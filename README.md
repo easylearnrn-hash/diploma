@@ -1,6 +1,6 @@
-# Diploma Project
+# Armenian College of Nurses - Diploma Project
 
-A web-based diploma project with homepage and login functionality.
+Official website for the Armenian College of Nurses showcasing nursing education programs, curriculum, and admissions information.
 
 ## Project Structure
 
@@ -20,10 +20,18 @@ DIPLOMA/
 
 ## Features
 
-- Responsive homepage
-- Login page with form validation
-- Modern, clean design
-- Mobile-friendly layout
+- **Homepage with embedded styles** - Modern, responsive design for Armenian College of Nurses
+- **Sections included:**
+  - Hero section with call-to-action
+  - Statistics showcase (98% NCLEX Readiness, 500+ Graduates)
+  - Programs overview (Associate, BSN, RN Bridge)
+  - System-based curriculum display
+  - Simulation & Clinical Training info
+  - Faculty & Leadership showcase
+  - Admissions CTA section
+- **Login page** - Secure authentication interface
+- **Responsive design** - Mobile-friendly layout
+- **Modern glassmorphism UI** - Backdrop blur effects and gradient backgrounds
 
 ## Getting Started
 
@@ -58,17 +66,29 @@ DIPLOMA/
 
 ## TODO
 
-- [ ] Implement actual login authentication
-- [ ] Add more pages as needed
-- [ ] Connect to backend API (if required)
-- [ ] Add form validation
-- [ ] Implement user session management
+- [ ] Complete login page functionality
+- [ ] Add backend API integration
+- [ ] Implement user authentication system
+- [ ] Add application form pages
+- [ ] Create program detail pages
+- [ ] Add faculty profiles
+- [ ] Implement contact form
+- [ ] Add news/announcements section
 
 ## Technologies Used
 
-- HTML5
-- CSS3
-- JavaScript (ES6+)
+- HTML5 with embedded CSS
+- Modern CSS (CSS Grid, Flexbox, Custom Properties)
+- Glassmorphism design techniques
+- Google Fonts (Inter)
+- Vanilla JavaScript
+
+## Design Features
+
+- **Color Scheme**: Dark blue gradient (#0a2540, #020617) with teal accent (#2dd4bf)
+- **Typography**: Inter font family (Google Fonts)
+- **UI Style**: Glassmorphism with backdrop blur effects
+- **Responsive**: Mobile-first design with media queries
 
 ## License
 
