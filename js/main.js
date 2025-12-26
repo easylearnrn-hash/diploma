@@ -8,19 +8,19 @@ document.addEventListener('DOMContentLoaded', function() {
         loginForm.addEventListener('submit', function(e) {
             e.preventDefault();
             
-            const username = document.getElementById('username').value;
+            const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
             
             // Basic validation
-            if (username && password) {
-                // TODO: Implement actual login logic
-                console.log('Login attempt:', { username, password });
-                alert('Login functionality to be implemented');
+            if (email && password) {
+                // Simulate login validation
+                // In production, this would be an API call to your backend
+                console.log('Login attempt:', { email, password });
                 
-                // Example: Redirect to home page after login
-                // window.location.href = 'index.html';
+                // Redirect to student portal on successful login
+                window.location.href = 'Student-page.html';
             } else {
-                alert('Please enter both username and password');
+                alert('Please enter both email and password');
             }
         });
     }
