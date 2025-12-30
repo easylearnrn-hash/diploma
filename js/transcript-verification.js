@@ -30,8 +30,8 @@ function generateSecureVerificationCode(studentId) {
  * @returns {Promise<Object>} - Saved transcript with verification code
  */
 async function saveTranscriptToDatabase(transcriptData) {
-  const supabase = initSupabase();
-  if (!supabase) {
+  const client = initSupabase();
+  if (!client) {
     throw new Error('Supabase client not initialized');
   }
   
@@ -54,7 +54,7 @@ async function saveTranscriptToDatabase(transcriptData) {
   };
   
   // Insert into database
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('transcripts')
     .insert([transcriptRecord])
     .select()
@@ -74,12 +74,12 @@ async function saveTranscriptToDatabase(transcriptData) {
  * @returns {Promise<Object>} - Transcript data or null if not found
  */
 async function verifyTranscriptCode(verificationCode) {
-  const supabase = initSupabase();
-  if (!supabase) {
+  const client = initSupabase();
+  if (!client) {
     throw new Error('Supabase client not initialized');
   }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('transcripts')
     .select('*')
     .eq('verification_code', verificationCode)
@@ -104,12 +104,12 @@ async function verifyTranscriptCode(verificationCode) {
  * @returns {Promise<Object>} - Updated transcript
  */
 async function updateTranscriptStatus(verificationCode, newStatus) {
-  const supabase = initSupabase();
-  if (!supabase) {
+  const client = initSupabase();
+  if (!client) {
     throw new Error('Supabase client not initialized');
   }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('transcripts')
     .update({ status: newStatus })
     .eq('verification_code', verificationCode)
@@ -130,12 +130,12 @@ async function updateTranscriptStatus(verificationCode, newStatus) {
  * @returns {Promise<Array>} - Array of transcripts
  */
 async function getStudentTranscripts(studentId) {
-  const supabase = initSupabase();
-  if (!supabase) {
+  const client = initSupabase();
+  if (!client) {
     throw new Error('Supabase client not initialized');
   }
   
-  const { data, error } = await supabase
+  const { data, error } = await client
     .from('transcripts')
     .select('*')
     .eq('student_id', studentId)

@@ -18,23 +18,23 @@ const SUPABASE_CONFIG = {
 };
 
 // Initialize Supabase client
-let supabase = null;
+let supabaseClient = null;
 
 function initSupabase() {
-  if (typeof supabase === 'undefined' || !window.supabase) {
+  if (typeof window.supabase === 'undefined' || !window.supabase) {
     console.error('Supabase library not loaded. Please include the Supabase CDN script.');
     return null;
   }
   
-  if (!supabase) {
-    supabase = window.supabase.createClient(
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(
       SUPABASE_CONFIG.url,
       SUPABASE_CONFIG.anonKey,
       SUPABASE_CONFIG.options
     );
   }
   
-  return supabase;
+  return supabaseClient;
 }
 
 // Export for use in other scripts
