@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transcript Verification | ACNHS</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .verification-container {
+      max-width: 800px;
+      margin: 100px auto 60px;
+      padding: 40px;
+      background: var(--bg-darker);
+      border-radius: 12px;
+      border: 1px solid rgba(45, 212, 191, 0.2);
+    }
+    
+    .verification-header {
+      text-align: center;
+      margin-bottom: 40px;
+      padding-bottom: 30px;
+      border-bottom: 2px solid rgba(45, 212, 191, 0.3);
+    }
+    
+    .verification-header h1 {
+      font-size: 32px;
+      margin-bottom: 12px;
+      color: var(--accent);
+      letter-spacing: -0.5px;
+    }
+    
+    .verification-header p {
+      color: var(--text-muted);
+      font-size: 15px;
+    }
+    
+    .verification-code-input {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    
+    .verification-code-input input {
+      width: 100%;
+      max-width: 400px;
+      padding: 16px 20px;
+      font-size: 18px;
+      font-weight: 600;
+      text-align: center;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: var(--bg-dark);
+      border: 2px solid rgba(45, 212, 191, 0.3);
+      border-radius: 8px;
+      color: white;
+      font-family: 'Courier New', monospace;
+      transition: all 0.3s;
+    }
+    
+    .verification-code-input input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(45, 212, 191, 0.1);
+    }
+    
+    .verification-code-input button {
+      margin-top: 16px;
+      padding: 14px 40px;
+      font-size: 16px;
+      font-weight: 600;
+      background: var(--accent);
+      color: var(--bg-dark);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+    
+    .verification-code-input button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4);
+    }
+    
+    .verification-result {
+      display: none;
+      padding: 30px;
+      border-radius: 8px;
+      margin-top: 30px;
+    }
+    
+    .verification-result.valid {
+      display: block;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05));
+      border: 2px solid rgba(16, 185, 129, 0.3);
+    }
+    
+    .verification-result.invalid {
+      display: block;
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.05));
+      border: 2px solid rgba(239, 68, 68, 0.3);
+    }
+    
+    .verification-result.revoked {
+      display: block;
+      background: linear-gradient(135deg, rgba(251, 146, 60, 0.1), rgba(249, 115, 22, 0.05));
+      border: 2px solid rgba(251, 146, 60, 0.3);
+    }
+    
+    .status-badge {
+      display: inline-block;
+      padding: 8px 20px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    
+    .status-badge.valid {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+    
+    .status-badge.invalid {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    
+    .status-badge.revoked {
+      background: rgba(251, 146, 60, 0.2);
+      color: #fb923c;
+    }
+    
+    .transcript-details {
+      margin-top: 20px;
+    }
+    
+    .transcript-details .detail-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .transcript-details .detail-row:last-child {
+      border-bottom: none;
+    }
+    
+    .transcript-details .label {
+      color: var(--text-muted);
+      font-size: 13px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
+    .transcript-details .value {
+      color: white;
+      font-weight: 600;
+      text-align: right;
+    }
+    
+    .security-notice {
+      margin-top: 40px;
+      padding: 20px;
+      background: rgba(45, 212, 191, 0.05);
+      border-left: 4px solid var(--accent);
+      border-radius: 4px;
+    }
+    
+    .security-notice h3 {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      color: var(--accent);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    
+    .security-notice p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    
+    .loading {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 20px;
+      display: none;
+    }
+    
+    .loading.active {
+      display: block;
+    }
+    
+    @media (max-width: 768px) {
+      .verification-container {
+        margin: 60px 20px 40px;
+        padding: 30px 20px;
+      }
+      
+      .verification-header h1 {
+        font-size: 24px;
+      }
+      
+      .transcript-details .detail-row {
+        flex-direction: column;
+        gap: 4px;
+      }
+      
+      .transcript-details .value {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav>
+  <div class="nav-wrapper">
+    <a href="index.html" class="logo">ACNHS</a>
+    <button class="menu-toggle" onclick="toggleMenu()">☰</button>
+    <div class="nav-links" id="navLinks">
+      <a href="index.html">Home</a>
+      <a href="about.html">About</a>
+      <a href="studies-portal.html">Programs</a>
+      <a href="Student-page.html">Student Portal</a>
+      <a href="login.html" class="btn-secondary">Login</a>
+    </div>
+  </div>
+</nav>
+
+<div class="verification-container">
+  <div class="verification-header">
+    <h1>Transcript Verification</h1>
+    <p>Verify the authenticity of ACNHS official transcripts</p>
+  </div>
+  
+  <div class="verification-code-input">
+    <input 
+      type="text" 
+      id="verificationCode" 
+      placeholder="TR-2025-XXX"
+      maxlength="20"
+      autocomplete="off"
+    >
+    <br>
+    <button onclick="verifyTranscript()">Verify Transcript</button>
+  </div>
+  
+  <div class="loading" id="loading">
+    <p>Verifying transcript...</p>
+  </div>
+  
+  <div class="verification-result" id="verificationResult">
+    <div id="resultContent"></div>
+  </div>
+  
+  <div class="security-notice">
+    <h3>🔒 Security & Privacy</h3>
+    <p>
+      This verification system confirms the authenticity of official ACNHS transcripts. 
+      Only basic information is displayed for privacy protection. For detailed verification 
+      or official inquiries, contact the Office of the Registrar at registrar@acnhs.edu.
+    </p>
+  </div>
+</div>
+
+<!-- Footer -->
+<footer style="background:var(--bg-darker);color:white;padding:60px 20px;text-align:center;border-top:1px solid rgba(45,212,191,0.2)">
+  <div style="max-width:1200px;margin:0 auto">
+    <div style="margin-bottom:30px">
+      <h3 style="font-size:24px;margin-bottom:10px">Armenian College of Nursing & Health Sciences</h3>
+      <p style="color:var(--text-muted);font-size:14px">Advancing Healthcare Education in Armenia</p>
+    </div>
+    <div style="display:flex;justify-content:center;gap:30px;flex-wrap:wrap;margin-bottom:30px;font-size:14px">
+      <a href="index.html" style="color:var(--text-muted);text-decoration:none">Home</a>
+      <a href="about.html" style="color:var(--text-muted);text-decoration:none">About</a>
+      <a href="studies-portal.html" style="color:var(--text-muted);text-decoration:none">Programs</a>
+      <a href="help-handbook.html" style="color:var(--text-muted);text-decoration:none">Student Handbook</a>
+    </div>
+    <p style="color:var(--text-muted);font-size:13px;margin:0">&copy; 2025 Armenian College of Nursing & Health Sciences. All rights reserved.</p>
+  </div>
+</footer>
+
+<script>
+// Auto-populate verification code from URL parameter
+window.addEventListener('DOMContentLoaded', () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const codeFromUrl = urlParams.get('code');
+  
+  // Also check for /verify/transcript/{CODE} path format
+  const pathMatch = window.location.pathname.match(/\/verify\/transcript\/([^\/]+)$/);
+  const codeFromPath = pathMatch ? pathMatch[1] : null;
+  
+  const code = codeFromPath || codeFromUrl;
+  
+  if (code) {
+    document.getElementById('verificationCode').value = code;
+    // Auto-verify if code is in URL
+    setTimeout(() => verifyTranscript(), 500);
+  }
+});
+
+// Mock database of valid transcripts (in production, this would be a server-side API)
+const transcriptDatabase = {
+  'TR-2025-001': {
+    status: 'valid',
+    studentName: 'Mariam Gevorgyan',
+    studentId: 'ACNHS-2024-001',
+    program: 'Associate Degree in Nursing (ADN)',
+    issueDate: 'December 26, 2025',
+    credits: '42.0',
+    gpa: '3.55'
+  },
+  'TR-2025-002': {
+    status: 'valid',
+    studentName: 'Armen Sargsyan',
+    studentId: 'ACNHS-2024-002',
+    program: 'Associate Degree in Nursing (ADN)',
+    issueDate: 'December 28, 2025',
+    credits: '36.0',
+    gpa: '3.82'
+  },
+  'TR-2024-999': {
+    status: 'revoked',
+    studentName: '[Redacted]',
+    studentId: '[Redacted]',
+    program: '[Redacted]',
+    issueDate: 'March 15, 2024',
+    revokedDate: 'November 10, 2025',
+    revokedReason: 'Reissued with corrections'
+  }
+};
+
+function verifyTranscript() {
+  const codeInput = document.getElementById('verificationCode');
+  const code = codeInput.value.trim().toUpperCase();
+  const loading = document.getElementById('loading');
+  const resultDiv = document.getElementById('verificationResult');
+  const resultContent = document.getElementById('resultContent');
+  
+  if (!code) {
+    alert('Please enter a verification code');
+    return;
+  }
+  
+  // Show loading
+  loading.classList.add('active');
+  resultDiv.style.display = 'none';
+  resultDiv.className = 'verification-result';
+  
+  // Simulate API call delay
+  setTimeout(() => {
+    loading.classList.remove('active');
+    
+    const transcript = transcriptDatabase[code];
+    
+    if (!transcript) {
+      // Invalid code
+      resultDiv.classList.add('invalid');
+      resultContent.innerHTML = `
+        <span class="status-badge invalid">❌ Invalid</span>
+        <h2 style="color:#ef4444;margin:10px 0">Transcript Not Found</h2>
+        <p style="color:var(--text-muted);margin-bottom:0">
+          The verification code <strong>${code}</strong> does not match any official ACNHS transcript in our records.
+        </p>
+        <p style="color:var(--text-muted);margin-top:16px;font-size:13px">
+          <strong>Possible reasons:</strong><br>
+          • Incorrect verification code<br>
+          • Transcript was never issued by ACNHS<br>
+          • Fraudulent document
+        </p>
+        <p style="color:var(--text-muted);margin-top:16px;font-size:13px">
+          If you believe this is an error, contact <a href="mailto:registrar@acnhs.edu" style="color:var(--accent)">registrar@acnhs.edu</a>
+        </p>
+      `;
+    } else if (transcript.status === 'revoked') {
+      // Revoked transcript
+      resultDiv.classList.add('revoked');
+      resultContent.innerHTML = `
+        <span class="status-badge revoked">⚠️ Revoked</span>
+        <h2 style="color:#fb923c;margin:10px 0">Transcript Revoked</h2>
+        <p style="color:var(--text-muted);margin-bottom:20px">
+          This transcript has been officially revoked and is no longer valid.
+        </p>
+        <div class="transcript-details">
+          <div class="detail-row">
+            <span class="label">Verification Code</span>
+            <span class="value">${code}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Original Issue Date</span>
+            <span class="value">${transcript.issueDate}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Revoked On</span>
+            <span class="value">${transcript.revokedDate}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Reason</span>
+            <span class="value">${transcript.revokedReason}</span>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:20px;font-size:13px">
+          For updated information, contact <a href="mailto:registrar@acnhs.edu" style="color:var(--accent)">registrar@acnhs.edu</a>
+        </p>
+      `;
+    } else {
+      // Valid transcript
+      resultDiv.classList.add('valid');
+      resultContent.innerHTML = `
+        <span class="status-badge valid">✓ Valid</span>
+        <h2 style="color:#10b981;margin:10px 0">Transcript Verified</h2>
+        <p style="color:var(--text-muted);margin-bottom:20px">
+          This is an authentic official transcript issued by the Armenian College of Nursing & Health Sciences.
+        </p>
+        <div class="transcript-details">
+          <div class="detail-row">
+            <span class="label">Verification Code</span>
+            <span class="value">${code}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Student Name</span>
+            <span class="value">${transcript.studentName}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Student ID</span>
+            <span class="value">${transcript.studentId}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Program</span>
+            <span class="value">${transcript.program}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Issue Date</span>
+            <span class="value">${transcript.issueDate}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Cumulative Credits</span>
+            <span class="value">${transcript.credits}</span>
+          </div>
+          <div class="detail-row">
+            <span class="label">Cumulative GPA</span>
+            <span class="value">${transcript.gpa}</span>
+          </div>
+        </div>
+        <p style="color:var(--text-muted);margin-top:20px;font-size:13px">
+          Verified on ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+        </p>
+      `;
+    }
+  }, 800);
+}
+
+// Allow Enter key to verify
+document.getElementById('verificationCode').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    verifyTranscript();
+  }
+});
+
+// Menu toggle function
+function toggleMenu() {
+  document.getElementById('navLinks').classList.toggle('active');
+}
+</script>
+
+</body>
+</html>
