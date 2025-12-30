@@ -636,38 +636,40 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Mock database of valid transcripts (in production, this would be a server-side API)
+// Mock database of valid transcripts (fallback if Supabase is not configured)
 const transcriptDatabase = {
   'TR-2025-001': {
     status: 'valid',
-    studentName: 'Mariam Gevorgyan',
-    studentId: 'ACNHS-2024-001',
+    student_name: 'Mariam Gevorgyan',
+    student_id: 'ACNHS-2024-001',
     program: 'Associate Degree in Nursing (ADN)',
-    issueDate: 'December 26, 2025',
-    credits: '42.0',
-    gpa: '3.55'
+    issue_date: 'December 26, 2025',
+    total_credits: '42.0',
+    cumulative_gpa: '3.55'
   },
   'TR-2025-002': {
     status: 'valid',
-    studentName: 'Armen Sargsyan',
-    studentId: 'ACNHS-2024-002',
+    student_name: 'Armen Sargsyan',
+    student_id: 'ACNHS-2024-002',
     program: 'Associate Degree in Nursing (ADN)',
-    issueDate: 'December 28, 2025',
-    credits: '36.0',
-    gpa: '3.82'
+    issue_date: 'December 28, 2025',
+    total_credits: '36.0',
+    cumulative_gpa: '3.82'
   },
   'TR-2024-999': {
     status: 'revoked',
-    studentName: '[Redacted]',
-    studentId: '[Redacted]',
+    student_name: '[Redacted]',
+    student_id: '[Redacted]',
     program: '[Redacted]',
-    issueDate: 'March 15, 2024',
-    revokedDate: 'November 10, 2025',
-    revokedReason: 'Reissued with corrections'
+    issue_date: 'March 15, 2024',
+    metadata: {
+      revokedDate: 'November 10, 2025',
+      revokedReason: 'Reissued with corrections'
+    }
   }
 };
 
-function verifyTranscript() {
+async function verifyTranscript() {
   const codeInput = document.getElementById('verificationCode');
   const code = codeInput.value.trim().toUpperCase();
   const loading = document.getElementById('loading');
@@ -684,13 +686,23 @@ function verifyTranscript() {
   resultDiv.style.display = 'none';
   resultDiv.className = 'verification-result';
   
-  // Simulate API call delay
-  setTimeout(() => {
-    loading.classList.remove('active');
-    
-    const transcript = transcriptDatabase[code];
-    
-    if (!transcript) {
+  // Try database lookup first, fallback to mock data
+  let transcript = null;
+  try {
+    initSupabase();
+    transcript = await verifyTranscriptCode(code);
+    console.log('✅ Transcript retrieved from database');
+  } catch (error) {
+    console.warn('⚠️ Database lookup failed, using fallback data:', error.message);
+    // Fallback to mock database
+    await new Promise(resolve => setTimeout(resolve, 800)); // Simulate network delay
+    transcript = transcriptDatabase[code];
+  }
+  
+  // Hide loading
+  loading.classList.remove('active');
+  
+  if (!transcript) {
       // Invalid code
       resultDiv.classList.add('invalid');
       resultContent.innerHTML = `
@@ -739,11 +751,11 @@ function verifyTranscript() {
           </div>
           <div class="detail-row">
             <span class="label">Student Name</span>
-            <span class="value">${transcript.studentName}</span>
+            <span class="value">${transcript.student_name}</span>
           </div>
           <div class="detail-row">
             <span class="label">Student ID</span>
-            <span class="value" style="font-family: 'Courier New', monospace;">${transcript.studentId}</span>
+            <span class="value" style="font-family: 'Courier New', monospace;">${transcript.student_id}</span>
           </div>
           <div class="detail-row">
             <span class="label">Academic Program</span>
@@ -751,15 +763,15 @@ function verifyTranscript() {
           </div>
           <div class="detail-row">
             <span class="label">Original Issue Date</span>
-            <span class="value">${transcript.issueDate}</span>
+            <span class="value">${transcript.issue_date}</span>
           </div>
           <div class="detail-row">
             <span class="label">Revoked On</span>
-            <span class="value">${transcript.revokedDate}</span>
+            <span class="value">${transcript.metadata?.revokedDate || 'N/A'}</span>
           </div>
           <div class="detail-row">
             <span class="label">Revocation Reason</span>
-            <span class="value">${transcript.revokedReason}</span>
+            <span class="value">${transcript.metadata?.revokedReason || 'N/A'}</span>
           </div>
         </div>
         <div style="background: rgba(251, 146, 60, 0.12); border: 1px solid rgba(251, 146, 60, 0.3); border-radius: 8px; padding: 24px; margin-top: 30px;">
@@ -799,11 +811,11 @@ function verifyTranscript() {
           </div>
           <div class="detail-row">
             <span class="label">Student Name</span>
-            <span class="value">${transcript.studentName}</span>
+            <span class="value">${transcript.student_name}</span>
           </div>
           <div class="detail-row">
             <span class="label">Student ID</span>
-            <span class="value" style="font-family: 'Courier New', monospace;">${transcript.studentId}</span>
+            <span class="value" style="font-family: 'Courier New', monospace;">${transcript.student_id}</span>
           </div>
           <div class="detail-row">
             <span class="label">Academic Program</span>
@@ -811,15 +823,15 @@ function verifyTranscript() {
           </div>
           <div class="detail-row">
             <span class="label">Issue Date</span>
-            <span class="value">${transcript.issueDate}</span>
+            <span class="value">${transcript.issue_date}</span>
           </div>
           <div class="detail-row">
             <span class="label">Total Credits Earned</span>
-            <span class="value">${transcript.credits} credits</span>
+            <span class="value">${transcript.total_credits} credits</span>
           </div>
           <div class="detail-row">
             <span class="label">Cumulative GPA</span>
-            <span class="value" style="font-weight: 700; color: var(--accent); font-size: 18px;">${transcript.gpa}</span>
+            <span class="value" style="font-weight: 700; color: var(--accent); font-size: 18px;">${transcript.cumulative_gpa}</span>
           </div>
         </div>
         <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 8px; padding: 24px; margin-top: 30px;">
@@ -841,7 +853,9 @@ function verifyTranscript() {
         </div>
       `;
     }
-  }, 800);
+    
+    // Show result
+    resultDiv.style.display = 'block';
 }
 
 // Allow Enter key to verify
@@ -856,6 +870,13 @@ function toggleMenu() {
   document.getElementById('navLinks').classList.toggle('active');
 }
 </script>
+
+<!-- Supabase Client Library -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Supabase Configuration -->
+<script src="js/supabase-config.js"></script>
+<!-- Transcript Verification Service -->
+<script src="js/transcript-verification.js"></script>
 
 </body>
 </html>

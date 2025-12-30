@@ -1070,6 +1070,12 @@ Download your official ACNHS transcript at any time. All documents include the i
 </div>
 
 <script src="js/html2pdf.bundle.min.js"></script>
+<!-- Supabase Client Library -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- Supabase Configuration -->
+<script src="js/supabase-config.js"></script>
+<!-- Transcript Verification Service -->
+<script src="js/transcript-verification.js"></script>
 
 <script>
 // QR Code Generation Function (Lightweight, no external library needed)
@@ -1101,7 +1107,7 @@ function generateQRCode(text, canvasId, size = 100) {
   img.src = qrUrl;
 }
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   const formattedDate = new Intl.DateTimeFormat('en-US', {
     month: 'long',
     day: 'numeric',
@@ -1111,12 +1117,66 @@ document.addEventListener('DOMContentLoaded', () => {
     el.textContent = formattedDate;
   });
   
-  // Generate QR code for verification
-  const verificationCode = 'TR-2025-001';
-  const verificationUrl = `https://acnhs.am/verify-transcript.html?code=${verificationCode}`;
-  generateQRCode(verificationUrl, 'qrcode-canvas', 90);
-  generateQRCode(verificationUrl, 'qrcode-ministry-canvas', 70);
-  generateQRCode(verificationUrl, 'qrcode-useval-canvas', 70);
+  // Student data (in production, this would come from a form or database)
+  const studentData = {
+    student_id: 'ACNHS2025001',
+    student_name: 'John Doe',
+    date_of_birth: '2000-05-15',
+    program: 'Bachelor of Science in Nursing',
+    cumulative_gpa: 3.75,
+    total_credits: 120.00,
+    metadata: {
+      term: 'Spring 2025',
+      dean: 'Dr. Sarah Johnson'
+    }
+  };
+  
+  // Generate unique verification codes for each transcript type
+  let verificationCodes = {
+    standard: generateSecureVerificationCode(studentData.student_id),
+    ministry: generateSecureVerificationCode(studentData.student_id),
+    useval: generateSecureVerificationCode(studentData.student_id)
+  };
+  
+  // Try to save to database (will fail gracefully if Supabase not configured)
+  try {
+    initSupabase();
+    
+    // Save all three transcript versions
+    for (const [type, code] of Object.entries(verificationCodes)) {
+      await saveTranscriptToDatabase({
+        ...studentData,
+        transcript_type: type === 'useval' ? 'us-evaluation' : type,
+        verification_code: code
+      });
+    }
+    
+    console.log('✅ Transcripts saved to database with verification codes:', verificationCodes);
+  } catch (error) {
+    console.warn('⚠️ Database not configured. Using temporary codes:', error.message);
+    // Fallback to temporary codes if database is not set up
+    verificationCodes = {
+      standard: 'TR-2025-DEMO-STD',
+      ministry: 'TR-2025-DEMO-MIN',
+      useval: 'TR-2025-DEMO-USA'
+    };
+  }
+  
+  // Update verification code displays in the DOM
+  document.getElementById('transcript-verification-code-1').textContent = verificationCodes.standard;
+  document.getElementById('transcript-verification-code-2').textContent = verificationCodes.ministry;
+  document.getElementById('transcript-verification-code-3').textContent = verificationCodes.useval;
+  
+  // Generate QR codes for verification
+  const verificationUrls = {
+    standard: `https://acnhs.am/verify-transcript.html?code=${verificationCodes.standard}`,
+    ministry: `https://acnhs.am/verify-transcript.html?code=${verificationCodes.ministry}`,
+    useval: `https://acnhs.am/verify-transcript.html?code=${verificationCodes.useval}`
+  };
+  
+  generateQRCode(verificationUrls.standard, 'qrcode-canvas', 90);
+  generateQRCode(verificationUrls.ministry, 'qrcode-ministry-canvas', 70);
+  generateQRCode(verificationUrls.useval, 'qrcode-useval-canvas', 70);
 });
 
 // Tab switching function
