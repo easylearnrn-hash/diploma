@@ -3,10 +3,10 @@
 
 const SUPABASE_CONFIG = {
   // Your Supabase project URL
-  url: 'YOUR_SUPABASE_URL', // e.g., 'https://your-project.supabase.co'
+  url: 'https://zlvnxvrzotamhpezqedr.supabase.co',
   
   // Your Supabase anonymous (public) key - safe for client-side use
-  anonKey: 'YOUR_SUPABASE_ANON_KEY',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4MTEzMTcsImV4cCI6MjA3ODM4NzMxN30.-IoSqKhDrA9NuG4j3GufIbfmodWqCoppEklE1nTmw38',
   
   // Optional: Additional configuration
   options: {
