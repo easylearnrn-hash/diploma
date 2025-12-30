@@ -719,7 +719,7 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
         <div style="flex:1;text-align:right">
           <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">VERIFICATION CODE</p>
-          <p id="transcript-verification-code-1" style="margin:4px 0 0 0;font-weight:700">Loading...</p>
+          <p id="transcript-verification-code-1" style="margin:4px 0 0 0;font-weight:700;font-family:monospace;letter-spacing:2px;font-size:11px;white-space:nowrap;color:#0f172a">Loading...</p>
         </div>
       </div>
     </div>
@@ -875,7 +875,7 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
         <div style="flex:1;text-align:right">
           <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">VERIFICATION CODE</p>
-          <p id="transcript-verification-code-2" style="margin:4px 0 0 0;font-weight:700">Loading...</p>
+          <p id="transcript-verification-code-2" style="margin:4px 0 0 0;font-weight:700;font-family:monospace;letter-spacing:2px;font-size:11px;white-space:nowrap;color:#0f172a">Loading...</p>
         </div>
       </div>
     </div>
@@ -1053,7 +1053,7 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
         <div style="flex:0 0 160px">
           <p style="margin:0;font-size:9px;color:#475569">Verification Code</p>
-          <p id="transcript-verification-code-3" style="margin:5px 0 0 0;font-size:11px;font-weight:700;font-family:monospace;color:#14b8a6;letter-spacing:2px">Loading...</p>
+          <p id="transcript-verification-code-3" style="margin:5px 0 0 0;font-size:11px;font-weight:700;font-family:monospace;color:#14b8a6;letter-spacing:2px;white-space:nowrap">Loading...</p>
         </div>
       </div>
     </div>
@@ -1082,10 +1082,18 @@ Download your official ACNHS transcript at any time. All documents include the i
 function generateQRCode(text, canvasId, size = 100) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
+  canvas.dataset.qrLoaded = 'false';
   
   const ctx = canvas.getContext('2d');
   canvas.width = size;
   canvas.height = size;
+  ctx.clearRect(0,0,size,size);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0,0,size,size);
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Generating…', size/2, size/2);
   
   // Use QR Code API service (print-safe, no external dependency)
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&format=png&margin=0`;
@@ -1251,6 +1259,15 @@ async function downloadTranscript(){
     return;
   }
 
+  // Ensure fonts are fully loaded for crisp rendering
+  if(document.fonts && document.fonts.status!=='loaded'){
+    try{
+      await document.fonts.ready;
+    }catch(err){
+      console.warn('Font loading wait skipped:', err);
+    }
+  }
+
   // Wait for QR code to be fully rendered
   const qrCanvas = document.getElementById(qrCanvasId);
   if (qrCanvas && !qrCanvas.dataset.qrLoaded) {
@@ -1288,9 +1305,9 @@ async function downloadTranscript(){
   printWindow.document.close();
   printWindow.focus();
 
-  // Trigger PDF download with longer delay to ensure canvas is fully rendered
+  // Trigger PDF download after layout settles
   setTimeout(()=>{
-    generateTranscriptPDF(transcriptId, pdfFilename);
+    requestAnimationFrame(()=>generateTranscriptPDF(transcriptId, pdfFilename));
   },500);
 }
 
@@ -1322,6 +1339,20 @@ function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNH
   clone.style.minHeight='1056px';
   clone.style.height='auto';
 
+  // Copy rendered canvas content (QR codes, seals) into the clone
+  const originalCanvases=transcript.querySelectorAll('canvas');
+  originalCanvases.forEach(originalCanvas=>{
+    if(!originalCanvas.id) return;
+    const clonedCanvas=clone.querySelector(`#${originalCanvas.id}`);
+    if(!clonedCanvas) return;
+
+    clonedCanvas.width=originalCanvas.width;
+    clonedCanvas.height=originalCanvas.height;
+    const ctx=clonedCanvas.getContext('2d');
+    ctx.clearRect(0,0,clonedCanvas.width,clonedCanvas.height);
+    ctx.drawImage(originalCanvas,0,0);
+  });
+
   const wrapper=document.createElement('div');
   wrapper.style.position='fixed';
   wrapper.style.top='0';
@@ -1340,8 +1371,17 @@ function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNH
   const options={
     filename:`${filename}.pdf`,
     margin:[0,0,0,0],
-    image:{type:'jpeg',quality:0.98},
-    html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',allowTaint:true,logging:false},
+    image:{type:'jpeg',quality:1},
+    html2canvas:{
+      scale:3,
+      useCORS:true,
+      backgroundColor:'#ffffff',
+      letterRendering:true,
+      allowTaint:false,
+      logging:false,
+      windowWidth:816,
+      windowHeight:1056
+    },
     jsPDF:{unit:'pt',format:'letter',orientation:'portrait'}
   };
 
