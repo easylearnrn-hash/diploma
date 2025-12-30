@@ -24,12 +24,17 @@ DIPLOMA/
 - **Sections included:**
   - Hero section with call-to-action
   - Statistics showcase (98% NCLEX Readiness, 500+ Graduates)
-  - Programs overview (Associate, BSN, RN Bridge)
+  - Programs overview (Associate, BSN, NCLEX Preparation)
   - System-based curriculum display
   - Simulation & Clinical Training info
   - Faculty & Leadership showcase
   - Admissions CTA section
 - **Login page** - Secure authentication interface
+- **SMS Integration** - Twilio + Supabase Edge Functions for notifications
+  - Admission notifications
+  - Class reminders
+  - Phone verification
+  - Exam alerts
 - **Responsive design** - Mobile-friendly layout
 - **Modern glassmorphism UI** - Backdrop blur effects and gradient backgrounds
 
@@ -64,16 +69,43 @@ DIPLOMA/
 2. **Functionality**: Edit `js/main.js` to add interactive features
 3. **Content**: Edit HTML files to change page content
 
+## SMS Integration
+
+This project includes a complete SMS notification system using Twilio and Supabase Edge Functions.
+
+### Quick Start
+1. See `QUICKSTART-SMS.md` for 5-minute setup
+2. Complete guide in `TWILIO-SMS-SETUP.md`
+3. Test with `sms-demo.html`
+
+### Features
+- ✅ Send SMS to US phone numbers
+- ✅ Phone verification with codes
+- ✅ Admission notifications
+- ✅ Class and exam reminders
+- ✅ Serverless backend (Supabase Edge Functions)
+- ✅ Secure credential management
+
+### Usage
+```javascript
+const smsService = new SMSService(SUPABASE_URL, SUPABASE_ANON_KEY);
+await smsService.sendSMS('+15551234567', 'Welcome!', 'notification');
+```
+
+See `SMS-INTEGRATION-SUMMARY.md` for complete documentation.
+
 ## TODO
 
+- [x] SMS notification system (Twilio + Supabase)
 - [ ] Complete login page functionality
 - [ ] Add backend API integration
 - [ ] Implement user authentication system
-- [ ] Add application form pages
+- [ ] Add application form pages with SMS verification
 - [ ] Create program detail pages
 - [ ] Add faculty profiles
 - [ ] Implement contact form
 - [ ] Add news/announcements section
+- [ ] Integrate SMS with admission workflow
 
 ## Technologies Used
 
@@ -82,6 +114,9 @@ DIPLOMA/
 - Glassmorphism design techniques
 - Google Fonts (Inter)
 - Vanilla JavaScript
+- **Supabase** - Backend-as-a-Service & Edge Functions
+- **Twilio** - SMS API
+- **TypeScript/Deno** - Edge Function runtime
 
 ## Design Features
 
