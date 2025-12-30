@@ -719,7 +719,7 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
         <div style="flex:1;text-align:right">
           <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">VERIFICATION CODE</p>
-          <p style="margin:4px 0 0 0;font-weight:700">TR-2025-001</p>
+          <p id="transcript-verification-code-1" style="margin:4px 0 0 0;font-weight:700">Loading...</p>
         </div>
       </div>
     </div>
@@ -875,7 +875,7 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
         <div style="flex:1;text-align:right">
           <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">VERIFICATION CODE</p>
-          <p style="margin:4px 0 0 0;font-weight:700">TR-2025-001</p>
+          <p id="transcript-verification-code-2" style="margin:4px 0 0 0;font-weight:700">Loading...</p>
         </div>
       </div>
     </div>
@@ -1094,6 +1094,9 @@ function generateQRCode(text, canvasId, size = 100) {
   img.crossOrigin = 'anonymous';
   img.onload = () => {
     ctx.drawImage(img, 0, 0, size, size);
+    // Mark QR as loaded for PDF generation
+    canvas.dataset.qrLoaded = 'true';
+    console.log(`✅ QR code loaded on ${canvasId}`);
   };
   img.onerror = () => {
     // Fallback: draw simple text if QR service fails
@@ -1103,6 +1106,8 @@ function generateQRCode(text, canvasId, size = 100) {
     ctx.font = '10px monospace';
     ctx.textAlign = 'center';
     ctx.fillText('TR-2025-001', size/2, size/2);
+    // Mark as loaded even on error
+    canvas.dataset.qrLoaded = 'true';
   };
   img.src = qrUrl;
 }
@@ -1208,7 +1213,7 @@ function showTab(tabName) {
 }
 
 // Download transcript function
-function downloadTranscript(){
+async function downloadTranscript(){
   // Get selected version
   const selectedVersion = document.querySelector('input[name="transcriptVersion"]:checked');
   if (!selectedVersion) {
@@ -1217,7 +1222,7 @@ function downloadTranscript(){
   }
   
   const version = selectedVersion.value;
-  let transcriptId, pdfFilename, pdfTitle;
+  let transcriptId, pdfFilename, pdfTitle, qrCanvasId;
   
   // Determine which template to use
   switch(version) {
@@ -1225,22 +1230,44 @@ function downloadTranscript(){
       transcriptId = 'transcriptDocumentMinistry';
       pdfFilename = 'ACNHS_Official_Transcript_Ministry_Review';
       pdfTitle = 'ACNHS Official Transcript - Ministry Review';
+      qrCanvasId = 'qrcode-ministry-canvas';
       break;
     case 'useval':
       transcriptId = 'transcriptDocumentUSEval';
       pdfFilename = 'ACNHS_Official_Transcript_US_Credential_Evaluation';
       pdfTitle = 'ACNHS Official Transcript - US Credential Evaluation';
+      qrCanvasId = 'qrcode-useval-canvas';
       break;
     default:
       transcriptId = 'transcriptDocument';
       pdfFilename = 'ACNHS_Official_Transcript';
       pdfTitle = 'ACNHS Official Transcript';
+      qrCanvasId = 'qrcode-canvas';
   }
   
   const transcript=document.getElementById(transcriptId);
   if(!transcript){
     console.error('Transcript template not found:', transcriptId);
     return;
+  }
+
+  // Wait for QR code to be fully rendered
+  const qrCanvas = document.getElementById(qrCanvasId);
+  if (qrCanvas && !qrCanvas.dataset.qrLoaded) {
+    console.log('Waiting for QR code to load...');
+    await new Promise(resolve => {
+      const checkInterval = setInterval(() => {
+        if (qrCanvas.dataset.qrLoaded === 'true') {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, 5000);
+    });
   }
 
   // Open print preview in new window
@@ -1261,10 +1288,10 @@ function downloadTranscript(){
   printWindow.document.close();
   printWindow.focus();
 
-  // Trigger PDF download simultaneously (after layout settles)
+  // Trigger PDF download with longer delay to ensure canvas is fully rendered
   setTimeout(()=>{
     generateTranscriptPDF(transcriptId, pdfFilename);
-  },150);
+  },500);
 }
 
 function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNHS_Official_Transcript'){
