@@ -626,7 +626,7 @@ Download your official ACNHS transcript at any time. All documents include the i
       </div>
       <div style="text-align:center">
         <div id="qrcode-container" style="background:#ffffff;padding:6px;border:2px solid #0f172a;border-radius:4px;display:inline-block">
-          <canvas id="qrcode-canvas" width="90" height="90" style="display:block"></canvas>
+          <img id="qrcode-standard" alt="Verification QR" width="90" height="90" style="display:block" data-qr-loaded="false" crossorigin="anonymous" referrerpolicy="no-referrer" />
         </div>
         <p style="margin:6px 0 0 0;font-size:8px;color:#475569;letter-spacing:0.5px">SCAN TO VERIFY</p>
         <p style="margin:2px 0 0 0;font-size:7px;color:#64748b">acnhs.am/verify</p>
@@ -781,8 +781,8 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
       </div>
       <div style="text-align:center">
-        <div id="qrcode-ministry-container" style="background:#ffffff;padding:6px;border:2px solid #0f172a;border-radius:4px;display:inline-block">
-          <canvas id="qrcode-ministry-canvas" width="70" height="70" style="display:block"></canvas>
+        <div id="qrcode-ministry-container" style="background:#ffffff;padding:4px;border:2px solid #0f172a;border-radius:4px;display:inline-block">
+          <img id="qrcode-ministry" alt="Verification QR" width="70" height="70" style="display:block" data-qr-loaded="false" crossorigin="anonymous" referrerpolicy="no-referrer" />
         </div>
         <p style="margin:6px 0 0 0;font-size:8px;color:#475569;letter-spacing:0.5px">SCAN TO VERIFY</p>
         <p style="margin:2px 0 0 0;font-size:7px;color:#64748b">acnhs.am/verify</p>
@@ -937,8 +937,8 @@ Download your official ACNHS transcript at any time. All documents include the i
         </div>
       </div>
       <div style="text-align:center">
-        <div id="qrcode-useval-container" style="background:#ffffff;padding:6px;border:2px solid #0f172a;border-radius:4px;display:inline-block">
-          <canvas id="qrcode-useval-canvas" width="70" height="70" style="display:block"></canvas>
+        <div id="qrcode-useval-container" style="background:#ffffff;padding:4px;border:2px solid #0f172a;border-radius:4px;display:inline-block">
+          <img id="qrcode-useval" alt="Verification QR" width="70" height="70" style="display:block" data-qr-loaded="false" crossorigin="anonymous" referrerpolicy="no-referrer" />
         </div>
         <p style="margin:6px 0 0 0;font-size:8px;color:#475569;letter-spacing:0.5px">SCAN TO VERIFY</p>
         <p style="margin:2px 0 0 0;font-size:7px;color:#64748b">acnhs.am/verify</p>
@@ -1078,45 +1078,34 @@ Download your official ACNHS transcript at any time. All documents include the i
 <script src="js/transcript-verification.js"></script>
 
 <script>
-// QR Code Generation Function (Lightweight, no external library needed)
-function generateQRCode(text, canvasId, size = 100) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  canvas.dataset.qrLoaded = 'false';
-  
-  const ctx = canvas.getContext('2d');
-  canvas.width = size;
-  canvas.height = size;
-  ctx.clearRect(0,0,size,size);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0,0,size,size);
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '10px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('Generating…', size/2, size/2);
-  
-  // Use QR Code API service (print-safe, no external dependency)
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&format=png&margin=0`;
-  
-  const img = new Image();
-  img.crossOrigin = 'anonymous';
+// QR Code Generation Function (loads remote image directly)
+function generateQRCode(text, imageId, size = 100) {
+  const img = document.getElementById(imageId);
+  if (!img) return;
+
+  img.dataset.qrLoaded = 'false';
+  img.src = '';
+  img.alt = 'Generating QR…';
+  img.style.opacity = '0.4';
+
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&data=${encodeURIComponent(text)}&format=png&margin=0&cacheBust=${Date.now()}`;
+
   img.onload = () => {
-    ctx.drawImage(img, 0, 0, size, size);
-    // Mark QR as loaded for PDF generation
-    canvas.dataset.qrLoaded = 'true';
-    console.log(`✅ QR code loaded on ${canvasId}`);
+    img.dataset.qrLoaded = 'true';
+    img.alt = 'Verification QR code';
+    img.style.opacity = '1';
+    console.log(`✅ QR code loaded on ${imageId}`);
   };
+
   img.onerror = () => {
-    // Fallback: draw simple text if QR service fails
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, size, size);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '10px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('TR-2025-001', size/2, size/2);
-    // Mark as loaded even on error
-    canvas.dataset.qrLoaded = 'true';
+    img.dataset.qrLoaded = 'true';
+    img.alt = 'QR unavailable';
+    img.style.opacity = '1';
+    img.src = 'data:image/svg+xml;base64,' + btoa(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><rect width="100%" height="100%" fill="#f8fafc"/><text x="50%" y="50%" font-family='monospace' font-size='10' fill='#0f172a' text-anchor='middle'>QR ERR</text></svg>`);
   };
+
+  img.crossOrigin = 'anonymous';
+  img.referrerPolicy = 'no-referrer';
   img.src = qrUrl;
 }
 
@@ -1191,9 +1180,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     useval: `https://acnhs.am/verify-transcript.html?code=${verificationCodes.useval}`
   };
   
-  generateQRCode(verificationUrls.standard, 'qrcode-canvas', 90);
-  generateQRCode(verificationUrls.ministry, 'qrcode-ministry-canvas', 70);
-  generateQRCode(verificationUrls.useval, 'qrcode-useval-canvas', 70);
+  generateQRCode(verificationUrls.standard, 'qrcode-standard', 90);
+  generateQRCode(verificationUrls.ministry, 'qrcode-ministry', 70);
+  generateQRCode(verificationUrls.useval, 'qrcode-useval', 70);
 });
 
 // Tab switching function
@@ -1230,7 +1219,7 @@ async function downloadTranscript(){
   }
   
   const version = selectedVersion.value;
-  let transcriptId, pdfFilename, pdfTitle, qrCanvasId;
+  let transcriptId, pdfFilename, pdfTitle, qrElementId;
   
   // Determine which template to use
   switch(version) {
@@ -1238,19 +1227,19 @@ async function downloadTranscript(){
       transcriptId = 'transcriptDocumentMinistry';
       pdfFilename = 'ACNHS_Official_Transcript_Ministry_Review';
       pdfTitle = 'ACNHS Official Transcript - Ministry Review';
-      qrCanvasId = 'qrcode-ministry-canvas';
+      qrElementId = 'qrcode-ministry';
       break;
     case 'useval':
       transcriptId = 'transcriptDocumentUSEval';
       pdfFilename = 'ACNHS_Official_Transcript_US_Credential_Evaluation';
       pdfTitle = 'ACNHS Official Transcript - US Credential Evaluation';
-      qrCanvasId = 'qrcode-useval-canvas';
+      qrElementId = 'qrcode-useval';
       break;
     default:
       transcriptId = 'transcriptDocument';
       pdfFilename = 'ACNHS_Official_Transcript';
       pdfTitle = 'ACNHS Official Transcript';
-      qrCanvasId = 'qrcode-canvas';
+      qrElementId = 'qrcode-standard';
   }
   
   const transcript=document.getElementById(transcriptId);
@@ -1269,12 +1258,12 @@ async function downloadTranscript(){
   }
 
   // Wait for QR code to be fully rendered
-  const qrCanvas = document.getElementById(qrCanvasId);
-  if (qrCanvas && !qrCanvas.dataset.qrLoaded) {
+  const qrElement = document.getElementById(qrElementId);
+  if (qrElement && qrElement.dataset.qrLoaded !== 'true') {
     console.log('Waiting for QR code to load...');
     await new Promise(resolve => {
       const checkInterval = setInterval(() => {
-        if (qrCanvas.dataset.qrLoaded === 'true') {
+        if (qrElement.dataset.qrLoaded === 'true') {
           clearInterval(checkInterval);
           resolve();
         }
@@ -1338,20 +1327,6 @@ function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNH
   clone.style.maxWidth='816px';
   clone.style.minHeight='1056px';
   clone.style.height='auto';
-
-  // Copy rendered canvas content (QR codes, seals) into the clone
-  const originalCanvases=transcript.querySelectorAll('canvas');
-  originalCanvases.forEach(originalCanvas=>{
-    if(!originalCanvas.id) return;
-    const clonedCanvas=clone.querySelector(`#${originalCanvas.id}`);
-    if(!clonedCanvas) return;
-
-    clonedCanvas.width=originalCanvas.width;
-    clonedCanvas.height=originalCanvas.height;
-    const ctx=clonedCanvas.getContext('2d');
-    ctx.clearRect(0,0,clonedCanvas.width,clonedCanvas.height);
-    ctx.drawImage(originalCanvas,0,0);
-  });
 
   const wrapper=document.createElement('div');
   wrapper.style.position='fixed';
