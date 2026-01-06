@@ -738,6 +738,174 @@
       background: rgba(34, 197, 94, 0.25);
       transform: translateY(-1px);
     }
+
+    /* Notification Styles */
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: rgba(15, 23, 42, 0.98);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 320px;
+      max-width: 420px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      z-index: 10000;
+      animation: slideIn 0.3s ease-out;
+      backdrop-filter: blur(10px);
+    }
+
+    .notification.success {
+      border-color: rgba(34, 197, 94, 0.5);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(34, 197, 94, 0.05));
+    }
+
+    .notification.error {
+      border-color: rgba(239, 68, 68, 0.5);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(239, 68, 68, 0.05));
+    }
+
+    .notification.info {
+      border-color: rgba(59, 130, 246, 0.5);
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(59, 130, 246, 0.05));
+    }
+
+    .notification-content {
+      display: flex;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .notification-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .notification-text {
+      flex: 1;
+    }
+
+    .notification-title {
+      color: white;
+      font-weight: 600;
+      font-size: 15px;
+      margin-bottom: 4px;
+    }
+
+    .notification-message {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .notification-close {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      padding: 0;
+      font-size: 20px;
+      line-height: 1;
+      transition: color 0.2s;
+    }
+
+    .notification-close:hover {
+      color: white;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    @keyframes slideOut {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+    }
+
+    /* Input Modal Styles */
+    .input-modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(5px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .input-modal-content {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      border-radius: 16px;
+      padding: 28px;
+      min-width: 400px;
+      max-width: 500px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      animation: scaleIn 0.3s ease-out;
+    }
+
+    .input-modal-title {
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .input-modal-input {
+      width: 100%;
+      padding: 12px;
+      background: #1a2942;
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      margin-bottom: 20px;
+      transition: all 0.2s;
+    }
+
+    .input-modal-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+    }
+
+    .input-modal-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    @keyframes scaleIn {
+      from {
+        transform: scale(0.9);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1509,6 +1677,90 @@
       });
     }
 
+    // Show notification toast
+    function showNotification(title, message, type = 'success') {
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      
+      const icons = {
+        success: '✅',
+        error: '❌',
+        info: 'ℹ️'
+      };
+      
+      notification.innerHTML = `
+        <div class="notification-content">
+          <div class="notification-icon">${icons[type] || icons.info}</div>
+          <div class="notification-text">
+            <div class="notification-title">${title}</div>
+            <div class="notification-message">${message}</div>
+          </div>
+          <button class="notification-close" onclick="this.parentElement.parentElement.remove()">✕</button>
+        </div>
+      `;
+      
+      document.body.appendChild(notification);
+      
+      // Auto dismiss success notifications after 4 seconds
+      if (type === 'success') {
+        setTimeout(() => {
+          notification.style.animation = 'slideOut 0.3s ease-out';
+          setTimeout(() => notification.remove(), 300);
+        }, 4000);
+      }
+    }
+
+    // Show input prompt modal
+    function showInputPrompt(title, placeholder = '') {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'input-modal';
+        
+        modal.innerHTML = `
+          <div class="input-modal-content">
+            <div class="input-modal-title">${title}</div>
+            <input type="text" class="input-modal-input" placeholder="${placeholder}" autofocus>
+            <div class="input-modal-buttons">
+              <button class="modal-btn modal-btn-secondary" onclick="this.closest('.input-modal').remove(); window.inputModalResolve(null);">Cancel</button>
+              <button class="modal-btn modal-btn-primary" onclick="const input = this.closest('.input-modal-content').querySelector('input'); this.closest('.input-modal').remove(); window.inputModalResolve(input.value);">OK</button>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        const input = modal.querySelector('input');
+        input.focus();
+        
+        // Handle Enter key
+        input.addEventListener('keypress', (e) => {
+          if (e.key === 'Enter') {
+            modal.remove();
+            resolve(input.value);
+          }
+        });
+        
+        // Handle Escape key
+        modal.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') {
+            modal.remove();
+            resolve(null);
+          }
+        });
+        
+        // Store resolve function globally for button onclick
+        window.inputModalResolve = resolve;
+        
+        // Click outside to cancel
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+            resolve(null);
+          }
+        });
+      });
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       const supabase = initSupabase();
@@ -1905,8 +2157,8 @@
       });
     }
 
-    function addCustomRFEDocument() {
-      const docName = prompt('Enter the document name:');
+    async function addCustomRFEDocument() {
+      const docName = await showInputPrompt('Enter the document name:', 'e.g., Birth Certificate');
       if (!docName || !docName.trim()) return;
       
       const container = document.getElementById('rfeDocumentsContainer');
@@ -1963,7 +2215,11 @@
         
         if (error) throw error;
         
-        alert('✅ Application status updated successfully!\n\nApplicant will see the changes when they check their application status.');
+        showNotification(
+          'Status Updated Successfully!',
+          'Applicant will see the changes when they check their application status.',
+          'success'
+        );
         
         // Reload applications list
         await loadApplications();
@@ -1976,7 +2232,11 @@
         
       } catch (error) {
         console.error('Error updating status:', error);
-        alert('❌ Failed to update status: ' + (error.message || 'Unknown error'));
+        showNotification(
+          'Update Failed',
+          error.message || 'An unknown error occurred while updating the status.',
+          'error'
+        );
       }
     }
 
