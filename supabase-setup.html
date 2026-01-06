@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supabase Setup Helper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    h1 {
+      font-size: 28px;
+      margin-bottom: 10px;
+      color: #1e293b;
+    }
+    p {
+      color: #64748b;
+      margin-bottom: 30px;
+    }
+    .section {
+      background: #f8fafc;
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .section h2 {
+      font-size: 18px;
+      margin-bottom: 15px;
+      color: #334155;
+    }
+    button {
+      width: 100%;
+      padding: 14px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-bottom: 10px;
+      transition: all 0.2s;
+    }
+    button:hover {
+      background: #5568d3;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102,126,234,0.4);
+    }
+    .result {
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 15px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    .success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #34d399;
+    }
+    .error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #f87171;
+    }
+    .info {
+      background: #dbeafe;
+      color: #1e40af;
+      border: 1px solid #60a5fa;
+    }
+    pre {
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 15px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+      margin-top: 10px;
+    }
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 10px;
+    }
+    input:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🔧 Supabase Setup Helper</h1>
+    <p>Test your Supabase connection and create admin user</p>
+
+    <!-- TEST CONNECTION -->
+    <div class="section">
+      <h2>Step 1: Test Connection</h2>
+      <button onclick="testConnection()">Test Supabase Connection</button>
+      <div id="connectionResult"></div>
+    </div>
+
+    <!-- CREATE ADMIN USER -->
+    <div class="section">
+      <h2>Step 2: Create Admin User</h2>
+      <label>Email</label>
+      <input type="email" id="adminEmail" value="Hrachfilm@gmail.com" placeholder="admin@example.com">
+      <label>Password</label>
+      <input type="password" id="adminPassword" value="Demirchyan36!" placeholder="Choose a strong password">
+      <button onclick="createAdminUser()">Create Admin Account</button>
+      <div id="createResult"></div>
+    </div>
+
+    <!-- VERIFY USER -->
+    <div class="section">
+      <h2>Step 3: Verify User Exists</h2>
+      <button onclick="checkUser()">Check if User Exists</button>
+      <div id="checkResult"></div>
+    </div>
+
+    <!-- INSTRUCTIONS -->
+    <div class="section">
+      <h2>📖 Manual Steps (if automated fails)</h2>
+      <div class="info result">
+        <strong>Go to Supabase Dashboard:</strong><br>
+        1. Visit <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a><br>
+        2. Select your project: <strong>zlvnxvrzotamhpezqedr</strong><br>
+        3. Go to <strong>Authentication → Users</strong><br>
+        4. Click <strong>"Add User"</strong><br>
+        5. Email: <code>Hrachfilm@gmail.com</code><br>
+        6. Password: <code>Demirchyan36!</code><br>
+        7. Click <strong>"Create User"</strong><br>
+        8. <strong>Confirm the email</strong> (important!)
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script>
+    function showResult(elementId, message, type) {
+      const el = document.getElementById(elementId);
+      el.innerHTML = `<div class="result ${type}">${message}</div>`;
+    }
+
+    async function testConnection() {
+      showResult('connectionResult', '⏳ Testing connection...', 'info');
+      
+      try {
+        const supabase = initSupabase();
+        if (!supabase) {
+          throw new Error('Failed to initialize Supabase client');
+        }
+
+        // Try to fetch from a table (any table)
+        const { data, error } = await supabase
+          .from('applications')
+          .select('*')
+          .limit(1);
+
+        if (error) {
+          showResult('connectionResult', 
+            `⚠️ Connection works but query failed:<br><pre>${JSON.stringify(error, null, 2)}</pre>
+            <br>This might be OK if the table doesn't exist yet.`, 
+            'info');
+        } else {
+          showResult('connectionResult', 
+            `✅ <strong>Connection successful!</strong><br>Supabase is working correctly.`, 
+            'success');
+        }
+      } catch (err) {
+        showResult('connectionResult', 
+          `❌ <strong>Connection failed!</strong><br>${err.message}<br><br>
+          <strong>Possible fixes:</strong><br>
+          • Check if your Supabase project is paused (free tier)<br>
+          • Verify the URL and anon key in js/supabase-config.js<br>
+          • Check your internet connection`, 
+          'error');
+      }
+    }
+
+    async function createAdminUser() {
+      const email = document.getElementById('adminEmail').value;
+      const password = document.getElementById('adminPassword').value;
+
+      if (!email || !password) {
+        showResult('createResult', '❌ Please enter both email and password', 'error');
+        return;
+      }
+
+      showResult('createResult', '⏳ Creating admin user...', 'info');
+
+      try {
+        const supabase = initSupabase();
+        if (!supabase) {
+          throw new Error('Failed to initialize Supabase client');
+        }
+
+        // Sign up the user
+        const { data, error } = await supabase.auth.signUp({
+          email: email,
+          password: password,
+          options: {
+            emailRedirectTo: window.location.origin + '/admin-home.html'
+          }
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        if (data.user) {
+          showResult('createResult', 
+            `✅ <strong>Admin user created!</strong><br><br>
+            Email: <code>${email}</code><br>
+            User ID: <code>${data.user.id}</code><br><br>
+            <strong>⚠️ Important:</strong> Check your email (<code>${email}</code>) to confirm the account!<br>
+            <em>If you don't see it, check spam folder.</em>`, 
+            'success');
+        } else {
+          showResult('createResult', 
+            `⚠️ User might already exist. Try logging in instead.`, 
+            'info');
+        }
+      } catch (err) {
+        showResult('createResult', 
+          `❌ <strong>Failed to create user:</strong><br>${err.message}<br><br>
+          <strong>If user already exists:</strong> This is fine! Just use the manual steps to confirm the email.`, 
+          'error');
+      }
+    }
+
+    async function checkUser() {
+      const email = document.getElementById('adminEmail').value;
+      showResult('checkResult', '⏳ Checking user...', 'info');
+
+      try {
+        const supabase = initSupabase();
+        if (!supabase) {
+          throw new Error('Failed to initialize Supabase client');
+        }
+
+        // Try to sign in
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: document.getElementById('adminPassword').value
+        });
+
+        if (error) {
+          if (error.message.includes('Invalid login')) {
+            showResult('checkResult', 
+              `⚠️ <strong>User exists but login failed.</strong><br><br>
+              Possible reasons:<br>
+              • Email not confirmed<br>
+              • Wrong password<br>
+              • Account disabled<br><br>
+              <strong>Solution:</strong> Use the manual steps above to verify the account in Supabase dashboard.`, 
+              'info');
+          } else {
+            throw error;
+          }
+        } else if (data.user) {
+          showResult('checkResult', 
+            `✅ <strong>User verified and working!</strong><br><br>
+            Email: <code>${data.user.email}</code><br>
+            User ID: <code>${data.user.id}</code><br>
+            Email Confirmed: <code>${data.user.email_confirmed_at ? 'Yes ✓' : 'No ✗'}</code><br><br>
+            <strong>You can now login at:</strong> <a href="login.html">login.html</a>`, 
+            'success');
+          
+          // Sign out after check
+          await supabase.auth.signOut();
+        }
+      } catch (err) {
+        showResult('checkResult', 
+          `❌ <strong>Check failed:</strong><br>${err.message}`, 
+          'error');
+      }
+    }
+
+    // Auto-test on load
+    window.addEventListener('DOMContentLoaded', () => {
+      testConnection();
+    });
+  </script>
+</body>
+</html>

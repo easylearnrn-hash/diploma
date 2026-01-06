@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS public.sms_verifications (
     attempts INTEGER DEFAULT 0
 );
 
--- Create index for faster lookups
-CREATE INDEX idx_sms_verifications_phone ON public.sms_verifications(phone_number);
-CREATE INDEX idx_sms_verifications_code ON public.sms_verifications(code);
-CREATE INDEX idx_sms_verifications_verified ON public.sms_verifications(verified);
+-- Create indexes idempotently for faster lookups
+CREATE INDEX IF NOT EXISTS idx_sms_verifications_phone ON public.sms_verifications(phone_number);
+CREATE INDEX IF NOT EXISTS idx_sms_verifications_code ON public.sms_verifications(code);
+CREATE INDEX IF NOT EXISTS idx_sms_verifications_verified ON public.sms_verifications(verified);
 
 -- Create sms_logs table (optional - for tracking all SMS sent)
 CREATE TABLE IF NOT EXISTS public.sms_logs (
@@ -31,30 +31,49 @@ CREATE TABLE IF NOT EXISTS public.sms_logs (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create index for logs
-CREATE INDEX idx_sms_logs_phone ON public.sms_logs(phone_number);
-CREATE INDEX idx_sms_logs_created ON public.sms_logs(created_at);
+-- Create indexes for logs (idempotent)
+CREATE INDEX IF NOT EXISTS idx_sms_logs_phone ON public.sms_logs(phone_number);
+CREATE INDEX IF NOT EXISTS idx_sms_logs_created ON public.sms_logs(created_at);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE public.sms_verifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.sms_logs ENABLE ROW LEVEL SECURITY;
 
--- Create policies for sms_verifications
--- Only service role can access (Edge Functions use service role key)
-CREATE POLICY "Service role can access all verifications"
-    ON public.sms_verifications
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
+-- Create policies for sms_verifications (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'sms_verifications'
+          AND policyname = 'Service role can access all verifications'
+    ) THEN
+        CREATE POLICY "Service role can access all verifications"
+            ON public.sms_verifications
+            FOR ALL
+            TO service_role
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
 
--- Create policies for sms_logs
-CREATE POLICY "Service role can access all logs"
-    ON public.sms_logs
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
+-- Create policies for sms_logs (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'sms_logs'
+          AND policyname = 'Service role can access all logs'
+    ) THEN
+        CREATE POLICY "Service role can access all logs"
+            ON public.sms_logs
+            FOR ALL
+            TO service_role
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
 
 -- Function to clean up expired verifications (run daily)
 CREATE OR REPLACE FUNCTION cleanup_expired_verifications()
@@ -95,28 +114,48 @@ CREATE TABLE IF NOT EXISTS public.transcripts (
     metadata JSONB DEFAULT '{}'::jsonb
 );
 
--- Create indexes for fast lookups
-CREATE INDEX idx_transcripts_verification_code ON public.transcripts(verification_code);
-CREATE INDEX idx_transcripts_student_id ON public.transcripts(student_id);
-CREATE INDEX idx_transcripts_status ON public.transcripts(status);
-CREATE INDEX idx_transcripts_issue_date ON public.transcripts(issue_date);
+-- Create indexes for fast lookups (idempotent)
+CREATE INDEX IF NOT EXISTS idx_transcripts_verification_code ON public.transcripts(verification_code);
+CREATE INDEX IF NOT EXISTS idx_transcripts_student_id ON public.transcripts(student_id);
+CREATE INDEX IF NOT EXISTS idx_transcripts_status ON public.transcripts(status);
+CREATE INDEX IF NOT EXISTS idx_transcripts_issue_date ON public.transcripts(issue_date);
 
 -- Enable Row Level Security
 ALTER TABLE public.transcripts ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Anyone can read valid transcripts by verification code (for public verification)
-CREATE POLICY "Public can verify transcripts"
-    ON public.transcripts
-    FOR SELECT
-    USING (true);
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'transcripts'
+          AND policyname = 'Public can verify transcripts'
+    ) THEN
+        CREATE POLICY "Public can verify transcripts"
+            ON public.transcripts
+            FOR SELECT
+            USING (true);
+    END IF;
+END$$;
 
--- Policy: Only service role can insert/update/delete
-CREATE POLICY "Service role can manage transcripts"
-    ON public.transcripts
-    FOR ALL
-    TO service_role
-    USING (true)
-    WITH CHECK (true);
+-- Policy: Only service role can insert/update/delete (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'transcripts'
+          AND policyname = 'Service role can manage transcripts'
+    ) THEN
+        CREATE POLICY "Service role can manage transcripts"
+            ON public.transcripts
+            FOR ALL
+            TO service_role
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
 
 -- Function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -128,17 +167,29 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to automatically update updated_at
-CREATE TRIGGER update_transcripts_updated_at
-    BEFORE UPDATE ON public.transcripts
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE t.tgname = 'update_transcripts_updated_at'
+          AND n.nspname = 'public'
+          AND c.relname = 'transcripts'
+    ) THEN
+        CREATE TRIGGER update_transcripts_updated_at
+            BEFORE UPDATE ON public.transcripts
+            FOR EACH ROW
+            EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END$$;
 
 -- Grant permissions
 GRANT ALL ON public.transcripts TO service_role;
 GRANT SELECT ON public.transcripts TO anon;
 GRANT SELECT ON public.transcripts TO authenticated;
 
--- Insert sample transcript for testing
+-- Insert sample transcript for testing (idempotent)
 INSERT INTO public.transcripts (
     verification_code,
     student_id,
@@ -163,4 +214,360 @@ INSERT INTO public.transcripts (
     3.75,
     120.00,
     '{"term": "Spring 2025", "dean": "Dr. Sarah Johnson"}'::jsonb
+)
+ON CONFLICT (verification_code) DO NOTHING;
+
+-- ==========================================
+-- ADMISSION APPLICATIONS
+-- ==========================================
+
+-- Stores submitted admission applications with a unique barcode for each record
+CREATE TABLE IF NOT EXISTS public.applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    reference_number TEXT UNIQUE NOT NULL,
+    barcode TEXT NOT NULL,
+    applicant_name TEXT NOT NULL,
+    email TEXT,
+    phone TEXT,
+    program TEXT,
+    start_term TEXT,
+    submission_date TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb
 );
+
+-- Helpful indexes
+CREATE INDEX IF NOT EXISTS idx_applications_reference ON public.applications(reference_number);
+CREATE INDEX IF NOT EXISTS idx_applications_barcode ON public.applications(barcode);
+CREATE INDEX IF NOT EXISTS idx_applications_program ON public.applications(program);
+CREATE INDEX IF NOT EXISTS idx_applications_submission ON public.applications(submission_date);
+
+-- Enable Row Level Security
+ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
+
+-- POLICIES (adjust for production security requirements)
+-- Allow anonymous inserts (public form submissions)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'applications'
+          AND policyname = 'Public can submit applications'
+    ) THEN
+        CREATE POLICY "Public can submit applications"
+            ON public.applications
+            FOR INSERT
+            TO anon
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+-- Allow authenticated/anon read access for the lightweight admin page (lock down in production)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'applications'
+          AND policyname = 'Public can read applications'
+    ) THEN
+        CREATE POLICY "Public can read applications"
+            ON public.applications
+            FOR SELECT
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'applications'
+          AND policyname = 'Public can update applications'
+    ) THEN
+        CREATE POLICY "Public can update applications"
+            ON public.applications
+            FOR UPDATE
+            TO anon
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'applications'
+          AND policyname = 'Public can delete applications'
+    ) THEN
+        CREATE POLICY "Public can delete applications"
+            ON public.applications
+            FOR DELETE
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+GRANT ALL ON public.applications TO service_role;
+GRANT INSERT, SELECT, UPDATE, DELETE ON public.applications TO anon;
+
+-- ==========================================
+-- REGISTRATIONS / WAITING LIST
+-- ==========================================
+
+-- Stores student registrations from the login page (waiting list)
+CREATE TABLE IF NOT EXISTS public.registrations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    full_name TEXT NOT NULL,
+    date_of_birth DATE NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    education_level TEXT NOT NULL,
+    preferred_start_date TEXT NOT NULL,
+    registration_date TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'contacted', 'approved', 'rejected')),
+    notes TEXT,
+    reminder_date DATE
+);
+
+-- Helpful indexes
+CREATE INDEX IF NOT EXISTS idx_registrations_email ON public.registrations(email);
+CREATE INDEX IF NOT EXISTS idx_registrations_status ON public.registrations(status);
+CREATE INDEX IF NOT EXISTS idx_registrations_date ON public.registrations(registration_date);
+CREATE INDEX IF NOT EXISTS idx_registrations_start_date ON public.registrations(preferred_start_date);
+CREATE INDEX IF NOT EXISTS idx_registrations_reminder ON public.registrations(reminder_date);
+
+-- Enable Row Level Security
+ALTER TABLE public.registrations ENABLE ROW LEVEL SECURITY;
+
+-- POLICIES
+-- Allow anonymous inserts (public form submissions)
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'registrations'
+          AND policyname = 'Public can submit registrations'
+    ) THEN
+        CREATE POLICY "Public can submit registrations"
+            ON public.registrations
+            FOR INSERT
+            TO anon
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+-- Allow authenticated/anon read access for admin page
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'registrations'
+          AND policyname = 'Public can read registrations'
+    ) THEN
+        CREATE POLICY "Public can read registrations"
+            ON public.registrations
+            FOR SELECT
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+-- Allow anonymous update access for admin page
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'registrations'
+          AND policyname = 'Public can update registrations'
+    ) THEN
+        CREATE POLICY "Public can update registrations"
+            ON public.registrations
+            FOR UPDATE
+            TO anon
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+-- Allow anonymous delete access for admin page
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'registrations'
+          AND policyname = 'Public can delete registrations'
+    ) THEN
+        CREATE POLICY "Public can delete registrations"
+            ON public.registrations
+            FOR DELETE
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+GRANT ALL ON public.registrations TO service_role;
+GRANT INSERT, SELECT, UPDATE, DELETE ON public.registrations TO anon;
+
+-- ==========================================
+-- STUDENT RECORDS
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS public.students (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id TEXT UNIQUE NOT NULL,
+    full_name TEXT,
+    email TEXT,
+    phone TEXT,
+    date_of_birth TEXT,
+    program TEXT,
+    start_term TEXT,
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'withdrawn')),
+    application_id UUID REFERENCES public.applications(id) ON DELETE SET NULL,
+    metadata JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc', now())
+);
+
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS student_id TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS program TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS start_term TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS status TEXT;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS application_id UUID;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS metadata JSONB;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ;
+ALTER TABLE public.students ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ;
+
+ALTER TABLE public.students ALTER COLUMN status SET DEFAULT 'active';
+ALTER TABLE public.students ALTER COLUMN metadata SET DEFAULT '{}'::jsonb;
+ALTER TABLE public.students ALTER COLUMN created_at SET DEFAULT timezone('utc', now());
+ALTER TABLE public.students ALTER COLUMN updated_at SET DEFAULT timezone('utc', now());
+
+UPDATE public.students
+SET student_id = CONCAT('TMP-', LPAD((FLOOR(random() * 1000000000))::text, 9, '0'))
+WHERE student_id IS NULL;
+
+ALTER TABLE public.students ALTER COLUMN student_id SET NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_students_student_id ON public.students(student_id);
+CREATE INDEX IF NOT EXISTS idx_students_status ON public.students(status);
+CREATE INDEX IF NOT EXISTS idx_students_application ON public.students(application_id);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass
+          AND conname = 'students_student_id_key'
+    ) THEN
+        ALTER TABLE public.students
+            ADD CONSTRAINT students_student_id_key UNIQUE (student_id);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conrelid = 'public.students'::regclass
+          AND conname = 'students_application_id_fkey'
+    ) THEN
+        ALTER TABLE public.students
+            ADD CONSTRAINT students_application_id_fkey
+            FOREIGN KEY (application_id)
+            REFERENCES public.applications(id)
+            ON DELETE SET NULL;
+    END IF;
+END$$;
+
+ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'students'
+          AND policyname = 'Public can read students'
+    ) THEN
+        CREATE POLICY "Public can read students"
+            ON public.students
+            FOR SELECT
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'students'
+          AND policyname = 'Public can insert students'
+    ) THEN
+        CREATE POLICY "Public can insert students"
+            ON public.students
+            FOR INSERT
+            TO anon
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'students'
+          AND policyname = 'Public can update students'
+    ) THEN
+        CREATE POLICY "Public can update students"
+            ON public.students
+            FOR UPDATE
+            TO anon
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+CREATE OR REPLACE FUNCTION maintain_students_updated_at()
+RETURNS trigger AS $$
+BEGIN
+    NEW.updated_at = timezone('utc', now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE t.tgname = 'students_updated_at_trg'
+          AND n.nspname = 'public'
+          AND c.relname = 'students'
+    ) THEN
+        CREATE TRIGGER students_updated_at_trg
+            BEFORE UPDATE ON public.students
+            FOR EACH ROW
+            EXECUTE FUNCTION maintain_students_updated_at();
+    END IF;
+END$$;
+
+GRANT ALL ON public.students TO service_role;
+GRANT INSERT, SELECT, UPDATE, DELETE ON public.students TO anon;

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Debug Session Storage</title>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 40px;
+      background: #1a1a1a;
+      color: #00ff00;
+      line-height: 1.8;
+    }
+    h1 {
+      color: #00ffff;
+      margin-bottom: 30px;
+    }
+    .section {
+      background: #2a2a2a;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      border: 2px solid #00ff00;
+    }
+    .key {
+      color: #ffff00;
+      font-weight: bold;
+    }
+    .value {
+      color: #00ff00;
+    }
+    button {
+      background: #ff0000;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border-radius: 5px;
+      margin: 10px 10px 10px 0;
+      font-family: monospace;
+      font-weight: bold;
+    }
+    button:hover {
+      background: #cc0000;
+    }
+    .clear-btn {
+      background: #0066ff;
+    }
+    .clear-btn:hover {
+      background: #0044cc;
+    }
+  </style>
+</head>
+<body>
+  <h1>🔍 Session Storage Debugger</h1>
+  
+  <div class="section">
+    <h2>📦 sessionStorage</h2>
+    <div id="sessionData"></div>
+  </div>
+  
+  <div class="section">
+    <h2>💾 localStorage</h2>
+    <div id="localData"></div>
+  </div>
+  
+  <div class="section">
+    <h2>🎯 Authentication Status</h2>
+    <div id="authStatus"></div>
+  </div>
+  
+  <button class="clear-btn" onclick="clearAll()">Clear All Storage</button>
+  <button onclick="window.location.href='login.html'">Go to Login</button>
+  <button onclick="window.location.href='admin-home.html'">Go to Admin Home</button>
+  <button onclick="window.location.href='Student-page.html'">Go to Student Page</button>
+  <button onclick="location.reload()">Refresh</button>
+
+  <script>
+    function displayStorage() {
+      // Display sessionStorage
+      const sessionDiv = document.getElementById('sessionData');
+      const sessionKeys = Object.keys(sessionStorage);
+      if (sessionKeys.length === 0) {
+        sessionDiv.innerHTML = '<p style="color: #ff6600;">Empty</p>';
+      } else {
+        sessionDiv.innerHTML = sessionKeys.map(key => 
+          `<div><span class="key">${key}:</span> <span class="value">${sessionStorage.getItem(key)}</span></div>`
+        ).join('');
+      }
+      
+      // Display localStorage
+      const localDiv = document.getElementById('localData');
+      const localKeys = Object.keys(localStorage);
+      if (localKeys.length === 0) {
+        localDiv.innerHTML = '<p style="color: #ff6600;">Empty</p>';
+      } else {
+        localDiv.innerHTML = localKeys.map(key => 
+          `<div><span class="key">${key}:</span> <span class="value">${localStorage.getItem(key)}</span></div>`
+        ).join('');
+      }
+      
+      // Display auth status
+      const authDiv = document.getElementById('authStatus');
+      const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+      const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      
+      authDiv.innerHTML = `
+        <div><span class="key">isLoggedIn:</span> <span class="value" style="color: ${isLoggedIn ? '#00ff00' : '#ff0000'}">${isLoggedIn}</span></div>
+        <div><span class="key">isAdmin:</span> <span class="value" style="color: ${isAdmin ? '#00ff00' : '#ff0000'}">${isAdmin}</span></div>
+        <div><span class="key">userEmail:</span> <span class="value">${userEmail || 'null'}</span></div>
+        <hr style="border-color: #444; margin: 15px 0;">
+        <div style="margin-top: 15px; padding: 15px; background: ${isLoggedIn ? (isAdmin ? '#003300' : '#333300') : '#330000'}; border-radius: 5px;">
+          <strong style="color: #ffffff;">Expected Redirect:</strong> 
+          <span style="color: ${isLoggedIn ? (isAdmin ? '#00ffff' : '#ffff00') : '#ff6600'}; font-size: 18px; font-weight: bold;">
+            ${!isLoggedIn ? 'login.html' : (isAdmin ? 'admin-home.html' : 'Student-page.html')}
+          </span>
+        </div>
+      `;
+    }
+    
+    function clearAll() {
+      if (confirm('Clear ALL storage data?')) {
+        sessionStorage.clear();
+        localStorage.clear();
+        alert('✅ All storage cleared!');
+        displayStorage();
+      }
+    }
+    
+    // Display on load
+    displayStorage();
+    
+    // Auto-refresh every 2 seconds
+    setInterval(displayStorage, 2000);
+  </script>
+</body>
+</html>

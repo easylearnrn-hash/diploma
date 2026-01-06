@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ACNHS Admissions Admin</title>
+  <link rel="icon" type="image/png" href="assets/images/Seal.png">
+  <style>
+    :root {
+      --bg:#0b172a;
+      --panel:#0f213f;
+      --card:#112643;
+      --accent:#2dd4bf;
+      --text:#e2e8f0;
+      --muted:#94a3b8;
+      --border:rgba(255,255,255,0.08);
+    }
+    * { box-sizing:border-box; }
+    body {
+      margin:0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(45,212,191,0.08), transparent 35%),
+                  radial-gradient(circle at 80% 0%, rgba(56,189,248,0.08), transparent 25%),
+                  var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      padding: 24px 28px 12px;
+      display:flex;
+      align-items:center;
+      gap:16px;
+      flex-wrap:wrap;
+    }
+    header h1 {
+      margin:0;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    header p { margin: 0; color: var(--muted); }
+    .badge { background: rgba(45,212,191,0.12); color: var(--accent); padding:6px 10px; border-radius:999px; font-weight:700; letter-spacing:0.5px; }
+    main { padding: 12px 28px 32px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.35);
+    }
+    .filters { display:flex; gap:12px; flex-wrap:wrap; margin-bottom: 12px; }
+    .filters input, .filters select, .filters button {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+    }
+    .filters input::placeholder { color: var(--muted); }
+    .filters button { cursor: pointer; background: var(--accent); color: #022c22; border: none; font-weight: 700; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { padding: 12px 10px; text-align: left; }
+    th { color: var(--muted); font-weight: 700; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); }
+    tr { border-bottom: 1px solid var(--border); }
+    tr:hover { background: rgba(255,255,255,0.02); }
+    .pill { padding: 4px 8px; border-radius: 8px; background: rgba(45,212,191,0.12); color: var(--accent); font-weight: 700; font-size: 12px; }
+    .btn-link { background: none; border: none; color: var(--accent); cursor: pointer; font-weight: 700; }
+    .status { color: var(--muted); font-size: 14px; margin-bottom: 8px; }
+    .empty { text-align: center; padding: 40px 0; color: var(--muted); }
+
+    /* Drawer */
+    .drawer-backdrop { position: fixed; inset:0; background: rgba(0,0,0,0.4); display:none; }
+    .drawer { position: fixed; top:0; right:-520px; width: 480px; height:100vh; background: #0c192f; border-left: 1px solid var(--border); box-shadow: -12px 0 30px rgba(0,0,0,0.45); padding: 20px; overflow-y:auto; transition: right 0.25s ease; }
+    .drawer.open { right:0; }
+    .drawer-backdrop.show { display:block; }
+    .drawer h2 { margin:0 0 4px 0; }
+    .drawer h3 { margin: 16px 0 6px; font-size: 14px; color: var(--muted); }
+    .grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
+    .card { background: var(--card); border: 1px solid var(--border); padding: 10px; border-radius: 10px; }
+    .card p { margin:2px 0; color: var(--muted); font-size: 13px; }
+    .card strong { color: var(--text); }
+    pre { background: #0a1425; border:1px solid var(--border); border-radius: 10px; padding: 10px; color: #cbd5e1; overflow:auto; font-size: 12px; }
+    .close-btn { background:none; border:none; color: var(--muted); font-size: 22px; cursor:pointer; float:right; }
+    svg.barcode { width: 180px; height: 60px; }
+    @media (max-width: 900px) {
+      .drawer { width: 100%; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <p class="badge">Admissions Admin</p>
+      <h1>Applications Dashboard</h1>
+      <p>Live view of submitted applications with barcodes</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="panel">
+      <div class="filters">
+        <input id="searchInput" type="search" placeholder="Search by name, reference, email, or barcode" aria-label="Search applications">
+        <select id="programFilter" aria-label="Filter by program">
+          <option value="">All programs</option>
+        </select>
+        <button id="refreshBtn">Refresh</button>
+      </div>
+      <div class="status" id="statusText">Loading applications…</div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Applicant</th>
+              <th>Program</th>
+              <th>Start Term</th>
+              <th>Submitted</th>
+              <th>Barcode</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="applicationsBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div class="drawer-backdrop" id="drawerBackdrop"></div>
+  <aside class="drawer" id="drawer">
+    <button class="close-btn" id="closeDrawer" aria-label="Close">×</button>
+    <h2 id="drawerName">Applicant</h2>
+    <p id="drawerReference" class="status"></p>
+    <svg id="drawerBarcode" class="barcode" aria-label="Application barcode"></svg>
+
+    <h3>Contact</h3>
+    <div class="grid">
+      <div class="card"><p>Email</p><strong id="drawerEmail">—</strong></div>
+      <div class="card"><p>Phone</p><strong id="drawerPhone">—</strong></div>
+      <div class="card"><p>Program</p><strong id="drawerProgram">—</strong></div>
+      <div class="card"><p>Start Term</p><strong id="drawerStart">—</strong></div>
+    </div>
+
+    <h3>Payload snapshot</h3>
+    <pre id="drawerPayload">{}</pre>
+  </aside>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script>
+    const statusText = document.getElementById('statusText');
+    const tableBody = document.getElementById('applicationsBody');
+    const searchInput = document.getElementById('searchInput');
+    const programFilter = document.getElementById('programFilter');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const drawer = document.getElementById('drawer');
+    const drawerBackdrop = document.getElementById('drawerBackdrop');
+    const closeDrawerBtn = document.getElementById('closeDrawer');
+    let cache = [];
+
+    function renderBarcode(target, value, width = 1.8, height = 60) {
+      if (!target || typeof JsBarcode === 'undefined' || !value) return;
+      try {
+        JsBarcode(target, value, { format: 'code128', lineColor: '#2dd4bf', width, height, displayValue: true, fontSize: 12, background: '#0c192f' });
+      } catch (e) {
+        console.error('Barcode render failed', e);
+      }
+    }
+
+    function setStatus(text) {
+      statusText.textContent = text;
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const d = new Date(value);
+      return isNaN(d) ? value : new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(d);
+    }
+
+    async function loadApplications() {
+      if (!supabaseClient) supabaseClient = initSupabase();
+      if (!supabaseClient) {
+        setStatus('Supabase is not configured. Please update js/supabase-config.js.');
+        return;
+      }
+
+      setStatus('Loading applications…');
+      const { data, error } = await supabaseClient
+        .from('applications')
+        .select('*')
+        .order('submission_date', { ascending: false })
+        .limit(200);
+
+      if (error) {
+        console.error(error);
+        setStatus('Failed to load applications. Check Supabase policies and table.');
+        return;
+      }
+
+      cache = data || [];
+      populateProgramFilter(cache);
+      renderRows(cache);
+      setStatus(`${cache.length} application${cache.length === 1 ? '' : 's'} loaded`);
+    }
+
+    function populateProgramFilter(apps) {
+      const programs = Array.from(new Set(apps.map(a => a.program).filter(Boolean))).sort();
+      programFilter.innerHTML = '<option value="">All programs</option>' + programs.map(p => `<option value="${p}">${p}</option>`).join('');
+    }
+
+    function applyFilters() {
+      const term = searchInput.value.trim().toLowerCase();
+      const program = programFilter.value;
+      const filtered = cache.filter(app => {
+        const haystack = [app.reference_number, app.applicant_name, app.email, app.phone, app.barcode]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        const matchesSearch = !term || haystack.includes(term);
+        const matchesProgram = !program || app.program === program;
+        return matchesSearch && matchesProgram;
+      });
+      renderRows(filtered);
+      setStatus(`${filtered.length} result${filtered.length === 1 ? '' : 's'} shown`);
+    }
+
+    function renderRows(rows) {
+      tableBody.innerHTML = '';
+      if (!rows.length) {
+        tableBody.innerHTML = `<tr><td colspan="7" class="empty">No applications yet.</td></tr>`;
+        return;
+      }
+
+      rows.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><div style="display:flex;flex-direction:column;gap:2px"><strong>${row.reference_number}</strong><span class="pill">${row.barcode}</span></div></td>
+          <td>${row.applicant_name || '—'}<div style="color:var(--muted);font-size:12px">${row.email || ''}</div></td>
+          <td>${row.program || '—'}</td>
+          <td>${row.start_term || '—'}</td>
+          <td>${formatDate(row.submission_date)}</td>
+          <td><svg class="barcode" data-barcode="${row.barcode}"></svg></td>
+          <td><button class="btn-link" data-ref="${row.reference_number}">View</button></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      tableBody.querySelectorAll('svg[data-barcode]').forEach(svg => renderBarcode(svg, svg.dataset.barcode));
+      tableBody.querySelectorAll('button[data-ref]').forEach(btn => btn.addEventListener('click', () => openDrawer(btn.dataset.ref)));
+    }
+
+    function openDrawer(reference) {
+      const app = cache.find(a => a.reference_number === reference);
+      if (!app) return;
+      drawer.classList.add('open');
+      drawerBackdrop.classList.add('show');
+
+      document.getElementById('drawerName').textContent = app.applicant_name || 'Applicant';
+      document.getElementById('drawerReference').textContent = `${app.reference_number} • ${app.barcode}`;
+      document.getElementById('drawerEmail').textContent = app.email || '—';
+      document.getElementById('drawerPhone').textContent = app.phone || '—';
+      document.getElementById('drawerProgram').textContent = app.program || '—';
+      document.getElementById('drawerStart').textContent = app.start_term || '—';
+      renderBarcode(document.getElementById('drawerBarcode'), app.barcode, 2, 70);
+
+      const payload = app.payload || {};
+      document.getElementById('drawerPayload').textContent = JSON.stringify(payload, null, 2);
+    }
+
+    function closeDrawer() {
+      drawer.classList.remove('open');
+      drawerBackdrop.classList.remove('show');
+    }
+
+    searchInput.addEventListener('input', applyFilters);
+    programFilter.addEventListener('change', applyFilters);
+    refreshBtn.addEventListener('click', loadApplications);
+    drawerBackdrop.addEventListener('click', closeDrawer);
+    closeDrawerBtn.addEventListener('click', closeDrawer);
+
+    document.addEventListener('DOMContentLoaded', loadApplications);
+  </script>
+</body>
+</html>

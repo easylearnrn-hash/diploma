@@ -354,20 +354,46 @@ footer{
 </header>
 
 <script>
-// Set login flag when on student page (user is viewing the portal)
-sessionStorage.setItem('isLoggedIn', 'true');
-localStorage.setItem('isLoggedIn', 'true');
+// Check if user is logged in before allowing access
+const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
+
+console.log('Student Page - Auth check:');
+console.log('  isLoggedIn:', isLoggedIn);
+console.log('  isAdmin:', isAdmin);
+console.log('  sessionStorage.isAdmin:', sessionStorage.getItem('isAdmin'));
+console.log('  localStorage.isAdmin:', localStorage.getItem('isAdmin'));
+console.log('  userEmail:', sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'));
+
+// Redirect if not logged in
+if (!isLoggedIn) {
+  console.log('Student Page - Not logged in, redirecting to login');
+  window.location.href = 'login.html';
+}
+
+// Redirect admins to admin dashboard
+if (isAdmin) {
+  console.log('Student Page - Admin detected, redirecting to admin-home.html');
+  window.location.href = 'admin-home.html';
+} else {
+  console.log('Student Page - Regular student, staying on page');
+}
+
 
 // Logout function
 function handleLogout() {
-  // Clear login flags
+  // Clear all login flags and session data
   sessionStorage.removeItem('isLoggedIn');
   localStorage.removeItem('isLoggedIn');
   sessionStorage.removeItem('userEmail');
   localStorage.removeItem('userEmail');
+  sessionStorage.removeItem('userId');
+  localStorage.removeItem('userId');
+  sessionStorage.removeItem('isAdmin');
+  localStorage.removeItem('isAdmin');
   
-  // Redirect to homepage
-  window.location.href = 'index.html';
+  // Redirect to login page
+  window.location.href = 'login.html';
 }
 </script>
 
@@ -1209,76 +1235,141 @@ function showTab(tabName) {
   event.target.classList.add('active');
 }
 
-const transcriptExportConfigs={
-  standard:{
-    transcriptId:'transcriptDocument',
-    filename:'ACNHS_Official_Transcript',
-    qrId:'qrcode-standard'
-  },
-  ministry:{
-    transcriptId:'transcriptDocumentMinistry',
-    filename:'ACNHS_Official_Transcript_Ministry_Review',
-    qrId:'qrcode-ministry'
-  },
-  useval:{
-    transcriptId:'transcriptDocumentUSEval',
-    filename:'ACNHS_Official_Transcript_US_Credential_Evaluation',
-    qrId:'qrcode-useval'
-  }
-};
-
+// Download transcript function
 async function downloadTranscript(){
-  const selectedVersion=document.querySelector('input[name="transcriptVersion"]:checked');
-  if(!selectedVersion){
+  // Get selected version
+  const selectedVersion = document.querySelector('input[name="transcriptVersion"]:checked');
+  if (!selectedVersion) {
     alert('Please select a transcript version');
     return;
   }
-
-  const version=selectedVersion.value;
-  const exportConfig=transcriptExportConfigs[version]||transcriptExportConfigs.standard;
-  const transcript=document.getElementById(exportConfig.transcriptId);
-
+  
+  const version = selectedVersion.value;
+  let transcriptId, pdfFilename, pdfTitle, qrElementId;
+  
+  // Determine which template to use
+  switch(version) {
+    case 'ministry':
+      transcriptId = 'transcriptDocumentMinistry';
+      pdfFilename = 'ACNHS_Official_Transcript_Ministry_Review';
+      pdfTitle = 'ACNHS Official Transcript - Ministry Review';
+      qrElementId = 'qrcode-ministry';
+      break;
+    case 'useval':
+      transcriptId = 'transcriptDocumentUSEval';
+      pdfFilename = 'ACNHS_Official_Transcript_US_Credential_Evaluation';
+      pdfTitle = 'ACNHS Official Transcript - US Credential Evaluation';
+      qrElementId = 'qrcode-useval';
+      break;
+    default:
+      transcriptId = 'transcriptDocument';
+      pdfFilename = 'ACNHS_Official_Transcript';
+      pdfTitle = 'ACNHS Official Transcript';
+      qrElementId = 'qrcode-standard';
+  }
+  
+  const transcript=document.getElementById(transcriptId);
   if(!transcript){
-    alert('Transcript template not found. Please refresh the page and try again.');
+    console.error('Transcript template not found:', transcriptId);
     return;
   }
 
-  if(typeof html2pdf==='undefined'){
-    alert('PDF engine failed to load. Please refresh and try again.');
-    return;
-  }
-
-  if(window.location.protocol==='file:'){
-    alert('⚠️ PDF export requires the local server. Run "python3 start-server.py" and open http://localhost:8000/Student-page.html');
-    return;
-  }
-
-  await ensureFontsReady();
-  await waitForQRElement(exportConfig.qrId);
-  await new Promise(resolve=>setTimeout(resolve,150));
-
-  const {wrapper,clone}=mountTranscriptClone(transcript);
-  const options=getPdfOptions(exportConfig.filename);
-
-  try{
-    await html2pdf().set(options).from(clone).save();
-  }catch(err){
-    console.error('Transcript PDF download failed',err);
-    const isSecurityError=err?.name==='SecurityError'||err?.message?.includes('insecure');
-    if(isSecurityError){
-      alert('⚠️ Browser blocked the PDF due to security. Please ensure you are using http://localhost:8000/ and not opening the file directly.');
-    }else{
-      alert('❌ PDF export failed. Check the console for technical details.');
-    }
-  }finally{
-    if(wrapper && wrapper.parentNode){
-      wrapper.parentNode.removeChild(wrapper);
+  // Ensure fonts are fully loaded for crisp rendering
+  if(document.fonts && document.fonts.status!=='loaded'){
+    try{
+      await document.fonts.ready;
+    }catch(err){
+      console.warn('Font loading wait skipped:', err);
     }
   }
+
+  // Wait for QR code to be fully rendered
+  const qrElement = document.getElementById(qrElementId);
+  if (qrElement && qrElement.dataset.qrLoaded !== 'true') {
+    console.log('Waiting for QR code to load...');
+    await new Promise(resolve => {
+      const checkInterval = setInterval(() => {
+        if (qrElement.dataset.qrLoaded === 'true') {
+          clearInterval(checkInterval);
+          resolve();
+        }
+      }, 100);
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        resolve();
+      }, 5000);
+    });
+  }
+
+  // Open print preview in new window
+  const printWindow=window.open('', '_blank','width=900,height=1200');
+  if(!printWindow){
+    alert('Please allow pop-ups to view and download the transcript.');
+    return;
+  }
+
+  const transcriptHTML=transcript.innerHTML;
+  const styles=`<style>
+    @page{size:letter;margin:0}
+    html,body{margin:0;padding:0;background:#ffffff;font-family:'Times New Roman',Times,serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;-webkit-user-select:none;user-select:none}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-sizing:border-box}
+  </style>`;
+
+  printWindow.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${pdfTitle}</title>${styles}</head><body>${transcriptHTML}</body></html>`);
+  printWindow.document.close();
+  printWindow.focus();
+
+  // Trigger PDF download after layout settles
+  setTimeout(()=>{
+    requestAnimationFrame(()=>generateTranscriptPDF(transcriptId, pdfFilename));
+  },500);
 }
 
-function getPdfOptions(filename){
-  return{
+function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNHS_Official_Transcript'){
+  if(typeof html2pdf==='undefined'){
+    console.error('html2pdf library failed to load');
+    return;
+  }
+
+  // Check if running on file:// protocol
+  if(window.location.protocol==='file:'){
+    console.error('PDF generation requires HTTP server');
+    alert('⚠️ Security Error: PDF cannot be generated when opening HTML files directly.\n\n✅ Solution: Run a local web server\n\n1. Open Terminal in project folder\n2. Run: python3 start-server.py\n3. Open: http://localhost:8000/Student-page.html\n\nSee SERVER-SETUP.md for details.');
+    return;
+  }
+
+  const transcript=document.getElementById(transcriptId);
+  if(!transcript){
+    console.error('Transcript template not found:', transcriptId);
+    return;
+  }
+
+  const clone=transcript.cloneNode(true);
+  clone.style.display='block';
+  clone.style.position='relative';
+  clone.style.margin='0 auto';
+  clone.style.width='816px';
+  clone.style.maxWidth='816px';
+  clone.style.minHeight='1056px';
+  clone.style.height='auto';
+
+  const wrapper=document.createElement('div');
+  wrapper.style.position='fixed';
+  wrapper.style.top='0';
+  wrapper.style.left='0';
+  wrapper.style.width='100%';
+  wrapper.style.height='100%';
+  wrapper.style.padding='0';
+  wrapper.style.background='#ffffff';
+  wrapper.style.zIndex='-1';
+  wrapper.style.display='flex';
+  wrapper.style.alignItems='flex-start';
+  wrapper.style.justifyContent='center';
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+
+  const options={
     filename:`${filename}.pdf`,
     margin:[0,0,0,0],
     image:{type:'jpeg',quality:1},
@@ -1294,67 +1385,21 @@ function getPdfOptions(filename){
     },
     jsPDF:{unit:'pt',format:'letter',orientation:'portrait'}
   };
-}
 
-async function ensureFontsReady(){
-  if(!document.fonts) return;
-  try{
-    await document.fonts.ready;
-  }catch(err){
-    console.warn('Font loading wait skipped:',err);
-  }
-}
-
-async function waitForQRElement(elementId){
-  const qr=document.getElementById(elementId);
-  if(!qr) return;
-  if(qr.dataset.qrLoaded==='true'||(qr.complete&&qr.naturalWidth>0)){
-    qr.dataset.qrLoaded='true';
-    return;
-  }
-
-  await new Promise(resolve=>{
-    const timeout=setTimeout(()=>{
-      qr.dataset.qrLoaded='true';
-      resolve();
-    },7000);
-
-    const finalize=()=>{
-      clearTimeout(timeout);
-      qr.dataset.qrLoaded='true';
-      resolve();
-    };
-
-    qr.addEventListener('load',finalize,{once:true});
-    qr.addEventListener('error',finalize,{once:true});
+  html2pdf().set(options).from(clone).save().then(()=>{
+    document.body.removeChild(wrapper);
+  }).catch(err=>{
+    console.error('Transcript PDF download failed', err);
+    
+    // Check if it's a security error
+    if(err.name==='SecurityError'||err.message.includes('insecure')){
+      alert('⚠️ Security Error: Cannot generate PDF\n\n✅ Solution: Use a local web server\n\n1. Open Terminal in project folder\n2. Run: python3 start-server.py\n3. Open: http://localhost:8000/Student-page.html\n\nSee SERVER-SETUP.md for details.');
+    }else{
+      alert('❌ PDF generation failed. Check console for details.');
+    }
+    
+    document.body.removeChild(wrapper);
   });
-}
-
-function mountTranscriptClone(sourceNode){
-  const clone=sourceNode.cloneNode(true);
-  clone.style.display='block';
-  clone.style.margin='0 auto';
-  clone.style.position='relative';
-  clone.style.width='816px';
-  clone.style.maxWidth='816px';
-  clone.style.minHeight='1056px';
-  clone.style.height='auto';
-  clone.style.background='#ffffff';
-
-  const wrapper=document.createElement('div');
-  wrapper.id='transcript-pdf-wrapper';
-  wrapper.style.position='fixed';
-  wrapper.style.inset='0';
-  wrapper.style.zIndex='-1';
-  wrapper.style.background='#ffffff';
-  wrapper.style.display='flex';
-  wrapper.style.justifyContent='center';
-  wrapper.style.alignItems='flex-start';
-  wrapper.style.padding='40px 0';
-  wrapper.appendChild(clone);
-  document.body.appendChild(wrapper);
-
-  return{wrapper,clone};
 }
 
 // Toggle Help Dropdown

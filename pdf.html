@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF Preview - ACNHS Government Document</title>
+  <link rel="icon" type="image/png" href="assets/images/Seal.png">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #1a1a2e;
+      color: #e2e8f0;
+      padding: 40px 20px;
+    }
+
+    .preview-container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: #0f1f3a;
+      border-radius: 16px;
+      padding: 32px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .preview-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .preview-header h1 {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #2dd4bf 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .preview-header p {
+      color: #94a3b8;
+      font-size: 16px;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 32px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .btn-primary {
+      background: #2dd4bf;
+      color: #022c22;
+    }
+
+    .btn-primary:hover {
+      background: #14b8a6;
+      transform: translateY(-2px);
+    }
+
+    .btn-secondary {
+      background: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(59, 130, 246, 0.25);
+      transform: translateY(-2px);
+    }
+
+    .document-wrapper {
+      background: #fff;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    /* ========================================
+       GOVERNMENT DOCUMENT STYLES
+       ======================================== */
+    
+    .print-document * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    .print-document {
+      position: relative;
+      font-family: "Trajan Pro", "Times New Roman", "Georgia", serif;
+      color: #000;
+      background: #fff;
+      font-size: 11pt;
+      line-height: 1.45;
+    }
+
+    .print-shell {
+      position: relative;
+      padding: 0.75in;
+      margin: 0 auto;
+      background: #fff;
+      min-height: 11in;
+      width: 8.5in;
+    }
+
+    /* Official Government Header Border */
+    .print-shell::before {
+      content: '';
+      position: absolute;
+      top: 0.5in;
+      left: 0.75in;
+      right: 0.75in;
+      height: 3px;
+      background: repeating-linear-gradient(
+        90deg,
+        #1e3a8a 0px,
+        #1e3a8a 8px,
+        transparent 8px,
+        transparent 16px
+      );
+    }
+
+    .print-shell::after {
+      content: '';
+      position: absolute;
+      bottom: 0.5in;
+      left: 0.75in;
+      right: 0.75in;
+      height: 2px;
+      background: #1e3a8a;
+    }
+
+    /* Watermark */
+    .print-watermark {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-45deg);
+      opacity: 0.04;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .print-watermark img {
+      width: 550px;
+      height: 550px;
+      object-fit: contain;
+      filter: grayscale(100%);
+    }
+
+    /* Official Header */
+    .gov-header {
+      text-align: center;
+      border: 3px double #1e3a8a;
+      padding: 24px 20px;
+      margin: 32px 0 28px;
+      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+      position: relative;
+      z-index: 2;
+      box-shadow: inset 0 0 0 1px rgba(30, 58, 138, 0.1);
+    }
+
+    .gov-header__content {
+      max-width: 90%;
+      margin: 0 auto;
+    }
+
+    .gov-header__seal {
+      display: inline-block;
+      width: 100px;
+      height: 100px;
+      margin: -15px 20px 0 20px;
+      vertical-align: middle;
+    }
+
+    .gov-header__seal-img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+    }
+
+    .gov-header__super {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      margin-bottom: 10px;
+      margin-top: 5px;
+      color: #1a1a1a;
+    }
+
+    .gov-header__title {
+      font-size: 18pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      margin: 12px 0;
+      line-height: 1.3;
+      border-top: 2px solid #1e3a8a;
+      border-bottom: 2px solid #1e3a8a;
+      padding: 10px 0;
+      color: #1e3a8a;
+    }
+
+    .gov-header__dept {
+      font-size: 11pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin: 12px 0 8px;
+      color: #1e40af;
+    }
+
+    .gov-header__address {
+      font-size: 9pt;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      margin-top: 8px;
+      color: #555;
+    }
+
+    /* Document Classification */
+    .doc-classification {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 22px 0;
+      padding: 10px 12px;
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+      color: #fff;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 8pt;
+      border: 2px solid #1e3a8a;
+    }
+
+    .doc-classification__code,
+    .doc-classification__id,
+    .doc-classification__date,
+    .doc-classification__status {
+      white-space: nowrap;
+    }
+
+    .doc-classification__separator {
+      margin: 0 8px;
+      opacity: 0.5;
+    }
+
+    /* Document Title */
+    .doc-title {
+      text-align: center;
+      margin: 28px 0 24px;
+      page-break-after: avoid;
+    }
+
+    .doc-title__main {
+      font-size: 14pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      padding: 16px 20px;
+      border: 1px solid #1e3a8a;
+      background: linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%);
+      box-shadow: inset 0 0 0 1px rgba(30, 58, 138, 0.1);
+      color: #1e3a8a;
+    }
+
+    .doc-title__sub {
+      font-size: 10pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 8px;
+      color: #444;
+    }
+
+    /* Official Sections */
+    .gov-section {
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+
+    .gov-section__header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+      color: #fff;
+      padding: 9px 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10pt;
+      margin-bottom: 0;
+      border: 2px solid #1e3a8a;
+      border-bottom: none;
+    }
+
+    .gov-section__content {
+      border: 2px solid #1e3a8a;
+      padding: 0;
+      background: #fff;
+    }
+
+    /* Section with Photo Layout */
+    .section-with-photo {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 20px;
+    }
+
+    .section-with-photo .gov-section {
+      flex: 1;
+      margin-bottom: 0;
+    }
+
+    /* Applicant Photo */
+    .applicant-photo-container {
+      width: 120px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .applicant-photo-header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 100%);
+      color: #fff;
+      padding: 9px 14px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10pt;
+      text-align: center;
+      border: 1px solid #1e3a8a;
+      border-bottom: none;
+    }
+
+    .applicant-photo-frame {
+      width: 120px;
+      flex: 1;
+      border: 1px solid #1e3a8a;
+      border-top: none;
+      background: #ffffff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .applicant-photo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Government Table */
+    .gov-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      font-size: 10pt;
+      border: 0.5px solid #1e3a8a;
+    }
+
+    .gov-table tr {
+      border-bottom: 0.5px solid #1e3a8a;
+    }
+
+    .gov-table tr:last-child {
+      border-bottom: none;
+    }
+
+    .gov-table td {
+      padding: 12px 16px;
+      vertical-align: middle;
+      line-height: 1.6;
+      border-right: 0.5px solid #1e3a8a;
+    }
+
+    .gov-table td:last-child {
+      border-right: none;
+    }
+
+    .gov-table__label {
+      width: 35%;
+      font-weight: 800;
+      text-transform: uppercase;
+      font-size: 8.5pt;
+      letter-spacing: 0.08em;
+      background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+      color: #1e3a8a;
+      text-align: left;
+      position: relative;
+      padding-left: 24px;
+    }
+
+    .gov-table__label::before {
+      content: '▸';
+      position: absolute;
+      left: 6px;
+      color: #3b82f6;
+      font-weight: 900;
+    }
+
+    .gov-table__value {
+      width: 65%;
+      background: #ffffff;
+      color: #1a1a1a;
+      font-weight: 500;
+      font-size: 10pt;
+      letter-spacing: 0.01em;
+    }
+
+    /* Security Strip */
+    .security-strip {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: repeating-linear-gradient(
+        45deg,
+        #fef3c7,
+        #fef3c7 8px,
+        #fde68a 8px,
+        #fde68a 16px
+      );
+      border-top: 3px double #d97706;
+      border-bottom: 3px double #d97706;
+      margin: 30px 0;
+      font-size: 8pt;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: #92400e;
+    }
+
+    .microprint {
+      font-size: 5pt;
+      letter-spacing: 0.02em;
+      opacity: 0.8;
+    }
+
+    /* Security Features */
+    .security-features {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 16px;
+      background: linear-gradient(90deg, #f0fdfa 0%, #ccfbf1 50%, #f0fdfa 100%);
+      border-left: 4px solid #0f766e;
+      border-right: 4px solid #0f766e;
+      margin: 20px 0;
+      font-size: 7pt;
+      color: #115e59;
+    }
+
+    .security-code {
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      background: #fff;
+      padding: 4px 8px;
+      border: 1px solid #0f766e;
+      border-radius: 2px;
+    }
+
+    .hologram-indicator {
+      font-size: 6pt;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #0f766e;
+      border: 1px dashed #0f766e;
+      padding: 3px 6px;
+      background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 2px,
+        rgba(15, 118, 110, 0.05) 2px,
+        rgba(15, 118, 110, 0.05) 4px
+      );
+    }
+
+    .doc-authenticity {
+      font-size: 7pt;
+      color: #0f766e;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    /* Signature Block */
+    .gov-signatures {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 60px;
+      margin: 45px 0 30px;
+      page-break-inside: avoid;
+    }
+
+    .gov-signature {
+      text-align: center;
+    }
+
+    .gov-signature__line {
+      border: none;
+      border-bottom: 2px solid #0f766e;
+      height: 65px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 0px;
+      position: relative;
+    }
+
+    .gov-signature__line img {
+      max-width: 220px;
+      max-height: 90px;
+      position: absolute;
+      bottom: -15px;
+      object-fit: contain;
+    }
+
+    .gov-signature__handwritten {
+      font-family: 'Brush Script MT', 'Lucida Handwriting', 'Apple Chancery', cursive;
+      font-size: 26pt;
+      font-style: italic;
+      color: #1e40af;
+      line-height: 1;
+      font-weight: 400;
+    }
+
+    .gov-signature__name {
+      font-size: 11pt;
+      font-weight: 700;
+      margin-bottom: 6px;
+      margin-top: 2px;
+      color: #1e3a8a;
+      letter-spacing: 0.02em;
+    }
+
+    .gov-signature__title {
+      font-size: 10pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 5px;
+      color: #000;
+    }
+
+    .gov-signature__org {
+      font-size: 9pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-top: 4px;
+      color: #444;
+      line-height: 1.3;
+    }
+
+    .gov-signature__date {
+      font-size: 8pt;
+      margin-top: 6px;
+      font-style: italic;
+      color: #666;
+    }
+
+    .gov-signature__sign-btn {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .gov-signature__sign-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.5);
+      background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+    }
+
+    .gov-signature__sign-btn:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.4);
+    }
+
+    /* Document Thumbnails */
+    .gov-documents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .gov-document-item {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 8px;
+      text-align: center;
+      background: #f8fafc;
+    }
+
+    .gov-document-thumbnail {
+      width: 100%;
+      height: 100px;
+      object-fit: cover;
+      border-radius: 4px;
+      background: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 6px;
+      border: 1px solid #cbd5e1;
+    }
+
+    .gov-document-thumbnail img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .gov-document-name {
+      font-size: 8pt;
+      font-weight: 600;
+      color: #334155;
+      margin-bottom: 2px;
+      word-wrap: break-word;
+    }
+
+    .gov-document-status {
+      font-size: 7pt;
+      color: #16a34a;
+      font-weight: 500;
+    }
+
+    /* Official Seal */
+    .gov-seal {
+      text-align: center;
+      padding: 16px;
+      border: 3px double #0f766e;
+      background: linear-gradient(180deg, #f0fdfa 0%, #ccfbf1 100%);
+      box-shadow: inset 0 0 0 1px rgba(15, 118, 110, 0.1);
+    }
+
+    .gov-seal__image {
+      width: 95px;
+      height: 95px;
+      margin: 0 auto 10px;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.1));
+    }
+
+    .gov-seal__text {
+      font-size: 8pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: #0f766e;
+    }
+
+    /* Footer */
+    .gov-footer {
+      margin-top: 30px;
+      padding: 20px 24px;
+      border-top: 2px solid #1e3a8a;
+      background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      font-size: 7.5pt;
+      line-height: 1.5;
+      color: #333;
+    }
+
+    .gov-footer__verification {
+      font-weight: 800;
+      font-size: 8.5pt;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: #1e3a8a;
+      text-align: center;
+    }
+
+    .gov-footer__url {
+      font-family: "Courier New", monospace;
+      background: #dbeafe;
+      padding: 3px 8px;
+      border: 1px solid #1e3a8a;
+      font-weight: 600;
+      font-size: 7.5pt;
+      letter-spacing: 0.02em;
+      color: #1e40af;
+      white-space: nowrap;
+    }
+
+    .gov-footer p {
+      margin: 5px 0;
+    }
+
+    .gov-footer__barcode-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 30px;
+      margin: 12px 0;
+      padding: 12px 0;
+      border-top: 1px solid #cbd5e1;
+      border-bottom: 1px solid #cbd5e1;
+    }
+
+    .gov-footer__codes {
+      font-family: monospace;
+      font-size: 7pt;
+      color: #1e3a8a;
+      font-weight: 600;
+      text-align: center;
+    }
+
+    /* Microprint */
+    .microprint {
+      font-size: 5pt;
+      letter-spacing: 0.02em;
+      opacity: 0.8;
+    }
+
+    /* Print optimization */
+    @media print {
+      body {
+        background: #fff;
+        padding: 0;
+      }
+
+      .preview-container {
+        background: transparent;
+        padding: 0;
+        box-shadow: none;
+      }
+
+      .preview-header,
+      .button-group {
+        display: none;
+      }
+
+      .document-wrapper {
+        box-shadow: none;
+      }
+
+      .gov-section {
+        page-break-inside: avoid;
+      }
+      
+      .gov-signatures {
+        page-break-before: avoid;
+        page-break-inside: avoid;
+      }
+
+      .gov-footer {
+        page-break-before: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-container">
+    <div class="preview-header">
+      <h1>PDF Document Preview</h1>
+      <p>Government-style admission application record</p>
+    </div>
+
+    <div class="button-group">
+      <button class="btn btn-primary" onclick="generatePDF()">📄 Generate PDF</button>
+      <button class="btn btn-secondary" onclick="window.print()">🖨️ Print</button>
+      <button class="btn btn-secondary" onclick="location.href='admin-applications.html'">← Back to Admin</button>
+    </div>
+
+    <div class="document-wrapper">
+      <div class="print-document" id="pdfContent">
+        <div class="print-watermark" aria-hidden="true">
+          <img src="assets/images/Seal.png" alt="">
+        </div>
+        <div class="print-shell">
+          
+          <!-- Government Header -->
+          <div class="gov-header">
+            <div class="gov-header__seal">
+              <img src="assets/images/Seal.png" alt="Official Seal" class="gov-header__seal-img">
+            </div>
+            <div class="gov-header__content">
+              <div class="gov-header__super">REPUBLIC OF ARMENIA</div>
+              <h1 class="gov-header__title">ARMENIAN COLLEGE OF NURSING<br>& HEALTH SCIENCES</h1>
+              <div class="gov-header__dept">Office of Admissions & Records</div>
+              <div class="gov-header__address">27/41 Fuchik str · Yerevan, Armenia · +374 93 798879 USA +1 707 717 4440</div>
+            </div>
+          </div>
+
+          <!-- Document Classification -->
+          <div class="doc-classification">
+            <span class="doc-classification__code">OFFICIAL RECORD</span>
+            <span class="doc-classification__separator">|</span>
+            <span class="doc-classification__id" id="docIdDisplay">DOC ID: ACN-2024-001234</span>
+            <span class="doc-classification__separator">|</span>
+            <span class="doc-classification__date" id="issuedDate">ISSUED: JAN 06, 2026</span>
+            <span class="doc-classification__separator">|</span>
+            <span class="doc-classification__status" id="statusDisplay">STATUS: CONFIRMED</span>
+          </div>
+
+          <!-- Document Title -->
+          <div class="doc-title">
+            <div class="doc-title__main">OFFICIAL ADMISSION APPLICATION RECORD</div>
+            <div class="doc-title__sub" id="academicYear">Academic Year 2024-2025</div>
+          </div>
+
+          <!-- Document Verification with Photo -->
+          <div class="gov-section">
+            <div class="gov-section__header">DOCUMENT VERIFICATION</div>
+            <div class="gov-section__content" style="padding: 0; display: flex; gap: 0; align-items: center;">
+              
+              <!-- Applicant Photo -->
+              <div style="width: 113px; height: 151px; flex-shrink: 0; background: #fff; padding: 0 8px 0 26px;">
+                <img id="applicantPhoto" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='113' height='151'%3E%3Crect width='113' height='151' fill='%23e5e7eb'/%3E%3Ccircle cx='56.5' cy='45' r='28' fill='%239ca3af'/%3E%3Crect x='28' y='85' width='57' height='66' rx='28' fill='%239ca3af'/%3E%3Ctext x='56.5' y='20' font-family='Arial' font-size='12' fill='%23374151' text-anchor='middle'%3E3x4cm%3C/text%3E%3C/svg%3E" alt="Applicant" style="width: 100%; height: 100%; object-fit: cover; display: block;">
+              </div>
+              
+              <!-- Verification Details -->
+              <div style="flex: 1; padding: 16px 18px; display: flex; flex-direction: column; justify-content: center;">
+                
+                <!-- Barcode Section -->
+                <div style="text-align: center; margin-bottom: 12px;">
+                  <svg id="verification-barcode-top"></svg>
+                </div>
+                
+                <!-- Verification Info Grid -->
+                <div style="display: grid; grid-template-columns: 55px 1fr; gap: 8px 12px; font-size: 8.5pt; margin-bottom: 12px; align-items: center;">
+                  <div style="font-weight: 800; color: #1e3a8a; text-align: right; letter-spacing: 0.05em; white-space: nowrap;">REF:</div>
+                  <div id="refNumberDisplay" style="font-weight: 600; color: #1a1a1a; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ACN-2024-REF-789456</div>
+                  
+                  <div style="font-weight: 800; color: #1e3a8a; text-align: right; letter-spacing: 0.05em; white-space: nowrap;">CTRL:</div>
+                  <div id="ctrlNumberDisplay" style="font-weight: 600; color: #1a1a1a; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">ACN-2024-001234</div>
+                  
+                  <div style="font-weight: 800; color: #1e3a8a; text-align: right; letter-spacing: 0.05em; white-space: nowrap;">HASH:</div>
+                  <div id="hashDisplay" style="font-weight: 600; color: #1a1a1a; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">SHA256-7A8B9C</div>
+                </div>
+                
+                <!-- Verify URL -->
+                <div style="text-align: center; padding: 8px 10px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border: 2px solid #1e3a8a; border-radius: 3px;">
+                  <div style="font-size: 7pt; font-weight: 800; color: #1e3a8a; margin-bottom: 3px; letter-spacing: 0.1em;">VERIFY ONLINE</div>
+                  <div style="font-family: monospace; font-size: 7.5pt; font-weight: 700; color: #1e40af;">acnhs.am/verify</div>
+                </div>
+                
+              </div>
+            </div>
+          </div>
+
+          <!-- Applicant Overview -->
+          <div class="gov-section">
+            <div class="gov-section__header">APPLICANT INFORMATION</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Full Legal Name:</td>
+                  <td class="gov-table__value" id="fullName"><strong></strong></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Reference Number:</td>
+                  <td class="gov-table__value" id="refNumber"><strong></strong></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Program Choice:</td>
+                  <td class="gov-table__value" id="programChoice"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Intended Start Term:</td>
+                  <td class="gov-table__value" id="startTerm"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Personal Information -->
+          <div class="gov-section">
+            <div class="gov-section__header">PERSONAL INFORMATION</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Date of Birth:</td>
+                  <td class="gov-table__value" id="birthDate"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Gender:</td>
+                  <td class="gov-table__value" id="gender"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Nationality:</td>
+                  <td class="gov-table__value" id="nationality"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Place of Birth:</td>
+                  <td class="gov-table__value" id="birthPlace"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Contact Information -->
+          <div class="gov-section">
+            <div class="gov-section__header">CONTACT INFORMATION</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Email Address:</td>
+                  <td class="gov-table__value" id="email"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Primary Phone:</td>
+                  <td class="gov-table__value" id="primaryPhone"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Alternate Phone:</td>
+                  <td class="gov-table__value" id="altPhone"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Mailing Address:</td>
+                  <td class="gov-table__value" id="address"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Academic Background -->
+          <div class="gov-section">
+            <div class="gov-section__header">ACADEMIC BACKGROUND</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Education Level:</td>
+                  <td class="gov-table__value" id="educationLevel"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Institution Name:</td>
+                  <td class="gov-table__value" id="institutionName"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Field of Study:</td>
+                  <td class="gov-table__value" id="fieldOfStudy"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Graduation Year:</td>
+                  <td class="gov-table__value" id="graduationYear"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">GPA / Final Grade:</td>
+                  <td class="gov-table__value" id="gpa"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Emergency Contact -->
+          <div class="gov-section">
+            <div class="gov-section__header">EMERGENCY CONTACT</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Contact Name:</td>
+                  <td class="gov-table__value" id="emergencyName"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Relationship:</td>
+                  <td class="gov-table__value" id="emergencyRelation"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Phone Number:</td>
+                  <td class="gov-table__value" id="emergencyPhone"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Transfer Student Information (Conditional) -->
+          <div class="gov-section" id="transferStudentSection" style="display: none;">
+            <div class="gov-section__header">TRANSFER STUDENT INFORMATION</div>
+            <div class="gov-section__content">
+              <table class="gov-table">
+                <tr>
+                  <td class="gov-table__label">Previous Institution:</td>
+                  <td class="gov-table__value" id="prevInstitution"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Program Attended:</td>
+                  <td class="gov-table__value" id="prevProgram"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Student ID:</td>
+                  <td class="gov-table__value" id="prevStudentId"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Enrollment Period:</td>
+                  <td class="gov-table__value" id="enrollmentPeriod"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Academic Status:</td>
+                  <td class="gov-table__value" id="academicStatus"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Credits Earned:</td>
+                  <td class="gov-table__value" id="creditsEarned"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Credits Seeking Transfer:</td>
+                  <td class="gov-table__value" id="creditsTransfer"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Previous GPA:</td>
+                  <td class="gov-table__value" id="prevGPA"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Reason for Transfer:</td>
+                  <td class="gov-table__value" id="transferReason" style="white-space: pre-wrap;"></td>
+                </tr>
+                <tr>
+                  <td class="gov-table__label">Completed Courses:</td>
+                  <td class="gov-table__value" id="completedCourses" style="white-space: pre-wrap;"></td>
+                </tr>
+              </table>
+            </div>
+          </div>
+
+          <!-- Personal Statement -->
+          <div class="gov-section">
+            <div class="gov-section__header">PERSONAL STATEMENT</div>
+            <div class="gov-section__content">
+              <p id="personalStatement" style="font-size: 10pt; line-height: 1.6; text-align: justify; margin: 0; padding: 14px;">
+              </p>
+            </div>
+          </div>
+
+          <!-- Required Documents -->
+          <div class="gov-section">
+            <div class="gov-section__header">REQUIRED DOCUMENTS</div>
+            <div class="gov-section__content">
+              <div class="gov-documents-grid" id="documentsGrid">
+                <!-- Documents will be populated dynamically -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Security Features -->
+          <div class="security-features">
+            <div class="security-code">SEC-CODE: ACN-2024-SEC-8X9K2L</div>
+            <div class="hologram-indicator">◆ HOLOGRAM SEAL EMBEDDED ◆</div>
+            <div class="doc-authenticity">DIGITALLY VERIFIED</div>
+          </div>
+
+          <!-- Security Strip -->
+          <div class="security-strip">
+            <span>OFFICIAL DOCUMENT</span>
+            <span class="microprint">ARMENIAN COLLEGE OF NURSING AND HEALTH SCIENCES · OFFICE OF ADMISSIONS · REPUBLIC OF ARMENIA</span>
+            <span>DO NOT COPY</span>
+          </div>
+
+          <!-- Signatures -->
+          <div class="gov-signatures" id="signaturesSection">
+            <div class="gov-signature">
+              <div class="gov-signature__line" id="registrarSignatureLine">
+                <button class="gov-signature__sign-btn" id="signButton" style="display: none;">✍️ Click to Sign</button>
+              </div>
+              <div class="gov-signature__title">Registrar</div>
+              <div class="gov-signature__org">ACNHS Office of Records</div>
+              <div class="gov-signature__date" id="registrarDate">Date: January 06, 2026</div>
+            </div>
+            
+            <div class="gov-signature">
+              <div class="gov-signature__line" id="directorSignatureLine">
+                <span class="gov-signature__handwritten">Hrachya Vardanyan</span>
+              </div>
+              <div class="gov-signature__name">Dr. Hrachya Vardanyan</div>
+              <div class="gov-signature__title">Director of Admissions</div>
+              <div class="gov-signature__org">ACNHS Office of Admissions</div>
+              <div class="gov-signature__date" id="directorDate">Date: January 06, 2026</div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="gov-footer">
+            <div class="gov-footer__verification">DOCUMENT VERIFICATION</div>
+            
+            <div style="text-align: center; margin-bottom: 10px;">
+              <div style="margin-bottom: 6px;">This is an official record generated from the secure ACNHS Admissions Portal.</div>
+              <div>Verify authenticity online at: <span class="gov-footer__url">acnhs.am/verify</span></div>
+            </div>
+            
+            <!-- Verification Barcode and Seal -->
+            <div class="gov-footer__barcode-section">
+              <div style="flex: 1; text-align: center;">
+                <svg id="verification-barcode"></svg>
+                <div class="gov-footer__codes" style="margin-top: 6px;" id="footerCodes">
+                  REF: ACN-2024-REF-789456 · CTRL: ACN-2024-001234
+                </div>
+              </div>
+              <div class="gov-seal" style="flex: 0 0 auto; margin: 0;">
+                <img src="assets/images/Seal.png" alt="Official Seal" class="gov-seal__image" style="width: 75px; height: 75px; margin-bottom: 6px;">
+                <div class="gov-seal__text" style="font-size: 7pt;">Official Seal</div>
+                <div class="gov-seal__text" style="font-size: 6.5pt; margin-top: 3px;">ACNHS</div>
+              </div>
+            </div>
+            
+            <div style="font-size: 6.5pt; color: #666; line-height: 1.6; text-align: center;" class="microprint">
+              This document contains embedded security features including microprinting, security codes, and digital verification markers. 
+              Unauthorized reproduction, alteration, or forgery is prohibited by law. 
+              Armenian College of Nursing & Health Sciences is accredited by the Ministry of Education of the Republic of Armenia. 
+              All rights reserved.
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="js/html2pdf.bundle.min.js"></script>
+  <script>
+    // Configure PDF.js worker
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    
+    // Generate verification barcodes
+    window.addEventListener('DOMContentLoaded', function() {
+      // Top barcode in verification section (compact)
+      JsBarcode("#verification-barcode-top", "ACN2024001234VERIFY", {
+        format: "CODE128",
+        width: 1.2,
+        height: 28,
+        displayValue: true,
+        fontSize: 9,
+        margin: 2,
+        textMargin: 1
+      });
+      
+      // Bottom barcode in footer
+      JsBarcode("#verification-barcode", "ACN2024001234VERIFY", {
+        format: "CODE128",
+        width: 1.5,
+        height: 40,
+        displayValue: true,
+        fontSize: 11,
+        margin: 5,
+        textMargin: 2
+      });
+    });
+
+    async function generatePDF() {
+      const element = document.getElementById('pdfContent');
+      const options = {
+        filename: 'ACNHS-Application-Sample.pdf',
+        margin: [20, 20, 20, 20],
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
+      };
+
+      try {
+        const worker = html2pdf().set(options).from(element);
+        await worker.save();
+        console.log('PDF generated successfully!');
+      } catch (error) {
+        console.error('PDF generation failed:', error);
+        alert('Failed to generate PDF: ' + error.message);
+      }
+    }
+
+    // Log page load
+    console.log('PDF Preview page loaded');
+    console.log('Server should be running at http://localhost:8000');
+
+    // ==========================================
+    // PREVIEW MODE: Handle data from URL params
+    // ==========================================
+    function initPreviewMode() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const isPreview = urlParams.get('preview') === 'true';
+      
+      if (isPreview) {
+        // Hide buttons in preview mode
+        const buttonGroup = document.querySelector('.button-group');
+        if (buttonGroup) buttonGroup.style.display = 'none';
+        
+        const previewHeader = document.querySelector('.preview-header');
+        if (previewHeader) previewHeader.style.display = 'none';
+        
+        // Show sign button in preview mode
+        const signButton = document.getElementById('signButton');
+        if (signButton) {
+          signButton.style.display = 'inline-flex';
+          
+          // Handle sign button click
+          signButton.addEventListener('click', function() {
+            // Notify parent window that user has signed
+            window.parent.postMessage({ type: 'applicationSigned' }, '*');
+            
+            // Get applicant name from data
+            const dataParam = urlParams.get('data');
+            if (dataParam) {
+              try {
+                const formData = JSON.parse(decodeURIComponent(dataParam));
+                const registrarSignatureLine = document.getElementById('registrarSignatureLine');
+                if (registrarSignatureLine && formData.applicantName) {
+                  registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${formData.applicantName}</span>`;
+                }
+              } catch (error) {
+                console.error('Error signing application:', error);
+              }
+            }
+          });
+        }
+        
+        // Change status to pending in preview mode
+        const statusDisplay = document.getElementById('statusDisplay');
+        if (statusDisplay) statusDisplay.textContent = 'STATUS: PENDING REVIEW';
+        
+        // Get data from URL
+        const dataParam = urlParams.get('data');
+        if (dataParam) {
+          try {
+            const formData = JSON.parse(decodeURIComponent(dataParam));
+            populatePreviewData(formData);
+          } catch (error) {
+            console.error('Error parsing preview data:', error);
+          }
+        }
+      }
+    }
+
+    function populatePreviewData(data) {
+      // Helper function to safely set text content
+      function setField(id, value) {
+        const element = document.getElementById(id);
+        if (element && value) {
+          element.textContent = value;
+        }
+      }
+
+      // Calculate dynamic academic year (e.g., if current month is Aug-Dec: 2024-2025, if Jan-Jul: 2023-2024)
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth(); // 0-11
+      let academicYearStart, academicYearEnd;
+      
+      if (currentMonth >= 7) { // August (7) to December (11)
+        academicYearStart = currentYear;
+        academicYearEnd = currentYear + 1;
+      } else { // January (0) to July (6)
+        academicYearStart = currentYear - 1;
+        academicYearEnd = currentYear;
+      }
+      
+      setField('academicYear', `Academic Year ${academicYearStart}-${academicYearEnd}`);
+
+      // Populate Document Verification Codes
+      setField('docIdDisplay', data.documentId ? `DOC ID: ${data.documentId}` : 'DOC ID: ACN-2024-001234');
+      setField('refNumberDisplay', data.referenceNumber || 'ACN-2024-REF-789456');
+      setField('ctrlNumberDisplay', data.controlNumber || 'ACN-2024-001234');
+      setField('hashDisplay', data.verificationHash || 'SHA256-7A8B9C');
+      
+      // Update issued date
+      const monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+      const dateStr = `ISSUED: ${monthNames[now.getMonth()]} ${String(now.getDate()).padStart(2, '0')}, ${now.getFullYear()}`;
+      setField('issuedDate', dateStr);
+
+      // Generate barcodes with actual data
+      if (data.barcode) {
+        try {
+          // Top barcode in verification section
+          JsBarcode("#verification-barcode-top", data.barcode, {
+            format: "CODE128",
+            width: 1.2,
+            height: 28,
+            displayValue: true,
+            fontSize: 9,
+            margin: 2,
+            textMargin: 1
+          });
+          
+          // Bottom barcode in footer
+          JsBarcode("#verification-barcode", data.barcode, {
+            format: "CODE128",
+            width: 1.5,
+            height: 40,
+            displayValue: true,
+            fontSize: 11,
+            margin: 5,
+            textMargin: 2
+          });
+        } catch (error) {
+          console.error('Error generating barcodes:', error);
+        }
+      }
+
+      // Update footer codes to match top verification codes
+      const footerCodes = document.getElementById('footerCodes');
+      if (footerCodes && data.referenceNumber && data.controlNumber) {
+        footerCodes.textContent = `REF: ${data.referenceNumber} · CTRL: ${data.controlNumber}`;
+      }
+
+      // Applicant Information
+      const fullNameStrong = document.querySelector('#fullName strong');
+      if (fullNameStrong && data.applicantName) fullNameStrong.textContent = data.applicantName;
+
+      const refNumberStrong = document.querySelector('#refNumber strong');
+      if (refNumberStrong && data.referenceNumber) refNumberStrong.textContent = data.referenceNumber;
+
+      setField('programChoice', data.programChoice);
+      setField('startTerm', data.startTerm);
+
+      // Personal Information
+      setField('birthDate', data.dob);
+      setField('gender', data.gender);
+      setField('nationality', data.nationality);
+      setField('birthPlace', data.birthLocation);
+
+      // Contact Information
+      setField('email', data.email);
+      setField('primaryPhone', data.phone);
+      setField('altPhone', data.altPhone);
+      setField('address', data.addressLine);
+
+      // Academic Background
+      setField('educationLevel', data.educationLevel);
+      setField('institutionName', data.institution);
+      setField('fieldOfStudy', data.fieldOfStudy);
+      setField('graduationYear', data.gradYear);
+      setField('gpa', data.gpa);
+
+      // Emergency Contact
+      setField('emergencyName', data.emergencyName);
+      setField('emergencyRelation', data.emergencyRelation);
+      setField('emergencyPhone', data.emergencyPhone);
+
+      // Transfer Student Information (conditional)
+      if (data.isTransferStudent === 'yes') {
+        const transferSection = document.getElementById('transferStudentSection');
+        if (transferSection) {
+          transferSection.style.display = 'block';
+          
+          setField('prevInstitution', data.prevInstitution);
+          setField('prevProgram', data.prevProgram);
+          setField('prevStudentId', data.prevStudentId);
+          
+          // Format enrollment period
+          const enrollmentPeriod = `${data.prevStartDate} to ${data.prevEndDate}`;
+          setField('enrollmentPeriod', enrollmentPeriod);
+          
+          setField('academicStatus', data.academicStatus);
+          setField('creditsEarned', data.creditsEarned);
+          setField('creditsTransfer', data.creditsTransfer);
+          setField('prevGPA', data.prevGPA);
+          setField('transferReason', data.transferReason);
+          setField('completedCourses', data.completedCourses);
+        }
+      }
+
+      // Personal Statement
+      setField('personalStatement', data.statement);
+
+      // Update signature dates dynamically
+      const signatureMonthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const signatureDate = `Date: ${signatureMonthNames[now.getMonth()]} ${String(now.getDate()).padStart(2, '0')}, ${now.getFullYear()}`;
+      setField('registrarDate', signatureDate);
+      setField('directorDate', signatureDate);
+
+      // Don't add registrar signature in preview mode - it will be added when user clicks Sign button
+      // (signature is added by the sign button click handler in initPreviewMode)
+
+      console.log('Preview data populated:', data);
+    }
+
+    // Listen for photo and document updates via postMessage
+    window.addEventListener('message', function(event) {
+      if (event.data && event.data.type === 'updatePhoto') {
+        console.log('Received photo update via postMessage');
+        const photoImg = document.getElementById('applicantPhoto');
+        if (photoImg && event.data.photoData) {
+          photoImg.src = event.data.photoData;
+          console.log('Photo updated successfully');
+        } else {
+          console.error('Photo element not found or no photo data');
+        }
+      }
+      
+      if (event.data && event.data.type === 'addDocument') {
+        console.log('Received document:', event.data.document.fileName);
+        const documentsGrid = document.getElementById('documentsGrid');
+        if (documentsGrid) {
+          const docItem = document.createElement('div');
+          docItem.className = 'gov-document-item';
+          
+          const thumbnail = document.createElement('div');
+          thumbnail.className = 'gov-document-thumbnail';
+          
+          // Check if it's an image or PDF
+          if (event.data.document.data.startsWith('data:image/')) {
+            const img = document.createElement('img');
+            img.src = event.data.document.data;
+            img.alt = event.data.document.fileName;
+            thumbnail.appendChild(img);
+          } else if (event.data.document.data.startsWith('data:application/pdf')) {
+            // For PDFs, render first page as thumbnail
+            renderPdfThumbnail(event.data.document.data, thumbnail);
+          } else {
+            // Fallback for other file types
+            thumbnail.innerHTML = '<div style="font-size: 32px; color: #ef4444;">📄</div>';
+          }
+          
+          const docType = document.createElement('div');
+          docType.className = 'gov-document-name';
+          docType.textContent = event.data.document.name;
+          docType.style.fontWeight = '700';
+          docType.style.color = '#0f766e';
+          
+          const docFileName = document.createElement('div');
+          docFileName.className = 'gov-document-name';
+          docFileName.textContent = event.data.document.fileName;
+          docFileName.style.fontSize = '7pt';
+          docFileName.style.color = '#64748b';
+          docFileName.style.fontWeight = '400';
+          
+          const docStatus = document.createElement('div');
+          docStatus.className = 'gov-document-status';
+          docStatus.textContent = '✓ Uploaded';
+          
+          docItem.appendChild(thumbnail);
+          docItem.appendChild(docType);
+          docItem.appendChild(docFileName);
+          docItem.appendChild(docStatus);
+          documentsGrid.appendChild(docItem);
+        }
+      }
+    });
+
+    // Function to render PDF first page as thumbnail
+    async function renderPdfThumbnail(pdfDataUrl, thumbnailElement) {
+      try {
+        // Convert data URL to array buffer
+        const base64 = pdfDataUrl.split(',')[1];
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        
+        // Load PDF document
+        const loadingTask = pdfjsLib.getDocument({ data: bytes });
+        const pdf = await loadingTask.promise;
+        
+        // Get first page
+        const page = await pdf.getPage(1);
+        
+        // Create canvas for rendering
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        
+        // Calculate scale to fit thumbnail
+        const viewport = page.getViewport({ scale: 1 });
+        const scale = 100 / viewport.height; // Scale to 100px height
+        const scaledViewport = page.getViewport({ scale: scale });
+        
+        canvas.width = scaledViewport.width;
+        canvas.height = scaledViewport.height;
+        
+        // Render page
+        await page.render({
+          canvasContext: context,
+          viewport: scaledViewport
+        }).promise;
+        
+        // Add canvas to thumbnail
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+        canvas.style.objectFit = 'contain';
+        thumbnailElement.appendChild(canvas);
+        
+      } catch (error) {
+        console.error('Error rendering PDF thumbnail:', error);
+        // Fallback to icon
+        thumbnailElement.innerHTML = '<div style="font-size: 32px; color: #ef4444;">📄</div>';
+      }
+    }
+
+    // Initialize preview mode if in iframe
+    initPreviewMode();
+  </script>
+</body>
+</html>

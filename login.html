@@ -295,6 +295,80 @@ body{
     grid-template-columns:1fr;
   }
 }
+
+/* SUCCESS MODAL */
+.success-modal{
+  background:rgba(26, 41, 66, 0.95);
+  backdrop-filter:blur(20px);
+  border:2px solid #2dd4bf;
+  border-radius:24px;
+  padding:48px 40px;
+  max-width:480px;
+  width:90%;
+  box-shadow:0 24px 48px rgba(0,0,0,.5), 0 0 0 1px rgba(45,212,191,0.2);
+  animation:successSlideUp 0.4s ease;
+  position:relative;
+  text-align:center;
+}
+
+@keyframes successSlideUp{
+  from{opacity:0;transform:translateY(40px) scale(0.95)}
+  to{opacity:1;transform:translateY(0) scale(1)}
+}
+
+.success-icon{
+  width:80px;
+  height:80px;
+  margin:0 auto 24px;
+  background:linear-gradient(135deg, #2dd4bf, #14b8a6);
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:48px;
+  animation:successPulse 0.6s ease;
+  box-shadow:0 8px 24px rgba(45,212,191,0.4);
+}
+
+@keyframes successPulse{
+  0%{transform:scale(0)}
+  50%{transform:scale(1.1)}
+  100%{transform:scale(1)}
+}
+
+.success-modal h2{
+  font-size:28px;
+  color:white;
+  font-weight:800;
+  margin-bottom:12px;
+}
+
+.success-modal p{
+  color:#94a3b8;
+  font-size:16px;
+  line-height:1.6;
+  margin-bottom:32px;
+}
+
+.success-close-btn{
+  width:100%;
+  padding:16px;
+  background:#2dd4bf;
+  color:#022c22;
+  border:none;
+  border-radius:16px;
+  font-size:16px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.3s;
+  font-family:'Inter',sans-serif;
+}
+
+.success-close-btn:hover{
+  background:#26c4b5;
+  transform:translateY(-2px);
+  box-shadow:0 12px 24px rgba(45, 212, 191, 0.3);
+}
 </style>
 </head>
 
@@ -390,30 +464,118 @@ body{
   </div>
 </div>
 
+<!-- SUCCESS MODAL -->
+<div id="successModal" class="modal-overlay" style="display:none;">
+  <div class="success-modal">
+    <div class="success-icon">✅</div>
+    <h2>Registration Successful!</h2>
+    <p>Thank you for registering! You have been added to our waiting list. We will contact you soon.</p>
+    <button class="success-close-btn" onclick="closeSuccessModal()">Close</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
 <script src="js/main.js"></script>
 <script>
+const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+
+// Check if already logged in on page load
+window.addEventListener('DOMContentLoaded', function() {
+  const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+  const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
+  
+  if (isLoggedIn && userEmail) {
+    // Already logged in - redirect based on role
+    if (isAdmin) {
+      window.location.href = 'admin-home.html';
+    } else {
+      window.location.href = 'Student-page.html';
+    }
+  }
+});
+
 // Handle login form submission
-document.getElementById('loginForm').addEventListener('submit', function(e) {
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   
-  const email = document.getElementById('email').value;
+  const email = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
+  const submitBtn = e.target.querySelector('.signin-btn');
   
-  // Simple validation (in production, this would authenticate with backend)
-  if (email && password) {
-    // Set login flag in both sessionStorage and localStorage
+  if (!email || !password) {
+    alert('Please enter both email and password.');
+    return;
+  }
+
+  // Disable button during authentication
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Signing in...';
+  
+  try {
+    // Initialize Supabase client
+    const supabase = initSupabase();
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+
+    // Authenticate with Supabase
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    // Authentication successful
+    const user = data.user;
+    
+    // Store session info
     sessionStorage.setItem('isLoggedIn', 'true');
     localStorage.setItem('isLoggedIn', 'true');
-    sessionStorage.setItem('userEmail', email);
-    localStorage.setItem('userEmail', email);
+    sessionStorage.setItem('userEmail', user.email);
+    localStorage.setItem('userEmail', user.email);
+    sessionStorage.setItem('userId', user.id);
+    localStorage.setItem('userId', user.id);
+
+    // Check if user is admin
+    const isAdmin = ADMIN_EMAILS.some(adminEmail => adminEmail.toLowerCase() === user.email.toLowerCase());
     
-    // Show success message
-    alert('Login successful! Welcome back.');
+    console.log('Login - User email:', user.email);
+    console.log('Login - Admin emails:', ADMIN_EMAILS);
+    console.log('Login - Is admin?', isAdmin);
     
-    // Redirect to Student Portal
-    window.location.href = 'Student-page.html';
-  } else {
-    alert('Please enter valid credentials.');
+    if (isAdmin) {
+      sessionStorage.setItem('isAdmin', 'true');
+      localStorage.setItem('isAdmin', 'true');
+      console.log('Login - Set isAdmin to true in storage');
+      console.log('Login - sessionStorage isAdmin:', sessionStorage.getItem('isAdmin'));
+      console.log('Login - localStorage isAdmin:', localStorage.getItem('isAdmin'));
+      alert('Welcome back, Admin! Redirecting to admin dashboard...');
+      window.location.href = 'admin-home.html';
+    } else {
+      sessionStorage.setItem('isAdmin', 'false');
+      localStorage.setItem('isAdmin', 'false');
+      console.log('Login - Set isAdmin to false in storage');
+      alert('Login successful! Welcome back.');
+      window.location.href = 'Student-page.html';
+    }
+
+  } catch (error) {
+    console.error('Login error:', error);
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Sign In';
+    
+    if (error.message.includes('Invalid login credentials')) {
+      alert('Invalid email or password. Please try again.');
+    } else if (error.message.includes('Email not confirmed')) {
+      alert('Please confirm your email address before logging in.');
+    } else {
+      alert('Login failed: ' + (error.message || 'Unknown error'));
+    }
   }
 });
 
@@ -428,6 +590,23 @@ function closeRegistrationModal() {
   document.body.style.overflow = 'auto';
 }
 
+// SUCCESS MODAL FUNCTIONS
+function showSuccessModal() {
+  const modal = document.getElementById('successModal');
+  modal.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSuccessModal() {
+  const modal = document.getElementById('successModal');
+  modal.style.display = 'none';
+  document.body.style.overflow = 'auto';
+  // Redirect to homepage after closing
+  setTimeout(() => {
+    window.location.href = 'index.html';
+  }, 300); // Small delay for smooth animation
+}
+
 // Close modal when clicking outside
 document.getElementById('registrationModal').addEventListener('click', function(e) {
   if (e.target === this) {
@@ -435,9 +614,24 @@ document.getElementById('registrationModal').addEventListener('click', function(
   }
 });
 
+// Close success modal when clicking outside
+document.getElementById('successModal').addEventListener('click', function(e) {
+  if (e.target === this) {
+    closeSuccessModal();
+  }
+});
+
 // Handle registration form submission
-document.getElementById('registrationForm').addEventListener('submit', function(e) {
+document.getElementById('registrationForm').addEventListener('submit', async function(e) {
   e.preventDefault();
+  
+  const submitBtn = this.querySelector('button[type="submit"]') || this.querySelector('.signin-btn');
+  const originalText = submitBtn ? submitBtn.textContent : '';
+  
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Submitting...';
+  }
   
   const formData = {
     fullName: document.getElementById('fullName').value,
@@ -449,9 +643,54 @@ document.getElementById('registrationForm').addEventListener('submit', function(
   };
   
   console.log('Registration submitted:', formData);
-  alert('Thank you for registering! We will contact you soon.');
-  closeRegistrationModal();
-  this.reset();
+  
+  try {
+    // Save to Supabase
+    const supabase = initSupabase();
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
+    const { data, error } = await supabase
+      .from('registrations')
+      .insert([{
+        full_name: formData.fullName,
+        date_of_birth: formData.dob,
+        email: formData.email,
+        phone: formData.phone,
+        education_level: formData.education,
+        preferred_start_date: formData.startDate,
+        status: 'pending'
+      }])
+      .select();
+    
+    if (error) {
+      console.error('Registration save error:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      
+      // Check if table doesn't exist
+      if (error.message && error.message.includes('relation "public.registrations" does not exist')) {
+        alert('⚠️ Registration table not set up yet.\n\nThe administrator needs to run the SQL setup in Supabase first.\n\nPlease contact the administrator or try again later.');
+      } else {
+        alert('There was an error submitting your registration: ' + error.message + '\n\nPlease try again or contact us directly.');
+      }
+      throw error;
+    }
+    
+    console.log('Registration saved to Supabase:', data);
+    closeRegistrationModal();
+    this.reset();
+    showSuccessModal();
+    
+  } catch (error) {
+    console.error('Registration error:', error);
+    alert('There was an error submitting your registration. Please try again or contact us directly.');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  }
 });
 </script>
 </body>
