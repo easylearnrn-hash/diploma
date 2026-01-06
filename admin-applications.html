@@ -1054,6 +1054,53 @@
       </div>
     </div>
 
+    <!-- Status Management Section -->
+    <div class="drawer-section" id="statusManagementSection" style="display:none;">
+      <h3>📊 Status Management</h3>
+      
+      <div style="margin-bottom:20px;">
+        <label style="display:block;color:#94a3b8;font-size:14px;margin-bottom:8px;font-weight:500;">Update Application Status</label>
+        <select id="statusSelect" style="width:100%;padding:12px;background:#1a2942;border:1px solid rgba(45,212,191,0.3);border-radius:8px;color:white;font-size:14px;cursor:pointer;">
+          <option value="SUBMITTED">📝 Submitted</option>
+          <option value="UNDER REVIEW">👀 Under Review</option>
+          <option value="ACTIVELY REVIEWING">🔍 Actively Reviewing</option>
+          <option value="RFE PREPARING">📋 RFE Preparing</option>
+          <option value="RFE SENT">📤 RFE Sent</option>
+          <option value="ADDITIONAL DOCUMENTS REQUESTED">📎 Additional Documents Requested</option>
+          <option value="DOCUMENTS RECEIVED">📥 Documents Received</option>
+          <option value="FINAL REVIEW">⚖️ Final Review</option>
+          <option value="APPROVED">✅ Approved</option>
+          <option value="DENIED">❌ Denied</option>
+          <option value="ON HOLD">⏸️ On Hold</option>
+          <option value="WITHDRAWN">🚫 Withdrawn</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <label style="display:block;color:#94a3b8;font-size:14px;margin-bottom:8px;font-weight:500;">Status Message (Visible to Applicant)</label>
+        <textarea id="statusMessageInput" placeholder="e.g., 'Your application is currently being reviewed by our admissions committee...'" style="width:100%;padding:12px;background:#1a2942;border:1px solid rgba(45,212,191,0.3);border-radius:8px;color:white;font-size:14px;min-height:80px;font-family:'Inter',sans-serif;resize:vertical;"></textarea>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <label style="display:block;color:#94a3b8;font-size:14px;margin-bottom:8px;font-weight:500;">📎 Request Additional Documents (RFE)</label>
+        <div id="rfeDocumentsContainer" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">
+          <!-- Dynamic checkboxes will be added here -->
+        </div>
+        <button class="action-btn edit-btn" onclick="addCustomRFEDocument()" style="width:100%;margin-top:8px;">
+          <span>+</span> Add Custom Document Request
+        </button>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <label style="display:block;color:#94a3b8;font-size:14px;margin-bottom:8px;font-weight:500;">Admin Notes (Internal Only)</label>
+        <textarea id="adminNotesInput" placeholder="Internal notes about this application..." style="width:100%;padding:12px;background:#1a2942;border:1px solid rgba(45,212,191,0.3);border-radius:8px;color:white;font-size:14px;min-height:80px;font-family:'Inter',sans-serif;resize:vertical;"></textarea>
+      </div>
+
+      <button class="action-btn approve-btn" onclick="updateApplicationStatus()" style="width:100%;">
+        <span>💾</span> Update Status & Notify Applicant
+      </button>
+    </div>
+
     <div class="drawer-section" id="registrationDetails" style="display:none;">
       <h3>Registration Details</h3>
       <div class="info-grid">
@@ -1168,6 +1215,7 @@
       applicationOnlySections.forEach(section => toggleSection(section, true));
       toggleSection('registrationDetails', false);
       toggleSection('actionButtons', false);
+      toggleSection('statusManagementSection', true);
     }
 
     function showRegistrationView() {
@@ -1685,6 +1733,147 @@
 
       showApplicationView();
       openDrawer();
+      
+      // Load status management data
+      loadStatusManagement(app);
+    }
+
+    function loadStatusManagement(app) {
+      // Set current status
+      const statusSelect = document.getElementById('statusSelect');
+      if (statusSelect && app.status) {
+        statusSelect.value = app.status;
+      }
+      
+      // Set status message
+      const statusMessageInput = document.getElementById('statusMessageInput');
+      if (statusMessageInput) {
+        statusMessageInput.value = app.status_message || '';
+      }
+      
+      // Set admin notes
+      const adminNotesInput = document.getElementById('adminNotesInput');
+      if (adminNotesInput) {
+        adminNotesInput.value = app.admin_notes || '';
+      }
+      
+      // Load RFE documents
+      populateRFEDocuments(app.rfe_documents_requested || []);
+    }
+
+    function populateRFEDocuments(requestedDocs = []) {
+      const container = document.getElementById('rfeDocumentsContainer');
+      if (!container) return;
+      
+      const commonDocuments = [
+        'Updated Transcript',
+        'English Proficiency Test (TOEFL/IELTS)',
+        'Letter of Recommendation',
+        'Statement of Purpose',
+        'Passport Copy',
+        'Diploma/Degree Certificate',
+        'Financial Documents',
+        'Medical Records',
+        'Background Check'
+      ];
+      
+      container.innerHTML = commonDocuments.map(doc => {
+        const isChecked = requestedDocs.includes(doc);
+        return `
+          <label style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:6px;cursor:pointer;transition:all 0.2s;">
+            <input type="checkbox" value="${doc}" ${isChecked ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+            <span style="color:white;font-size:14px;">${doc}</span>
+          </label>
+        `;
+      }).join('');
+      
+      // Add any custom documents that aren't in the common list
+      requestedDocs.forEach(doc => {
+        if (!commonDocuments.includes(doc)) {
+          container.innerHTML += `
+            <label style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:6px;cursor:pointer;transition:all 0.2s;">
+              <input type="checkbox" value="${doc}" checked style="width:18px;height:18px;cursor:pointer;">
+              <span style="color:white;font-size:14px;">${doc}</span>
+              <button onclick="removeRFEDocument(this)" style="margin-left:auto;background:rgba(239,68,68,0.2);border:none;color:#fca5a5;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;">✕</button>
+            </label>
+          `;
+        }
+      });
+    }
+
+    function addCustomRFEDocument() {
+      const docName = prompt('Enter the document name:');
+      if (!docName || !docName.trim()) return;
+      
+      const container = document.getElementById('rfeDocumentsContainer');
+      if (!container) return;
+      
+      const newDoc = docName.trim();
+      container.innerHTML += `
+        <label style="display:flex;align-items:center;gap:8px;padding:8px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:6px;cursor:pointer;transition:all 0.2s;">
+          <input type="checkbox" value="${newDoc}" checked style="width:18px;height:18px;cursor:pointer;">
+          <span style="color:white;font-size:14px;">${newDoc}</span>
+          <button onclick="removeRFEDocument(this)" style="margin-left:auto;background:rgba(239,68,68,0.2);border:none;color:#fca5a5;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:12px;">✕</button>
+        </label>
+      `;
+    }
+
+    function removeRFEDocument(btn) {
+      btn.closest('label').remove();
+    }
+
+    async function updateApplicationStatus() {
+      if (!currentApplicationId) return;
+      
+      const supabase = initSupabase();
+      if (!supabase) return;
+      
+      const statusSelect = document.getElementById('statusSelect');
+      const statusMessageInput = document.getElementById('statusMessageInput');
+      const adminNotesInput = document.getElementById('adminNotesInput');
+      const rfeContainer = document.getElementById('rfeDocumentsContainer');
+      
+      const newStatus = statusSelect.value;
+      const statusMessage = statusMessageInput.value.trim();
+      const adminNotes = adminNotesInput.value.trim();
+      
+      // Collect checked RFE documents
+      const rfeDocuments = [];
+      if (rfeContainer) {
+        rfeContainer.querySelectorAll('input[type="checkbox"]:checked').forEach(checkbox => {
+          rfeDocuments.push(checkbox.value);
+        });
+      }
+      
+      try {
+        const { error } = await supabase
+          .from('applications')
+          .update({
+            status: newStatus,
+            status_message: statusMessage || null,
+            admin_notes: adminNotes || null,
+            rfe_documents_requested: rfeDocuments,
+            status_updated_at: new Date().toISOString()
+          })
+          .eq('id', currentApplicationId);
+        
+        if (error) throw error;
+        
+        alert('✅ Application status updated successfully!\n\nApplicant will see the changes when they check their application status.');
+        
+        // Reload applications list
+        await loadApplications();
+        
+        // Reopen drawer with updated data
+        const updatedApp = applicationsData.find(a => a.id === currentApplicationId);
+        if (updatedApp) {
+          openApplicationDrawer(currentApplicationId);
+        }
+        
+      } catch (error) {
+        console.error('Error updating status:', error);
+        alert('❌ Failed to update status: ' + (error.message || 'Unknown error'));
+      }
     }
 
     function getApplicationEditFields() {

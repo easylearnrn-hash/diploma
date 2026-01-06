@@ -98,6 +98,43 @@ body{
   border-color:rgba(239, 68, 68, 0.5);
 }
 
+.refresh-btn{
+  padding:10px 20px;
+  background:rgba(45, 212, 191, 0.15);
+  color:var(--accent);
+  border:1px solid rgba(45, 212, 191, 0.3);
+  border-radius:8px;
+  font-size:14px;
+  font-weight:600;
+  cursor:pointer;
+  transition:all 0.3s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.refresh-btn:hover{
+  background:rgba(45, 212, 191, 0.25);
+  border-color:rgba(45, 212, 191, 0.5);
+}
+
+.refresh-btn:active{
+  transform:scale(0.98);
+}
+
+.refresh-btn svg{
+  transition:transform 0.6s ease;
+}
+
+.refresh-btn.spinning svg{
+  animation:spin 1s linear infinite;
+}
+
+@keyframes spin{
+  from{transform:rotate(0deg);}
+  to{transform:rotate(360deg);}
+}
+
 /* CONTAINER */
 .container{
   max-width:1000px;
@@ -388,6 +425,12 @@ body{
     <div class="user-info">
       Welcome, <strong id="applicantName">Loading...</strong>
     </div>
+    <button class="refresh-btn" onclick="refreshStatus()" title="Refresh application status">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+      </svg>
+      Refresh
+    </button>
     <button class="logout-btn" onclick="logout()">Logout</button>
   </div>
 </div>
@@ -467,6 +510,18 @@ body{
         <p id="statusDescriptionText">Your application has been successfully submitted and is in our queue for review.</p>
       </div>
       
+      <!-- Requested Documents Section -->
+      <div id="requestedDocumentsContainer" style="display:none;margin-top:32px;background:rgba(45,212,191,0.03);border:1px solid rgba(45,212,191,0.2);border-radius:12px;padding:24px;">
+        <h3 style="font-size:18px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:24px;">📋</span>
+          Required Documents
+        </h3>
+        <p style="color:rgba(255,255,255,0.8);margin-bottom:20px;line-height:1.6;">
+          Please submit the following documents to complete your application. You can upload them through your portal or email them to <strong style="color:var(--accent);">admissions@universitaria.edu</strong>
+        </p>
+        <div class="doc-list"></div>
+      </div>
+      
       <!-- Application Timeline -->
       <div style="margin-top:48px;">
         <h3 style="font-size:20px;font-weight:700;margin-bottom:28px;">Application Timeline</h3>
@@ -529,6 +584,11 @@ const STATUS_INFO = {
     className: 'under-review',
     description: 'Our admissions committee is currently reviewing your application materials. This process typically takes 2-4 weeks. We appreciate your patience.'
   },
+  'ACTIVELY REVIEWING': {
+    icon: '🔍',
+    className: 'under-review',
+    description: 'Your application is currently being actively reviewed by our admissions committee. We are carefully evaluating all aspects of your submission.'
+  },
   'RFE PREPARING': {
     icon: '📝',
     className: 'rfe-preparing',
@@ -539,6 +599,21 @@ const STATUS_INFO = {
     className: 'rfe-sent',
     description: 'A Request for Evidence (RFE) has been sent to your email. Please review and submit the requested documents as soon as possible to avoid delays.'
   },
+  'ADDITIONAL DOCUMENTS REQUESTED': {
+    icon: '📎',
+    className: 'rfe-sent',
+    description: 'Additional documents have been requested to complete your application review. Please check the list below and submit the required materials.'
+  },
+  'DOCUMENTS RECEIVED': {
+    icon: '📥',
+    className: 'under-review',
+    description: 'Thank you for submitting the requested documents. We are now reviewing the additional materials you provided.'
+  },
+  'FINAL REVIEW': {
+    icon: '⚖️',
+    className: 'under-review',
+    description: 'Your application is in final review. An admissions decision will be communicated to you soon.'
+  },
   'APPROVED': {
     icon: '✅',
     className: 'approved',
@@ -548,6 +623,16 @@ const STATUS_INFO = {
     icon: '❌',
     className: 'denied',
     description: 'Unfortunately, we are unable to offer you admission at this time. You will receive a detailed letter explaining the decision and information about reapplication options.'
+  },
+  'ON HOLD': {
+    icon: '⏸️',
+    className: 'rfe-preparing',
+    description: 'Your application has been placed on hold. This may be due to pending documentation or additional review requirements. Please check for any messages from our admissions office.'
+  },
+  'WITHDRAWN': {
+    icon: '🚫',
+    className: 'denied',
+    description: 'This application has been withdrawn. If you have questions, please contact our admissions office.'
   }
 };
 
@@ -607,6 +692,9 @@ async function loadApplicationStatus() {
     // Display application data
     displayApplicationStatus(application);
     
+    // Start automatic status polling
+    startStatusPolling();
+    
     loadingState.style.display = 'none';
     mainContent.style.display = 'block';
     
@@ -658,10 +746,42 @@ function displayApplicationStatus(application) {
   document.getElementById('lastUpdated').textContent = lastUpdated;
   
   // Update status description
-  document.getElementById('statusDescriptionText').textContent = statusInfo.description;
+  const statusDescriptionEl = document.getElementById('statusDescriptionText');
+  
+  // Use custom status message from admin if available, otherwise use default
+  const displayDescription = application.status_message || statusInfo.description;
+  statusDescriptionEl.textContent = displayDescription;
+  
+  // Display requested documents if RFE
+  displayRequestedDocuments(application.rfe_documents_requested || []);
   
   // Update timeline dots
   updateTimeline(status);
+}
+
+// Display requested documents section
+function displayRequestedDocuments(documents) {
+  const container = document.getElementById('requestedDocumentsContainer');
+  if (!container) return;
+  
+  if (!documents || documents.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  
+  container.style.display = 'block';
+  const docList = container.querySelector('.doc-list') || container;
+  
+  const docHTML = documents.map(doc => `
+    <div style="background:rgba(45,212,191,0.05);border-left:3px solid var(--accent);padding:12px 16px;border-radius:6px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:20px;">📎</span>
+        <span style="color:white;font-weight:500;">${doc}</span>
+      </div>
+    </div>
+  `).join('');
+  
+  docList.innerHTML = docHTML;
 }
 
 // Update timeline based on status
@@ -676,10 +796,25 @@ function updateTimeline(status) {
   dotDecision.classList.add('inactive');
   
   // Activate dots based on status
-  if (['UNDER REVIEW', 'RFE PREPARING', 'RFE SENT', 'APPROVED', 'DENIED'].includes(status)) {
+  // All intermediate review statuses activate the review dot
+  const reviewStatuses = [
+    'UNDER REVIEW',
+    'ACTIVELY REVIEWING', 
+    'RFE PREPARING',
+    'RFE SENT',
+    'ADDITIONAL DOCUMENTS REQUESTED',
+    'DOCUMENTS RECEIVED',
+    'FINAL REVIEW',
+    'ON HOLD',
+    'APPROVED',
+    'DENIED'
+  ];
+  
+  if (reviewStatuses.includes(status)) {
     dotReview.classList.remove('inactive');
   }
   
+  // Only final decisions activate the decision dot
   if (['APPROVED', 'DENIED'].includes(status)) {
     dotDecision.classList.remove('inactive');
   }
@@ -695,6 +830,149 @@ function logout() {
   alert('You have been logged out.');
   window.location.href = 'login.html';
 }
+
+// Refresh status function
+async function refreshStatus() {
+  const refreshBtn = document.querySelector('.refresh-btn');
+  refreshBtn.classList.add('spinning');
+  refreshBtn.disabled = true;
+  
+  try {
+    const supabase = initSupabase();
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
+    const username = sessionStorage.getItem('applicationUsername');
+    const referenceNumber = sessionStorage.getItem('applicationReference');
+    
+    if (!username || !referenceNumber) {
+      throw new Error('Session expired. Please log in again.');
+    }
+    
+    // Fetch latest application data
+    const { data: application, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('username', username)
+      .eq('reference_number', referenceNumber)
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    if (!application) {
+      throw new Error('Application not found');
+    }
+    
+    // Update display with fresh data
+    displayApplicationStatus(application);
+    
+    // Show success feedback
+    showRefreshNotification('Status updated successfully!', 'success');
+    
+  } catch (error) {
+    console.error('Error refreshing status:', error);
+    showRefreshNotification('Failed to refresh: ' + (error.message || 'Unknown error'), 'error');
+  } finally {
+    setTimeout(() => {
+      refreshBtn.classList.remove('spinning');
+      refreshBtn.disabled = false;
+    }, 600);
+  }
+}
+
+// Show refresh notification
+function showRefreshNotification(message, type = 'info') {
+  const existingNotification = document.getElementById('refreshNotification');
+  if (existingNotification) {
+    existingNotification.remove();
+  }
+
+  const backgroundColor = type === 'success' ? 'rgba(16, 185, 129, 0.15)' : type === 'error' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)';
+  const borderColor = type === 'success' ? 'rgba(16, 185, 129, 0.3)' : type === 'error' ? 'rgba(239, 68, 68, 0.3)' : 'rgba(59, 130, 246, 0.3)';
+  const textColor = type === 'success' ? '#34d399' : type === 'error' ? '#fca5a5' : '#93c5fd';
+
+  const notificationHTML = `
+    <div id="refreshNotification" style="position: fixed; top: 100px; right: 32px; z-index: 10000; min-width: 280px; max-width: 400px; background: ${backgroundColor}; border: 1px solid ${borderColor}; border-radius: 12px; padding: 16px 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); backdrop-filter: blur(10px); animation: slideInRight 0.3s ease;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="color: ${textColor}; font-size: 18px;">
+          ${type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ'}
+        </div>
+        <p style="margin: 0; color: white; font-size: 14px; line-height: 1.5; flex: 1;">
+          ${message}
+        </p>
+      </div>
+    </div>
+    <style>
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    </style>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', notificationHTML);
+
+  setTimeout(() => {
+    const notification = document.getElementById('refreshNotification');
+    if (notification) {
+      notification.style.animation = 'slideInRight 0.3s ease reverse';
+      setTimeout(() => notification.remove(), 300);
+    }
+  }, 3000);
+}
+
+// Enable realtime updates via polling
+let statusPollInterval;
+
+function startStatusPolling() {
+  // Poll every 30 seconds for status changes
+  statusPollInterval = setInterval(async () => {
+    try {
+      const supabase = initSupabase();
+      if (!supabase) return;
+      
+      const username = sessionStorage.getItem('applicationUsername');
+      const referenceNumber = sessionStorage.getItem('applicationReference');
+      
+      if (!username || !referenceNumber) return;
+      
+      const { data: application, error } = await supabase
+        .from('applications')
+        .select('status, status_updated_at')
+        .eq('username', username)
+        .eq('reference_number', referenceNumber)
+        .single();
+      
+      if (!error && application) {
+        const currentStatus = document.getElementById('statusText')?.textContent;
+        if (application.status && application.status !== currentStatus) {
+          // Status changed - show notification and refresh
+          showRefreshNotification('Your application status has been updated to: ' + application.status, 'success');
+          await refreshStatus();
+        }
+      }
+    } catch (error) {
+      console.error('Polling error:', error);
+    }
+  }, 30000); // 30 seconds
+}
+
+// Stop polling when leaving page
+window.addEventListener('beforeunload', () => {
+  if (statusPollInterval) {
+    clearInterval(statusPollInterval);
+  }
+});
+
 </script>
 
 </body>
