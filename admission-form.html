@@ -6,10 +6,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <!-- Favicon -->
-<link rel="icon" type="image/png" sizes="32x32" href="assets/images/Seal.png">
-<link rel="icon" type="image/png" sizes="16x16" href="assets/images/Seal.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/images/Seal.png">
-<link rel="shortcut icon" href="assets/images/Seal.png">
+<link rel="shortcut icon" href="assets/images/favicon-32.png">
 
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/watermark.css">
@@ -1765,19 +1765,23 @@ async function handleAdmissionSubmit(e) {
   data.status = 'SUBMITTED';
 
   try {
-    const savedData = await saveApplicationToSupabase(data);
+  const savedData = await saveApplicationToSupabase(data);
+    const assignedUsername = savedData && savedData.username ? savedData.username : data.username;
+    if (assignedUsername) {
+      data.username = assignedUsername;
+    }
     populateAdmissionDocument(data);
     await renderBarcode(barcode);
     
     // Store data globally for PDF download
-    window.currentApplicationData = data;
+  window.currentApplicationData = data;
 
     form.dataset.submitted = 'true';
     submitBtn.textContent = 'Application Submitted ✓';
     
     // Show credentials modal only if credentials were saved
-    if (savedData && savedData.username) {
-      showCredentialsModal(username, password, referenceNumber);
+    if (assignedUsername) {
+      showCredentialsModal(assignedUsername, password, referenceNumber);
     } else {
       // Fallback: show success message without credentials
       showModal('✅ Application Submitted Successfully!\n\nReference Number: ' + referenceNumber + '\n\nYour application has been received. You will be contacted via email regarding next steps.', 'success');
@@ -1790,7 +1794,7 @@ async function handleAdmissionSubmit(e) {
     submitBtn.textContent = 'Submit Application';
     
     // Check if it's a database column error
-    if (error.message && (error.message.includes('column') || error.message.includes('username') || error.message.includes('password_hash') || error.message.includes('status'))) {
+    if (isMissingColumnError(error)) {
       showModal('⚠️ Database Update Required\n\nThe database schema needs to be updated. Please run the ADD-APPLICATION-CREDENTIALS.sql file in Supabase first.\n\nContact your administrator to run the database migration.', 'error');
     } else {
       showModal('We could not finish saving your application. Please try again or contact admissions.\n\nError: ' + (error.message || 'Unknown error'), 'error');
@@ -1907,11 +1911,37 @@ function closeCredentialsModal() {
   }
 }
 
+function isMissingColumnError(error) {
+  if (!error) return false;
+  if (error.code === '42703') return true;
+  const message = error.message ? error.message.toLowerCase() : '';
+  return message.includes('column') && message.includes('does not exist');
+}
+
+function isDuplicateUsernameError(error) {
+  if (!error) return false;
+  const message = (error.message || '').toLowerCase();
+  const details = (error.details || '').toLowerCase();
+  return error.code === '23505' && (message.includes('username') || details.includes('username'));
+}
+
+function regenerateUsernameSlug(username) {
+  const randomDigits = Math.floor(1000 + Math.random() * 9000);
+  if (!username) {
+    return `applicant.${randomDigits}`;
+  }
+  const parts = username.split('.');
+  if (parts.length >= 3) {
+    return `${parts.slice(0, parts.length - 1).join('.')}.${randomDigits}`;
+  }
+  return `${username}.${randomDigits}`;
+}
+
 async function saveApplicationToSupabase(data) {
   const client = initSupabase();
   if (!client) throw new Error('Supabase client not initialized');
 
-  const record = {
+  const baseRecord = {
     reference_number: data.referenceNumber,
     barcode: data.barcode,
     document_id: data.documentId,
@@ -1926,49 +1956,49 @@ async function saveApplicationToSupabase(data) {
     payload: data
   };
   
-  // Try to include new credential columns if they exist
-  if (data.username) record.username = data.username;
-  if (data.passwordHash) record.password_hash = data.passwordHash;
-  if (data.status) record.status = data.status;
+  const maxUsernameAttempts = 5;
+  let attempt = 0;
 
-  const { data: inserted, error } = await client
-    .from('applications')
-    .insert([record])
-    .select()
-    .single();
+  while (attempt < maxUsernameAttempts) {
+    const record = { ...baseRecord };
 
-  if (error) {
-    // If error is about missing columns, try again without new columns
-    if (error.message && (error.message.includes('column') || error.message.includes('username'))) {
-      console.warn('New columns not available, saving without credentials:', error);
-      const basicRecord = {
-        reference_number: data.referenceNumber,
-        barcode: data.barcode,
-        document_id: data.documentId,
-        control_number: data.controlNumber,
-        verification_hash: data.verificationHash,
-        applicant_name: data.applicantName,
-        email: data.email,
-        phone: data.phone,
-        program: data.programChoice,
-        start_term: data.startTerm,
-        submission_date: new Date().toISOString(),
-        payload: data
-      };
-      
+    if (data.username) record.username = data.username;
+    if (data.passwordHash) record.password_hash = data.passwordHash;
+    if (data.status) record.status = data.status;
+
+    const { data: inserted, error } = await client
+      .from('applications')
+      .insert([record])
+      .select()
+      .single();
+
+    if (!error) {
+      return inserted;
+    }
+
+    if (isMissingColumnError(error)) {
+      console.warn('New credential columns missing, saving without them:', error);
       const { data: retryInserted, error: retryError } = await client
         .from('applications')
-        .insert([basicRecord])
+        .insert([baseRecord])
         .select()
         .single();
-        
+
       if (retryError) throw retryError;
       return retryInserted;
     }
+
+    if (isDuplicateUsernameError(error)) {
+      console.warn('Username collision detected, generating a new username', error);
+      data.username = regenerateUsernameSlug(data.username);
+      attempt++;
+      continue;
+    }
+
     throw error;
   }
 
-  return inserted;
+  throw new Error('Unable to generate a unique username after multiple attempts. Please try again.');
 }
 
 function generateBarcodeValue(referenceNumber) {
