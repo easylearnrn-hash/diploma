@@ -1765,7 +1765,7 @@ async function handleAdmissionSubmit(e) {
   data.status = 'SUBMITTED';
 
   try {
-    await saveApplicationToSupabase(data);
+    const savedData = await saveApplicationToSupabase(data);
     populateAdmissionDocument(data);
     await renderBarcode(barcode);
     
@@ -1775,15 +1775,26 @@ async function handleAdmissionSubmit(e) {
     form.dataset.submitted = 'true';
     submitBtn.textContent = 'Application Submitted ✓';
     
-    // Show credentials to applicant
-    showCredentialsModal(username, password, referenceNumber);
+    // Show credentials modal only if credentials were saved
+    if (savedData && savedData.username) {
+      showCredentialsModal(username, password, referenceNumber);
+    } else {
+      // Fallback: show success message without credentials
+      showModal('✅ Application Submitted Successfully!\n\nReference Number: ' + referenceNumber + '\n\nYour application has been received. You will be contacted via email regarding next steps.', 'success');
+    }
     
     console.log('Form data saved:', data);
   } catch (error) {
     console.error('Admission processing failed', error);
     submitBtn.disabled = false;
     submitBtn.textContent = 'Submit Application';
-    showModal('We could not finish saving and downloading your receipt. Please try again or contact admissions.', 'error');
+    
+    // Check if it's a database column error
+    if (error.message && (error.message.includes('column') || error.message.includes('username') || error.message.includes('password_hash') || error.message.includes('status'))) {
+      showModal('⚠️ Database Update Required\n\nThe database schema needs to be updated. Please run the ADD-APPLICATION-CREDENTIALS.sql file in Supabase first.\n\nContact your administrator to run the database migration.', 'error');
+    } else {
+      showModal('We could not finish saving your application. Please try again or contact admissions.\n\nError: ' + (error.message || 'Unknown error'), 'error');
+    }
   }
 }
 
@@ -1911,12 +1922,14 @@ async function saveApplicationToSupabase(data) {
     phone: data.phone,
     program: data.programChoice,
     start_term: data.startTerm,
-    username: data.username,
-    password_hash: data.passwordHash,
-    status: data.status || 'SUBMITTED',
     submission_date: new Date().toISOString(),
     payload: data
   };
+  
+  // Try to include new credential columns if they exist
+  if (data.username) record.username = data.username;
+  if (data.passwordHash) record.password_hash = data.passwordHash;
+  if (data.status) record.status = data.status;
 
   const { data: inserted, error } = await client
     .from('applications')
@@ -1925,6 +1938,33 @@ async function saveApplicationToSupabase(data) {
     .single();
 
   if (error) {
+    // If error is about missing columns, try again without new columns
+    if (error.message && (error.message.includes('column') || error.message.includes('username'))) {
+      console.warn('New columns not available, saving without credentials:', error);
+      const basicRecord = {
+        reference_number: data.referenceNumber,
+        barcode: data.barcode,
+        document_id: data.documentId,
+        control_number: data.controlNumber,
+        verification_hash: data.verificationHash,
+        applicant_name: data.applicantName,
+        email: data.email,
+        phone: data.phone,
+        program: data.programChoice,
+        start_term: data.startTerm,
+        submission_date: new Date().toISOString(),
+        payload: data
+      };
+      
+      const { data: retryInserted, error: retryError } = await client
+        .from('applications')
+        .insert([basicRecord])
+        .select()
+        .single();
+        
+      if (retryError) throw retryError;
+      return retryInserted;
+    }
     throw error;
   }
 
