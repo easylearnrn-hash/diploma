@@ -1078,6 +1078,9 @@
 
       <div style="margin-bottom:20px;">
         <label style="display:block;color:#94a3b8;font-size:14px;margin-bottom:8px;font-weight:500;">Status Message (Visible to Applicant)</label>
+        <select id="messageTemplateSelect" onchange="applyMessageTemplate()" style="width:100%;padding:10px;background:#1a2942;border:1px solid rgba(45,212,191,0.2);border-radius:6px;color:rgba(255,255,255,0.7);font-size:13px;margin-bottom:8px;cursor:pointer;">
+          <option value="">📝 Select a template or write custom message...</option>
+        </select>
         <textarea id="statusMessageInput" placeholder="e.g., 'Your application is currently being reviewed by our admissions committee...'" style="width:100%;padding:12px;background:#1a2942;border:1px solid rgba(45,212,191,0.3);border-radius:8px;color:white;font-size:14px;min-height:80px;font-family:'Inter',sans-serif;resize:vertical;"></textarea>
       </div>
 
@@ -1738,11 +1741,79 @@
       loadStatusManagement(app);
     }
 
+    // Professional message templates for each status
+    const MESSAGE_TEMPLATES = {
+      'SUBMITTED': [
+        'Your application has been successfully received and is in our queue for initial review.',
+        'Thank you for submitting your application. We will begin reviewing your materials shortly.',
+        'We have received your application and will contact you if we need any additional information.'
+      ],
+      'UNDER REVIEW': [
+        'Your application is currently being reviewed by our admissions committee.',
+        'Our admissions team is carefully evaluating your application materials and academic credentials.',
+        'We are actively reviewing your application and will update you on the status within 2-3 weeks.'
+      ],
+      'ACTIVELY REVIEWING': [
+        'Your application is currently under active review by our senior admissions committee.',
+        'We are conducting a detailed evaluation of your academic qualifications and supporting documents.',
+        'Your application is receiving careful consideration from our admissions team. We appreciate your patience.'
+      ],
+      'RFE PREPARING': [
+        'We are preparing a request for additional documentation to complete your application review.',
+        'Our team is compiling a list of additional documents needed to finalize your application assessment.',
+        'We need a few more documents to complete your application. A detailed request will be sent shortly.'
+      ],
+      'RFE SENT': [
+        'A request for additional documents has been sent to your email. Please review and respond at your earliest convenience.',
+        'We have requested additional documentation to support your application. Please check your email for details.',
+        'Additional materials are needed to complete your application review. Please see the requested documents below.'
+      ],
+      'ADDITIONAL DOCUMENTS REQUESTED': [
+        'Please submit the requested documents to complete your application. You may upload them through your portal or email them to admissions@universitaria.edu',
+        'We need additional documentation to proceed with your application review. Please see the list of required documents below.',
+        'Your application requires supplementary materials for completion. Kindly submit the requested documents at your earliest convenience.',
+        'To finalize your application assessment, we need the additional documents listed below. Please submit them within 14 days.'
+      ],
+      'DOCUMENTS RECEIVED': [
+        'Thank you for submitting the requested documents. We have received them and will continue with your application review.',
+        'We have successfully received your additional documentation and are proceeding with the evaluation process.',
+        'Your supplementary materials have been received and added to your application file. The review will continue shortly.'
+      ],
+      'FINAL REVIEW': [
+        'Your application has moved to final review stage. A decision will be communicated within 7-10 business days.',
+        'We are conducting the final assessment of your application. You will receive our decision soon.',
+        'Your application is in the final stage of review by our admissions committee. We appreciate your patience as we finalize our decision.'
+      ],
+      'APPROVED': [
+        'Congratulations! Your application has been approved. You will receive an official acceptance letter via email within 2-3 business days.',
+        'We are pleased to inform you that your application has been approved for admission. Welcome to our university!',
+        'Congratulations on your acceptance! We look forward to welcoming you to our academic community. Further enrollment instructions will follow.',
+        'Your application has been approved. Please check your email for the official acceptance letter and next steps for enrollment.'
+      ],
+      'DENIED': [
+        'After careful consideration, we regret to inform you that we are unable to offer you admission at this time. We wish you success in your academic pursuits.',
+        'We have completed our review of your application. Unfortunately, we are unable to offer you admission for this term. You may reapply for a future term.',
+        'Thank you for your interest in our university. After thorough evaluation, we are unable to extend an offer of admission at this time.'
+      ],
+      'ON HOLD': [
+        'Your application has been placed on hold pending additional review or information. We will contact you with an update soon.',
+        'We are placing your application on temporary hold. This may be due to pending verification or additional assessment requirements.',
+        'Your application status is currently on hold. We will reach out if we need any clarification or additional information.'
+      ],
+      'WITHDRAWN': [
+        'Your application has been withdrawn as requested. If you wish to reapply in the future, you are welcome to submit a new application.',
+        'We have processed your withdrawal request. Thank you for considering our university.',
+        'Your application withdrawal has been completed. We appreciate your interest and wish you the best in your academic endeavors.'
+      ]
+    };
+
     function loadStatusManagement(app) {
       // Set current status
       const statusSelect = document.getElementById('statusSelect');
       if (statusSelect && app.status) {
         statusSelect.value = app.status;
+        // Update message templates when status changes
+        updateMessageTemplates(app.status);
       }
       
       // Set status message
@@ -1759,6 +1830,39 @@
       
       // Load RFE documents
       populateRFEDocuments(app.rfe_documents_requested || []);
+      
+      // Add event listener to status select
+      statusSelect.addEventListener('change', function() {
+        updateMessageTemplates(this.value);
+      });
+    }
+
+    function updateMessageTemplates(status) {
+      const templateSelect = document.getElementById('messageTemplateSelect');
+      if (!templateSelect) return;
+      
+      const templates = MESSAGE_TEMPLATES[status] || [];
+      
+      // Clear and populate dropdown
+      templateSelect.innerHTML = '<option value="">📝 Select a template or write custom message...</option>';
+      
+      templates.forEach((template, index) => {
+        const option = document.createElement('option');
+        option.value = template;
+        option.textContent = `Template ${index + 1}: ${template.substring(0, 60)}${template.length > 60 ? '...' : ''}`;
+        templateSelect.appendChild(option);
+      });
+    }
+
+    function applyMessageTemplate() {
+      const templateSelect = document.getElementById('messageTemplateSelect');
+      const messageInput = document.getElementById('statusMessageInput');
+      
+      if (templateSelect && messageInput && templateSelect.value) {
+        messageInput.value = templateSelect.value;
+        // Reset dropdown to placeholder
+        templateSelect.selectedIndex = 0;
+      }
     }
 
     function populateRFEDocuments(requestedDocs = []) {
