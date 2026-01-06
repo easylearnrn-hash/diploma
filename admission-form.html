@@ -1741,6 +1741,17 @@ async function handleAdmissionSubmit(e) {
   data.documentId = verificationCodes.documentId;
   data.controlNumber = verificationCodes.controlNumber;
   data.verificationHash = verificationCodes.verificationHash;
+  
+  // Generate application credentials
+  const firstName = document.querySelector('[name="firstName"]').value;
+  const lastName = document.querySelector('[name="lastName"]').value;
+  const username = generateUsername(firstName, lastName);
+  const password = generateSecurePassword();
+  const passwordHash = await hashPassword(password);
+  
+  data.username = username;
+  data.passwordHash = passwordHash;
+  data.status = 'SUBMITTED';
 
   try {
     await saveApplicationToSupabase(data);
@@ -1753,17 +1764,8 @@ async function handleAdmissionSubmit(e) {
     form.dataset.submitted = 'true';
     submitBtn.textContent = 'Application Submitted ✓';
     
-    // Try to show PDF preview modal, fall back to auto-download
-    try {
-      showPdfPreview();
-    } catch (previewError) {
-      console.error('Preview failed, downloading directly:', previewError);
-      await buildAndDownloadAdmissionPdf();
-      showModal(
-        `<strong>Application Submitted Successfully!</strong>\n\n<strong>Reference Number:</strong> ${referenceNumber}\n<strong>Barcode:</strong> ${barcode}\n\nA PDF receipt has been downloaded for your records.\n\nOur admissions team will contact you within 10-15 business days.`,
-        'success'
-      );
-    }
+    // Show credentials to applicant
+    showCredentialsModal(username, password, referenceNumber);
     
     console.log('Form data saved:', data);
   } catch (error) {
@@ -1771,6 +1773,115 @@ async function handleAdmissionSubmit(e) {
     submitBtn.disabled = false;
     submitBtn.textContent = 'Submit Application';
     showModal('We could not finish saving and downloading your receipt. Please try again or contact admissions.', 'error');
+  }
+}
+
+/**
+ * Display credentials modal to applicant after successful submission
+ */
+function showCredentialsModal(username, password, referenceNumber) {
+  const modalHTML = `
+    <div id="credentialsModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.85); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
+      <div style="background: white; border-radius: 12px; padding: 40px; max-width: 600px; width: 100%; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+        
+        <div style="text-align: center; margin-bottom: 30px;">
+          <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px;">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </div>
+          <h2 style="margin: 0; color: #2d3748; font-size: 28px; font-weight: 700;">Application Submitted Successfully!</h2>
+          <p style="margin: 10px 0 0; color: #718096; font-size: 16px;">Your login credentials have been generated</p>
+        </div>
+
+        <div style="background: #f7fafc; border: 2px solid #e2e8f0; border-radius: 8px; padding: 25px; margin-bottom: 25px;">
+          <p style="margin: 0 0 20px; color: #e53e3e; font-weight: 600; font-size: 15px;">
+            ⚠️ IMPORTANT: Please save these credentials immediately. You will need them to track your application status.
+          </p>
+          
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-weight: 600; color: #4a5568; margin-bottom: 8px; font-size: 14px;">Reference Number</label>
+            <div style="background: white; border: 1px solid #cbd5e0; border-radius: 6px; padding: 12px; font-family: 'Courier New', monospace; font-size: 16px; font-weight: 600; color: #2d3748;">
+              ${referenceNumber}
+            </div>
+          </div>
+
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; font-weight: 600; color: #4a5568; margin-bottom: 8px; font-size: 14px;">Username</label>
+            <div style="background: white; border: 1px solid #cbd5e0; border-radius: 6px; padding: 12px; font-family: 'Courier New', monospace; font-size: 16px; font-weight: 600; color: #2d3748;">
+              ${username}
+            </div>
+          </div>
+
+          <div style="margin-bottom: 0;">
+            <label style="display: block; font-weight: 600; color: #4a5568; margin-bottom: 8px; font-size: 14px;">Password</label>
+            <div style="background: white; border: 1px solid #cbd5e0; border-radius: 6px; padding: 12px; font-family: 'Courier New', monospace; font-size: 16px; font-weight: 600; color: #2d3748; letter-spacing: 2px;">
+              ${password}
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #edf2f7; border-left: 4px solid #4299e1; padding: 15px; margin-bottom: 25px; border-radius: 4px;">
+          <p style="margin: 0; color: #2d3748; font-size: 14px; line-height: 1.6;">
+            <strong>📝 What's Next?</strong><br>
+            Use these credentials to log in and track your application status in real-time. You'll receive updates as your application moves through our review process.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <button onclick="copyCredentials('${username}', '${password}', '${referenceNumber}')" style="flex: 1; background: #667eea; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+            📋 Copy All
+          </button>
+          <button onclick="window.location.href='application-status.html'" style="flex: 1; background: #48bb78; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+            🔍 Track Status
+          </button>
+          <button onclick="closeCredentialsModal()" style="flex: 1; background: #4a5568; color: white; border: none; padding: 14px 24px; border-radius: 8px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+            Close
+          </button>
+        </div>
+
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+}
+
+/**
+ * Copy credentials to clipboard
+ */
+function copyCredentials(username, password, referenceNumber) {
+  const text = `Application Credentials
+━━━━━━━━━━━━━━━━━━━━
+Reference Number: ${referenceNumber}
+Username: ${username}
+Password: ${password}
+
+Login at: [Your Domain]/application-status.html`;
+
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    const originalText = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.style.background = '#48bb78';
+    setTimeout(() => {
+      btn.textContent = originalText;
+      btn.style.background = '#667eea';
+    }, 2000);
+  }).catch(err => {
+    console.error('Copy failed:', err);
+    alert('Could not copy to clipboard. Please copy manually.');
+  });
+}
+
+/**
+ * Close credentials modal
+ */
+function closeCredentialsModal() {
+  const modal = document.getElementById('credentialsModal');
+  if (modal) {
+    modal.remove();
   }
 }
 
@@ -1789,6 +1900,9 @@ async function saveApplicationToSupabase(data) {
     phone: data.phone,
     program: data.programChoice,
     start_term: data.startTerm,
+    username: data.username,
+    password_hash: data.passwordHash,
+    status: data.status || 'SUBMITTED',
     submission_date: new Date().toISOString(),
     payload: data
   };
@@ -2069,6 +2183,58 @@ function generateVerificationCodes() {
     controlNumber: generateControlNumber(),
     verificationHash: generateVerificationHash()
   };
+}
+
+// ==========================================
+// APPLICATION CREDENTIALS GENERATION
+// ==========================================
+
+// Generate unique username for applicant
+function generateUsername(firstName, lastName) {
+  // Format: firstname.lastname.XXXX (XXXX = random 4 digits)
+  const cleanFirst = firstName.toLowerCase().replace(/[^a-z]/g, '');
+  const cleanLast = lastName.toLowerCase().replace(/[^a-z]/g, '');
+  const randomDigits = Math.floor(1000 + Math.random() * 9000); // 4 digits
+  return `${cleanFirst}.${cleanLast}.${randomDigits}`;
+}
+
+// Generate secure password
+function generateSecurePassword() {
+  // Password format: Uppercase + lowercase + numbers (12 characters)
+  const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Excluding I, O
+  const lowercase = 'abcdefghjkmnpqrstuvwxyz'; // Excluding i, l, o
+  const numbers = '23456789'; // Excluding 0, 1
+  
+  let password = '';
+  
+  // Ensure at least 2 uppercase, 2 lowercase, 2 numbers
+  for (let i = 0; i < 2; i++) {
+    password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+  }
+  for (let i = 0; i < 2; i++) {
+    password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+  }
+  for (let i = 0; i < 2; i++) {
+    password += numbers.charAt(Math.floor(Math.random() * numbers.length));
+  }
+  
+  // Add 6 more random characters from all sets
+  const allChars = uppercase + lowercase + numbers;
+  for (let i = 0; i < 6; i++) {
+    password += allChars.charAt(Math.floor(Math.random() * allChars.length));
+  }
+  
+  // Shuffle the password
+  return password.split('').sort(() => Math.random() - 0.5).join('');
+}
+
+// Hash password using SHA-256
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 // Close warning
