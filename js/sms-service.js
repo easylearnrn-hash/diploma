@@ -193,6 +193,31 @@ class SMSService {
   }
 
   /**
+   * Format phone number for display (x xxx xxx xxxx)
+   * @param {string} phoneNumber - Phone number in any format
+   * @returns {string} Formatted phone number for display
+   */
+  formatPhoneForDisplay(phoneNumber) {
+    if (!phoneNumber) return '—';
+    
+    // Remove all non-digit characters
+    const digits = phoneNumber.replace(/\D/g, '');
+    
+    // Handle 11 digits (with country code 1)
+    if (digits.length === 11 && digits[0] === '1') {
+      return `${digits[0]} ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+    }
+    
+    // Handle 10 digits (without country code)
+    if (digits.length === 10) {
+      return `1 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+    }
+    
+    // Return as-is if format doesn't match
+    return phoneNumber;
+  }
+
+  /**
    * Send admission notification SMS
    * @param {string} phoneNumber - Student's phone number
    * @param {string} studentName - Student's name

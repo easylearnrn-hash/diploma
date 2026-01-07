@@ -1927,8 +1927,8 @@
       document.getElementById('drawerReference').textContent = `Ref: ${app.reference_number || payload.referenceNumber || '—'}`;
 
       setDrawerValue('drawerEmail', payload.email || app.email || '—');
-      setDrawerValue('drawerPhone', payload.phone || app.phone || '—');
-      setDrawerValue('drawerAltPhone', payload.altPhone || 'Not provided');
+      setDrawerValue('drawerPhone', formatPhone(payload.phone || app.phone || '—'));
+      setDrawerValue('drawerAltPhone', formatPhone(payload.altPhone) || 'Not provided');
       setDrawerValue('drawerAddress', payload.addressLine || '—');
       setDrawerValue('drawerProgram', payload.programChoice || app.program || '—');
       setDrawerValue('drawerStart', payload.startTerm || app.start_term || '—');
@@ -1939,7 +1939,7 @@
       setDrawerValue('drawerBirthLocation', payload.birthLocation || '—');
       setDrawerValue('drawerEmergencyName', payload.emergencyName || '—');
       setDrawerValue('drawerEmergencyRelation', payload.emergencyRelation || '—');
-      setDrawerValue('drawerEmergencyPhone', payload.emergencyPhone || '—');
+      setDrawerValue('drawerEmergencyPhone', formatPhone(payload.emergencyPhone) || '—');
       setDrawerValue('drawerEducationLevel', payload.educationLevel || '—');
       setDrawerValue('drawerInstitution', payload.institution || '—');
       setDrawerValue('drawerFieldOfStudy', payload.fieldOfStudy || '—');
@@ -3388,7 +3388,7 @@ The table needs to be created before registrations can be stored.`;
         <tr ${rowClass}>
           <td><strong>${reg.full_name || '—'}</strong></td>
           <td>${reg.email || '—'}</td>
-          <td>${reg.phone || '—'}</td>
+          <td>${formatPhone(reg.phone)}</td>
           <td>${reg.education_level || '—'}</td>
           <td>${formatStartDate(reg.preferred_start_date)}</td>
           <td>${formatDate(reg.registration_date)}</td>
@@ -3472,6 +3472,26 @@ The table needs to be created before registrations can be stored.`;
       return map[value] || value;
     }
 
+    function formatPhone(phoneNumber) {
+      if (!phoneNumber) return '—';
+      
+      // Remove all non-digit characters
+      const digits = phoneNumber.replace(/\D/g, '');
+      
+      // Handle 11 digits (with country code 1)
+      if (digits.length === 11 && digits[0] === '1') {
+        return `${digits[0]} ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;
+      }
+      
+      // Handle 10 digits (without country code)
+      if (digits.length === 10) {
+        return `1 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+      }
+      
+      // Return as-is if format doesn't match
+      return phoneNumber;
+    }
+
     // ACTION FUNCTIONS
     let currentRegistrationId = null;
 
@@ -3525,7 +3545,7 @@ The table needs to be created before registrations can be stored.`;
       document.getElementById('drawerName').textContent = reg.full_name || 'Student';
       document.getElementById('drawerReference').textContent = `Registered: ${formatDate(reg.registration_date)}`;
       document.getElementById('drawerEmail').textContent = reg.email || '—';
-      document.getElementById('drawerPhone').textContent = reg.phone || '—';
+      document.getElementById('drawerPhone').textContent = formatPhone(reg.phone);
   setDrawerValue('drawerAltPhone', 'Not captured');
   setDrawerValue('drawerAddress', 'Not captured');
       document.getElementById('drawerFullName').textContent = reg.full_name || '—';
