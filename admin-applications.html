@@ -331,6 +331,7 @@
       backdrop-filter: blur(4px);
       display: none;
       z-index: 100;
+      will-change: opacity; /* GPU acceleration hint */
     }
 
     .drawer-backdrop.show {
@@ -351,6 +352,7 @@
       transition: right 0.3s ease;
       z-index: 101;
       contain: layout paint; /* Isolate layout calculations */
+      will-change: right; /* GPU acceleration hint */
     }
 
     .drawer.open {
@@ -2329,10 +2331,16 @@
 
     // APPLICATIONS
     async function loadApplications() {
-      const supabase = initSupabase();
-      if (!supabase) return;
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        console.error('❌ Failed to initialize Supabase client');
+        setStatus('applicationsStatus', '❌ Database connection failed');
+        return;
+      }
       
       setStatus('applicationsStatus', '⏳ Loading applications...');
+      
+      console.time('⏱️ Applications query');
       
       // ===== PERFORMANCE: Optimized query - Don't load payload initially =====
       // - Only fetch fields needed for table display
@@ -2343,6 +2351,8 @@
         .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode')
         .order('submission_date', { ascending: false })
         .limit(200);
+      
+      console.timeEnd('⏱️ Applications query');
       
       if (error) {
         console.error('Error loading applications:', error);
@@ -2509,35 +2519,63 @@
       showAlert('Screenshot downloaded', 'success');
     }
 
+    // ===== PERFORMANCE: Global Supabase client - initialize once =====
+    let globalSupabase = null;
+    function getSupabaseClient() {
+      if (!globalSupabase) {
+        globalSupabase = initSupabase();
+      }
+      return globalSupabase;
+    }
+
     async function openApplicationDrawer(id) {
-      console.time('⏱️ Drawer open time');
+      console.time('⏱️ Total drawer open time');
       const app = applicationsData.find(a => a.id === id);
-      if (!app) return;
+      if (!app) {
+        console.warn('Application not found:', id);
+        return;
+      }
 
       // ===== PERFORMANCE: Fetch full payload only when opening drawer =====
       if (!app.payload) {
         console.time('⏱️ Fetching payload from Supabase');
-        const supabase = initSupabase();
+        const supabase = getSupabaseClient();
         if (supabase) {
-          const { data, error } = await supabase
-            .from('applications')
-            .select('payload, control_number, document_id, verification_hash, username, credentials_screenshot')
-            .eq('id', id)
-            .single();
-          
-          if (!error && data) {
-            // Merge fetched data into the app object
-            app.payload = data.payload;
-            app.control_number = data.control_number;
-            app.document_id = data.document_id;
-            app.verification_hash = data.verification_hash;
-            app.username = data.username;
-            app.credentials_screenshot = data.credentials_screenshot;
+          try {
+            const { data, error } = await supabase
+              .from('applications')
+              .select('payload, control_number, document_id, verification_hash, username, credentials_screenshot')
+              .eq('id', id)
+              .single();
+            
+            if (error) {
+              console.error('Payload fetch error:', error);
+              showNotification('Error', 'Failed to load application data', 'error');
+              return;
+            }
+            
+            if (data) {
+              // Merge fetched data into the app object IN-PLACE (modify reference)
+              app.payload = data.payload;
+              app.control_number = data.control_number;
+              app.document_id = data.document_id;
+              app.verification_hash = data.verification_hash;
+              app.username = data.username;
+              app.credentials_screenshot = data.credentials_screenshot;
+              console.timeEnd('⏱️ Fetching payload from Supabase');
+            }
+          } catch (err) {
+            console.error('Unexpected error fetching payload:', err);
+            showNotification('Error', 'An unexpected error occurred', 'error');
+            return;
           }
+        } else {
+          console.error('Supabase client not initialized');
+          showNotification('Error', 'Database connection failed', 'error');
+          return;
         }
-        console.timeEnd('⏱️ Fetching payload from Supabase');
       } else {
-        console.log('✅ Using cached payload, no fetch needed');
+        console.log('✅ Using cached payload (0ms fetch)');
       }
 
       currentApplicationId = id;
@@ -2663,7 +2701,7 @@
       // Load status history
       loadStatusHistory(app);
       
-      console.timeEnd('⏱️ Drawer open time');
+      console.timeEnd('⏱️ Total drawer open time');
     }
 
     // Professional message templates for each status
@@ -4199,12 +4237,32 @@ The table needs to be created before registrations can be stored.`;
       // ===== PERFORMANCE: Use debounced filter for search input =====
       document.getElementById('searchApplications').addEventListener('input', debouncedFilterApplications);
       document.getElementById('programFilter').addEventListener('change', filterApplications);
-      document.getElementById('refreshApplications').addEventListener('click', loadApplications);
+      
+      // Add loading state to refresh button
+      document.getElementById('refreshApplications').addEventListener('click', async () => {
+        const btn = document.getElementById('refreshApplications');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ Loading...';
+        await loadApplications();
+        btn.disabled = false;
+        btn.textContent = originalText;
+      });
       
       document.getElementById('searchRegistrations').addEventListener('input', filterRegistrations);
       document.getElementById('statusFilter').addEventListener('change', filterRegistrations);
       document.getElementById('startDateFilter').addEventListener('change', filterRegistrations);
-      document.getElementById('refreshRegistrations').addEventListener('click', loadRegistrations);
+      
+      // Add loading state to registrations refresh button
+      document.getElementById('refreshRegistrations').addEventListener('click', async () => {
+        const btn = document.getElementById('refreshRegistrations');
+        const originalText = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = '⏳ Loading...';
+        await loadRegistrations();
+        btn.disabled = false;
+        btn.textContent = originalText;
+      });
     }
 
     // DRAWER
