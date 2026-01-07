@@ -1451,17 +1451,22 @@
     }
 
     function getApplicationStatusData(app) {
-      const statusRaw = (app?.payload?.applicationStatus || 'Pending Review').toString();
+      // Use the admin-changed status from the status column (not the old applicationStatus from payload)
+      const statusRaw = (app?.status || 'Pending Review').toString();
       const normalized = statusRaw.toLowerCase();
       let pillClass = 'pending';
       let badgeClass = 'pending';
 
-      if (normalized.includes('confirm')) {
+      // Determine pill class based on status
+      if (normalized.includes('confirm') || normalized.includes('approved')) {
         pillClass = 'approved';
         badgeClass = 'confirmed';
       } else if (normalized.includes('deny') || normalized.includes('reject')) {
         pillClass = 'rejected';
         badgeClass = 'denied';
+      } else if (normalized.includes('rfe') || normalized.includes('request')) {
+        pillClass = 'warning';
+        badgeClass = 'pending';
       }
 
       return {
