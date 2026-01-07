@@ -1210,6 +1210,9 @@
         <button class="action-btn" onclick="viewApplicationPreview()" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);grid-column:1/-1;">
           <span>📄</span> View Application Preview
         </button>
+        <button class="action-btn" onclick="requestReupload()" style="background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3);grid-column:1/-1;">
+          <span>📤</span> Request Re-upload of Missing Files
+        </button>
         <div id="applicationDefaultButtons" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <button class="action-btn approve-btn" onclick="confirmApplication()">
             <span>✓</span> Confirm
@@ -1770,6 +1773,61 @@
       
       // Clear iframe src to stop any running scripts
       iframe.src = 'about:blank';
+    }
+
+    async function requestReupload() {
+      const app = applications.find(a => a.id === currentApplicationId);
+      if (!app) {
+        showNotification('Error', 'Application not found', 'error');
+        return;
+      }
+
+      const payload = app.payload || {};
+      const hasMissingFiles = !payload.applicantPhoto || !payload.documents || payload.documents.length === 0;
+
+      if (!hasMissingFiles) {
+        showNotification('Info', 'This application already has all files uploaded', 'info');
+        return;
+      }
+
+      // Determine what's missing
+      const missingItems = [];
+      if (!payload.applicantPhoto) missingItems.push('Photo');
+      if (!payload.documents || payload.documents.length === 0) missingItems.push('Supporting Documents');
+
+      const confirmMessage = `This will set the status to "Request for Evidence - Documents" and ask the student to re-upload:\n\n${missingItems.join('\n')}\n\nContinue?`;
+      
+      if (!confirm(confirmMessage)) {
+        return;
+      }
+
+      try {
+        const statusMessage = `Dear ${app.applicant_name},\n\nWe are reviewing your application (Ref: ${app.reference_number}). However, we need you to re-upload the following items:\n\n${missingItems.map(item => `• ${item}`).join('\n')}\n\nPlease log in to your application portal and re-submit these files.\n\nThank you,\nAdmissions Office`;
+
+        const { error } = await supabase
+          .from('applications')
+          .update({
+            status: 'RFE - Documents',
+            status_message: statusMessage,
+            rfe_documents_requested: missingItems,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentApplicationId);
+
+        if (error) throw error;
+
+        showNotification('Success', 'Re-upload request sent to student', 'success');
+        await loadApplications();
+        
+        // Refresh the drawer to show updated status
+        const updatedApp = applications.find(a => a.id === currentApplicationId);
+        if (updatedApp) {
+          populateDrawer(updatedApp);
+        }
+      } catch (error) {
+        console.error('Error requesting re-upload:', error);
+        showNotification('Error', 'Failed to send re-upload request', 'error');
+      }
     }
 
     // Close modal when clicking outside
