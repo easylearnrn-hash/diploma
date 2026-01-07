@@ -1862,14 +1862,42 @@
 
     // APPLICATION PREVIEW MODAL (SINGLE SOURCE OF TRUTH)
     // Uses the exact same pdf.html that applicants see
-    function viewApplicationPreview() {
+    async function viewApplicationPreview() {
       const app = getApplicationById(currentApplicationId);
       if (!app) {
         showNotification('Error', 'Application not found', 'error');
         return;
       }
 
+      // ===== PERFORMANCE: Ensure payload is loaded before preview =====
+      if (!app.payload) {
+        showNotification('Info', 'Loading application data...', 'info');
+        const supabase = initSupabase();
+        if (supabase) {
+          const { data, error } = await supabase
+            .from('applications')
+            .select('payload, control_number, document_id, verification_hash')
+            .eq('id', app.id)
+            .single();
+          
+          if (error) {
+            console.error('Error loading payload:', error);
+            showNotification('Error', 'Failed to load application data', 'error');
+            return;
+          }
+          
+          if (data) {
+            app.payload = data.payload;
+            app.control_number = data.control_number;
+            app.document_id = data.document_id;
+            app.verification_hash = data.verification_hash;
+          }
+        }
+      }
+
       const payload = app.payload || {};
+      
+      console.log('Preview data:', { app, payload }); // Debug log
       
       // Prepare data in the EXACT same format as admission-form.html does
       const previewData = {
@@ -1937,12 +1965,37 @@
       // Encode data exactly like admission-form.html does
       const dataString = encodeURIComponent(JSON.stringify(previewData));
       
+      console.log('Opening preview with data length:', dataString.length); // Debug log
+      
       // Open modal
       const modal = document.getElementById('previewModal');
       const iframe = document.getElementById('previewIframe');
       
+      if (!modal || !iframe) {
+        console.error('Modal elements not found!', { modal, iframe });
+        showNotification('Error', 'Preview modal not found', 'error');
+        return;
+      }
+      
+      // Show loading state
+      iframe.style.background = '#0f1f3a';
+      iframe.srcdoc = '<html><body style="margin:0;padding:60px;background:#0f1f3a;color:#94a3b8;font-family:system-ui;text-align:center;"><div style="font-size:48px;margin-bottom:20px;">⏳</div><div style="font-size:18px;">Loading preview...</div></body></html>';
+      
       // Load pdf.html with data (SINGLE SOURCE OF TRUTH)
-      iframe.src = `pdf.html?preview=true&data=${dataString}`;
+      // Use a slight delay to ensure srcdoc renders first
+      setTimeout(() => {
+        iframe.src = `pdf.html?preview=true&data=${dataString}`;
+      }, 100);
+      
+      // Listen for iframe load errors
+      iframe.onerror = function(e) {
+        console.error('Iframe load error:', e);
+        showNotification('Error', 'Failed to load preview', 'error');
+      };
+      
+      iframe.onload = function() {
+        console.log('✅ Preview iframe loaded successfully');
+      };
       
       modal.style.display = 'block';
       document.body.style.overflow = 'hidden';
