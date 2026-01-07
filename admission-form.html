@@ -1745,7 +1745,8 @@ async function handleAdmissionSubmit(e) {
   const barcode = generateBarcodeValue(referenceNumber);
   const verificationCodes = generateVerificationCodes();
   
-  const data = gatherAdmissionData();
+  // Use async version to include photo and document files
+  const data = await gatherAdmissionDataWithFiles();
   data.submissionDate = submissionDate;
   data.referenceNumber = referenceNumber;
   data.barcode = barcode;
@@ -2191,6 +2192,69 @@ function gatherAdmissionData() {
     declaration: form.querySelector('[name="declaration"]').checked ? 'Confirmed' : 'Pending',
     consent: form.querySelector('[name="dataConsent"]').checked ? 'Granted' : 'Pending'
   };
+}
+
+// NEW: Async function to gather data WITH photo and document files
+async function gatherAdmissionDataWithFiles() {
+  const baseData = gatherAdmissionData();
+  
+  // Get photo as base64
+  const photoInput = document.getElementById('photoUpload');
+  if (photoInput && photoInput.files && photoInput.files[0]) {
+    try {
+      baseData.applicantPhoto = await fileToBase64(photoInput.files[0]);
+    } catch (error) {
+      console.error('Error reading photo:', error);
+    }
+  }
+  
+  // Get documents as base64 array
+  const documentInputs = [
+    { id: 'passportUpload', name: 'Passport' },
+    { id: 'diplomaUpload', name: 'Diploma' },
+    { id: 'transcriptUpload', name: 'Transcript' },
+    { id: 'englishUpload', name: 'English Test' },
+    { id: 'recommendationUpload', name: 'Recommendation' }
+  ];
+  
+  const documentsArray = [];
+  for (const doc of documentInputs) {
+    const input = document.getElementById(doc.id);
+    if (input && input.files && input.files.length > 0) {
+      for (let i = 0; i < input.files.length; i++) {
+        const file = input.files[i];
+        try {
+          const data = await fileToBase64(file);
+          documentsArray.push({
+            name: doc.name + (input.files.length > 1 ? ` (${i + 1})` : ''),
+            fileName: file.name,
+            data: data
+          });
+        } catch (error) {
+          console.error(`Error reading ${file.name}:`, error);
+        }
+      }
+    }
+  }
+  
+  if (documentsArray.length > 0) {
+    baseData.documents = documentsArray;
+  }
+  
+  // Add signature (applicant name)
+  baseData.signature = baseData.applicantName;
+  
+  return baseData;
+}
+
+// Helper function to convert file to base64
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function summarizeStatement(text) {
