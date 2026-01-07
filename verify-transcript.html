@@ -706,16 +706,37 @@ async function checkApplicationStatus() {
     const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjc3lhd3liamRjbWpkZnhxZ3VpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU3NjQ0ODQsImV4cCI6MjA1MTM0MDQ4NH0.PXZ1yJUykBNh2qUXN7lXvSgN8T7cPQ4s8cVRBHO5sWg';
     const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
     
-    // Query database
+    // Query database - use maybeSingle() to avoid error on no match
     const { data, error } = await supabase
       .from('applications')
       .select('control_number, status')
       .eq('control_number', controlNumber)
-      .single();
+      .maybeSingle();
     
     loading.classList.remove('active');
     
-    if (error || !data) {
+    if (error) {
+      // Database error
+      console.error('Database error:', error);
+      resultDiv.className = 'verification-result invalid';
+      resultContent.innerHTML = `
+        <div class="result-icon invalid">❌</div>
+        <div class="result-status">Database Error</div>
+        <div class="result-message">
+          Error checking control number: ${error.message}
+        </div>
+        <div class="result-details">
+          <p style="margin-top:20px;font-size:14px;color:rgba(255,255,255,0.6);">
+            Please contact the Admissions Office at <a href="mailto:admissions@acnhs.am" style="color:#2dd4bf;">admissions@acnhs.am</a>
+          </p>
+        </div>
+      `;
+      resultDiv.style.display = 'block';
+      resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    
+    if (!data) {
       // Control number not found
       resultDiv.className = 'verification-result invalid';
       resultContent.innerHTML = `
