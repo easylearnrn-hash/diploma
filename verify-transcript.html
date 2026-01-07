@@ -740,6 +740,19 @@
 </footer>
 
 <script>
+// Supabase configuration (singleton instance)
+const SUPABASE_URL = 'https://zlvnxvrzotamhpezqedr.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4MTEzMTcsImV4cCI6MjA3ODM4NzMxN30.-IoSqKhDrA9NuG4j3GufIbfmodWqCoppEklE1nTmw38';
+let supabaseClient = null;
+
+// Get or create Supabase client (singleton)
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  }
+  return supabaseClient;
+}
+
 // Custom Alert Functions
 function showCustomAlert(message, icon = '⚠️') {
   const overlay = document.getElementById('customAlertOverlay');
@@ -822,16 +835,15 @@ async function checkApplicationStatus() {
   resultDiv.className = 'verification-result';
   
   try {
-    // Initialize Supabase
-    const supabaseUrl = 'https://zlvnxvrzotamhpezqedr.supabase.co';
-    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4MTEzMTcsImV4cCI6MjA3ODM4NzMxN30.-IoSqKhDrA9NuG4j3GufIbfmodWqCoppEklE1nTmw38';
-    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    // Get Supabase client (singleton - reuses same instance)
+    const supabase = getSupabaseClient();
     
-    // Query database - use maybeSingle() to avoid error on no match
-    const { data, error } = await supabase
+    // Query database - check both control_number and reference_number
+    // First try control_number (if column exists after migration)
+    let { data, error } = await supabase
       .from('applications')
-      .select('reference_number, status')
-      .eq('reference_number', controlNumber)
+      .select('reference_number, control_number, status')
+      .or(`control_number.eq.${controlNumber},reference_number.eq.${controlNumber}`)
       .maybeSingle();
     
     loading.classList.remove('active');
