@@ -224,20 +224,28 @@ ON CONFLICT (verification_code) DO NOTHING;
 -- Stores submitted admission applications with a unique barcode for each record
 CREATE TABLE IF NOT EXISTS public.applications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    reference_number TEXT UNIQUE NOT NULL,
-    barcode TEXT NOT NULL,
+    reference_number TEXT UNIQUE NOT NULL,  -- REF: ACNHS-ADM-20260106-960
+    control_number TEXT UNIQUE,              -- CTRL: ACN-2026-136376
+    document_id TEXT UNIQUE,                 -- DOC ID: ACN-2026-392908
+    barcode TEXT UNIQUE NOT NULL,            -- Barcode: ACN2024001234VERIFY
+    hash TEXT UNIQUE,                        -- HASH: SHA256-D82025
     applicant_name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
     program TEXT,
     start_term TEXT,
     submission_date TIMESTAMPTZ DEFAULT timezone('utc', now()),
-    payload JSONB NOT NULL DEFAULT '{}'::jsonb
+    payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+    status TEXT DEFAULT 'Pending Review',
+    status_history JSONB DEFAULT '[]'::jsonb
 );
 
 -- Helpful indexes
 CREATE INDEX IF NOT EXISTS idx_applications_reference ON public.applications(reference_number);
+CREATE INDEX IF NOT EXISTS idx_applications_control_number ON public.applications(control_number);
+CREATE INDEX IF NOT EXISTS idx_applications_document_id ON public.applications(document_id);
 CREATE INDEX IF NOT EXISTS idx_applications_barcode ON public.applications(barcode);
+CREATE INDEX IF NOT EXISTS idx_applications_hash ON public.applications(hash);
 CREATE INDEX IF NOT EXISTS idx_applications_program ON public.applications(program);
 CREATE INDEX IF NOT EXISTS idx_applications_submission ON public.applications(submission_date);
 
