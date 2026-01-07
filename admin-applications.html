@@ -607,6 +607,12 @@
       transform: translateY(0);
     }
 
+    .action-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
     .action-btn span:first-child {
       font-size: 16px;
     }
@@ -1871,28 +1877,37 @@
         return;
       }
 
-      // ===== PERFORMANCE: Ensure payload is loaded before preview =====
+      // ===== ENSURE DATA IS LOADED: Wait for payload if still loading =====
       if (!app.payload) {
         showNotification('Info', 'Loading application data...', 'info');
-        const supabase = initSupabase();
+        const supabase = getSupabaseClient(); // Use global client
         if (supabase) {
-          const { data, error } = await supabase
-            .from('applications')
-            .select('payload, control_number, document_id, verification_hash')
-            .eq('id', app.id)
-            .single();
-          
-          if (error) {
-            console.error('Error loading payload:', error);
+          try {
+            const { data, error } = await supabase
+              .from('applications')
+              .select('payload, control_number, document_id, verification_hash')
+              .eq('id', app.id)
+              .single();
+            
+            if (error) {
+              console.error('Error loading payload:', error);
+              showNotification('Error', 'Failed to load application data', 'error');
+              return;
+            }
+            
+            if (data) {
+              app.payload = data.payload;
+              app.control_number = data.control_number;
+              app.document_id = data.document_id;
+              app.verification_hash = data.verification_hash;
+              
+              // Update the drawer with the loaded data
+              currentApplicationPayload = clonePayload(app.payload || {});
+            }
+          } catch (err) {
+            console.error('Unexpected error loading payload:', err);
             showNotification('Error', 'Failed to load application data', 'error');
             return;
-          }
-          
-          if (data) {
-            app.payload = data.payload;
-            app.control_number = data.control_number;
-            app.document_id = data.document_id;
-            app.verification_hash = data.verification_hash;
           }
         }
       }
@@ -2528,6 +2543,16 @@
       return globalSupabase;
     }
 
+    // Helper function to enable/disable action buttons
+    function setActionButtonsState(disabled) {
+      const previewBtn = document.querySelector('button[onclick="viewApplicationPreview()"]');
+      const editBtn = document.querySelector('#applicationDefaultButtons .edit-btn');
+      const deleteBtn = document.querySelector('#applicationDefaultButtons .delete-btn');
+      if (previewBtn) previewBtn.disabled = disabled;
+      if (editBtn) editBtn.disabled = disabled;
+      if (deleteBtn) deleteBtn.disabled = disabled;
+    }
+
     async function openApplicationDrawer(id) {
       console.time('⏱️ Total drawer open time');
       const app = applicationsData.find(a => a.id === id);
@@ -2544,6 +2569,10 @@
       // Show loading state immediately
       document.getElementById('drawerName').textContent = 'Loading...';
       document.getElementById('drawerReference').textContent = `Ref: ${app.reference_number || '—'}`;
+      
+      // Disable action buttons until data loads
+      setActionButtonsState(true);
+      
       console.log('🚀 Drawer opened instantly, loading data...');
 
       // ===== PERFORMANCE: Fetch full payload only when opening drawer =====
@@ -2593,6 +2622,9 @@
       } else {
         console.log('✅ Using cached payload (0ms fetch)');
       }
+
+      // Re-enable action buttons now that data is loaded
+      setActionButtonsState(false);
 
       currentApplicationId = id;
       currentApplicationPayload = clonePayload(app.payload || {});
