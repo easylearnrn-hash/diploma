@@ -1207,6 +1207,31 @@
     function initPreviewMode() {
       const urlParams = new URLSearchParams(window.location.search);
       const isPreview = urlParams.get('preview') === 'true';
+      const previewKey = urlParams.get('key');
+      let formData = null;
+      
+      if (previewKey && typeof sessionStorage !== 'undefined') {
+        try {
+          const stored = sessionStorage.getItem(previewKey);
+          if (stored) {
+            formData = JSON.parse(stored);
+            sessionStorage.removeItem(previewKey);
+          }
+        } catch (error) {
+          console.warn('Unable to read preview data from sessionStorage', error);
+        }
+      }
+      
+      if (!formData) {
+        const dataParam = urlParams.get('data');
+        if (dataParam) {
+          try {
+            formData = JSON.parse(decodeURIComponent(dataParam));
+          } catch (error) {
+            console.error('Error parsing preview data:', error);
+          }
+        }
+      }
       
       if (isPreview) {
         // Keep buttons hidden in preview mode (already hidden by CSS)
@@ -1225,16 +1250,10 @@
             window.parent.postMessage({ type: 'applicationSigned' }, '*');
             
             // Get applicant name from data
-            const dataParam = urlParams.get('data');
-            if (dataParam) {
-              try {
-                const formData = JSON.parse(decodeURIComponent(dataParam));
-                const registrarSignatureLine = document.getElementById('registrarSignatureLine');
-                if (registrarSignatureLine && formData.applicantName) {
-                  registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${formData.applicantName}</span>`;
-                }
-              } catch (error) {
-                console.error('Error signing application:', error);
+            if (formData?.applicantName) {
+              const registrarSignatureLine = document.getElementById('registrarSignatureLine');
+              if (registrarSignatureLine) {
+                registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${formData.applicantName}</span>`;
               }
             }
           });
@@ -1244,14 +1263,13 @@
         const statusDisplay = document.getElementById('statusDisplay');
         if (statusDisplay) statusDisplay.textContent = 'STATUS: PENDING REVIEW';
         
-        // Get data from URL
-        const dataParam = urlParams.get('data');
-        if (dataParam) {
-          try {
-            const formData = JSON.parse(decodeURIComponent(dataParam));
-            populatePreviewData(formData);
-          } catch (error) {
-            console.error('Error parsing preview data:', error);
+        if (formData) {
+          populatePreviewData(formData);
+        } else {
+          console.warn('No preview data provided');
+          const container = document.querySelector('.preview-container');
+          if (container) {
+            container.innerHTML = '<div style="text-align:center;padding:60px;color:#fca5a5;">Unable to load preview data.</div>';
           }
         }
       } else {

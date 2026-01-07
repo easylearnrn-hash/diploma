@@ -1962,10 +1962,18 @@
         submissionDate: app.submission_date || payload.submissionDate
       };
 
-      // Encode data exactly like admission-form.html does
+      // Store preview data in sessionStorage to avoid huge query strings
+      const previewKey = `preview-${app.id}-${Date.now()}`;
+      try {
+        sessionStorage.setItem(previewKey, JSON.stringify(previewData));
+      } catch (storageError) {
+        console.warn('Session storage unavailable, falling back to URL data', storageError);
+      }
+      
+      // Encode data for fallback (kept for backwards compatibility)
       const dataString = encodeURIComponent(JSON.stringify(previewData));
       
-      console.log('Opening preview with data length:', dataString.length); // Debug log
+      console.log('Opening preview with data length:', dataString.length, 'key:', previewKey); // Debug log
       
       // Open modal
       const modal = document.getElementById('previewModal');
@@ -1984,7 +1992,10 @@
       // Load pdf.html with data (SINGLE SOURCE OF TRUTH)
       // Use a slight delay to ensure srcdoc renders first
       setTimeout(() => {
-        iframe.src = `pdf.html?preview=true&data=${dataString}`;
+        const params = new URLSearchParams({ preview: 'true' });
+        if (previewKey) params.set('key', previewKey);
+        else params.set('data', dataString);
+        iframe.src = `pdf.html?${params.toString()}`;
       }, 100);
       
       // Listen for iframe load errors
