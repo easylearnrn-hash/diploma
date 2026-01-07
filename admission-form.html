@@ -1809,7 +1809,7 @@ async function handleAdmissionSubmit(e) {
 function showCredentialsModal(username, password, referenceNumber) {
   const modalHTML = `
     <div id="credentialsModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(44, 62, 80, 0.95); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px;">
-      <div style="background: white; border-radius: 8px; padding: 3rem; max-width: 600px; width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+      <div id="credentialsContent" style="background: white; border-radius: 8px; padding: 3rem; max-width: 600px; width: 100%; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
         
         <div style="text-align: center; margin-bottom: 2rem;">
           <div style="width: 80px; height: 80px; background: #3498db; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
@@ -1873,6 +1873,9 @@ function showCredentialsModal(username, password, referenceNumber) {
   `;
   
   document.body.insertAdjacentHTML('beforeend', modalHTML);
+  
+  // Capture screenshot after modal is rendered
+  setTimeout(() => captureCredentialsScreenshot(referenceNumber), 500);
 }
 
 /**
@@ -1900,6 +1903,44 @@ Login at: [Your Domain]/application-status.html`;
     console.error('Copy failed:', err);
     alert('Could not copy to clipboard. Please copy manually.');
   });
+}
+
+/**
+ * Capture screenshot of credentials modal
+ */
+async function captureCredentialsScreenshot(referenceNumber) {
+  try {
+    const credentialsContent = document.getElementById('credentialsContent');
+    if (!credentialsContent) {
+      console.error('Credentials content not found');
+      return;
+    }
+
+    // Use html2canvas to capture the modal content
+    const canvas = await html2canvas(credentialsContent, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      logging: false
+    });
+
+    // Convert canvas to base64 data URL
+    const screenshotDataUrl = canvas.toDataURL('image/png');
+    
+    // Save to database
+    const client = initSupabase();
+    const { error } = await client
+      .from('applications')
+      .update({ credentials_screenshot: screenshotDataUrl })
+      .eq('reference_number', referenceNumber);
+
+    if (error) {
+      console.error('Error saving screenshot:', error);
+    } else {
+      console.log('Credentials screenshot saved successfully');
+    }
+  } catch (error) {
+    console.error('Error capturing screenshot:', error);
+  }
 }
 
 /**
