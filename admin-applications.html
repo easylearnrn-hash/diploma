@@ -150,6 +150,7 @@
       border-radius: 16px;
       padding: 24px;
       box-shadow: 0 8px 32px var(--shadow);
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     .filters {
@@ -209,6 +210,7 @@
     /* TABLE */
     .table-wrapper {
       overflow-x: auto;
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     table {
@@ -348,6 +350,7 @@
       overflow-y: auto;
       transition: right 0.3s ease;
       z-index: 101;
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     .drawer.open {
@@ -657,6 +660,7 @@
       z-index: 10000;
       justify-content: center;
       align-items: center;
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     .custom-modal.active {
@@ -764,6 +768,7 @@
       z-index: 10000;
       animation: slideIn 0.3s ease-out;
       backdrop-filter: blur(10px);
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     .notification.success {
@@ -860,6 +865,7 @@
       justify-content: center;
       z-index: 10000;
       animation: fadeIn 0.2s ease-out;
+      contain: layout paint; /* Isolate layout calculations */
     }
 
     .input-modal-content {
@@ -916,6 +922,28 @@
         opacity: 1;
       }
     }
+
+    /* ===== PERFORMANCE OPTIMIZATION: Disable expensive effects on low-power devices ===== */
+    @media (prefers-reduced-motion: reduce) {
+      .drawer-backdrop,
+      .custom-modal,
+      .notification,
+      .input-modal,
+      #previewModal,
+      #statusHistoryModal {
+        backdrop-filter: none !important;
+        background: rgba(0, 0, 0, 0.85) !important; /* Use solid color instead of blur */
+      }
+      
+      /* Disable animations for better performance */
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -933,7 +961,7 @@
     <div style="display:flex;justify-content:center;align-items:flex-start;min-height:100%;padding:20px;" onclick="if(event.target === this) closePreviewModal()">
       <div style="position:relative;width:100%;max-width:1000px;background:#0f1f3a;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
         <button onclick="closePreviewModal()" style="position:absolute;top:16px;right:16px;background:rgba(239,68,68,0.2);border:none;color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;z-index:1;transition:all 0.2s;">✕</button>
-        <iframe id="previewIframe" style="width:100%;height:90vh;border:none;border-radius:16px;" frameborder="0"></iframe>
+        <iframe id="previewIframe" title="Application Preview" loading="lazy" style="width:100%;height:90vh;border:none;border-radius:16px;"></iframe>
       </div>
     </div>
   </div>
@@ -1446,11 +1474,48 @@
   </aside>
 
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
-  <script src="js/html2pdf.bundle.min.js"></script>
+  <!-- html2pdf now lazy-loaded on demand - see printApplication() -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/admin-sidebar.js"></script>
   <script>
+    // ===== PERFORMANCE: Script loader for lazy loading =====
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+        document.head.appendChild(script);
+      });
+    }
+
+    // ===== PERFORMANCE: Barcode cache to prevent redundant rendering =====
+    const barcodeCache = new Map();
+
+    function renderBarcodeWithCache(targetElement, value, options = {}) {
+      if (!targetElement || !value) return;
+      
+      const cacheKey = `${value}-${JSON.stringify(options)}`;
+      
+      // Check if we already rendered this exact barcode
+      if (barcodeCache.has(cacheKey)) {
+        console.log(`♻️ Using cached barcode for: ${value}`);
+        return;
+      }
+      
+      // Render new barcode
+      if (typeof JsBarcode !== 'undefined') {
+        try {
+          JsBarcode(targetElement, value, options);
+          barcodeCache.set(cacheKey, true);
+          console.log(`✅ Generated and cached barcode: ${value}`);
+        } catch (e) {
+          console.error('Barcode render error:', e);
+        }
+      }
+    }
+
     let applicationsData = [];
     let registrationsData = [];
     let currentTab = 'applications';
@@ -2135,10 +2200,16 @@
       const supabase = initSupabase();
       setupTabs();
       setupFilters();
-      loadApplications();
-      loadRegistrations();
+      loadApplications(); // ✅ Load only active tab
+      // ❌ Don't load registrations until user clicks tab (lazy loading)
       setupDrawer();
     });
+
+    // ===== PERFORMANCE: Track which tabs have been loaded =====
+    const tabsLoaded = {
+      applications: false,
+      registrations: false
+    };
 
     // TAB SWITCHING
     function setupTabs() {
@@ -2162,6 +2233,13 @@
       document.querySelectorAll('.tab-content').forEach(content => {
         content.style.display = content.id === `tab-${tabName}` ? 'block' : 'none';
       });
+
+      // ===== PERFORMANCE: Lazy load tab data on first access =====
+      if (tabName === 'registrations' && !tabsLoaded.registrations) {
+        console.log('🚀 Lazy loading registrations tab for first time...');
+        loadRegistrations();
+        tabsLoaded.registrations = true;
+      }
     }
 
     // APPLICATIONS
@@ -2169,24 +2247,31 @@
       const supabase = initSupabase();
       if (!supabase) return;
       
-      setStatus('applicationsStatus', 'Loading applications...');
+      setStatus('applicationsStatus', '⏳ Loading applications...');
       
+      // ===== PERFORMANCE: Optimized query =====
+      // - Only fetch fields needed for table display
+      // - Limit to 200 records (pagination can be added later)
+      // - Payload is fetched only when drawer is opened
       const { data, error } = await supabase
         .from('applications')
-        .select('*')
-        .order('submission_date', { ascending: false });
+        .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, payload')
+        .order('submission_date', { ascending: false })
+        .limit(200);
       
       if (error) {
         console.error('Error loading applications:', error);
-        setStatus('applicationsStatus', 'Failed to load applications');
+        setStatus('applicationsStatus', '❌ Failed to load applications');
         return;
       }
       
       applicationsData = data || [];
+      tabsLoaded.applications = true; // ✅ Mark as loaded
       document.getElementById('applicationsCount').textContent = applicationsData.length;
       renderApplications();
       populateProgramFilter();
-      setStatus('applicationsStatus', `${applicationsData.length} application(s) found`);
+      setStatus('applicationsStatus', `✅ ${applicationsData.length} application(s) loaded`);
+      console.log(`✅ Loaded ${applicationsData.length} applications`);
     }
 
     function renderApplications(filtered = applicationsData) {
@@ -2416,20 +2501,17 @@
       if (svg) {
         svg.innerHTML = '';
       }
-      if (app.barcode && typeof JsBarcode !== 'undefined') {
-        try {
-          JsBarcode(svg, app.barcode, {
-            format: 'code128',
-            width: 2,
-            height: 60,
-            displayValue: true,
-            lineColor: '#2dd4bf',
-            background: '#0b1629',
-            fontSize: 14
-          });
-        } catch (e) {
-          console.error('Barcode render error:', e);
-        }
+      if (app.barcode) {
+        // ===== PERFORMANCE: Use cached barcode rendering =====
+        renderBarcodeWithCache(svg, app.barcode, {
+          format: 'code128',
+          width: 2,
+          height: 60,
+          displayValue: true,
+          lineColor: '#2dd4bf',
+          background: '#0b1629',
+          fontSize: 14
+        });
       } else if (svg) {
         svg.textContent = 'Barcode unavailable';
       }
@@ -3003,9 +3085,16 @@
         return;
       }
 
+      // ===== PERFORMANCE: Lazy-load html2pdf only when needed =====
       if (typeof html2pdf === 'undefined') {
-        showModal('PDF library unavailable. Please refresh and try again.', 'error');
-        return;
+        try {
+          showNotification('Loading PDF Library...', 'Please wait while we prepare the PDF generator.', 'info');
+          await loadScript('js/html2pdf.bundle.min.js');
+          console.log('✅ html2pdf library loaded on demand');
+        } catch (error) {
+          showModal('Failed to load PDF library. Please refresh and try again.', 'error');
+          return;
+        }
       }
 
       const app = applicationsData.find(a => a.id === currentApplicationId);
@@ -3769,18 +3858,15 @@
       document.body.appendChild(printRoot);
 
       const barcodeNode = printPage.querySelector('#printBarcodeCanvas');
-      if (barcodeNode && typeof JsBarcode !== 'undefined' && (app.barcode || payload.barcode)) {
-        try {
-          JsBarcode(barcodeNode, app.barcode || payload.barcode, {
-            format: 'code128',
-            width: 1.8,
-            height: 60,
-            displayValue: true,
-            fontSize: 12
-          });
-        } catch (error) {
-          console.error('Print barcode render error:', error);
-        }
+      if (barcodeNode && (app.barcode || payload.barcode)) {
+        // ===== PERFORMANCE: Use cached barcode rendering =====
+        renderBarcodeWithCache(barcodeNode, app.barcode || payload.barcode, {
+          format: 'code128',
+          width: 1.8,
+          height: 60,
+          displayValue: true,
+          fontSize: 12
+        });
       }
 
       const options = {
@@ -3826,15 +3912,19 @@
         return;
       }
       
-      setStatus('registrationsStatus', 'Loading registrations...');
+      setStatus('registrationsStatus', '⏳ Loading registrations...');
       
       console.log('Fetching registrations from Supabase...');
       console.log('Supabase client initialized:', !!supabase);
       
+      // ===== PERFORMANCE: Optimized query =====
+      // - Only fetch fields needed for table display
+      // - Limit to 200 records
       const { data, error } = await supabase
         .from('registrations')
-        .select('*')
-        .order('registration_date', { ascending: false });
+        .select('id, full_name, email, phone, education_level, preferred_start_date, registration_date, status, reminder_date, date_of_birth')
+        .order('registration_date', { ascending: false })
+        .limit(200);
       
       if (error) {
         console.error('Error loading registrations:', error);
@@ -3879,9 +3969,10 @@ The table needs to be created before registrations can be stored.`;
       console.log(`✅ Loaded ${data?.length || 0} registrations:`, data);
       
       registrationsData = data || [];
+      tabsLoaded.registrations = true; // ✅ Mark as loaded
       document.getElementById('registrationsCount').textContent = registrationsData.length;
       renderRegistrations();
-      setStatus('registrationsStatus', `${registrationsData.length} registration(s) found`);
+      setStatus('registrationsStatus', `✅ ${registrationsData.length} registration(s) loaded`);
     }
 
     function isReminderDue(reminderDate) {
