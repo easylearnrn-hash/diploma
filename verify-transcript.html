@@ -559,11 +559,22 @@
 <div class="verification-container">
   <div class="verification-header">
     <div class="subtitle">Academic Credential Verification System</div>
-    <h1>Transcript Verification</h1>
-    <p>Enter a verification code from an ACNHS transcript to confirm its authenticity and view details</p>
+    <h1>Document Verification</h1>
+    <p>Verify transcripts and check application status</p>
+    
+    <!-- Tabs -->
+    <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+      <button onclick="switchTab('transcript')" id="transcriptTab" style="padding:12px 32px;background:rgba(45,212,191,0.2);border:2px solid #2dd4bf;color:#2dd4bf;border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;transition:all 0.3s;">
+        📄 Transcript Verification
+      </button>
+      <button onclick="switchTab('application')" id="applicationTab" style="padding:12px 32px;background:transparent;border:2px solid rgba(45,212,191,0.3);color:rgba(255,255,255,0.6);border-radius:8px;cursor:pointer;font-weight:600;font-size:15px;transition:all 0.3s;">
+        📋 Application Status
+      </button>
+    </div>
   </div>
   
-  <div class="verification-input-section">
+  <!-- Transcript Verification Section -->
+  <div class="verification-input-section" id="transcriptSection">
     <div class="verification-code-input">
       <label class="input-label" for="verificationCode">Verification Code</label>
       <input 
@@ -575,6 +586,22 @@
       >
       <br>
       <button onclick="verifyTranscript()">🔍 Verify Transcript</button>
+    </div>
+  </div>
+  
+  <!-- Application Status Check Section -->
+  <div class="verification-input-section" id="applicationSection" style="display:none;">
+    <div class="verification-code-input">
+      <label class="input-label" for="controlNumber">Application Control Number</label>
+      <input 
+        type="text" 
+        id="controlNumber" 
+        placeholder="ACN-2026-XXXXXX"
+        maxlength="20"
+        autocomplete="off"
+      >
+      <br>
+      <button onclick="checkApplicationStatus()">🔍 Check Status</button>
     </div>
   </div>
   
@@ -618,6 +645,148 @@
 </footer>
 
 <script>
+// Tab switching function
+function switchTab(tab) {
+  const transcriptTab = document.getElementById('transcriptTab');
+  const applicationTab = document.getElementById('applicationTab');
+  const transcriptSection = document.getElementById('transcriptSection');
+  const applicationSection = document.getElementById('applicationSection');
+  const resultDiv = document.getElementById('verificationResult');
+  
+  // Hide results
+  resultDiv.style.display = 'none';
+  resultDiv.className = 'verification-result';
+  
+  if (tab === 'transcript') {
+    transcriptTab.style.background = 'rgba(45,212,191,0.2)';
+    transcriptTab.style.borderColor = '#2dd4bf';
+    transcriptTab.style.color = '#2dd4bf';
+    
+    applicationTab.style.background = 'transparent';
+    applicationTab.style.borderColor = 'rgba(45,212,191,0.3)';
+    applicationTab.style.color = 'rgba(255,255,255,0.6)';
+    
+    transcriptSection.style.display = 'block';
+    applicationSection.style.display = 'none';
+  } else {
+    applicationTab.style.background = 'rgba(45,212,191,0.2)';
+    applicationTab.style.borderColor = '#2dd4bf';
+    applicationTab.style.color = '#2dd4bf';
+    
+    transcriptTab.style.background = 'transparent';
+    transcriptTab.style.borderColor = 'rgba(45,212,191,0.3)';
+    transcriptTab.style.color = 'rgba(255,255,255,0.6)';
+    
+    transcriptSection.style.display = 'none';
+    applicationSection.style.display = 'block';
+  }
+}
+
+// Check application status
+async function checkApplicationStatus() {
+  const controlInput = document.getElementById('controlNumber');
+  const controlNumber = controlInput.value.trim().toUpperCase();
+  const loading = document.getElementById('loading');
+  const resultDiv = document.getElementById('verificationResult');
+  const resultContent = document.getElementById('resultContent');
+  
+  if (!controlNumber) {
+    alert('Please enter a control number');
+    return;
+  }
+  
+  // Show loading
+  loading.classList.add('active');
+  resultDiv.style.display = 'none';
+  resultDiv.className = 'verification-result';
+  
+  try {
+    // Initialize Supabase
+    const supabaseUrl = 'https://pcsyawybjdcmjdfxqgui.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBjc3lhd3liamRjbWpkZnhxZ3VpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU3NjQ0ODQsImV4cCI6MjA1MTM0MDQ4NH0.PXZ1yJUykBNh2qUXN7lXvSgN8T7cPQ4s8cVRBHO5sWg';
+    const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    
+    // Query database
+    const { data, error } = await supabase
+      .from('applications')
+      .select('control_number, status')
+      .eq('control_number', controlNumber)
+      .single();
+    
+    loading.classList.remove('active');
+    
+    if (error || !data) {
+      // Control number not found
+      resultDiv.className = 'verification-result invalid';
+      resultContent.innerHTML = `
+        <div class="result-icon invalid">❌</div>
+        <div class="result-status">Invalid Control Number</div>
+        <div class="result-message">
+          The control number "${controlNumber}" was not found in our system.
+        </div>
+        <div class="result-details">
+          <p style="margin-top:20px;font-size:14px;color:rgba(255,255,255,0.6);">
+            Please verify you entered the correct control number. If you believe this is an error, 
+            contact the Admissions Office at <a href="mailto:admissions@acnhs.am" style="color:#2dd4bf;">admissions@acnhs.am</a>
+          </p>
+        </div>
+      `;
+    } else {
+      // Application found - show only status and that it's real
+      resultDiv.className = 'verification-result valid';
+      const statusColor = getStatusColor(data.status);
+      
+      resultContent.innerHTML = `
+        <div class="result-icon valid">✓</div>
+        <div class="result-status">Application Verified</div>
+        <div class="result-message">
+          Control number <strong>${controlNumber}</strong> is valid and registered in our system.
+        </div>
+        <div class="result-details">
+          <div style="margin-top:24px;padding:20px;background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="color:rgba(255,255,255,0.7);font-size:14px;">Current Status:</span>
+              <span style="display:inline-block;padding:8px 16px;background:${statusColor};border-radius:6px;font-weight:600;font-size:14px;">${data.status}</span>
+            </div>
+          </div>
+          <p style="margin-top:20px;font-size:13px;color:rgba(255,255,255,0.5);text-align:center;">
+            For detailed application information, please log in to your applicant portal.
+          </p>
+        </div>
+      `;
+    }
+    
+    resultDiv.style.display = 'block';
+    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    
+  } catch (err) {
+    console.error('Error checking application:', err);
+    loading.classList.remove('active');
+    resultDiv.className = 'verification-result invalid';
+    resultContent.innerHTML = `
+      <div class="result-icon invalid">⚠️</div>
+      <div class="result-status">Verification Error</div>
+      <div class="result-message">
+        Unable to verify application at this time. Please try again later.
+      </div>
+    `;
+    resultDiv.style.display = 'block';
+  }
+}
+
+function getStatusColor(status) {
+  const normalized = status.toLowerCase();
+  if (normalized.includes('approved') || normalized.includes('confirm')) {
+    return 'rgba(34, 197, 94, 0.2)';
+  } else if (normalized.includes('denied') || normalized.includes('reject')) {
+    return 'rgba(239, 68, 68, 0.2)';
+  } else if (normalized.includes('rfe') || normalized.includes('request')) {
+    return 'rgba(234, 179, 8, 0.2)';
+  } else {
+    return 'rgba(59, 130, 246, 0.2)';
+  }
+}
+
 // Auto-populate verification code from URL parameter
 window.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
