@@ -45,6 +45,8 @@ BEGIN
 END $$;
 
 -- Add status column if it doesn't exist
+-- Note: Your table already has a status column with CHECK constraint
+-- This block will be skipped if status column already exists
 DO $$ 
 BEGIN
     IF NOT EXISTS (
@@ -53,7 +55,7 @@ BEGIN
         AND table_name = 'applications' 
         AND column_name = 'status'
     ) THEN
-        ALTER TABLE public.applications ADD COLUMN status TEXT DEFAULT 'Pending Review';
+        ALTER TABLE public.applications ADD COLUMN status TEXT DEFAULT 'SUBMITTED';
     END IF;
 END $$;
 
@@ -73,6 +75,14 @@ END $$;
 -- STEP 3: Add UNIQUE constraints (will skip if already exists)
 DO $$ 
 BEGIN
+    -- barcode unique constraint (if not already unique)
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint 
+        WHERE conname = 'applications_barcode_key'
+    ) THEN
+        ALTER TABLE public.applications ADD CONSTRAINT applications_barcode_key UNIQUE (barcode);
+    END IF;
+
     -- control_number unique constraint
     IF NOT EXISTS (
         SELECT 1 FROM pg_constraint 
