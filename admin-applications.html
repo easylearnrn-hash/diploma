@@ -928,6 +928,23 @@
     </div>
   </div>
 
+  <!-- Status History Modal -->
+  <div id="statusHistoryModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);backdrop-filter:blur(5px);z-index:10001;overflow:auto;">
+    <div style="display:flex;justify-content:center;align-items:center;min-height:100%;padding:20px;">
+      <div style="position:relative;width:100%;max-width:600px;background:#0f1f3a;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);max-height:80vh;display:flex;flex-direction:column;">
+        <div style="padding:24px;border-bottom:1px solid rgba(45,212,191,0.2);display:flex;justify-content:space-between;align-items:center;">
+          <h2 style="margin:0;color:white;font-size:20px;font-weight:600;display:flex;align-items:center;gap:10px;">
+            <span>📜</span> Status History
+          </h2>
+          <button onclick="closeStatusHistoryModal()" style="background:rgba(239,68,68,0.2);border:none;color:#fca5a5;width:36px;height:36px;border-radius:50%;cursor:pointer;font-size:18px;transition:all 0.2s;">✕</button>
+        </div>
+        <div id="statusHistoryModalContent" style="padding:24px;overflow-y:auto;flex:1;">
+          <!-- History content will be populated here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Sidebar will be injected by admin-sidebar.js -->
   
   <div class="container">
@@ -1843,6 +1860,78 @@
       }
     }
 
+    function openStatusHistoryModal(appId) {
+      const app = applicationsData.find(a => a.id === appId);
+      if (!app) return;
+      
+      const modal = document.getElementById('statusHistoryModal');
+      const content = document.getElementById('statusHistoryModalContent');
+      
+      // Generate history content using the same function
+      const statusHistory = app.status_history || [];
+      
+      if (statusHistory.length === 0) {
+        content.innerHTML = `
+          <div style="padding:40px;text-align:center;color:rgba(255,255,255,0.5);font-size:14px;">
+            <div style="font-size:48px;margin-bottom:16px;">📋</div>
+            <p style="font-size:16px;margin-bottom:8px;">No status changes recorded yet</p>
+            <p style="font-size:13px;color:rgba(255,255,255,0.3);">Status history will appear here once changes are made</p>
+          </div>
+        `;
+      } else {
+        // Sort by date (newest first)
+        const sorted = [...statusHistory].sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
+        
+        content.innerHTML = sorted.map((entry, index) => {
+          const date = new Date(entry.changed_at);
+          const formattedDate = date.toLocaleDateString('en-US', { 
+            month: 'short', 
+            day: 'numeric', 
+            year: 'numeric' 
+          });
+          const formattedTime = date.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: true 
+          });
+          
+          const isFirst = index === 0;
+          const statusColor = getStatusColor(entry.status);
+          
+          return `
+            <div style="position:relative;padding-left:24px;padding-bottom:${isFirst ? '0' : '16px'};">
+              ${!isFirst ? '<div style="position:absolute;left:7px;top:0;bottom:0;width:2px;background:rgba(45,212,191,0.2);"></div>' : ''}
+              <div style="position:absolute;left:0;top:4px;width:16px;height:16px;border-radius:50%;background:${statusColor};border:3px solid #0f1f3a;z-index:1;"></div>
+              <div style="background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;padding:16px;">
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
+                  <span style="color:white;font-weight:600;font-size:15px;">${entry.status}</span>
+                  ${isFirst ? '<span style="background:rgba(34,197,94,0.2);color:#22c55e;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;">CURRENT</span>' : ''}
+                </div>
+                <div style="color:rgba(255,255,255,0.6);font-size:13px;margin-bottom:${entry.message ? '12px' : '0'};">
+                  <span>📅 ${formattedDate}</span>
+                  <span style="margin-left:16px;">🕒 ${formattedTime}</span>
+                </div>
+                ${entry.message ? `
+                  <div style="color:rgba(255,255,255,0.85);font-size:13px;line-height:1.6;background:rgba(0,0,0,0.3);padding:12px;border-radius:6px;border-left:3px solid ${statusColor};">
+                    ${entry.message}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+      
+      modal.style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeStatusHistoryModal() {
+      const modal = document.getElementById('statusHistoryModal');
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+    }
+
     // Close modal when clicking outside
     document.addEventListener('DOMContentLoaded', function() {
       const modal = document.getElementById('previewModal');
@@ -1854,10 +1943,23 @@
         });
       }
       
+      // Status history modal close handlers
+      const historyModal = document.getElementById('statusHistoryModal');
+      if (historyModal) {
+        historyModal.addEventListener('click', function(e) {
+          if (e.target === historyModal) {
+            closeStatusHistoryModal();
+          }
+        });
+      }
+      
       // Close modal on Escape key
       document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape' && modal.style.display === 'block') {
           closePreviewModal();
+        }
+        if (e.key === 'Escape' && historyModal && historyModal.style.display === 'block') {
+          closeStatusHistoryModal();
         }
       });
     });
@@ -2051,7 +2153,7 @@
           <td><strong>${app.applicant_name || '—'}</strong></td>
           <td>${programName}</td>
           <td>${startTerm}</td>
-          <td><span class="pill ${statusData.pillClass}">${statusData.label}</span></td>
+          <td><span class="pill ${statusData.pillClass}" onclick="openStatusHistoryModal('${app.id}')" style="cursor:pointer;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">${statusData.label}</span></td>
           <td>${formatDate(app.submission_date)}</td>
           <td><button class="btn-view" onclick="openApplicationDrawer('${app.id}')">View</button></td>
         </tr>
