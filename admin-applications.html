@@ -918,6 +918,16 @@
     </div>
   </div>
 
+  <!-- Application Preview Modal (SINGLE SOURCE OF TRUTH) -->
+  <div id="previewModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);backdrop-filter:blur(5px);z-index:10001;overflow:auto;">
+    <div style="display:flex;justify-content:center;align-items:flex-start;min-height:100%;padding:20px;">
+      <div style="position:relative;width:100%;max-width:1000px;background:#0f1f3a;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+        <button onclick="closePreviewModal()" style="position:absolute;top:16px;right:16px;background:rgba(239,68,68,0.2);border:none;color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;z-index:1;transition:all 0.2s;">✕</button>
+        <iframe id="previewIframe" style="width:100%;height:90vh;border:none;border-radius:16px;" frameborder="0"></iframe>
+      </div>
+    </div>
+  </div>
+
   <!-- Sidebar will be injected by admin-sidebar.js -->
   
   <div class="container">
@@ -1029,18 +1039,6 @@
       <div class="barcode-container">
         <svg id="drawerBarcode" class="barcode"></svg>
       </div>
-    </div>
-
-    <!-- Full Application Preview Toggle -->
-    <div class="drawer-section" id="previewToggleSection">
-      <button class="action-btn" onclick="toggleFullPreview()" style="width:100%;background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid var(--accent);">
-        <span id="previewToggleIcon">📄</span> <span id="previewToggleText">Show Full Application Preview</span>
-      </button>
-    </div>
-
-    <!-- Full Application Preview (Hidden by default) -->
-    <div id="fullApplicationPreview" style="display:none;margin:0 -24px;padding:24px;background:#ffffff;">
-      <!-- Preview content will be injected here -->
     </div>
 
     <div class="drawer-section">
@@ -1209,6 +1207,9 @@
     <div class="drawer-section" id="applicationActions" style="display:none;">
       <h3>Actions</h3>
       <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="action-btn" onclick="viewApplicationPreview()" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);grid-column:1/-1;">
+          <span>📄</span> View Application Preview
+        </button>
         <div id="applicationDefaultButtons" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <button class="action-btn approve-btn" onclick="confirmApplication()">
             <span>✓</span> Confirm
@@ -1399,11 +1400,6 @@
       toggleSection('registrationDetails', false);
       toggleSection('actionButtons', false);
       toggleSection('statusManagementSection', true);
-      toggleSection('previewToggleSection', true);
-      // Reset preview on new application view
-      document.getElementById('fullApplicationPreview').style.display = 'none';
-      document.getElementById('previewToggleText').textContent = 'Show Full Application Preview';
-      document.getElementById('previewToggleIcon').textContent = '📄';
     }
 
     function showRegistrationView() {
@@ -1411,250 +1407,6 @@
       applicationOnlySections.forEach(section => toggleSection(section, false));
       toggleSection('registrationDetails', true);
       toggleSection('actionButtons', true);
-      toggleSection('previewToggleSection', false);
-    }
-
-    function toggleFullPreview() {
-      const preview = document.getElementById('fullApplicationPreview');
-      const toggleText = document.getElementById('previewToggleText');
-      const toggleIcon = document.getElementById('previewToggleIcon');
-      
-      if (preview.style.display === 'none') {
-        // Show preview
-        populateFullPreview();
-        preview.style.display = 'block';
-        toggleText.textContent = 'Hide Full Application Preview';
-        toggleIcon.textContent = '✕';
-        
-        // Hide other sections when preview is shown
-        applicationOnlySections.forEach(section => toggleSection(section, false));
-        toggleSection('statusManagementSection', false);
-        toggleSection('barcodeSection', false);
-      } else {
-        // Hide preview
-        preview.style.display = 'none';
-        toggleText.textContent = 'Show Full Application Preview';
-        toggleIcon.textContent = '📄';
-        
-        // Show sections again
-        applicationOnlySections.forEach(section => toggleSection(section, true));
-        toggleSection('statusManagementSection', true);
-        toggleSection('barcodeSection', true);
-      }
-    }
-
-    function populateFullPreview() {
-      const app = getApplicationById(currentApplicationId);
-      if (!app) return;
-      
-      const payload = app.payload || {};
-      const preview = document.getElementById('fullApplicationPreview');
-      
-      // Generate barcode SVG data
-      const barcodeCanvas = document.createElement('canvas');
-      const barcodeSVG = `<svg id="previewBarcode" style="width:280px;height:72px"></svg>`;
-      
-      preview.innerHTML = `
-<div style="max-width:8.5in;margin:0 auto;padding:30px;background:#ffffff;box-shadow:0 0 20px rgba(0,0,0,0.1);border-radius:8px;color:#000;">
-  <!-- WATERMARK -->
-  <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:520px;height:520px;opacity:0.08;pointer-events:none">
-    <img src="assets/images/Seal.png" alt="ACNHS Watermark" style="width:100%;height:100%;filter:saturate(0.8);opacity:0.95">
-  </div>
-
-  <div style="position:relative;z-index:1">
-    <!-- HEADER -->
-    <div style="text-align:center;margin-bottom:36px">
-      <p style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#1e3a8a;margin:0">Secure Application Receipt • Armenian College of Nursing &amp; Health Sciences</p>
-      <div style="height:4px;width:70%;margin:14px auto;background:linear-gradient(90deg,rgba(15,23,42,0) 0%,#0f172a 25%,#14b8a6 50%,#0f172a 75%,rgba(15,23,42,0) 100%)"></div>
-      <h1 style="font-size:22px;font-weight:700;margin:0;color:#0f172a;letter-spacing:0.5px">OFFICIAL ADMISSION APPLICATION RECEIPT</h1>
-      <p style="margin:8px 0 12px 0;font-size:12px;letter-spacing:1px;color:#1e3a8a;font-weight:600">Reference <span>${app.reference_number || '—'}</span></p>
-      <div style="display:flex;align-items:flex-end;justify-content:center;gap:18px;flex-wrap:wrap">
-        <div style="text-align:left;min-width:200px">
-          <p style="margin:0;font-size:11px;color:#475569;letter-spacing:0.5px">Unique Barcode</p>
-          <p style="margin:4px 0 0 0;font-size:13px;font-weight:700;color:#0f172a;letter-spacing:1px">${app.barcode || '—'}</p>
-        </div>
-        <div style="background:#ffffff;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px">
-          ${barcodeSVG}
-        </div>
-      </div>
-    </div>
-
-    <!-- APPLICANT SUMMARY -->
-    <div style="margin-bottom:28px;border-top:2px solid #0f172a;border-bottom:1px solid #cbd5f5;padding:14px 0;display:flex;flex-wrap:wrap;gap:25px;font-size:12px">
-      <div style="flex:1 1 220px">
-        <p style="margin:0;color:#475569;font-size:11px;letter-spacing:1px">APPLICANT NAME</p>
-        <p style="margin:4px 0 0 0;font-weight:700;font-size:13px">${payload.applicantName || app.applicant_name || '—'}</p>
-      </div>
-      <div style="flex:1 1 160px">
-        <p style="margin:0;color:#475569;font-size:11px;letter-spacing:1px">DATE OF BIRTH</p>
-        <p style="margin:4px 0 0 0;font-weight:700;font-size:13px">${formatDate(payload.dob) || '—'}</p>
-      </div>
-      <div style="flex:1 1 140px">
-        <p style="margin:0;color:#475569;font-size:11px;letter-spacing:1px">GENDER</p>
-        <p style="margin:4px 0 0 0;font-weight:700;font-size:13px">${payload.gender || '—'}</p>
-      </div>
-      <div style="flex:1 1 200px">
-        <p style="margin:0;color:#475569;font-size:11px;letter-spacing:1px">NATIONALITY</p>
-        <p style="margin:4px 0 0 0;font-weight:700;font-size:13px">${payload.nationality || '—'}</p>
-      </div>
-      <div style="flex:1 1 220px">
-        <p style="margin:0;color:#475569;font-size:11px;letter-spacing:1px">PLACE OF BIRTH</p>
-        <p style="margin:4px 0 0 0;font-weight:700;font-size:13px">${payload.birthLocation || '—'}</p>
-      </div>
-    </div>
-
-    <!-- CONTACT & ADDRESS -->
-    <div style="margin-bottom:28px">
-      <h2 style="margin:0 0 10px 0;font-size:14px;letter-spacing:1px;color:#0f172a">CONTACT &amp; RESIDENCE</h2>
-      <div style="display:flex;flex-wrap:wrap;gap:18px;font-size:11px">
-        <div style="flex:1 1 240px;background:#f8fafc;padding:12px;border:1px solid #d7dbe8">
-          <p style="margin:0;color:#475569;font-size:10px;letter-spacing:1px">PRIMARY EMAIL</p>
-          <p style="margin:6px 0 0 0;font-weight:600">${payload.email || app.email || '—'}</p>
-        </div>
-        <div style="flex:1 1 180px;background:#f8fafc;padding:12px;border:1px solid #d7dbe8">
-          <p style="margin:0;color:#475569;font-size:10px;letter-spacing:1px">PRIMARY PHONE</p>
-          <p style="margin:6px 0 0 0;font-weight:600">${formatPhone(payload.phone || app.phone)}</p>
-        </div>
-        <div style="flex:1 1 180px;background:#f8fafc;padding:12px;border:1px solid #d7dbe8">
-          <p style="margin:0;color:#475569;font-size:10px;letter-spacing:1px">ALTERNATE PHONE</p>
-          <p style="margin:6px 0 0 0;font-weight:600">${formatPhone(payload.altPhone) || '—'}</p>
-        </div>
-        <div style="flex:1 1 100%;background:#f8fafc;padding:12px;border:1px solid #d7dbe8">
-          <p style="margin:0;color:#475569;font-size:10px;letter-spacing:1px">CURRENT ADDRESS</p>
-          <p style="margin:6px 0 0 0;font-weight:600">${payload.addressLine || '—'}</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- PROGRAM SELECTION -->
-    <div style="margin-bottom:28px">
-      <h2 style="margin:0 0 10px 0;font-size:14px;letter-spacing:1px;color:#0f172a">PROGRAM SELECTION</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead>
-          <tr style="background:#f8fafc;border-top:2px solid #0f172a;border-bottom:2px solid #0f172a">
-            <th style="padding:9px;text-align:left">PROGRAM</th>
-            <th style="padding:9px;text-align:left">INTENDED START</th>
-            <th style="padding:9px;text-align:left">PREVIOUS APPLICATION</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px;font-weight:600">${payload.programChoice || app.program || '—'}</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${formatStartDate(payload.startTerm || app.start_term)}</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.previousApplication || '—'}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- ACADEMIC & EMERGENCY SUMMARY -->
-    <div style="display:flex;flex-wrap:wrap;gap:20px;margin-bottom:28px">
-      <div style="flex:1 1 260px;border:1px solid #d7dbe8;padding:14px">
-        <p style="margin:0 0 8px 0;color:#475569;font-size:10px;letter-spacing:1px">ACADEMIC BACKGROUND</p>
-        <p style="margin:0;font-size:12px;font-weight:700">${payload.educationLevel || '—'}</p>
-        <p style="margin:4px 0 0 0;font-size:11px">${payload.institution || '—'}</p>
-        <p style="margin:2px 0 0 0;font-size:11px">${payload.fieldOfStudy || '—'}</p>
-        <p style="margin:2px 0 0 0;font-size:11px">Graduated ${payload.graduationYear || '—'} • GPA ${payload.gpa || '—'}</p>
-      </div>
-      <div style="flex:1 1 240px;border:1px solid #d7dbe8;padding:14px">
-        <p style="margin:0 0 8px 0;color:#475569;font-size:10px;letter-spacing:1px">EMERGENCY CONTACT</p>
-        <p style="margin:0;font-size:12px;font-weight:700">${payload.emergencyName || '—'}</p>
-        <p style="margin:4px 0 0 0;font-size:11px">Relationship: <span>${payload.emergencyRelation || '—'}</span></p>
-        <p style="margin:2px 0 0 0;font-size:11px">Phone: <span>${formatPhone(payload.emergencyPhone)}</span></p>
-      </div>
-    </div>
-
-    <!-- DOCUMENTS -->
-    <div style="margin-bottom:28px">
-      <h2 style="margin:0 0 10px 0;font-size:14px;letter-spacing:1px;color:#0f172a">DOCUMENT CHECKLIST</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:11px">
-        <thead>
-          <tr style="background:#f8fafc;border-top:2px solid #0f172a;border-bottom:2px solid #0f172a">
-            <th style="padding:9px;text-align:left;width:60%">REQUIRED DOCUMENT</th>
-            <th style="padding:9px;text-align:left">STATUS</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">Passport Copy</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.documents?.passport || 'Not Provided'}</td>
-          </tr>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">Diploma / Degree Certificate</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.documents?.diploma || 'Not Provided'}</td>
-          </tr>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">Official Transcripts</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.documents?.transcript || 'Not Provided'}</td>
-          </tr>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">English Proficiency Results</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.documents?.english || 'Not Provided'}</td>
-          </tr>
-          <tr>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">Letters of Recommendation</td>
-            <td style="border-bottom:1px solid #d7dbe8;padding:10px">${payload.documents?.recommendation || 'Optional'}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <!-- PERSONAL STATEMENT -->
-    <div style="margin-bottom:28px;border:1px solid #d7dbe8;padding:16px;background:#f8fafc">
-      <p style="margin:0 0 6px 0;color:#475569;font-size:10px;letter-spacing:1px">PERSONAL STATEMENT SUMMARY</p>
-      <p style="margin:0;font-size:11px;line-height:1.6;text-align:justify">
-        ${payload.personalStatement || 'No statement provided.'}
-      </p>
-    </div>
-
-    <!-- DECLARATION -->
-    <div style="border-top:3px double #0f172a;padding-top:18px">
-      <p style="margin:0 0 16px 0;font-size:11px;line-height:1.6;text-align:justify;color:#1f2937">
-        This receipt confirms that the Armenian College of Nursing &amp; Health Sciences has received the applicant's submission and supporting documents listed herein. Verification of authenticity and completeness will be conducted by the Office of Admissions. All communications regarding this application will cite Reference <span>${app.reference_number || '—'}</span>.
-      </p>
-      <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:40px">
-        <div style="flex:1">
-          <div style="border-bottom:1px solid #0f172a;height:1px;margin-bottom:6px"></div>
-          <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">APPLICANT DECLARATION</p>
-          <p style="margin:4px 0 0 0;font-size:11px;font-weight:600;color:#0f172a">${payload.declaration || 'Confirmed'}</p>
-        </div>
-        <div style="flex:1">
-          <p style="margin:0 0 6px 0;font-size:12px;font-weight:700;color:#0f172a;text-align:center">${formatDate(app.submission_date)}</p>
-          <div style="border-bottom:1px solid #0f172a;height:1px;margin-bottom:6px"></div>
-          <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569;text-align:center">DATE OF SUBMISSION</p>
-        </div>
-        <div style="flex:1;text-align:right">
-          <p style="margin:0;font-size:10px;letter-spacing:1px;color:#475569">CONSENT TO COMMUNICATE</p>
-          <p style="margin:4px 0 0 0;font-weight:700">${payload.consent || 'Granted'}</p>
-        </div>
-      </div>
-    </div>
-
-    <div style="margin-top:26px;text-align:center;font-size:9px;color:#64748b;letter-spacing:1px">
-      <p style="margin:0">CONFIDENTIAL • DO NOT ALTER • VALID ONLY WITH EMBEDDED SEAL</p>
-    </div>
-  </div>
-</div>
-      `;
-      
-      // Render barcode in preview
-      setTimeout(() => {
-        const barcodeSVG = document.getElementById('previewBarcode');
-        if (barcodeSVG && app.barcode && typeof JsBarcode !== 'undefined') {
-          try {
-            JsBarcode(barcodeSVG, app.barcode, {
-              format: 'code128',
-              width: 1.5,
-              height: 72,
-              displayValue: false,
-              lineColor: '#2dd4bf',
-              background: 'transparent'
-            });
-          } catch (e) {
-            console.error('Preview barcode error:', e);
-          }
-        }
-      }, 100);
     }
 
     function setDrawerValue(id, value, fallback = '—') {
@@ -1920,6 +1672,118 @@
       const modal = document.getElementById('customModal');
       modal.classList.remove('active');
     }
+
+    // APPLICATION PREVIEW MODAL (SINGLE SOURCE OF TRUTH)
+    // Uses the exact same pdf.html that applicants see
+    function viewApplicationPreview() {
+      const app = getApplicationById(currentApplicationId);
+      if (!app) {
+        showNotification('Error', 'Application not found', 'error');
+        return;
+      }
+
+      const payload = app.payload || {};
+      
+      // Prepare data in the EXACT same format as admission-form.html does
+      const previewData = {
+        // Document IDs
+        documentId: app.document_id || payload.documentId,
+        referenceNumber: app.reference_number || payload.referenceNumber,
+        controlNumber: app.control_number || payload.controlNumber,
+        verificationHash: app.verification_hash || payload.verificationHash,
+        barcode: app.barcode || payload.barcode,
+        
+        // Personal Information
+        applicantName: payload.applicantName || app.applicant_name,
+        dob: payload.dob,
+        gender: payload.gender,
+        nationality: payload.nationality,
+        birthLocation: payload.birthLocation,
+        
+        // Contact Information
+        email: payload.email || app.email,
+        phone: payload.phone || app.phone,
+        altPhone: payload.altPhone,
+        addressLine: payload.addressLine,
+        city: payload.city,
+        state: payload.state,
+        zip: payload.zip,
+        country: payload.country,
+        
+        // Program Selection
+        programChoice: payload.programChoice || app.program,
+        startTerm: payload.startTerm || app.start_term,
+        previousApplication: payload.previousApplication,
+        
+        // Academic History
+        educationLevel: payload.educationLevel,
+        institution: payload.institution,
+        fieldOfStudy: payload.fieldOfStudy,
+        graduationYear: payload.graduationYear,
+        gpa: payload.gpa,
+        
+        // Emergency Contact
+        emergencyName: payload.emergencyName,
+        emergencyRelation: payload.emergencyRelation,
+        emergencyPhone: payload.emergencyPhone,
+        
+        // Documents
+        documents: payload.documents || [],
+        
+        // Statement
+        statement: payload.statement,
+        
+        // Agreement
+        termsAgreed: payload.termsAgreed,
+        dataProcessingAgreed: payload.dataProcessingAgreed,
+        
+        // Submission
+        submissionDate: app.submission_date || payload.submissionDate
+      };
+
+      // Encode data exactly like admission-form.html does
+      const dataString = encodeURIComponent(JSON.stringify(previewData));
+      
+      // Open modal
+      const modal = document.getElementById('previewModal');
+      const iframe = document.getElementById('previewIframe');
+      
+      // Load pdf.html with data (SINGLE SOURCE OF TRUTH)
+      iframe.src = `pdf.html?preview=true&data=${dataString}`;
+      
+      modal.style.display = 'block';
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closePreviewModal() {
+      const modal = document.getElementById('previewModal');
+      const iframe = document.getElementById('previewIframe');
+      
+      modal.style.display = 'none';
+      document.body.style.overflow = 'auto';
+      
+      // Clear iframe src to stop any running scripts
+      iframe.src = 'about:blank';
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('DOMContentLoaded', function() {
+      const modal = document.getElementById('previewModal');
+      if (modal) {
+        modal.addEventListener('click', function(e) {
+          if (e.target === modal) {
+            closePreviewModal();
+          }
+        });
+      }
+      
+      // Close modal on Escape key
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && modal.style.display === 'block') {
+          closePreviewModal();
+        }
+      });
+    });
 
     function showConfirm(message, type = 'question') {
       return new Promise((resolve) => {
