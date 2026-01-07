@@ -1962,18 +1962,7 @@
         submissionDate: app.submission_date || payload.submissionDate
       };
 
-      // Store preview data in sessionStorage to avoid huge query strings
-      const previewKey = `preview-${app.id}-${Date.now()}`;
-      try {
-        sessionStorage.setItem(previewKey, JSON.stringify(previewData));
-      } catch (storageError) {
-        console.warn('Session storage unavailable, falling back to URL data', storageError);
-      }
-      
-      // Encode data for fallback (kept for backwards compatibility)
-      const dataString = encodeURIComponent(JSON.stringify(previewData));
-      
-      console.log('Opening preview with data length:', dataString.length, 'key:', previewKey); // Debug log
+      console.log('Preview data:', { app, payload }); // Debug log
       
       // Open modal
       const modal = document.getElementById('previewModal');
@@ -1989,23 +1978,31 @@
       iframe.style.background = '#0f1f3a';
       iframe.srcdoc = '<html><body style="margin:0;padding:60px;background:#0f1f3a;color:#94a3b8;font-family:system-ui;text-align:center;"><div style="font-size:48px;margin-bottom:20px;">⏳</div><div style="font-size:18px;">Loading preview...</div></body></html>';
       
-      // Load pdf.html with data (SINGLE SOURCE OF TRUTH)
-      // Use a slight delay to ensure srcdoc renders first
+      // Store data to send via postMessage after iframe loads
+      window.pendingPreviewData = previewData;
+      
+      // Load pdf.html in preview mode
       setTimeout(() => {
-        const params = new URLSearchParams({ preview: 'true' });
-        if (previewKey) params.set('key', previewKey);
-        else params.set('data', dataString);
-        iframe.src = `pdf.html?${params.toString()}`;
+        iframe.src = `pdf.html?preview=true&postMessage=true`;
       }, 100);
       
-      // Listen for iframe load errors
+      // Listen for iframe ready, then send data via postMessage
+      iframe.onload = function() {
+        console.log('✅ Preview iframe loaded, sending data via postMessage...');
+        setTimeout(() => {
+          if (iframe.contentWindow && window.pendingPreviewData) {
+            iframe.contentWindow.postMessage({
+              type: 'PREVIEW_DATA',
+              data: window.pendingPreviewData
+            }, '*');
+            console.log('📤 Sent preview data to iframe');
+          }
+        }, 50);
+      };
+      
       iframe.onerror = function(e) {
         console.error('Iframe load error:', e);
         showNotification('Error', 'Failed to load preview', 'error');
-      };
-      
-      iframe.onload = function() {
-        console.log('✅ Preview iframe loaded successfully');
       };
       
       modal.style.display = 'block';

@@ -1207,29 +1207,36 @@
     function initPreviewMode() {
       const urlParams = new URLSearchParams(window.location.search);
       const isPreview = urlParams.get('preview') === 'true';
-      const previewKey = urlParams.get('key');
+      const usePostMessage = urlParams.get('postMessage') === 'true';
       let formData = null;
       
-      if (previewKey && typeof sessionStorage !== 'undefined') {
-        try {
-          const stored = sessionStorage.getItem(previewKey);
-          if (stored) {
-            formData = JSON.parse(stored);
-            sessionStorage.removeItem(previewKey);
+      // Listen for postMessage data from parent
+      if (usePostMessage) {
+        console.log('📨 Waiting for preview data via postMessage...');
+        window.addEventListener('message', function(event) {
+          if (event.data && event.data.type === 'PREVIEW_DATA') {
+            console.log('📥 Received preview data via postMessage');
+            formData = event.data.data;
+            if (formData) {
+              populatePreviewData(formData);
+            } else {
+              console.error('Received empty preview data');
+              showError();
+            }
           }
-        } catch (error) {
-          console.warn('Unable to read preview data from sessionStorage', error);
-        }
+        });
+        
+        // Show loading state while waiting for data
+        return;
       }
       
-      if (!formData) {
-        const dataParam = urlParams.get('data');
-        if (dataParam) {
-          try {
-            formData = JSON.parse(decodeURIComponent(dataParam));
-          } catch (error) {
-            console.error('Error parsing preview data:', error);
-          }
+      // Fallback: try to get data from URL params (for backwards compatibility)
+      const dataParam = urlParams.get('data');
+      if (dataParam) {
+        try {
+          formData = JSON.parse(decodeURIComponent(dataParam));
+        } catch (error) {
+          console.error('Error parsing preview data:', error);
         }
       }
       
@@ -1265,12 +1272,9 @@
         
         if (formData) {
           populatePreviewData(formData);
-        } else {
+        } else if (!usePostMessage) {
           console.warn('No preview data provided');
-          const container = document.querySelector('.preview-container');
-          if (container) {
-            container.innerHTML = '<div style="text-align:center;padding:60px;color:#fca5a5;">Unable to load preview data.</div>';
-          }
+          showError();
         }
       } else {
         // NOT in preview mode - show buttons and header
@@ -1279,6 +1283,13 @@
         
         const previewHeader = document.querySelector('.preview-header');
         if (previewHeader) previewHeader.style.display = 'block';
+      }
+    }
+    
+    function showError() {
+      const container = document.querySelector('.preview-container');
+      if (container) {
+        container.innerHTML = '<div style="text-align:center;padding:60px;color:#fca5a5;">Unable to load preview data.</div>';
       }
     }
 
