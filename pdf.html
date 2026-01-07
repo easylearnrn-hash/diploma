@@ -1415,6 +1415,69 @@
       // Don't add registrar signature in preview mode - it will be added when user clicks Sign button
       // (signature is added by the sign button click handler in initPreviewMode)
 
+      // Handle applicant photo if present in data
+      if (data.applicantPhoto) {
+        const photoImg = document.getElementById('applicantPhoto');
+        if (photoImg) {
+          photoImg.src = data.applicantPhoto;
+          console.log('Applicant photo loaded from data');
+        }
+      }
+
+      // Handle documents if present in data
+      if (data.documents && Array.isArray(data.documents) && data.documents.length > 0) {
+        const documentsGrid = document.getElementById('documentsGrid');
+        if (documentsGrid) {
+          // Clear any existing placeholder documents
+          documentsGrid.innerHTML = '';
+          
+          // Add each document
+          data.documents.forEach(doc => {
+            const docItem = document.createElement('div');
+            docItem.className = 'gov-document-item';
+            
+            const thumbnail = document.createElement('div');
+            thumbnail.className = 'gov-document-thumbnail';
+            
+            // Check if it's an image or PDF
+            if (doc.data && doc.data.startsWith('data:image/')) {
+              const img = document.createElement('img');
+              img.src = doc.data;
+              img.alt = doc.fileName || doc.name;
+              img.style.width = '100%';
+              img.style.height = '100%';
+              img.style.objectFit = 'cover';
+              thumbnail.appendChild(img);
+            } else if (doc.data && doc.data.startsWith('data:application/pdf')) {
+              // For PDFs, show PDF icon
+              thumbnail.innerHTML = '<div style="font-size: 32px; color: #ef4444;">📄</div>';
+            } else {
+              // Fallback for other file types
+              thumbnail.innerHTML = '<div style="font-size: 32px; color: #64748b;">📎</div>';
+            }
+            
+            const docType = document.createElement('div');
+            docType.className = 'gov-document-name';
+            docType.textContent = doc.name || doc.fileName || 'Document';
+            
+            docItem.appendChild(thumbnail);
+            docItem.appendChild(docType);
+            documentsGrid.appendChild(docItem);
+          });
+          
+          console.log(`Loaded ${data.documents.length} documents from data`);
+        }
+      }
+
+      // Handle signature if present (for submitted applications)
+      if (data.signature) {
+        const registrarSignatureLine = document.getElementById('registrarSignatureLine');
+        if (registrarSignatureLine) {
+          registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${data.signature}</span>`;
+          console.log('Signature loaded from data');
+        }
+      }
+
       console.log('Preview data populated:', data);
     }
 
