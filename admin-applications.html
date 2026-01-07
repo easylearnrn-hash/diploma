@@ -972,7 +972,6 @@
                 <th>Start Term</th>
                 <th>Status</th>
                 <th>Submitted</th>
-                <th>Last Status</th>
                 <th></th>
               </tr>
             </thead>
@@ -2013,39 +2012,33 @@
       const tbody = document.getElementById('applicationsBody');
       
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty"><div class="empty-icon">📋</div><p>No applications found</p></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="empty"><div class="empty-icon">📋</div><p>No applications found</p></td></tr>`;
         return;
       }
       
       tbody.innerHTML = filtered.map(app => {
         const statusData = getApplicationStatusData(app);
-        const lastStatus = app.status || 'SUBMITTED';
-        const statusIcons = {
-          'SUBMITTED': '📝',
-          'UNDER REVIEW': '👀',
-          'ACTIVELY REVIEWING': '🔍',
-          'RFE PREPARING': '📋',
-          'RFE SENT': '📤',
-          'ADDITIONAL DOCUMENTS REQUESTED': '📎',
-          'DOCUMENTS RECEIVED': '📥',
-          'FINAL REVIEW': '⚖️',
-          'APPROVED': '✅',
-          'DENIED': '❌',
-          'ON HOLD': '⏸️',
-          'WITHDRAWN': '🚫'
-        };
-        const statusIcon = statusIcons[lastStatus] || '📝';
-        const statusText = lastStatus.replace(/_/g, ' ');
+        
+        // Shorten program names
+        let programName = app.program || '—';
+        programName = programName.replace('Associate Degree in Nursing (ADN)', 'ADN');
+        programName = programName.replace('Bachelor of Science in Nursing (BSN)', 'BSN');
+        programName = programName.replace('Associate Degree in Nursing', 'ADN');
+        programName = programName.replace('Bachelor of Science in Nursing', 'BSN');
+        
+        // Clean up start term - remove date ranges
+        let startTerm = app.start_term || '—';
+        startTerm = startTerm.replace(/\s*\(Late August – Early September\)/g, '');
+        startTerm = startTerm.replace(/\s*\([^)]+\)/g, ''); // Remove any parenthetical content
         
         return `
         <tr>
           <td><span class="pill">${app.reference_number || '—'}</span></td>
           <td><strong>${app.applicant_name || '—'}</strong></td>
-          <td>${app.program || '—'}</td>
-          <td>${app.start_term || '—'}</td>
+          <td>${programName}</td>
+          <td>${startTerm}</td>
           <td><span class="pill ${statusData.pillClass}">${statusData.label}</span></td>
           <td>${formatDate(app.submission_date)}</td>
-          <td><span style="font-size:12px;color:rgba(255,255,255,0.8);">${statusIcon} ${statusText}</span></td>
           <td><button class="btn-view" onclick="openApplicationDrawer('${app.id}')">View</button></td>
         </tr>
       `;
