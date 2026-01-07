@@ -2510,11 +2510,13 @@
     }
 
     async function openApplicationDrawer(id) {
+      console.time('⏱️ Drawer open time');
       const app = applicationsData.find(a => a.id === id);
       if (!app) return;
 
       // ===== PERFORMANCE: Fetch full payload only when opening drawer =====
       if (!app.payload) {
+        console.time('⏱️ Fetching payload from Supabase');
         const supabase = initSupabase();
         if (supabase) {
           const { data, error } = await supabase
@@ -2533,6 +2535,9 @@
             app.credentials_screenshot = data.credentials_screenshot;
           }
         }
+        console.timeEnd('⏱️ Fetching payload from Supabase');
+      } else {
+        console.log('✅ Using cached payload, no fetch needed');
       }
 
       currentApplicationId = id;
@@ -2624,22 +2629,29 @@
   document.getElementById('drawerPayload').textContent = JSON.stringify(app, null, 2);
 
       const svg = document.getElementById('drawerBarcode');
-      if (svg) {
-        svg.innerHTML = '';
-      }
       if (app.barcode) {
         // ===== PERFORMANCE: Use cached barcode rendering =====
-        renderBarcodeWithCache(svg, app.barcode, {
-          format: 'code128',
-          width: 2,
-          height: 60,
-          displayValue: true,
-          lineColor: '#2dd4bf',
-          background: '#0b1629',
-          fontSize: 14
-        });
+        // Only clear and re-render if barcode changed
+        const currentBarcode = svg.dataset.currentBarcode;
+        if (currentBarcode !== app.barcode) {
+          svg.innerHTML = '';
+          svg.dataset.currentBarcode = app.barcode;
+          renderBarcodeWithCache(svg, app.barcode, {
+            format: 'code128',
+            width: 2,
+            height: 60,
+            displayValue: true,
+            lineColor: '#2dd4bf',
+            background: '#0b1629',
+            fontSize: 14
+          });
+        } else {
+          console.log('♻️ Barcode already rendered, skipping...');
+        }
       } else if (svg) {
+        svg.innerHTML = '';
         svg.textContent = 'Barcode unavailable';
+        svg.dataset.currentBarcode = '';
       }
 
       showApplicationView();
@@ -2650,6 +2662,8 @@
       
       // Load status history
       loadStatusHistory(app);
+      
+      console.timeEnd('⏱️ Drawer open time');
     }
 
     // Professional message templates for each status
@@ -2742,8 +2756,13 @@
       // Load RFE documents
       populateRFEDocuments(app.rfe_documents_requested || []);
       
-      // Add event listener to status select
-      statusSelect.addEventListener('change', function() {
+      // ===== PERFORMANCE FIX: Remove old event listener before adding new one =====
+      // Clone and replace to remove all old listeners
+      const newStatusSelect = statusSelect.cloneNode(true);
+      statusSelect.parentNode.replaceChild(newStatusSelect, statusSelect);
+      
+      // Add fresh event listener
+      newStatusSelect.addEventListener('change', function() {
         updateMessageTemplates(this.value);
       });
     }
