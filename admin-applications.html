@@ -1311,6 +1311,16 @@
       </div>
     </div>
 
+    <div class="drawer-section" id="photoSection">
+      <h3>📸 Applicant Photo</h3>
+      <div id="applicantPhotoContainer" style="display:none;text-align:center;">
+        <img id="applicantPhoto" src="" alt="Applicant Photo" style="max-width:200px;max-height:267px;border-radius:8px;border:2px solid rgba(45,212,191,0.3);cursor:pointer;transition:all 0.2s;" onclick="viewImage(this.src, 'Applicant Photo')" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 8px 20px rgba(45,212,191,0.3)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">
+      </div>
+      <div id="noPhotoMessage" style="padding:12px;background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;color:rgba(255,255,255,0.7);font-size:13px;text-align:center;">
+        📷 No photo uploaded
+      </div>
+    </div>
+
     <div class="drawer-section" id="documentsSection">
       <h3>Supporting Documents</h3>
       <ul class="document-list" id="drawerDocuments"></ul>
@@ -2556,6 +2566,69 @@
       document.body.appendChild(modal);
     }
 
+    // View any image or document in full size popup
+    function viewImage(src, title = '') {
+      if (!src) return;
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.95);z-index:10002;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px 20px 20px;';
+      modal.onclick = (e) => {
+        if (e.target === modal || e.target === closeBtn) {
+          modal.remove();
+        }
+      };
+      
+      // Add keyboard support (ESC to close)
+      const handleKeyDown = (e) => {
+        if (e.key === 'Escape') {
+          modal.remove();
+          document.removeEventListener('keydown', handleKeyDown);
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      
+      // Close button
+      const closeBtn = document.createElement('button');
+      closeBtn.innerHTML = '✕';
+      closeBtn.style.cssText = 'position:absolute;top:20px;right:20px;background:rgba(239,68,68,0.2);border:2px solid rgba(239,68,68,0.4);color:#fca5a5;width:48px;height:48px;border-radius:50%;cursor:pointer;font-size:24px;font-weight:bold;z-index:10003;transition:all 0.2s;';
+      closeBtn.onmouseover = () => {
+        closeBtn.style.background = 'rgba(239,68,68,0.4)';
+        closeBtn.style.transform = 'scale(1.1)';
+      };
+      closeBtn.onmouseout = () => {
+        closeBtn.style.background = 'rgba(239,68,68,0.2)';
+        closeBtn.style.transform = 'scale(1)';
+      };
+      
+      // Title
+      if (title) {
+        const titleEl = document.createElement('div');
+        titleEl.textContent = title;
+        titleEl.style.cssText = 'position:absolute;top:20px;left:20px;color:rgba(255,255,255,0.9);font-size:18px;font-weight:600;z-index:10003;text-shadow:0 2px 10px rgba(0,0,0,0.5);';
+        modal.appendChild(titleEl);
+      }
+      
+      // Determine if it's an image or PDF
+      const isPDF = src.startsWith('data:application/pdf') || src.toLowerCase().endsWith('.pdf');
+      
+      if (isPDF) {
+        // Create iframe for PDF viewing
+        const iframe = document.createElement('iframe');
+        iframe.src = src;
+        iframe.style.cssText = 'width:90%;max-width:900px;height:85vh;border:none;border-radius:8px;box-shadow:0 10px 50px rgba(0,0,0,0.5);background:white;';
+        modal.appendChild(iframe);
+      } else {
+        // Create img for image viewing
+        const img = document.createElement('img');
+        img.src = src;
+        img.style.cssText = 'max-width:90%;max-height:85vh;border-radius:8px;box-shadow:0 10px 50px rgba(0,0,0,0.5);object-fit:contain;';
+        modal.appendChild(img);
+      }
+      
+      modal.appendChild(closeBtn);
+      document.body.appendChild(modal);
+    }
+
     // Download credentials screenshot
     function downloadScreenshot() {
       const img = document.getElementById('credentialsScreenshot');
@@ -2976,6 +3049,22 @@
         console.log('⚠️ No credentials screenshot available - showing upload option');
       }
 
+      // Set applicant photo if available
+      const applicantPhotoContainer = document.getElementById('applicantPhotoContainer');
+      const applicantPhotoImg = document.getElementById('applicantPhoto');
+      const noPhotoMessage = document.getElementById('noPhotoMessage');
+      
+      if (payload.applicantPhoto) {
+        applicantPhotoImg.src = payload.applicantPhoto;
+        applicantPhotoContainer.style.display = 'block';
+        noPhotoMessage.style.display = 'none';
+        console.log('✅ Applicant photo displayed');
+      } else {
+        applicantPhotoContainer.style.display = 'none';
+        noPhotoMessage.style.display = 'block';
+        console.log('⚠️ No applicant photo available');
+      }
+
       setDrawerValue('drawerEmail', payload.email || app.email || '—');
       setDrawerValue('drawerPhone', formatPhone(payload.phone || app.phone || '—'));
       setDrawerValue('drawerAltPhone', formatPhone(payload.altPhone) || 'Not provided');
@@ -3009,16 +3098,32 @@
 
       const docList = document.getElementById('drawerDocuments');
       if (docList) {
-        const documents = Object.entries(payload.documents || {});
-        if (documents.length === 0) {
-          docList.innerHTML = '<li><strong>No supporting documents tracked</strong><span>—</span></li>';
-        } else {
+        // Check if documents is an array (with file data) or an object (with status labels)
+        const hasDocumentFiles = Array.isArray(payload.documents) && payload.documents.length > 0;
+        const hasDocumentStatus = !Array.isArray(payload.documents) && payload.documents && Object.keys(payload.documents).length > 0;
+        
+        if (hasDocumentFiles) {
+          // Documents with actual file data - make them clickable
+          docList.innerHTML = payload.documents.map((doc, index) => `
+            <li style="cursor:pointer;transition:all 0.2s;" 
+                onclick="viewImage('${doc.data}', '${doc.name || doc.fileName}')"
+                onmouseover="this.style.background='rgba(45,212,191,0.1)';this.style.transform='translateX(4px)'"
+                onmouseout="this.style.background='';this.style.transform='translateX(0)'">
+              <strong>📄 ${doc.name || doc.fileName}</strong>
+              <span style="color:#2dd4bf;font-size:11px;">👁️ View</span>
+            </li>
+          `).join('');
+        } else if (hasDocumentStatus) {
+          // Documents with status labels only (old format)
+          const documents = Object.entries(payload.documents);
           docList.innerHTML = documents.map(([key, value]) => `
             <li>
               <strong>${formatDocumentLabel(key)}</strong>
               <span>${value || 'Pending'}</span>
             </li>
           `).join('');
+        } else {
+          docList.innerHTML = '<li><strong>No supporting documents tracked</strong><span>—</span></li>';
         }
       }
 
