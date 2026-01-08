@@ -1167,12 +1167,30 @@
             <button onclick="downloadScreenshot()" style="padding:6px 12px;background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.3);border-radius:4px;font-size:10px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(45,212,191,0.25)'" onmouseout="this.style.background='rgba(45,212,191,0.15)'">💾 Download Screenshot</button>
           </div>
         </div>
+        
+        <!-- Upload Screenshot for Old Applications -->
+        <div id="credentialsScreenshotUpload" style="display:none;margin-bottom:16px;padding:12px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;">
+          <div style="color:rgba(255,255,255,0.7);margin-bottom:8px;font-size:12px;text-align:center;">
+            ⚠️ No credentials screenshot available
+          </div>
+          <input type="file" id="screenshotUploadInput" accept="image/*" style="display:none;" onchange="handleScreenshotUpload(event)">
+          <button onclick="document.getElementById('screenshotUploadInput').click()" style="width:100%;padding:8px;background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.3);border-radius:4px;font-size:11px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(45,212,191,0.25)'" onmouseout="this.style.background='rgba(45,212,191,0.15)'">📤 Upload Credentials Screenshot</button>
+        </div>
 
         <div style="margin-bottom:12px;">
           <div style="color:rgba(255,255,255,0.6);margin-bottom:4px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Username</div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span id="drawerUsername" style="color:#2dd4bf;font-weight:600;font-size:13px;flex:1;">—</span>
             <button onclick="copyToClipboard(document.getElementById('drawerUsername').textContent, 'Username')" style="padding:4px 8px;background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.3);border-radius:4px;font-size:10px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(45,212,191,0.25)'" onmouseout="this.style.background='rgba(45,212,191,0.15)'">📋 Copy</button>
+          </div>
+        </div>
+        
+        <!-- Password Reset Section -->
+        <div style="margin-bottom:12px;padding:12px;background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:8px;">
+          <div style="color:rgba(255,255,255,0.6);margin-bottom:8px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">Password Reset</div>
+          <button onclick="resetStudentPassword()" style="width:100%;padding:8px;background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3);border-radius:4px;font-size:11px;cursor:pointer;transition:all 0.2s;font-weight:600;" onmouseover="this.style.background='rgba(234,179,8,0.25)'" onmouseout="this.style.background='rgba(234,179,8,0.15)'">🔑 Generate New Password</button>
+          <div style="color:rgba(255,255,255,0.4);font-size:10px;margin-top:6px;text-align:center;">
+            Creates a new random password for the student
           </div>
         </div>
         <div style="padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);">
@@ -1484,6 +1502,7 @@
   <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
   <!-- html2pdf now lazy-loaded on demand - see printApplication() -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/admin-sidebar.js"></script>
   <script>
@@ -1871,8 +1890,14 @@
     // APPLICATION PREVIEW MODAL (SINGLE SOURCE OF TRUTH)
     // Uses the exact same pdf.html that applicants see
     async function viewApplicationPreview() {
+      console.log('🔍 DEBUG: viewApplicationPreview() called');
+      console.log('🔍 DEBUG: currentApplicationId =', currentApplicationId);
+      
       const app = getApplicationById(currentApplicationId);
+      console.log('🔍 DEBUG: app =', app);
+      
       if (!app) {
+        console.error('❌ DEBUG: Application not found!');
         showNotification('Error', 'Application not found', 'error');
         return;
       }
@@ -1985,25 +2010,26 @@
       const modal = document.getElementById('previewModal');
       const iframe = document.getElementById('previewIframe');
       
+      console.log('🔍 DEBUG: Modal elements:', { modal, iframe });
+      console.log('🔍 DEBUG: Modal exists?', !!modal);
+      console.log('🔍 DEBUG: Iframe exists?', !!iframe);
+      
       if (!modal || !iframe) {
-        console.error('Modal elements not found!', { modal, iframe });
+        console.error('❌ DEBUG: Modal elements not found!', { modal, iframe });
         showNotification('Error', 'Preview modal not found', 'error');
         return;
       }
       
-      // Show loading state
+      console.log('✅ DEBUG: Opening modal...');
+      
+      // Clear any previous content
+      iframe.src = '';
       iframe.style.background = '#0f1f3a';
-      iframe.srcdoc = '<html><body style="margin:0;padding:60px;background:#0f1f3a;color:#94a3b8;font-family:system-ui;text-align:center;"><div style="font-size:48px;margin-bottom:20px;">⏳</div><div style="font-size:18px;">Loading preview...</div></body></html>';
       
       // Store data to send via postMessage after iframe loads
       window.pendingPreviewData = previewData;
       
-      // Load pdf.html in preview mode
-      setTimeout(() => {
-        iframe.src = `pdf.html?preview=true&postMessage=true`;
-      }, 100);
-      
-      // Listen for iframe ready, then send data via postMessage
+      // Set up onload BEFORE setting src (critical order!)
       iframe.onload = function() {
         console.log('✅ Preview iframe loaded, sending data via postMessage...');
         setTimeout(() => {
@@ -2013,17 +2039,28 @@
               data: window.pendingPreviewData
             }, '*');
             console.log('📤 Sent preview data to iframe');
+          } else {
+            console.error('❌ DEBUG: Cannot send postMessage!', {
+              hasContentWindow: !!iframe.contentWindow,
+              hasPendingData: !!window.pendingPreviewData
+            });
           }
-        }, 50);
+        }, 100);
       };
       
+      // Show loading state and load pdf.html immediately
+      console.log('🔍 DEBUG: Loading iframe with pdf.html...');
+      iframe.src = `pdf.html?preview=true&postMessage=true`;
+      
       iframe.onerror = function(e) {
-        console.error('Iframe load error:', e);
+        console.error('❌ DEBUG: Iframe load error:', e);
         showNotification('Error', 'Failed to load preview', 'error');
       };
       
       modal.style.display = 'block';
       document.body.style.overflow = 'hidden';
+      
+      console.log('✅ DEBUG: Modal display set to block');
     }
 
     function closePreviewModal() {
@@ -2523,7 +2560,7 @@
     function downloadScreenshot() {
       const img = document.getElementById('credentialsScreenshot');
       if (!img || !img.src) {
-        showAlert('No screenshot available', 'error');
+        showNotification('Error', 'No screenshot available', 'error');
         return;
       }
       
@@ -2531,8 +2568,264 @@
       link.href = img.src;
       link.download = `credentials-${currentApplicationPayload.referenceNumber || 'screenshot'}.png`;
       link.click();
-      showAlert('Screenshot downloaded', 'success');
+      showNotification('Success', 'Screenshot downloaded', 'success');
     }
+
+    async function handleScreenshotUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      if (!file.type.startsWith('image/')) {
+        showNotification('Error', 'Please select an image file', 'error');
+        return;
+      }
+      
+      try {
+        // Convert image to base64
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+          const base64Image = e.target.result;
+          
+          const supabase = getSupabaseClient();
+          if (!supabase) {
+            showNotification('Error', 'Database connection failed', 'error');
+            return;
+          }
+          
+          // Save to database
+          const { error } = await supabase
+            .from('applications')
+            .update({ credentials_screenshot: base64Image })
+            .eq('id', currentApplicationId);
+          
+          if (error) throw error;
+          
+          // Update local data
+          const app = getApplicationById(currentApplicationId);
+          if (app) {
+            app.credentials_screenshot = base64Image;
+          }
+          
+          // Update UI
+          const screenshotContainer = document.getElementById('credentialsScreenshotContainer');
+          const screenshotUpload = document.getElementById('credentialsScreenshotUpload');
+          const screenshotImg = document.getElementById('credentialsScreenshot');
+          
+          screenshotImg.src = base64Image;
+          screenshotContainer.style.display = 'block';
+          screenshotUpload.style.display = 'none';
+          
+          showNotification('Success', 'Credentials screenshot uploaded successfully', 'success');
+        };
+        
+        reader.onerror = function() {
+          showNotification('Error', 'Failed to read image file', 'error');
+        };
+        
+        reader.readAsDataURL(file);
+      } catch (err) {
+        console.error('Error uploading screenshot:', err);
+        showNotification('Error', 'Failed to upload screenshot: ' + err.message, 'error');
+      }
+    }
+
+    // ===== PASSWORD RESET FUNCTIONS =====
+    
+    /**
+     * Generate a secure random password
+     * Same algorithm as admission-form.html
+     * 12 characters: 2 uppercase + 2 lowercase + 8 numbers
+     */
+    function generateSecurePassword() {
+      // Using limited character sets to avoid confusion (no I, l, O, 0, 1)
+      const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+      const lowercase = 'abcdefghjkmnpqrstuvwxyz';
+      const numbers = '23456789';
+      
+      let password = '';
+      
+      // Ensure at least 2 uppercase letters
+      for (let i = 0; i < 2; i++) {
+        password += uppercase.charAt(Math.floor(Math.random() * uppercase.length));
+      }
+      
+      // Ensure at least 2 lowercase letters
+      for (let i = 0; i < 2; i++) {
+        password += lowercase.charAt(Math.floor(Math.random() * lowercase.length));
+      }
+      
+      // Fill the rest with numbers (8 more characters for total of 12)
+      for (let i = 0; i < 8; i++) {
+        password += numbers.charAt(Math.floor(Math.random() * numbers.length));
+      }
+      
+      // Shuffle the password to randomize position
+      return password.split('').sort(() => Math.random() - 0.5).join('');
+    }
+
+    /**
+     * Hash password using bcrypt
+     */
+    async function hashPassword(password) {
+      try {
+        // Using bcrypt with 10 rounds (same as admission form)
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(password, salt);
+        return hash;
+      } catch (err) {
+        console.error('Error hashing password:', err);
+        throw err;
+      }
+    }
+
+    /**
+     * Reset student password and display it to admin
+     */
+    async function resetStudentPassword() {
+      const app = getApplicationById(currentApplicationId);
+      if (!app) {
+        showNotification('Error', 'Application not found', 'error');
+        return;
+      }
+
+      // Confirm action
+      if (!confirm(`Reset password for ${app.payload?.name || 'this student'}?\n\nA new random password will be generated and displayed to you.\n\nYou should communicate this password to the student via email or phone.`)) {
+        return;
+      }
+
+      try {
+        // Generate new password
+        const newPassword = generateSecurePassword();
+        console.log('🔑 Generated new password for', app.payload?.name);
+
+        // Hash the password
+        const passwordHash = await hashPassword(newPassword);
+        console.log('🔒 Password hashed successfully');
+
+        // Update database
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          showNotification('Error', 'Database connection failed', 'error');
+          return;
+        }
+
+        const { error } = await supabase
+          .from('applications')
+          .update({ 
+            password_hash: passwordHash,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', currentApplicationId);
+
+        if (error) throw error;
+
+        // Add status history entry
+        const statusHistory = app.status_history || [];
+        statusHistory.push({
+          status: app.status || 'PENDING',
+          message: 'Password reset by admin',
+          changed_at: new Date().toISOString(),
+          changed_by: 'admin'
+        });
+
+        await supabase
+          .from('applications')
+          .update({ status_history: statusHistory })
+          .eq('id', currentApplicationId);
+
+        // Update local data
+        app.status_history = statusHistory;
+        
+        // Load updated status history
+        loadStatusHistory();
+
+        // Show the new password to admin
+        showPasswordModal(app.username, newPassword, app.payload?.email || app.email);
+
+        showNotification('Success', 'Password reset successfully', 'success');
+      } catch (err) {
+        console.error('Error resetting password:', err);
+        showNotification('Error', 'Failed to reset password: ' + err.message, 'error');
+      }
+    }
+
+    /**
+     * Display modal with new password for admin to copy
+     */
+    function showPasswordModal(username, password, email) {
+      const modal = document.createElement('div');
+      modal.className = 'input-modal';
+      modal.innerHTML = `
+        <div class="input-modal-content" style="min-width:500px;">
+          <h3 class="input-modal-title">🔑 Password Reset Successful</h3>
+          
+          <div style="background:rgba(45,212,191,0.1);border:1px solid rgba(45,212,191,0.3);border-radius:8px;padding:16px;margin-bottom:20px;">
+            <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-bottom:16px;text-align:center;">
+              New login credentials for the student:
+            </div>
+            
+            <div style="background:rgba(0,0,0,0.3);border-radius:6px;padding:12px;margin-bottom:12px;">
+              <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">Username</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <code id="resetUsername" style="color:#2dd4bf;font-weight:600;font-size:14px;flex:1;">${username}</code>
+                <button onclick="copyToClipboard('${username}', 'Username')" style="padding:4px 8px;background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.3);border-radius:4px;font-size:10px;cursor:pointer;">📋 Copy</button>
+              </div>
+            </div>
+            
+            <div style="background:rgba(234,179,8,0.2);border:1px solid rgba(234,179,8,0.4);border-radius:6px;padding:12px;">
+              <div style="color:rgba(255,255,255,0.6);font-size:11px;margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px;">New Password</div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <code id="resetPassword" style="color:#eab308;font-weight:600;font-size:16px;flex:1;letter-spacing:1px;">${password}</code>
+                <button onclick="copyToClipboard('${password}', 'Password')" style="padding:4px 8px;background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3);border-radius:4px;font-size:10px;cursor:pointer;">📋 Copy</button>
+              </div>
+            </div>
+          </div>
+          
+          <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:12px;margin-bottom:20px;">
+            <div style="color:#ef4444;font-size:12px;font-weight:600;margin-bottom:4px;">⚠️ Important</div>
+            <div style="color:rgba(255,255,255,0.7);font-size:11px;line-height:1.6;">
+              This password is shown only once. Please copy it and send it to the student via:<br>
+              📧 Email: <strong style="color:#2dd4bf;">${email}</strong><br>
+              Or contact them via phone.
+            </div>
+          </div>
+          
+          <div style="display:flex;gap:12px;">
+            <button onclick="copyBothCredentials('${username}', '${password}')" style="flex:1;padding:10px;background:rgba(45,212,191,0.15);color:#2dd4bf;border:1px solid rgba(45,212,191,0.3);border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(45,212,191,0.25)'" onmouseout="this.style.background='rgba(45,212,191,0.15)'">
+              📋 Copy Both
+            </button>
+            <button onclick="this.closest('.input-modal').remove()" style="flex:1;padding:10px;background:rgba(100,116,139,0.15);color:#94a3b8;border:1px solid rgba(100,116,139,0.3);border-radius:6px;font-size:12px;cursor:pointer;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(100,116,139,0.25)'" onmouseout="this.style.background='rgba(100,116,139,0.15)'">
+              Close
+            </button>
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      
+      // Close on background click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+          modal.remove();
+        }
+      });
+    }
+
+    /**
+     * Copy both username and password
+     */
+    function copyBothCredentials(username, password) {
+      const text = `Student Portal Login Credentials\n\nUsername: ${username}\nPassword: ${password}\n\nPortal: https://acnhs.am/portal`;
+      
+      navigator.clipboard.writeText(text).then(() => {
+        showNotification('Success', 'Both credentials copied to clipboard', 'success');
+      }).catch(err => {
+        console.error('Failed to copy:', err);
+        showNotification('Error', 'Failed to copy to clipboard', 'error');
+      });
+    }
+
+    // ===== END PASSWORD RESET FUNCTIONS =====
 
     // ===== PERFORMANCE: Global Supabase client - initialize once =====
     let globalSupabase = null;
@@ -2545,10 +2838,17 @@
 
     // Helper function to enable/disable action buttons
     function setActionButtonsState(disabled) {
+      console.log('🔍 DEBUG: setActionButtonsState called with disabled =', disabled);
       const previewBtn = document.querySelector('button[onclick="viewApplicationPreview()"]');
       const editBtn = document.querySelector('#applicationDefaultButtons .edit-btn');
       const deleteBtn = document.querySelector('#applicationDefaultButtons .delete-btn');
-      if (previewBtn) previewBtn.disabled = disabled;
+      console.log('🔍 DEBUG: Preview button found?', !!previewBtn, 'Button:', previewBtn);
+      if (previewBtn) {
+        previewBtn.disabled = disabled;
+        console.log('🔍 DEBUG: Preview button disabled set to', disabled);
+      } else {
+        console.error('❌ DEBUG: Preview button not found!');
+      }
       if (editBtn) editBtn.disabled = disabled;
       if (deleteBtn) deleteBtn.disabled = disabled;
     }
@@ -2583,7 +2883,7 @@
           try {
             const { data, error } = await supabase
               .from('applications')
-              .select('payload, control_number, document_id, verification_hash, username, credentials_screenshot')
+              .select('payload, control_number, document_id, verification_hash, username, credentials_screenshot, status, status_message, admin_notes, rfe_documents_requested, status_updated_at, status_history')
               .eq('id', id)
               .single();
             
@@ -2601,6 +2901,12 @@
               app.verification_hash = data.verification_hash;
               app.username = data.username;
               app.credentials_screenshot = data.credentials_screenshot;
+              app.status = data.status;
+              app.status_message = data.status_message;
+              app.admin_notes = data.admin_notes;
+              app.rfe_documents_requested = data.rfe_documents_requested;
+              app.status_updated_at = data.status_updated_at;
+              app.status_history = data.status_history;
               
               // Log payload size for debugging
               const payloadSize = JSON.stringify(data).length;
@@ -2648,12 +2954,26 @@
 
       // Set credentials screenshot if available
       const screenshotContainer = document.getElementById('credentialsScreenshotContainer');
+      const screenshotUpload = document.getElementById('credentialsScreenshotUpload');
       const screenshotImg = document.getElementById('credentialsScreenshot');
+      
+      console.log('🔍 DEBUG: Credentials Screenshot Check:', {
+        hasScreenshot: !!app.credentials_screenshot,
+        screenshotURL: app.credentials_screenshot,
+        hasContainer: !!screenshotContainer,
+        hasUpload: !!screenshotUpload,
+        hasImg: !!screenshotImg
+      });
+      
       if (app.credentials_screenshot) {
         screenshotImg.src = app.credentials_screenshot;
         screenshotContainer.style.display = 'block';
+        screenshotUpload.style.display = 'none';
+        console.log('✅ Credentials screenshot displayed');
       } else {
         screenshotContainer.style.display = 'none';
+        screenshotUpload.style.display = 'block';
+        console.log('⚠️ No credentials screenshot available - showing upload option');
       }
 
       setDrawerValue('drawerEmail', payload.email || app.email || '—');
@@ -2750,6 +3070,62 @@
       
       console.timeEnd('⏱️ Total drawer open time');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+
+    // Refresh drawer after status update (refetch data from Supabase)
+    async function refreshApplicationDrawer(applicationId) {
+      console.log('🔄 DEBUG: Refreshing application drawer', { applicationId });
+      
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        console.error('❌ Supabase client not available');
+        return;
+      }
+      
+      try {
+        // Fetch fresh data from Supabase
+        const { data, error } = await supabase
+          .from('applications')
+          .select('status, status_message, admin_notes, rfe_documents_requested, status_updated_at, status_history')
+          .eq('id', applicationId)
+          .single();
+        
+        if (error) throw error;
+        
+        console.log('🔍 DEBUG: Fetched fresh status data', {
+          status: data.status,
+          historyLength: data.status_history?.length || 0,
+          status_history: data.status_history
+        });
+        
+        // Update local application data
+        const app = applicationsData.find(a => a.id === applicationId);
+        if (app && data) {
+          app.status = data.status;
+          app.status_message = data.status_message;
+          app.admin_notes = data.admin_notes;
+          app.rfe_documents_requested = data.rfe_documents_requested;
+          app.status_updated_at = data.status_updated_at;
+          app.status_history = data.status_history;
+          
+          console.log('🔍 DEBUG: Updated local app data, reloading status history...');
+          
+          // Reload status history section
+          loadStatusHistory(app);
+          
+          // Update status badge in drawer
+          const statusData = getApplicationStatusData(app);
+          const statusBadgeEl = document.getElementById('drawerApplicationStatus');
+          if (statusBadgeEl) {
+            statusBadgeEl.textContent = statusData.statusText;
+            statusBadgeEl.className = `status-badge ${statusData.badgeClass}`;
+          }
+          
+          console.log('✅ Drawer refreshed with latest status history');
+        }
+      } catch (err) {
+        console.error('❌ Error refreshing drawer:', err);
+      }
     }
 
     // Professional message templates for each status
@@ -2948,6 +3324,13 @@
       
       const statusHistory = app.status_history || [];
       
+      console.log('🔍 DEBUG: loadStatusHistory called', {
+        hasContainer: !!container,
+        historyLength: statusHistory.length,
+        history: statusHistory,
+        appStatus: app.status
+      });
+      
       if (statusHistory.length === 0) {
         container.innerHTML = `
           <div style="padding:20px;text-align:center;color:rgba(255,255,255,0.5);font-size:14px;">
@@ -2955,6 +3338,7 @@
             <p>No status changes recorded yet</p>
           </div>
         `;
+        console.log('⚠️ No status history found for application');
         return;
       }
       
@@ -3042,6 +3426,14 @@
         const currentApp = applicationsData.find(a => a.id === currentApplicationId);
         const currentHistory = currentApp?.status_history || [];
         
+        console.log('🔍 DEBUG: Updating application status', {
+          currentApplicationId,
+          newStatus,
+          statusMessage,
+          currentHistoryLength: currentHistory.length,
+          currentHistory
+        });
+        
         // Create new history entry
         const historyEntry = {
           status: newStatus,
@@ -3052,6 +3444,11 @@
         
         // Append to history
         const updatedHistory = [...currentHistory, historyEntry];
+        
+        console.log('🔍 DEBUG: New history entry created', {
+          historyEntry,
+          updatedHistoryLength: updatedHistory.length
+        });
         
         const { error } = await supabase
           .from('applications')
@@ -3066,6 +3463,21 @@
           .eq('id', currentApplicationId);
         
         if (error) throw error;
+        
+        console.log('✅ DEBUG: Status update saved to database');
+        
+        // ===== UPDATE LOCAL DATA IMMEDIATELY =====
+        if (currentApp) {
+          currentApp.status = newStatus;
+          currentApp.status_message = statusMessage || null;
+          currentApp.admin_notes = adminNotes || null;
+          currentApp.rfe_documents_requested = rfeDocuments;
+          currentApp.status_updated_at = new Date().toISOString();
+          currentApp.status_history = updatedHistory;
+        }
+        
+        // ===== REFRESH DRAWER TO SHOW UPDATED STATUS HISTORY =====
+        await refreshApplicationDrawer(currentApplicationId);
         
         showNotification(
           'Status Updated Successfully!',
