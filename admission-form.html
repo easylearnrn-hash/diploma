@@ -3181,24 +3181,80 @@ function loadPreviewData() {
     formData.referenceNumber = generateReferenceNumber();
     formData.barcode = generateBarcodeValue(formData.referenceNumber);
     
+    // Convert documents to array format for preview
+    const documentInputs = [
+      { id: 'passportUpload', name: 'Passport' },
+      { id: 'diplomaUpload', name: 'Diploma' },
+      { id: 'transcriptUpload', name: 'Transcript' },
+      { id: 'englishUpload', name: 'English Test' },
+      { id: 'recommendationUpload', name: 'Recommendation' }
+    ];
+    
+    const documentsArray = [];
+    let pendingFiles = 0;
+    let processedFiles = 0;
+    
+    // Count total files
+    documentInputs.forEach(doc => {
+      const input = document.getElementById(doc.id);
+      if (input && input.files && input.files.length > 0) {
+        pendingFiles += input.files.length;
+      }
+    });
+    
     // Get photo as base64 BEFORE loading iframe
     const photoInput = document.getElementById('photoUpload');
     
     if (photoInput && photoInput.files && photoInput.files[0]) {
+      pendingFiles++;
       console.log('📸 Photo found, loading for preview:', photoInput.files[0].name);
       const reader = new FileReader();
       reader.onload = function(e) {
         // Include photo in the data
         formData.applicantPhoto = e.target.result;
         console.log('✅ Photo loaded as base64');
-        
-        // Now load the iframe with all data including photo
-        loadIframeWithData(iframe, formData);
+        processedFiles++;
+        checkAllFilesLoaded();
       };
       reader.readAsDataURL(photoInput.files[0]);
-    } else {
-      console.log('⚠️ No photo uploaded yet');
-      // Load iframe without photo
+    }
+    
+    // Load all documents as base64
+    documentInputs.forEach(doc => {
+      const input = document.getElementById(doc.id);
+      if (input && input.files && input.files.length > 0) {
+        for (let i = 0; i < input.files.length; i++) {
+          const file = input.files[i];
+          const reader = new FileReader();
+          reader.onload = function(e) {
+            documentsArray.push({
+              name: doc.name + (input.files.length > 1 ? ` (${i + 1})` : ''),
+              data: e.target.result,
+              fileName: file.name
+            });
+            processedFiles++;
+            console.log(`✅ Document loaded: ${doc.name} (${processedFiles}/${pendingFiles})`);
+            checkAllFilesLoaded();
+          };
+          reader.readAsDataURL(file);
+        }
+      }
+    });
+    
+    // Function to check if all files are loaded
+    function checkAllFilesLoaded() {
+      if (processedFiles === pendingFiles) {
+        // All files loaded, now include documents array
+        formData.documents = documentsArray;
+        console.log(`✅ All files loaded (${documentsArray.length} documents)`);
+        loadIframeWithData(iframe, formData);
+      }
+    }
+    
+    // If no files to load, proceed immediately
+    if (pendingFiles === 0) {
+      console.log('⚠️ No photo or documents to load');
+      formData.documents = [];
       loadIframeWithData(iframe, formData);
     }
     
@@ -3212,41 +3268,13 @@ function loadIframeWithData(iframe, formData) {
     // Convert form data to URL-safe JSON
     const dataString = encodeURIComponent(JSON.stringify(formData));
     
-    // Load pdf.html with data parameter
+    // Load pdf.html with data parameter (includes photo and documents)
     iframe.src = `pdf.html?preview=true&data=${dataString}`;
     
-    // Handle documents via postMessage after iframe loads
-    iframe.onload = function() {
-      const documentInputs = [
-        { id: 'passportUpload', name: 'Passport' },
-        { id: 'diplomaUpload', name: 'Diploma' },
-        { id: 'transcriptUpload', name: 'Transcript' },
-        { id: 'englishUpload', name: 'English Test' },
-        { id: 'recommendationUpload', name: 'Recommendation' }
-      ];
-      
-      const documents = [];
-      documentInputs.forEach(doc => {
-        const input = document.getElementById(doc.id);
-        if (input && input.files && input.files.length > 0) {
-          for (let i = 0; i < input.files.length; i++) {
-            const file = input.files[i];
-            const reader = new FileReader();
-            reader.onload = function(e) {
-              iframe.contentWindow.postMessage({
-                type: 'addDocument',
-                document: {
-                  name: doc.name + (input.files.length > 1 ? ` (${i + 1})` : ''),
-                  data: e.target.result,
-                  fileName: file.name
-                }
-              }, '*');
-            };
-            reader.readAsDataURL(file);
-          }
-        }
-      });
-    };
+    console.log('✅ Preview loaded with all data:', {
+      hasPhoto: !!formData.applicantPhoto,
+      documentsCount: formData.documents?.length || 0
+    });
   } catch (error) {
     console.error('Error loading preview:', error);
     showModal('Failed to load preview. Please check your form data.', 'error');
