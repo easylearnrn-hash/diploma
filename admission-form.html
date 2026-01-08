@@ -2290,6 +2290,9 @@ async function handleAdmissionSubmit(e) {
     // Check if it's a database column error
     if (isMissingColumnError(error)) {
       showModal('⚠️ Database Update Required\n\nThe database schema needs to be updated. Please run the ADD-APPLICATION-CREDENTIALS.sql file in Supabase first.\n\nContact your administrator to run the database migration.', 'error');
+    } else if (isNetworkError(error)) {
+      // Network/timeout error - show user-friendly message
+      showModal('⏱️ Connection Timeout\n\nYour application could not be submitted due to a connection issue. This usually happens when:\n\n• Internet connection is slow or unstable\n• Network connection was lost\n• Request took too long to complete\n\nPlease try again:\n✓ Check your internet connection\n✓ Try switching between WiFi and mobile data\n✓ Close other apps/tabs using bandwidth\n✓ Move closer to your WiFi router\n\nYour information has been saved in this form. You can try submitting again.', 'error');
     } else {
       showModal('We could not finish saving your application. Please try again or contact admissions.\n\nError: ' + (error.message || 'Unknown error'), 'error');
     }
@@ -2315,9 +2318,9 @@ function showCredentialsModal(username, password, referenceNumber) {
           <p style="margin: 0.5rem 0 0; color: #666; font-size: 1rem;">Your login credentials have been generated</p>
         </div>
 
-        <div style="background: #f4f4f4; border: 1px solid #ddd; border-radius: 4px; padding: 1.5rem; margin-bottom: 1.5rem;">
-          <p style="margin: 0 0 1.25rem; color: #e74c3c; font-weight: 600; font-size: 0.95rem;">
-            ⚠️ IMPORTANT: Please save these credentials immediately. You will need them to track your application status.
+        <div style="background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 1.5rem; margin-bottom: 1.5rem;">
+          <p style="margin: 0 0 1.25rem; color: #856404; font-weight: 600; font-size: 0.95rem;">
+            ⚠️ IMPORTANT: Please save these credentials immediately.<br>You will need them to track your application status.
           </p>
           
           <div style="margin-bottom: 1rem;">
@@ -2353,7 +2356,7 @@ function showCredentialsModal(username, password, referenceNumber) {
           <button onclick="copyCredentials('${username}', '${password}', '${referenceNumber}')" style="flex: 1; min-width: 140px; background: #3498db; color: white; border: none; padding: 0.75rem 1rem; border-radius: 4px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background-color 0.3s;">
             📋 Copy All
           </button>
-          <button onclick="window.location.href='application-status.html'" style="flex: 1; min-width: 140px; background: #27ae60; color: white; border: none; padding: 0.75rem 1rem; border-radius: 4px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background-color 0.3s;">
+          <button onclick="window.location.href='Student-page.html'" style="flex: 1; min-width: 140px; background: #27ae60; color: white; border: none; padding: 0.75rem 1rem; border-radius: 4px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background-color 0.3s;">
             🔍 Track Status
           </button>
           <button onclick="closeCredentialsModal()" style="flex: 1; min-width: 140px; background: #95a5a6; color: white; border: none; padding: 0.75rem 1rem; border-radius: 4px; font-size: 1rem; font-weight: 500; cursor: pointer; transition: background-color 0.3s;">
@@ -2488,6 +2491,36 @@ function isMissingColumnError(error) {
   if (error.code === '42703') return true;
   const message = error.message ? error.message.toLowerCase() : '';
   return message.includes('column') && message.includes('does not exist');
+}
+
+function isNetworkError(error) {
+  if (!error) return false;
+  
+  // Check for TypeError (most common for fetch failures)
+  if (error.name === 'TypeError' || error.constructor.name === 'TypeError') {
+    return true;
+  }
+  
+  // Check for common network error messages
+  const message = (error.message || '').toLowerCase();
+  const networkErrors = [
+    'failed to fetch',
+    'network error',
+    'network request failed',
+    'timeout',
+    'timed out',
+    'connection refused',
+    'connection reset',
+    'connection aborted',
+    'connection closed',
+    'no internet',
+    'offline',
+    'unreachable',
+    'cors',
+    'net::err'
+  ];
+  
+  return networkErrors.some(errText => message.includes(errText));
 }
 
 function isDuplicateUsernameError(error) {
