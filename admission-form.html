@@ -3181,33 +3181,42 @@ function loadPreviewData() {
     formData.referenceNumber = generateReferenceNumber();
     formData.barcode = generateBarcodeValue(formData.referenceNumber);
     
+    // Get photo as base64 BEFORE loading iframe
+    const photoInput = document.getElementById('photoUpload');
+    
+    if (photoInput && photoInput.files && photoInput.files[0]) {
+      console.log('📸 Photo found, loading for preview:', photoInput.files[0].name);
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        // Include photo in the data
+        formData.applicantPhoto = e.target.result;
+        console.log('✅ Photo loaded as base64');
+        
+        // Now load the iframe with all data including photo
+        loadIframeWithData(iframe, formData);
+      };
+      reader.readAsDataURL(photoInput.files[0]);
+    } else {
+      console.log('⚠️ No photo uploaded yet');
+      // Load iframe without photo
+      loadIframeWithData(iframe, formData);
+    }
+    
+  } catch (err) {
+    console.error('Error loading preview data:', err);
+  }
+}
+
+function loadIframeWithData(iframe, formData) {
+  try {
     // Convert form data to URL-safe JSON
     const dataString = encodeURIComponent(JSON.stringify(formData));
     
     // Load pdf.html with data parameter
     iframe.src = `pdf.html?preview=true&data=${dataString}`;
     
-    // Handle photo separately via postMessage after iframe loads
+    // Handle documents via postMessage after iframe loads
     iframe.onload = function() {
-      const photoInput = document.getElementById('photoUpload');
-      console.log('Iframe loaded, checking for photo...');
-      if (photoInput && photoInput.files && photoInput.files[0]) {
-        console.log('Photo found, sending via postMessage:', photoInput.files[0].name);
-        const reader = new FileReader();
-        reader.onload = function(e) {
-          // Send photo data via postMessage
-          iframe.contentWindow.postMessage({
-            type: 'updatePhoto',
-            photoData: e.target.result
-          }, '*');
-          console.log('Photo data sent via postMessage');
-        };
-        reader.readAsDataURL(photoInput.files[0]);
-      } else {
-        console.log('No photo uploaded yet');
-      }
-      
-      // Send all document thumbnails
       const documentInputs = [
         { id: 'passportUpload', name: 'Passport' },
         { id: 'diplomaUpload', name: 'Diploma' },
@@ -3238,7 +3247,6 @@ function loadPreviewData() {
         }
       });
     };
-    
   } catch (error) {
     console.error('Error loading preview:', error);
     showModal('Failed to load preview. Please check your form data.', 'error');
