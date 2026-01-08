@@ -3265,16 +3265,27 @@ function loadPreviewData() {
 
 function loadIframeWithData(iframe, formData) {
   try {
-    // Convert form data to URL-safe JSON
-    const dataString = encodeURIComponent(JSON.stringify(formData));
+    // Store data globally to send via postMessage
+    window.previewFormData = formData;
     
-    // Load pdf.html with data parameter (includes photo and documents)
-    iframe.src = `pdf.html?preview=true&data=${dataString}`;
+    // Load pdf.html without data in URL (URL would be too long with base64 images)
+    iframe.src = `pdf.html?preview=true&postMessage=true`;
     
-    console.log('✅ Preview loaded with all data:', {
-      hasPhoto: !!formData.applicantPhoto,
-      documentsCount: formData.documents?.length || 0
-    });
+    // Send data via postMessage after iframe loads
+    iframe.onload = function() {
+      setTimeout(() => {
+        if (iframe.contentWindow) {
+          iframe.contentWindow.postMessage({
+            type: 'PREVIEW_DATA',
+            data: window.previewFormData
+          }, '*');
+          console.log('✅ Preview data sent via postMessage:', {
+            hasPhoto: !!formData.applicantPhoto,
+            documentsCount: formData.documents?.length || 0
+          });
+        }
+      }, 100);
+    };
   } catch (error) {
     console.error('Error loading preview:', error);
     showModal('Failed to load preview. Please check your form data.', 'error');
