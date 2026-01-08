@@ -2939,14 +2939,48 @@
       document.getElementById('drawer').classList.add('open');
       document.getElementById('drawerBackdrop').classList.add('show');
       
-      // Show loading state immediately
-      document.getElementById('drawerName').textContent = 'Loading...';
+      // ===== INSTANT: Show basic information immediately from cached data =====
+      document.getElementById('drawerName').textContent = app.applicant_name || 'Applicant';
       document.getElementById('drawerReference').textContent = `Ref: ${app.reference_number || '—'}`;
       
-      // Disable action buttons until data loads
+      // Show basic status immediately
+      let statusBadge = document.getElementById('drawerApplicationStatus');
+      if (statusBadge) {
+        const statusData = getApplicationStatusData(app);
+        statusBadge.textContent = statusData.label;
+        statusBadge.className = `status-badge ${statusData.badgeClass}`;
+      }
+      
+      // Show basic fields from cached data
+      setDrawerValue('drawerEmail', app.email || '—');
+      setDrawerValue('drawerProgram', app.program || '—');
+      setDrawerValue('drawerStart', app.start_term || '—');
+      setDrawerValue('drawerSubmissionDate', formatDate(app.submission_date));
+      setDrawerValue('drawerBarcodeValue', app.barcode || '—');
+      
+      // Show barcode if available
+      let svg = document.getElementById('drawerBarcode');
+      if (app.barcode) {
+        const currentBarcode = svg.dataset.currentBarcode;
+        if (currentBarcode !== app.barcode) {
+          svg.innerHTML = '';
+          svg.dataset.currentBarcode = app.barcode;
+          renderBarcodeWithCache(svg, app.barcode, {
+            format: 'code128',
+            width: 2,
+            height: 60,
+            displayValue: true,
+            lineColor: '#2dd4bf',
+            fontSize: 14
+          });
+        }
+      }
+      
+      // Disable action buttons until full data loads
       setActionButtonsState(true);
       
-      console.log('🚀 Drawer opened instantly, loading data...');
+      console.log('🚀 Drawer opened with basic info, loading full details...');
+
 
       // ===== PERFORMANCE: Fetch full payload only when opening drawer =====
       if (!app.payload) {
@@ -3090,7 +3124,7 @@
       setDrawerValue('drawerBarcodeValue', app.barcode || payload.barcode || '—');
   setDrawerValue('drawerStudentId', payload.studentId || 'Pending Assignment');
 
-      const statusBadge = document.getElementById('drawerApplicationStatus');
+      statusBadge = document.getElementById('drawerApplicationStatus');
       if (statusBadge) {
         statusBadge.textContent = statusData.label;
         statusBadge.className = `status-badge ${statusData.badgeClass}`;
@@ -3139,7 +3173,7 @@
 
   document.getElementById('drawerPayload').textContent = JSON.stringify(app, null, 2);
 
-      const svg = document.getElementById('drawerBarcode');
+      svg = document.getElementById('drawerBarcode');
       if (app.barcode) {
         // ===== PERFORMANCE: Use cached barcode rendering =====
         // Only clear and re-render if barcode changed
