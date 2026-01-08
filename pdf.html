@@ -1210,39 +1210,8 @@
       const usePostMessage = urlParams.get('postMessage') === 'true';
       let formData = null;
       
-      // Listen for postMessage data from parent
-      if (usePostMessage) {
-        console.log('📨 Waiting for preview data via postMessage...');
-        window.addEventListener('message', function(event) {
-          if (event.data && event.data.type === 'PREVIEW_DATA') {
-            console.log('📥 Received preview data via postMessage');
-            formData = event.data.data;
-            if (formData) {
-              populatePreviewData(formData);
-            } else {
-              console.error('Received empty preview data');
-              showError();
-            }
-          }
-        });
-        
-        // Show loading state while waiting for data
-        return;
-      }
-      
-      // Fallback: try to get data from URL params (for backwards compatibility)
-      const dataParam = urlParams.get('data');
-      if (dataParam) {
-        try {
-          formData = JSON.parse(decodeURIComponent(dataParam));
-        } catch (error) {
-          console.error('Error parsing preview data:', error);
-        }
-      }
-      
       if (isPreview) {
-        // Keep buttons hidden in preview mode (already hidden by CSS)
-        
+        // Setup preview mode UI immediately
         const previewHeader = document.querySelector('.preview-header');
         if (previewHeader) previewHeader.style.display = 'none';
         
@@ -1256,11 +1225,12 @@
             // Notify parent window that user has signed
             window.parent.postMessage({ type: 'applicationSigned' }, '*');
             
-            // Get applicant name from data
-            if (formData?.applicantName) {
+            // Get applicant name from data (will be available after postMessage)
+            const applicantName = window.currentFormData?.applicantName;
+            if (applicantName) {
               const registrarSignatureLine = document.getElementById('registrarSignatureLine');
               if (registrarSignatureLine) {
-                registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${formData.applicantName}</span>`;
+                registrarSignatureLine.innerHTML = `<span class="gov-signature__handwritten">${applicantName}</span>`;
               }
             }
           });
@@ -1269,10 +1239,44 @@
         // Change status to pending in preview mode
         const statusDisplay = document.getElementById('statusDisplay');
         if (statusDisplay) statusDisplay.textContent = 'STATUS: PENDING REVIEW';
+      }
+      
+      // Listen for postMessage data from parent
+      if (usePostMessage) {
+        console.log('📨 Waiting for preview data via postMessage...');
+        window.addEventListener('message', function(event) {
+          if (event.data && event.data.type === 'PREVIEW_DATA') {
+            console.log('📥 Received preview data via postMessage');
+            formData = event.data.data;
+            window.currentFormData = formData; // Store globally for sign button
+            if (formData) {
+              populatePreviewData(formData);
+            } else {
+              console.error('Received empty preview data');
+              showError();
+            }
+          }
+        });
         
+        // Don't return early - button is already set up above
+        return;
+      }
+      
+      // Fallback: try to get data from URL params (for backwards compatibility)
+      const dataParam = urlParams.get('data');
+      if (dataParam) {
+        try {
+          formData = JSON.parse(decodeURIComponent(dataParam));
+          window.currentFormData = formData;
+        } catch (error) {
+          console.error('Error parsing preview data:', error);
+        }
+      }
+      
+      if (isPreview) {
         if (formData) {
           populatePreviewData(formData);
-        } else if (!usePostMessage) {
+        } else {
           console.warn('No preview data provided');
           showError();
         }
