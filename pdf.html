@@ -1252,7 +1252,10 @@
             formData = event.data.data;
             window.currentFormData = formData; // Store globally for sign button
             if (formData) {
-              populatePreviewData(formData);
+              populatePreviewData(formData).catch(err => {
+                console.error('Failed to populate preview data:', err);
+                showError();
+              });
             } else {
               console.error('Received empty preview data');
               showError();
@@ -1277,7 +1280,10 @@
       
       if (isPreview) {
         if (formData) {
-          populatePreviewData(formData);
+          populatePreviewData(formData).catch(err => {
+            console.error('Failed to populate preview data:', err);
+            showError();
+          });
         } else {
           console.warn('No preview data provided');
           showError();
@@ -1299,7 +1305,7 @@
       }
     }
 
-    function populatePreviewData(data) {
+  async function populatePreviewData(data) {
       // Helper function to safely set text content
       function setField(id, value) {
         const element = document.getElementById(id);
@@ -1455,18 +1461,25 @@
       // Handle applicant photo if present in data
       const photoImg = document.getElementById('applicantPhoto');
       if (photoImg) {
-        // Check multiple possible locations for photo data
-        const photoData = data.applicantPhoto || data.payload?.applicantPhoto || null;
-        
-        if (photoData) {
-          photoImg.src = photoData;
+        const photoSources = [
+          data.applicantPhoto,
+          data.applicantPhotoPreview,
+          data.payload?.applicantPhoto,
+          data.payload?.applicantPhotoUrl,
+          data.payload?.applicantPhotoMeta?.url,
+          data.applicantPhotoMeta?.url
+        ];
+
+        const resolvedPhoto = await resolvePhotoSource(photoSources);
+        if (resolvedPhoto) {
+          photoImg.src = resolvedPhoto;
           photoImg.style.display = 'block';
           photoImg.style.maxWidth = '100%';
           photoImg.style.maxHeight = '100%';
           photoImg.style.width = 'auto';
           photoImg.style.height = 'auto';
           photoImg.style.objectFit = 'contain';
-          console.log('✅ Applicant photo loaded from data');
+          console.log('✅ Applicant photo loaded');
         } else {
           console.warn('⚠️ No applicant photo found in data:', {
             hasApplicantPhoto: !!data.applicantPhoto,
@@ -1505,14 +1518,11 @@
       // Handle documents if present in data
       const documentsGrid = document.getElementById('documentsGrid');
       if (documentsGrid) {
-        // Clear any existing placeholder documents
         documentsGrid.innerHTML = '';
+
+        const documentsData = await resolveDocumentPreviewList(data);
         
-        // Check multiple possible locations for documents data
-        const documentsData = data.documents || data.payload?.documents || null;
-        
-        if (documentsData && Array.isArray(documentsData) && documentsData.length > 0) {
-          // Add each document
+        if (documentsData.length > 0) {
           documentsData.forEach(doc => {
             const docItem = document.createElement('div');
             docItem.className = 'gov-document-item';
@@ -1520,16 +1530,16 @@
             const thumbnail = document.createElement('div');
             thumbnail.className = 'gov-document-thumbnail';
             
-            // Check if it's an image or PDF
-            if (doc.data && doc.data.startsWith('data:image/')) {
+            const previewData = doc.data;
+            if (previewData && previewData.startsWith('data:image/')) {
               const img = document.createElement('img');
-              img.src = doc.data;
+              img.src = previewData;
               img.alt = doc.fileName || doc.name;
               img.style.width = '100%';
               img.style.height = '100%';
               img.style.objectFit = 'cover';
               thumbnail.appendChild(img);
-            } else if (doc.data && doc.data.startsWith('data:application/pdf')) {
+            } else if (previewData && previewData.startsWith('data:application/pdf')) {
               // For PDFs, show PDF icon
               thumbnail.innerHTML = '<div style="font-size: 32px; color: #ef4444;">📄</div>';
             } else {
@@ -1546,7 +1556,7 @@
             documentsGrid.appendChild(docItem);
           });
           
-          console.log(`✅ Loaded ${documentsData.length} documents from data`);
+          console.log(`✅ Loaded ${documentsData.length} documents for preview`);
         } else {
           console.warn('⚠️ No documents found in data:', {
             hasDocuments: !!data.documents,
@@ -1587,6 +1597,76 @@
       }
 
       console.log('Preview data populated:', data);
+    }
+
+    async function resolvePhotoSource(sources = []) {
+      for (const source of sources) {
+        if (!source || typeof source !== 'string') continue;
+        if (source.startsWith('data:')) {
+          return source;
+        }
+        if (/^https?:/i.test(source)) {
+          try {
+            return await convertUrlToDataUrl(source);
+          } catch (error) {
+            console.warn('Unable to convert photo URL to data URL, falling back to direct URL:', error);
+            return source;
+          }
+        }
+        return source;
+      }
+      return null;
+    }
+
+    async function resolveDocumentPreviewList(data) {
+      const candidates = [];
+      if (Array.isArray(data.documentPreviews) && data.documentPreviews.length) candidates.push(data.documentPreviews);
+      if (Array.isArray(data.documents) && data.documents.length && data.documents[0]?.data) candidates.push(data.documents);
+      const payload = data.payload || {};
+      if (Array.isArray(payload.documentPreviews) && payload.documentPreviews.length) candidates.push(payload.documentPreviews);
+      if (Array.isArray(payload.uploadedDocuments) && payload.uploadedDocuments.length) candidates.push(payload.uploadedDocuments);
+      if (Array.isArray(payload.documentUploads) && payload.documentUploads.length) candidates.push(payload.documentUploads);
+      if (Array.isArray(payload.documents) && payload.documents.length && payload.documents[0]?.data) candidates.push(payload.documents);
+
+      if (!candidates.length) return [];
+      const source = candidates[0];
+      return hydrateDocumentPreviews(source);
+    }
+
+    async function hydrateDocumentPreviews(documents = []) {
+      const hydrated = [];
+      for (const doc of documents) {
+        if (!doc || typeof doc !== 'object') continue;
+        if (doc.data && typeof doc.data === 'string' && doc.data.startsWith('data:')) {
+          hydrated.push(doc);
+          continue;
+        }
+        if (doc.url && /^https?:/i.test(doc.url)) {
+          try {
+            const dataUrl = await convertUrlToDataUrl(doc.url);
+            hydrated.push({ ...doc, data: dataUrl });
+            continue;
+          } catch (error) {
+            console.warn('Unable to hydrate document preview:', { doc, error });
+          }
+        }
+        hydrated.push(doc);
+      }
+      return hydrated;
+    }
+
+    async function convertUrlToDataUrl(url) {
+      const response = await fetch(url, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`Failed to fetch asset (${response.status})`);
+      }
+      const blob = await response.blob();
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
     }
 
     // Listen for photo and document updates via postMessage

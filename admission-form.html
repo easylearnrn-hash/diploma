@@ -2003,6 +2003,16 @@ const form = document.getElementById('admissionForm');
 const progressBar = document.getElementById('progressBar');
 const submitBtn = document.getElementById('submitBtn');
 
+const APPLICATION_STORAGE_BUCKET = 'application-files';
+const APPLICATION_STORAGE_FOLDER = 'applications';
+const DOCUMENT_UPLOAD_FIELDS = [
+  { id: 'passportUpload', name: 'Passport', optional: false },
+  { id: 'diplomaUpload', name: 'Diploma', optional: false },
+  { id: 'transcriptUpload', name: 'Transcript', optional: false },
+  { id: 'englishUpload', name: 'English Test', optional: true },
+  { id: 'recommendationUpload', name: 'Recommendation', optional: true }
+];
+
 function getSubmitStatusElement() {
   if (!submitBtn) return null;
   let statusEl = document.getElementById('submitStatusMessage');
@@ -2299,8 +2309,20 @@ async function handleAdmissionSubmit(e) {
   data.passwordHash = passwordHash;
   data.status = 'SUBMITTED';
 
+  let uploadedAssets = { photo: null, documents: [] };
   try {
-    const savedData = await saveApplicationWithRetries(data, {
+    updateSubmitStatus('Uploading your files securely...', 'info');
+    uploadedAssets = await uploadApplicationAssets(referenceNumber);
+    updateSubmitStatus('Files uploaded. Saving your application...', 'info');
+  } catch (uploadError) {
+    console.error('File upload failed', uploadError);
+    throw new Error(uploadError.message || 'We could not upload your files. Please try again.');
+  }
+
+  const supabasePayload = createSupabasePayload(data, uploadedAssets);
+
+  try {
+    const savedData = await saveApplicationWithRetries(supabasePayload, {
       maxAttempts: 3,
       timeoutMs: 45000,
       onStatus: ({ attempt, maxAttempts, stage, delayMs }) => {
@@ -2321,11 +2343,20 @@ async function handleAdmissionSubmit(e) {
     if (assignedUsername) {
       data.username = assignedUsername;
     }
+    if (uploadedAssets.photo) {
+      data.applicantPhotoRemote = uploadedAssets.photo.url;
+    }
+    if (uploadedAssets.documents?.length) {
+      data.uploadedDocuments = uploadedAssets.documents;
+    }
     populateAdmissionDocument(data);
     await renderBarcode(barcode);
     
     // Store data globally for PDF download
-  window.currentApplicationData = data;
+  window.currentApplicationData = {
+    ...data,
+    documentPreviews: data.documentPreviews || (Array.isArray(data.documents) ? data.documents : [])
+  };
 
     form.dataset.submitted = 'true';
     submitBtn.textContent = 'Application Submitted ✓';
@@ -2962,6 +2993,7 @@ function gatherAdmissionData() {
 // NEW: Async function to gather data WITH photo and document files
 async function gatherAdmissionDataWithFiles() {
   const baseData = gatherAdmissionData();
+  baseData.documentStatuses = { ...baseData.documents };
   
   // Get photo as base64
   const photoInput = document.getElementById('photoUpload');
@@ -2973,24 +3005,16 @@ async function gatherAdmissionDataWithFiles() {
     }
   }
   
-  // Get documents as base64 array
-  const documentInputs = [
-    { id: 'passportUpload', name: 'Passport' },
-    { id: 'diplomaUpload', name: 'Diploma' },
-    { id: 'transcriptUpload', name: 'Transcript' },
-    { id: 'englishUpload', name: 'English Test' },
-    { id: 'recommendationUpload', name: 'Recommendation' }
-  ];
-  
-  const documentsArray = [];
-  for (const doc of documentInputs) {
+  // Get documents as base64 array (for immediate preview only)
+  const documentPreviews = [];
+  for (const doc of DOCUMENT_UPLOAD_FIELDS) {
     const input = document.getElementById(doc.id);
     if (input && input.files && input.files.length > 0) {
       for (let i = 0; i < input.files.length; i++) {
         const file = input.files[i];
         try {
           const data = await fileToBase64(file);
-          documentsArray.push({
+          documentPreviews.push({
             name: doc.name + (input.files.length > 1 ? ` (${i + 1})` : ''),
             fileName: file.name,
             data: data
@@ -3002,8 +3026,8 @@ async function gatherAdmissionDataWithFiles() {
     }
   }
   
-  if (documentsArray.length > 0) {
-    baseData.documents = documentsArray;
+  if (documentPreviews.length > 0) {
+    baseData.documentPreviews = documentPreviews;
   }
   
   // Add signature (applicant name)
@@ -3020,6 +3044,125 @@ function fileToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+function sanitizeFileName(fileName = '') {
+  return fileName
+    .toLowerCase()
+    .replace(/[^a-z0-9.\-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'file';
+}
+
+function deepClonePayload(data) {
+  if (typeof structuredClone === 'function') {
+    return structuredClone(data);
+  }
+  return JSON.parse(JSON.stringify(data));
+}
+
+async function uploadApplicationAssets(referenceNumber) {
+  const client = initSupabase();
+  if (!client) throw new Error('Supabase client not initialized');
+  if (!APPLICATION_STORAGE_BUCKET) throw new Error('Storage bucket not configured');
+
+  const storage = client.storage.from(APPLICATION_STORAGE_BUCKET);
+  const folder = `${APPLICATION_STORAGE_FOLDER}/${referenceNumber}`;
+  const uploads = { photo: null, documents: [] };
+
+  const photoInput = document.getElementById('photoUpload');
+  if (photoInput && photoInput.files && photoInput.files[0]) {
+    const photoFile = photoInput.files[0];
+    const photoPath = `${folder}/photo-${Date.now()}-${sanitizeFileName(photoFile.name)}`;
+    const { error: photoError } = await storage.upload(photoPath, photoFile, {
+      cacheControl: '86400',
+      upsert: true,
+      contentType: photoFile.type || 'application/octet-stream'
+    });
+    if (photoError) {
+      console.error('Photo upload failed:', photoError);
+      throw new Error(photoError.message || 'Unable to upload applicant photo');
+    }
+    const { data: publicPhoto } = storage.getPublicUrl(photoPath);
+    uploads.photo = {
+      path: photoPath,
+      url: publicPhoto?.publicUrl || null,
+      fileName: photoFile.name,
+      contentType: photoFile.type || 'application/octet-stream',
+      size: photoFile.size,
+      uploadedAt: new Date().toISOString()
+    };
+  }
+
+  for (const doc of DOCUMENT_UPLOAD_FIELDS) {
+    const input = document.getElementById(doc.id);
+    if (!input || !input.files || input.files.length === 0) continue;
+
+    for (let i = 0; i < input.files.length; i++) {
+      const file = input.files[i];
+      const label = doc.name + (input.files.length > 1 ? ` (${i + 1})` : '');
+      const docPath = `${folder}/documents/${doc.id}/${Date.now()}-${sanitizeFileName(file.name)}`;
+      const { error: docError } = await storage.upload(docPath, file, {
+        cacheControl: '86400',
+        upsert: true,
+        contentType: file.type || 'application/octet-stream'
+      });
+      if (docError) {
+        console.error(`Upload failed for ${label}:`, docError);
+        throw new Error(docError.message || `Unable to upload ${label}`);
+      }
+      const { data: publicDoc } = storage.getPublicUrl(docPath);
+      uploads.documents.push({
+        path: docPath,
+        url: publicDoc?.publicUrl || null,
+        name: label,
+        fileName: file.name,
+        bucket: APPLICATION_STORAGE_BUCKET,
+        contentType: file.type || 'application/octet-stream',
+        size: file.size,
+        uploadedAt: new Date().toISOString(),
+        fieldId: doc.id,
+        optional: !!doc.optional
+      });
+    }
+  }
+
+  return uploads;
+}
+
+function createSupabasePayload(originalData, uploads) {
+  const sanitized = deepClonePayload(originalData);
+  ['documentPreviews', 'documentsPreview', 'documentFiles'].forEach(key => {
+    if (sanitized[key]) delete sanitized[key];
+  });
+
+  if (uploads.photo) {
+    sanitized.applicantPhotoMeta = uploads.photo;
+    sanitized.applicantPhotoUrl = uploads.photo.url;
+    sanitized.applicantPhoto = uploads.photo.url;
+  } else {
+    sanitized.applicantPhotoMeta = null;
+    sanitized.applicantPhotoUrl = null;
+    sanitized.applicantPhoto = null;
+  }
+
+  sanitized.uploadedDocuments = uploads.documents;
+  sanitized.documentUploads = uploads.documents;
+  sanitized.attachmentsSummary = {
+    bucket: APPLICATION_STORAGE_BUCKET,
+    folder: `${APPLICATION_STORAGE_FOLDER}/${originalData.referenceNumber}`,
+    documentCount: uploads.documents.length,
+    hasPhoto: Boolean(uploads.photo),
+    totalBytes:
+      uploads.documents.reduce((sum, doc) => sum + (doc.size || 0), 0) +
+      (uploads.photo?.size || 0)
+  };
+
+  if (sanitized.documentStatuses) {
+    sanitized.documents = sanitized.documentStatuses;
+  }
+
+  return sanitized;
 }
 
 function summarizeStatement(text) {
@@ -3403,7 +3546,8 @@ function loadPreviewData() {
     function checkAllFilesLoaded() {
       if (processedFiles === pendingFiles) {
         // All files loaded, now include documents array
-        formData.documents = documentsArray;
+  formData.documentPreviews = documentsArray;
+  formData.documents = documentsArray;
         console.log(`✅ All files loaded (${documentsArray.length} documents)`);
         loadIframeWithData(iframe, formData);
       }
@@ -3412,7 +3556,8 @@ function loadPreviewData() {
     // If no files to load, proceed immediately
     if (pendingFiles === 0) {
       console.log('⚠️ No photo or documents to load');
-      formData.documents = [];
+  formData.documentPreviews = [];
+  formData.documents = [];
       loadIframeWithData(iframe, formData);
     }
     

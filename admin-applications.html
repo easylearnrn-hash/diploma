@@ -1952,6 +1952,15 @@
       console.log('Preview data:', { app, payload }); // Debug log
       
       // Prepare data in the EXACT same format as admission-form.html does
+      const previewPhoto = payload.applicantPhoto || payload.applicantPhotoUrl || payload.applicantPhotoMeta?.url;
+      const previewDocuments = (() => {
+        if (Array.isArray(payload.documentPreviews) && payload.documentPreviews.length) return payload.documentPreviews;
+        if (Array.isArray(payload.uploadedDocuments) && payload.uploadedDocuments.length) return payload.uploadedDocuments;
+        if (Array.isArray(payload.documentUploads) && payload.documentUploads.length) return payload.documentUploads;
+        if (Array.isArray(payload.documents) && payload.documents.length) return payload.documents;
+        return [];
+      })();
+
       const previewData = {
         // Document IDs
         documentId: app.document_id || payload.documentId,
@@ -1994,11 +2003,14 @@
         emergencyRelation: payload.emergencyRelation,
         emergencyPhone: payload.emergencyPhone,
         
-        // Photo (from payload)
-        applicantPhoto: payload.applicantPhoto,
+  // Photo (from payload or storage)
+  applicantPhoto: previewPhoto,
+  applicantPhotoMeta: payload.applicantPhotoMeta,
         
-        // Documents
-        documents: payload.documents || [],
+  // Documents
+  documents: previewDocuments,
+  documentPreviews: previewDocuments,
+  uploadedDocuments: payload.uploadedDocuments || payload.documentUploads || [],
         
         // Statement
         statement: payload.statement,
@@ -2092,7 +2104,15 @@
       }
 
       const payload = app.payload || {};
-      const hasMissingFiles = !payload.applicantPhoto || !payload.documents || payload.documents.length === 0;
+      const hasPhoto = !!(payload.applicantPhoto || payload.applicantPhotoUrl || payload.applicantPhotoMeta?.url);
+      const documentCount = (() => {
+        if (Array.isArray(payload.uploadedDocuments)) return payload.uploadedDocuments.length;
+        if (Array.isArray(payload.documentUploads)) return payload.documentUploads.length;
+        if (Array.isArray(payload.documents)) return payload.documents.length;
+        return 0;
+      })();
+      const hasDocuments = documentCount > 0;
+      const hasMissingFiles = !hasPhoto || !hasDocuments;
 
       if (!hasMissingFiles) {
         showNotification('Info', 'This application already has all files uploaded', 'info');
@@ -2101,8 +2121,8 @@
 
       // Determine what's missing
       const missingItems = [];
-      if (!payload.applicantPhoto) missingItems.push('Photo');
-      if (!payload.documents || payload.documents.length === 0) missingItems.push('Supporting Documents');
+      if (!hasPhoto) missingItems.push('Photo');
+      if (!hasDocuments) missingItems.push('Supporting Documents');
 
       const confirmMessage = `This will set the status to "Request for Evidence - Documents" and ask the student to re-upload:\n\n${missingItems.join('\n')}\n\nContinue?`;
       
@@ -3088,8 +3108,9 @@
       const applicantPhotoImg = document.getElementById('applicantPhoto');
       const noPhotoMessage = document.getElementById('noPhotoMessage');
       
-      if (payload.applicantPhoto) {
-        applicantPhotoImg.src = payload.applicantPhoto;
+      const applicantPhotoSource = payload.applicantPhoto || payload.applicantPhotoUrl || payload.applicantPhotoMeta?.url;
+      if (applicantPhotoSource) {
+        applicantPhotoImg.src = applicantPhotoSource;
         applicantPhotoContainer.style.display = 'block';
         noPhotoMessage.style.display = 'none';
         console.log('✅ Applicant photo displayed');
@@ -3132,24 +3153,56 @@
 
       const docList = document.getElementById('drawerDocuments');
       if (docList) {
-        // Check if documents is an array (with file data) or an object (with status labels)
-        const hasDocumentFiles = Array.isArray(payload.documents) && payload.documents.length > 0;
-        const hasDocumentStatus = !Array.isArray(payload.documents) && payload.documents && Object.keys(payload.documents).length > 0;
+        const documentFiles = (() => {
+          if (Array.isArray(payload.documentPreviews) && payload.documentPreviews.length) return payload.documentPreviews;
+          if (Array.isArray(payload.uploadedDocuments) && payload.uploadedDocuments.length) return payload.uploadedDocuments;
+          if (Array.isArray(payload.documentUploads) && payload.documentUploads.length) return payload.documentUploads;
+          if (Array.isArray(payload.documents) && payload.documents.length && (payload.documents[0]?.data || payload.documents[0]?.url)) return payload.documents;
+          return [];
+        })();
+
+        const statusMap = payload.documentStatuses || (!Array.isArray(payload.documents) ? payload.documents : null);
+        const hasDocumentFiles = documentFiles.length > 0;
+        const hasDocumentStatus = statusMap && Object.keys(statusMap).length > 0;
         
         if (hasDocumentFiles) {
-          // Documents with actual file data - make them clickable
-          docList.innerHTML = payload.documents.map((doc, index) => `
-            <li style="cursor:pointer;transition:all 0.2s;" 
-                onclick="viewImage('${doc.data}', '${doc.name || doc.fileName}')"
-                onmouseover="this.style.background='rgba(45,212,191,0.1)';this.style.transform='translateX(4px)'"
-                onmouseout="this.style.background='';this.style.transform='translateX(0)'">
-              <strong>📄 ${doc.name || doc.fileName}</strong>
-              <span style="color:#2dd4bf;font-size:11px;">👁️ View</span>
-            </li>
-          `).join('');
+          docList.innerHTML = '';
+          documentFiles.forEach(doc => {
+            const li = document.createElement('li');
+            li.style.transition = 'all 0.2s';
+            const docTitle = doc.name || doc.fileName || 'Document';
+            const viewSrc = doc.data || doc.url;
+            if (viewSrc) {
+              li.style.cursor = 'pointer';
+              li.addEventListener('click', () => viewImage(viewSrc, docTitle));
+              li.addEventListener('mouseover', () => {
+                li.style.background = 'rgba(45,212,191,0.1)';
+                li.style.transform = 'translateX(4px)';
+              });
+              li.addEventListener('mouseout', () => {
+                li.style.background = '';
+                li.style.transform = 'translateX(0)';
+              });
+            } else {
+              li.style.cursor = 'default';
+            }
+
+            const titleEl = document.createElement('strong');
+            titleEl.textContent = `📄 ${docTitle}`;
+            li.appendChild(titleEl);
+
+            const badge = document.createElement('span');
+            badge.style.fontSize = '11px';
+            badge.style.marginLeft = '8px';
+            badge.style.color = viewSrc ? '#2dd4bf' : '#a1a1aa';
+            badge.textContent = viewSrc ? '👁️ View' : '📦 Stored';
+            li.appendChild(badge);
+
+            docList.appendChild(li);
+          });
         } else if (hasDocumentStatus) {
           // Documents with status labels only (old format)
-          const documents = Object.entries(payload.documents);
+          const documents = Object.entries(statusMap);
           docList.innerHTML = documents.map(([key, value]) => `
             <li>
               <strong>${formatDocumentLabel(key)}</strong>
@@ -3921,7 +3974,8 @@
         { label: 'Submitted', value: payload.submissionDate || formatDate(app.submission_date) }
       ];
 
-      const documents = Object.entries(payload.documents || {});
+  const documentStatusMap = payload.documentStatuses || (!Array.isArray(payload.documents) ? payload.documents : {});
+  const documents = Object.entries(documentStatusMap || {});
       const documentRows = documents.length
         ? documents.map(([key, value]) => ({ label: formatDocumentLabel(key), value: formatDocumentValue(value) }))
         : [{ label: 'Documents', value: 'No supporting documents recorded' }];
