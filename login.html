@@ -544,6 +544,7 @@ body{
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/main.js"></script>
 <script>
@@ -691,28 +692,44 @@ document.getElementById('applicationLoginForm').addEventListener('submit', async
       throw new Error('Supabase not configured');
     }
 
-    // Hash the provided password using SHA-256
-    const passwordHash = await hashPassword(password);
-
-    // Query applications table for matching username and password_hash
-    const { data: applications, error } = await supabase
+    // First, get the application by username to check the password hash format
+    const { data: applications, error: fetchError } = await supabase
       .from('applications')
-      .select('reference_number, applicant_name, status, username')
+      .select('reference_number, applicant_name, status, username, password_hash')
       .eq('username', username)
-      .eq('password_hash', passwordHash)
       .limit(1);
 
-    if (error) {
-      throw error;
+    if (fetchError) {
+      throw fetchError;
     }
 
     if (!applications || applications.length === 0) {
       throw new Error('Invalid username or password');
     }
 
-    // Authentication successful
     const application = applications[0];
-    
+    const storedHash = application.password_hash;
+    let isPasswordValid = false;
+
+    // Check if the stored hash is bcrypt (starts with $2a$, $2b$, or $2y$)
+    const isBcrypt = /^\$2[aby]\$/.test(storedHash);
+
+    if (isBcrypt) {
+      // Use bcrypt comparison for bcrypt hashes (from password reset)
+      console.log('Using bcrypt verification');
+      isPasswordValid = await bcrypt.compare(password, storedHash);
+    } else {
+      // Use SHA-256 comparison for SHA-256 hashes (original system)
+      console.log('Using SHA-256 verification');
+      const passwordHash = await hashPassword(password);
+      isPasswordValid = (passwordHash === storedHash);
+    }
+
+    if (!isPasswordValid) {
+      throw new Error('Invalid username or password');
+    }
+
+    // Authentication successful
     // Store session info for application tracking
     sessionStorage.setItem('isApplicationLogin', 'true');
     sessionStorage.setItem('applicationUsername', username);
