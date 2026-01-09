@@ -2002,6 +2002,46 @@ body.preview-fullscreen {
 const form = document.getElementById('admissionForm');
 const progressBar = document.getElementById('progressBar');
 const submitBtn = document.getElementById('submitBtn');
+
+function getSubmitStatusElement() {
+  if (!submitBtn) return null;
+  let statusEl = document.getElementById('submitStatusMessage');
+  if (!statusEl && submitBtn.parentNode) {
+    statusEl = document.createElement('div');
+    statusEl.id = 'submitStatusMessage';
+    statusEl.style.marginTop = '12px';
+    statusEl.style.fontSize = '0.95rem';
+    statusEl.style.textAlign = 'center';
+    statusEl.style.color = '#38bdf8';
+    statusEl.style.display = 'none';
+    statusEl.style.transition = 'opacity 0.2s ease';
+    submitBtn.parentNode.insertBefore(statusEl, submitBtn.nextSibling);
+  }
+  return statusEl;
+}
+
+function updateSubmitStatus(message, type = 'info') {
+  const statusEl = getSubmitStatusElement();
+  if (!statusEl) return;
+  if (!message) {
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+    return;
+  }
+  statusEl.style.display = 'block';
+  statusEl.textContent = message;
+  if (type === 'error') {
+    statusEl.style.color = '#f87171';
+  } else if (type === 'success') {
+    statusEl.style.color = '#34d399';
+  } else {
+    statusEl.style.color = '#38bdf8';
+  }
+}
+
+function clearSubmitStatus() {
+  updateSubmitStatus('');
+}
 const dateFormatter = new Intl.DateTimeFormat('en-US', {month: 'long', day: 'numeric', year: 'numeric'});
 
 // Track preview and signature status
@@ -2232,6 +2272,7 @@ async function handleAdmissionSubmit(e) {
   e.preventDefault();
   submitBtn.disabled = true;
   submitBtn.textContent = 'Submitting...';
+  updateSubmitStatus('Uploading your application. Please stay on this page.');
 
   const submissionDate = dateFormatter.format(new Date());
   const referenceNumber = generateReferenceNumber();
@@ -2259,7 +2300,23 @@ async function handleAdmissionSubmit(e) {
   data.status = 'SUBMITTED';
 
   try {
-  const savedData = await saveApplicationToSupabase(data);
+    const savedData = await saveApplicationWithRetries(data, {
+      maxAttempts: 3,
+      timeoutMs: 45000,
+      onStatus: ({ attempt, maxAttempts, stage, delayMs }) => {
+        if (stage === 'waiting') {
+          const seconds = Math.ceil((delayMs || 0) / 1000);
+          submitBtn.textContent = `Retrying in ${seconds}s...`;
+          updateSubmitStatus(`Connection issue detected. Retrying in ${seconds} second${seconds === 1 ? '' : 's'} (${attempt}/${maxAttempts})...`);
+        } else if (stage === 'retry') {
+          submitBtn.textContent = `Retrying... (${attempt}/${maxAttempts})`;
+          updateSubmitStatus(`Still saving your application (${attempt}/${maxAttempts}). Please keep this tab open.`, 'info');
+        } else {
+          submitBtn.textContent = 'Submitting...';
+          updateSubmitStatus('Uploading your application. Please stay on this page.');
+        }
+      }
+    });
     const assignedUsername = savedData && savedData.username ? savedData.username : data.username;
     if (assignedUsername) {
       data.username = assignedUsername;
@@ -2272,6 +2329,8 @@ async function handleAdmissionSubmit(e) {
 
     form.dataset.submitted = 'true';
     submitBtn.textContent = 'Application Submitted ✓';
+    updateSubmitStatus('Application saved! Generating credentials...', 'success');
+    setTimeout(clearSubmitStatus, 4000);
     
     // Show credentials modal only if credentials were saved
     if (assignedUsername) {
@@ -2286,13 +2345,14 @@ async function handleAdmissionSubmit(e) {
     console.error('Admission processing failed', error);
     submitBtn.disabled = false;
     submitBtn.textContent = 'Submit Application';
+    updateSubmitStatus('We could not submit your application after several attempts. Please check your connection and try again.', 'error');
     
     // Check if it's a database column error
     if (isMissingColumnError(error)) {
       showModal('⚠️ Database Update Required\n\nThe database schema needs to be updated. Please run the ADD-APPLICATION-CREDENTIALS.sql file in Supabase first.\n\nContact your administrator to run the database migration.', 'error');
     } else if (isNetworkError(error)) {
       // Network/timeout error - show user-friendly message
-      showModal('⏱️ Connection Timeout\n\nYour application could not be submitted due to a connection issue. This usually happens when:\n\n• Internet connection is slow or unstable\n• Network connection was lost\n• Request took too long to complete\n\nPlease try again:\n✓ Check your internet connection\n✓ Try switching between WiFi and mobile data\n✓ Close other apps/tabs using bandwidth\n✓ Move closer to your WiFi router\n\nYour information has been saved in this form. You can try submitting again.', 'error');
+      showModal('⏱️ Connection Timeout\n\nWe tried submitting your application multiple times but the connection kept dropping.\n\nPlease try again:\n✓ Check your internet connection\n✓ Try switching between WiFi and mobile data\n✓ Close other apps/tabs using bandwidth\n✓ Move closer to your WiFi router\n\nYour information is still in this form, so tap Submit again once your connection is stable.', 'error');
     } else {
       showModal('We could not finish saving your application. Please try again or contact admissions.\n\nError: ' + (error.message || 'Unknown error'), 'error');
     }
@@ -2521,6 +2581,104 @@ function isNetworkError(error) {
   ];
   
   return networkErrors.some(errText => message.includes(errText));
+}
+
+function isTimeoutError(error) {
+  if (!error || !error.message) return false;
+  return error.message.toLowerCase().includes('timeout');
+}
+
+function isRetryableError(error) {
+  return isNetworkError(error) || isTimeoutError(error);
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function promiseWithTimeout(promise, timeoutMs = 45000, timeoutMessage = 'Request timed out') {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+
+    promise
+      .then(value => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(error => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+async function fetchExistingApplication(referenceNumber) {
+  if (!referenceNumber) return null;
+  const supabase = initSupabase();
+  if (!supabase) return null;
+  try {
+    const { data, error } = await supabase
+      .from('applications')
+      .select('id, reference_number, username, submission_date')
+      .eq('reference_number', referenceNumber)
+      .limit(1);
+    if (error) {
+      console.warn('Existing application lookup failed:', error);
+      return null;
+    }
+    return data && data.length > 0 ? data[0] : null;
+  } catch (lookupError) {
+    console.warn('Existing application lookup error:', lookupError);
+    return null;
+  }
+}
+
+async function saveApplicationWithRetries(data, options = {}) {
+  const {
+    maxAttempts = 3,
+    timeoutMs = 45000,
+    onStatus
+  } = options;
+
+  let attempt = 0;
+  let lastError = null;
+
+  while (attempt < maxAttempts) {
+    attempt++;
+    if (typeof onStatus === 'function') {
+      onStatus({ attempt, maxAttempts, stage: attempt === 1 ? 'initial' : 'retry' });
+    }
+
+    try {
+      const result = await promiseWithTimeout(saveApplicationToSupabase(data), timeoutMs, 'Submission timed out');
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.warn(`Submission attempt ${attempt} failed`, error);
+
+      const alreadySaved = await fetchExistingApplication(data.referenceNumber);
+      if (alreadySaved) {
+        console.warn('Application appears to be saved already. Using existing record.');
+        return alreadySaved;
+      }
+
+      const retryable = isRetryableError(error);
+      if (!retryable || attempt >= maxAttempts) {
+        error.attempts = attempt;
+        throw error;
+      }
+
+      const delayMs = Math.min(5000, 1500 * attempt);
+      if (typeof onStatus === 'function') {
+        onStatus({ attempt, maxAttempts, stage: 'waiting', delayMs });
+      }
+      await delay(delayMs);
+    }
+  }
+
+  throw lastError;
 }
 
 function isDuplicateUsernameError(error) {
