@@ -491,7 +491,7 @@
           <div class="form-group">
             <label class="form-label">Email Address</label>
             <input type="email" class="form-input" id="userEmail" placeholder="e.g. john@acnhs.am" required>
-            <p class="form-help">Primary email address for this user</p>
+            <p class="form-help">Primary email for internal use only (not shown in signature)</p>
           </div>
 
           <div class="form-group">
@@ -507,7 +507,7 @@
               white-space: pre-line;
               line-height: 1.6;
             ">Signature will be generated automatically</div>
-            <p class="form-help">Auto-generated from name, title, phone, and email</p>
+            <p class="form-help">✨ Personal email (firstinitial.lastname@acnhs.am) will be auto-created and shown in signature</p>
           </div>
 
           <div class="form-group">
@@ -642,7 +642,20 @@
 
       let signature = '';
       if (name || title || phoneExt || email) {
-        signature = generateSignature(name, title, phoneExt, email);
+        // Generate personal email for preview
+        let previewEmail = email;
+        if (name) {
+          const nameParts = name.trim().split(' ');
+          if (nameParts.length >= 2) {
+            const firstName = nameParts[0];
+            const lastName = nameParts[nameParts.length - 1];
+            const firstInitial = firstName.charAt(0).toLowerCase();
+            const lastNameLower = lastName.toLowerCase();
+            previewEmail = `${firstInitial}.${lastNameLower}@acnhs.am`;
+          }
+        }
+        
+        signature = generateSignature(name, title, phoneExt, previewEmail);
       } else {
         signature = 'Fill in the fields above to see signature preview';
       }
@@ -945,8 +958,9 @@
           manage_users: document.getElementById('permManageUsers').checked
         };
 
-        // Auto-generate signature
-        const autoSignature = generateSignature(name, title, phoneExt, email);
+        // Auto-generate signature using personal email
+        const signatureEmail = personalEmail ? personalEmail.email : email;
+        const autoSignature = generateSignature(name, title, phoneExt, signatureEmail);
 
         const userData = {
           name,
