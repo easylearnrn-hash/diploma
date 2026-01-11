@@ -1046,6 +1046,9 @@
                     <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#ffffff;font-weight:700;opacity:0.96;">&amp; Health Sciences</div>
                     <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#cbd5e1;font-weight:600;margin-top:6px;">Yerevan, Armenia</div>
                   </td>
+                  <td valign="top" align="right" style="padding-left:14px;">
+                    {{STUDENT_INFO}}
+                  </td>
                 </tr>
               </table>
               <div style="height:1px;background:rgba(255,255,255,0.10);margin:16px 0;"></div>
@@ -1251,7 +1254,8 @@ We're here to help! Contact us if you need assistance.`
         document.getElementById('programFilterGroup').style.display = type === 'program' ? 'block' : 'none';
       });
 
-      // Real-time preview - also listen to applicant name
+      // Real-time preview - also listen to applicant name and email
+      document.getElementById('recipientEmail').addEventListener('input', updatePreview);
       document.getElementById('applicantName').addEventListener('input', updatePreview);
       document.getElementById('emailSubject').addEventListener('input', updatePreview);
       document.getElementById('emailBody').addEventListener('input', updatePreview);
@@ -1267,13 +1271,40 @@ We're here to help! Contact us if you need assistance.`
       updatePreview();
     }
 
-    function updatePreview() {
+    async function updatePreview() {
       const subject = document.getElementById('emailSubject').value || 'Email Subject';
       const body = document.getElementById('emailBody').value || 'Your email content will appear here...';
       const applicantName = document.getElementById('applicantName').value || 'Applicant';
+      const recipientEmail = document.getElementById('recipientEmail').value;
       
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      
+      // Fetch student data if email is provided
+      let studentInfo = '';
+      if (recipientEmail && validateEmail(recipientEmail)) {
+        try {
+          const { data: studentData, error: studentError } = await db
+            .from('applications')
+            .select('reference_number, control_number, document_id, verification_hash')
+            .eq('email', recipientEmail)
+            .single();
+          
+          if (!studentError && studentData) {
+            const infoItems = [];
+            if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+            if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+            if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+            if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
+            
+            if (infoItems.length > 0) {
+              studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
+            }
+          }
+        } catch (e) {
+          console.log('Could not fetch student data for preview:', e);
+        }
+      }
       
       let html = EMAIL_HTML_TEMPLATE
         .replace(/{{SUBJECT}}/g, subject)
@@ -1281,7 +1312,8 @@ We're here to help! Contact us if you need assistance.`
         .replace(/{{DATE}}/g, dateStr)
         .replace(/{{APPLICANT_NAME}}/g, applicantName)
         .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
-        .replace(/{{YEAR}}/g, now.getFullYear());
+        .replace(/{{YEAR}}/g, now.getFullYear())
+        .replace(/{{STUDENT_INFO}}/g, studentInfo);
 
       const iframe = document.getElementById('previewFrame');
       iframe.srcdoc = html;
@@ -1797,13 +1829,38 @@ ${email.body}`;
           const now = new Date();
           const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
           
+          // Fetch student data from applications table
+          let studentInfo = '';
+          try {
+            const { data: studentData, error: studentError } = await db
+              .from('applications')
+              .select('reference_number, control_number, document_id, verification_hash')
+              .eq('email', recipient.email)
+              .single();
+            
+            if (!studentError && studentData) {
+              const infoItems = [];
+              if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+              if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+              if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+              if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
+              
+              if (infoItems.length > 0) {
+                studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
+              }
+            }
+          } catch (e) {
+            console.log('Could not fetch student data:', e);
+          }
+          
           let emailHtml = EMAIL_HTML_TEMPLATE
             .replace(/{{SUBJECT}}/g, subject)
             .replace(/{{EMAIL_TITLE}}/g, subject)
             .replace(/{{DATE}}/g, dateStr)
             .replace(/{{APPLICANT_NAME}}/g, recipient.name)
             .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
-            .replace(/{{YEAR}}/g, now.getFullYear());
+            .replace(/{{YEAR}}/g, now.getFullYear())
+            .replace(/{{STUDENT_INFO}}/g, studentInfo);
           
           const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail);
           
