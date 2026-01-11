@@ -558,9 +558,13 @@
       document.getElementById('modalTitle').textContent = userId ? 'Edit User' : 'Add New User';
       
       if (userId) {
-        loadUserData(userId);
+        editUser(userId);
       } else {
         document.getElementById('userForm').reset();
+        // Uncheck all email checkboxes
+        document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = false);
+        // Uncheck all permissions
+        document.querySelectorAll('[id^="perm"]').forEach(cb => cb.checked = false);
       }
       
       document.getElementById('userModal').classList.add('active');
@@ -574,24 +578,46 @@
 
     async function loadEmailAddresses() {
       try {
-        // Load from email_senders table
-        const { data, error } = await db
-          .from('email_senders')
+        // Try to load from email_configuration table first
+        let { data, error } = await db
+          .from('email_configuration')
           .select('*')
           .order('email');
 
-        if (error) throw error;
+        // If email_configuration doesn't exist, use default list
+        if (error || !data || data.length === 0) {
+          console.log('Using default email addresses');
+          const defaultEmails = [
+            { id: 'admissions', email: 'admissions@acnhs.am', display_name: 'ACNHS Admissions' },
+            { id: 'info', email: 'info@acnhs.am', display_name: 'ACNHS Info' },
+            { id: 'registrar', email: 'registrar@acnhs.am', display_name: 'ACNHS Registrar' },
+            { id: 'finance', email: 'finance@acnhs.am', display_name: 'ACNHS Finance' }
+          ];
+          data = defaultEmails;
+        }
 
         const container = document.getElementById('emailPermissions');
         container.innerHTML = data.map(sender => `
           <div class="checkbox-item">
             <input type="checkbox" id="email_${sender.id}" value="${sender.id}" class="email-checkbox">
-            <label for="email_${sender.id}">${sender.email} (${sender.display_name})</label>
+            <label for="email_${sender.id}">${sender.email}${sender.display_name ? ' (' + sender.display_name + ')' : ''}</label>
           </div>
         `).join('');
 
       } catch (error) {
         console.error('Error loading email addresses:', error);
+        // Fallback to basic list
+        const container = document.getElementById('emailPermissions');
+        container.innerHTML = `
+          <div class="checkbox-item">
+            <input type="checkbox" id="email_admissions" value="admissions" class="email-checkbox">
+            <label for="email_admissions">admissions@acnhs.am</label>
+          </div>
+          <div class="checkbox-item">
+            <input type="checkbox" id="email_info" value="info" class="email-checkbox">
+            <label for="email_info">info@acnhs.am</label>
+          </div>
+        `;
       }
     }
 
