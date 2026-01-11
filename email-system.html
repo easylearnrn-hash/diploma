@@ -1681,6 +1681,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // Get user's allowed email addresses
         const userAllowedEmails = getUserAllowedEmails();
         
+        // Check if user is main admin
+        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+        const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+        const isMainAdmin = ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+        
         const { data: emails, error } = await db
           .from('email_history')
           .select('*')
@@ -1690,7 +1695,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         if (error) throw error;
 
         // Filter emails based on user permissions
-        if (!window.isMainAdmin || !isMainAdmin()) {
+        if (!isMainAdmin) {
           // Non-admin users: only see emails sent TO or FROM their allowed addresses
           emailHistory = (emails || []).filter(email => {
             const recipientMatch = userAllowedEmails.includes(email.recipient?.toLowerCase());
@@ -1699,8 +1704,9 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           });
           console.log(`📧 Filtered emails: ${emailHistory.length} of ${emails?.length || 0} (allowed: ${userAllowedEmails.join(', ')})`);
         } else {
-          // Main admin sees all emails
+          // Main admin sees ALL emails
           emailHistory = emails || [];
+          console.log(`📧 Main admin - showing ALL ${emailHistory.length} emails`);
         }
         
         renderEmailList();
