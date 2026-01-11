@@ -467,8 +467,8 @@
 
           <div class="form-group">
             <label class="form-label">Password</label>
-            <input type="password" class="form-input" id="userPassword" placeholder="Enter password" required>
-            <p class="form-help">Minimum 8 characters</p>
+            <input type="password" class="form-input" id="userPassword" placeholder="Enter password">
+            <p class="form-help">Minimum 8 characters. When editing, leave blank to keep current password.</p>
           </div>
 
           <div class="form-group">
@@ -745,21 +745,30 @@
     }
 
     function openModal(userId = null) {
-      editingUserId = userId;
-      document.getElementById('modalTitle').textContent = userId ? 'Edit User' : 'Add New User';
-      
-      if (userId) {
-        editUser(userId);
-      } else {
+      // When called directly for new user
+      if (!userId) {
+        editingUserId = null;
+        
+        // Set up for new user
+        document.getElementById('modalTitle').textContent = 'Add New User';
+        const passwordField = document.getElementById('userPassword');
+        passwordField.required = true;
+        passwordField.placeholder = 'Enter password';
+        
+        // Reset form
         document.getElementById('userForm').reset();
+        
         // Uncheck all email checkboxes
         document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = false);
+        
         // Uncheck all permissions
         document.querySelectorAll('[id^="perm"]').forEach(cb => cb.checked = false);
-        // Reset signature preview with HTML
+        
+        // Reset signature preview
         document.getElementById('signaturePreview').innerHTML = '<div style="color: #94a3b8; font-style: italic;">Fill in the fields above to see signature preview</div>';
       }
       
+      // Open the modal
       document.getElementById('userModal').classList.add('active');
     }
 
@@ -804,10 +813,20 @@
 
         const container = document.getElementById('emailPermissions');
         
-        // Create a scrollable container with all emails
-        let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 12px;">';
+        // Filter out personal emails (format: firstinitial_lastname or firstinitial.lastname)
+        // Personal emails are auto-added, so don't show in checkboxes
+        const departmentalEmails = data.filter(sender => {
+          // Check if it's a personal email pattern (single letter + dot/underscore + name)
+          const isPersonal = sender.id.match(/^[a-z]_[a-z]+$/i) || 
+                           sender.email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
+          return !isPersonal;
+        });
         
-        html += data.map(sender => `
+        // Create a scrollable container with departmental emails only
+        let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 12px;">';
+        html += '<p style="font-size: 0.85em; color: #666; margin: 0 0 12px 0; padding: 8px; background: #f8f9fa; border-radius: 4px;">✨ Personal email (firstinitial.lastname@acnhs.am) will be auto-created</p>';
+        
+        html += departmentalEmails.map(sender => `
           <div class="checkbox-item">
             <input type="checkbox" id="email_${sender.id}" value="${sender.id}" class="email-checkbox">
             <label for="email_${sender.id}">${sender.email}${sender.display_name ? ' (' + sender.display_name + ')' : ''}</label>
@@ -989,12 +1008,18 @@
         const email = document.getElementById('userEmail').value.trim();
         const status = document.getElementById('userStatus').value;
 
-        if (!name || !username || !password || !role || !title || !phoneExt || !email) {
+        if (!name || !username || !role || !title || !phoneExt || !email) {
           alert('Please fill in all required fields');
           return;
         }
 
-        if (password.length < 8) {
+        // Password validation: required when creating, optional when editing
+        if (!editingUserId && (!password || password.trim() === '')) {
+          alert('Password is required when creating a new user');
+          return;
+        }
+
+        if (password && password.trim() !== '' && password.length < 8) {
           alert('Password must be at least 8 characters');
           return;
         }
@@ -1008,11 +1033,11 @@
           return;
         }
 
-        // Generate personal email address (first initial + last name)
+        // Generate/get personal email address (first initial + last name)
         const personalEmail = await createPersonalEmail(name, title);
         
-        // Add personal email to permissions if it was created
-        if (personalEmail && personalEmail.id) {
+        // Add personal email to permissions if it was created/exists and not already in array
+        if (personalEmail && personalEmail.id && !emailPermissions.includes(personalEmail.id)) {
           emailPermissions.push(personalEmail.id);
         }
 
@@ -1150,6 +1175,16 @@
 
     async function editUser(userId) {
       try {
+        // Set editing mode FIRST
+        editingUserId = userId;
+        
+        // Update modal title and password field
+        document.getElementById('modalTitle').textContent = 'Edit User';
+        const passwordField = document.getElementById('userPassword');
+        passwordField.required = false;
+        passwordField.placeholder = 'Leave blank to keep current password';
+        
+        // Fetch user data
         const { data, error } = await db
           .from('admin_users')
           .select('*')
@@ -1162,19 +1197,15 @@
           return;
         }
 
+        // Populate form fields
         document.getElementById('userName').value = data.name;
         document.getElementById('userUsername').value = data.username;
-        // Don't show hashed password - leave blank for security
-        document.getElementById('userPassword').value = '';
-        document.getElementById('userPassword').placeholder = 'Leave blank to keep current password';
+        document.getElementById('userPassword').value = ''; // Don't show hashed password
         document.getElementById('userRole').value = data.role;
         document.getElementById('userTitle').value = data.title || '';
         document.getElementById('userPhoneExt').value = data.phone_ext || '';
         document.getElementById('userEmail').value = data.email || '';
         document.getElementById('userStatus').value = data.status;
-
-        // Update signature preview
-        updateSignaturePreview();
 
         // Set permissions
         const permissions = data.permissions || {};
@@ -1190,7 +1221,11 @@
           cb.checked = emailPermissions.includes(cb.value);
         });
 
-        openModal(userId);
+        // Update signature preview
+        updateSignaturePreview();
+        
+        // Open the modal
+        document.getElementById('userModal').classList.add('active');
 
       } catch (error) {
         console.error('Error loading user:', error);
