@@ -19,13 +19,23 @@
   // Check if user has a specific permission
   function hasPermission(permissionKey) {
     const permissions = getUserPermissions();
+    
+    // Debug logging
+    console.log('🔍 Checking permission:', permissionKey);
+    console.log('📋 User permissions:', permissions);
+    
     if (!permissions) {
       // If no permissions found, check if user is main admin
       const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
       const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
-      return ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+      const isAdmin = ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+      console.log('⚠️ No permissions object found, checking if main admin:', isAdmin);
+      return isAdmin;
     }
-    return permissions[permissionKey] === true;
+    
+    const hasAccess = permissions[permissionKey] === true;
+    console.log(`${hasAccess ? '✅' : '❌'} Permission "${permissionKey}":`, hasAccess);
+    return hasAccess;
   }
 
   // Check if user is main admin
@@ -96,8 +106,17 @@
     ];
 
     // Filter menu items based on permissions
+    console.log('🔧 Filtering menu items...');
     const navItemsHTML = menuItems
-      .filter(item => !item.permission || hasPermission(item.permission) || isMainAdmin())
+      .filter(item => {
+        if (!item.permission) {
+          console.log(`✅ ${item.text}: Always visible (no permission required)`);
+          return true;
+        }
+        const hasAccess = hasPermission(item.permission) || isMainAdmin();
+        console.log(`${hasAccess ? '✅' : '❌'} ${item.text}: ${hasAccess ? 'VISIBLE' : 'HIDDEN'} (requires: ${item.permission})`);
+        return hasAccess;
+      })
       .map(item => `
         <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}">
           <span class="icon">${item.icon}</span>
