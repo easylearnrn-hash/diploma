@@ -1487,6 +1487,78 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       return departmentMap[email] || 'ACNHS';
     }
+    
+    // Generate department-specific signature with user attention
+    function generateDepartmentSignature(senderEmail, userInfo) {
+      const userName = userInfo?.name || sessionStorage.getItem('userName') || 'Staff Member';
+      const userPhoneExt = userInfo?.phone_ext || sessionStorage.getItem('userPhoneExt') || '';
+      
+      // Check if it's a personal email
+      const isPersonal = senderEmail.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
+      
+      // Department names (uppercase for signature)
+      const departmentNames = {
+        'admissions@acnhs.am': 'ADMISSIONS',
+        'info@acnhs.am': 'INFORMATION OFFICE',
+        'documents@acnhs.am': 'DOCUMENTS DEPARTMENT',
+        'international@acnhs.am': 'INTERNATIONAL RELATIONS',
+        'registrar@acnhs.am': 'REGISTRAR OFFICE',
+        'finance@acnhs.am': 'FINANCE DEPARTMENT',
+        'ceo@acnhs.am': 'OFFICE OF THE CEO',
+        'dean@acnhs.am': 'DEAN\'S OFFICE',
+        'academic@acnhs.am': 'ACADEMIC AFFAIRS',
+        'student-services@acnhs.am': 'STUDENT SERVICES',
+        'legal@acnhs.am': 'LEGAL DEPARTMENT',
+        'hr@acnhs.am': 'HUMAN RESOURCES',
+        'it@acnhs.am': 'IT SUPPORT',
+        'library@acnhs.am': 'LIBRARY SERVICES',
+        'alumni@acnhs.am': 'ALUMNI RELATIONS',
+        'research@acnhs.am': 'RESEARCH DEPARTMENT',
+        'do-not-reply@acnhs.am': 'AUTOMATED SYSTEM'
+      };
+      
+      const departmentName = departmentNames[senderEmail] || 'ADMINISTRATION';
+      
+      // Build signature HTML
+      let signatureHtml = '<table style="border:none;padding:0;margin:0;line-height:1.3;font-family:Arial,sans-serif;">';
+      signatureHtml += '<tr><td style="padding:2px 8px 2px 2px;vertical-align:middle;">';
+      signatureHtml += '<img src="https://acnhs.am/assets/images/Seal.png" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">';
+      signatureHtml += '</td><td style="padding:2px;vertical-align:middle;">';
+      
+      if (isPersonal) {
+        // Personal email signature
+        signatureHtml += `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${userName}</div>`;
+        if (userInfo?.title) {
+          signatureHtml += `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${userInfo.title}</div>`;
+        }
+      } else {
+        // Departmental email signature with user name and "Attention"
+        signatureHtml += `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${userName}</div>`;
+        signatureHtml += `<div style="font-size:13px;font-weight:700;color:#2563eb;margin-bottom:4px;">${departmentName}</div>`;
+      }
+      
+      signatureHtml += '<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing & Health Sciences</div>';
+      signatureHtml += '<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>';
+      
+      // Contact info
+      const phoneDisplay = userPhoneExt ? `+374 93 798879 ext ${userPhoneExt}` : '+374 93 798879';
+      signatureHtml += `<div style="font-size:11px;color:#64748b;margin-bottom:2px;">T: ${phoneDisplay}</div>`;
+      
+      // Email(s)
+      if (isPersonal) {
+        signatureHtml += `<div style="font-size:11px;color:#2563eb;">E: ${senderEmail}</div>`;
+      } else {
+        // Show both personal and departmental email
+        const personalEmail = userName.split(' ').map((n, i) => i === 0 ? n.charAt(0).toLowerCase() : n.toLowerCase()).join('.') + '@acnhs.am';
+        signatureHtml += `<div style="font-size:11px;color:#2563eb;margin-bottom:1px;">E: ${personalEmail}</div>`;
+        signatureHtml += `<div style="font-size:11px;color:#2563eb;margin-bottom:1px;">E: ${senderEmail} <span style="font-style:italic;color:#64748b;">(Attention: ${userName})</span></div>`;
+      }
+      
+      signatureHtml += '<div style="font-size:11px;color:#2563eb;margin-top:2px;">W: www.acnhs.am</div>';
+      signatureHtml += '</td></tr></table>';
+      
+      return signatureHtml;
+    }
 
     // Initialize
     document.addEventListener('DOMContentLoaded', async function() {
@@ -2303,21 +2375,11 @@ ${email.body}`;
         // Get selected sender email
         const senderEmail = document.getElementById('senderEmail').value;
         
-        // Get current user info including signature
+        // Get current user info
         const userInfo = await getCurrentUserInfo();
-        let userSignatureHtml = '';
         
-        if (userInfo && userInfo.signature) {
-          // Convert plain text signature to HTML (signature is stored as HTML from admin-users.html)
-          userSignatureHtml = userInfo.signature;
-        } else {
-          // Fallback signature if user info not found
-          userSignatureHtml = `
-            <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f172a;font-weight:900;">ACNHS Team</div>
-            <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#475569;font-weight:700;">Armenian College of Nursing & Health Sciences</div>
-            <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:6px;">+374 93 798879 • info@acnhs.am</div>
-          `;
-        }
+        // Generate department-specific signature based on sender email
+        const userSignatureHtml = generateDepartmentSignature(senderEmail, userInfo);
         
         // Get department name for "from" field
         const fromName = getDepartmentName(senderEmail);
