@@ -5,6 +5,10 @@ CREATE TABLE IF NOT EXISTS admin_users (
   username TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL,
+  title TEXT NOT NULL,
+  phone_ext TEXT NOT NULL,
+  email TEXT NOT NULL,
+  signature TEXT NOT NULL,
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
   permissions JSONB DEFAULT '{}'::jsonb,
   email_permissions TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -19,8 +23,17 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_username ON admin_users(username);
 -- Create index on status
 CREATE INDEX IF NOT EXISTS idx_admin_users_status ON admin_users(status);
 
+-- Create index on email
+CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);
+
 -- Enable RLS
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
+
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "Enable read access for authenticated users" ON admin_users;
+DROP POLICY IF EXISTS "Enable insert for authenticated users" ON admin_users;
+DROP POLICY IF EXISTS "Enable update for authenticated users" ON admin_users;
+DROP POLICY IF EXISTS "Enable delete for authenticated users" ON admin_users;
 
 -- Create policies for admin_users table
 -- Only authenticated users can read

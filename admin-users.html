@@ -477,7 +477,41 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label">Email Addresses</label>
+            <label class="form-label">Job Title</label>
+            <input type="text" class="form-input" id="userTitle" placeholder="e.g. Senior Accountant, Admissions Officer" required>
+            <p class="form-help">This will appear in their email signature</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Phone Extension</label>
+            <input type="text" class="form-input" id="userPhoneExt" placeholder="e.g. 101, 102" required>
+            <p class="form-help">Direct phone extension for this user</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="userEmail" placeholder="e.g. john@acnhs.am" required>
+            <p class="form-help">Primary email address for this user</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Signature Preview</label>
+            <div id="signaturePreview" style="
+              padding: 12px;
+              background: #f8f9fa;
+              border: 1px solid #dee2e6;
+              border-radius: 4px;
+              font-family: Arial, sans-serif;
+              font-size: 0.9em;
+              color: #495057;
+              white-space: pre-line;
+              line-height: 1.6;
+            ">Signature will be generated automatically</div>
+            <p class="form-help">Auto-generated from name, title, phone, and email</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Sending Permissions (Select Multiple)</label>
             <div class="checkbox-group" id="emailPermissions">
               <!-- Email addresses will be loaded here -->
             </div>
@@ -551,6 +585,52 @@
       document.getElementById('closeModalBtn').addEventListener('click', closeModal);
       document.getElementById('cancelBtn').addEventListener('click', closeModal);
       document.getElementById('saveUserBtn').addEventListener('click', saveUser);
+      
+      // Auto-update signature preview when fields change
+      const signatureFields = ['userName', 'userTitle', 'userPhoneExt', 'userEmail'];
+      signatureFields.forEach(fieldId => {
+        document.getElementById(fieldId).addEventListener('input', updateSignaturePreview);
+      });
+    }
+
+    function updateSignaturePreview() {
+      const name = document.getElementById('userName').value.trim();
+      const title = document.getElementById('userTitle').value.trim();
+      const phoneExt = document.getElementById('userPhoneExt').value.trim();
+      const email = document.getElementById('userEmail').value.trim();
+
+      let signature = '';
+      if (name || title || phoneExt || email) {
+        signature = generateSignature(name, title, phoneExt, email);
+      } else {
+        signature = 'Fill in the fields above to see signature preview';
+      }
+
+      document.getElementById('signaturePreview').textContent = signature;
+    }
+
+    function generateSignature(name, title, phoneExt, email) {
+      const companyName = 'Armenian College of Nursing & Health Sciences';
+      const mainPhone = '+374 93 798879';
+      const website = 'www.acnhs.am';
+
+      let signature = '';
+      
+      if (name) signature += `${name}\n`;
+      if (title) signature += `${title}\n`;
+      signature += `${companyName}\n`;
+      signature += `\n`;
+      
+      if (phoneExt) {
+        signature += `📞 ${mainPhone} ext. ${phoneExt}\n`;
+      } else {
+        signature += `📞 ${mainPhone}\n`;
+      }
+      
+      if (email) signature += `📧 ${email}\n`;
+      signature += `🌐 ${website}`;
+
+      return signature;
     }
 
     function openModal(userId = null) {
@@ -565,6 +645,8 @@
         document.querySelectorAll('.email-checkbox').forEach(cb => cb.checked = false);
         // Uncheck all permissions
         document.querySelectorAll('[id^="perm"]').forEach(cb => cb.checked = false);
+        // Reset signature preview
+        document.getElementById('signaturePreview').textContent = 'Fill in the fields above to see signature preview';
       }
       
       document.getElementById('userModal').classList.add('active');
@@ -672,6 +754,7 @@
                 <div class="user-info">
                   <h3>${user.name}</h3>
                   <div class="user-role">${user.role}</div>
+                  ${user.title ? `<div class="user-title" style="font-size: 0.85em; color: #888; margin-top: 4px;">${user.title}</div>` : ''}
                 </div>
               </div>
               
@@ -681,15 +764,29 @@
                   <span class="detail-value">@${user.username}</span>
                 </div>
                 <div class="detail-row">
+                  <span class="detail-label">Email</span>
+                  <span class="detail-value">${user.email || 'N/A'}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Phone</span>
+                  <span class="detail-value">+374 93 798879 ext. ${user.phone_ext || 'N/A'}</span>
+                </div>
+                <div class="detail-row">
                   <span class="detail-label">Status</span>
                   <span class="status-badge ${user.status === 'active' ? 'status-active' : 'status-inactive'}">
                     ${user.status === 'active' ? '● Active' : '● Inactive'}
                   </span>
                 </div>
                 <div class="detail-row">
-                  <span class="detail-label">Email Access</span>
+                  <span class="detail-label">Email Sending Access</span>
                   <span class="detail-value">${emailPermissions.length} address(es)</span>
                 </div>
+                ${user.signature ? `
+                <div class="detail-row" style="flex-direction: column; align-items: flex-start; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e9ecef;">
+                  <span class="detail-label" style="margin-bottom: 6px; font-weight: 600;">Email Signature:</span>
+                  <span class="detail-value" style="font-size: 0.85em; color: #666; white-space: pre-line; line-height: 1.5; font-family: Arial, sans-serif;">${user.signature}</span>
+                </div>
+                ` : ''}
               </div>
 
               <div class="user-permissions">
@@ -723,9 +820,12 @@
         const username = document.getElementById('userUsername').value.trim().toLowerCase();
         const password = document.getElementById('userPassword').value;
         const role = document.getElementById('userRole').value.trim();
+        const title = document.getElementById('userTitle').value.trim();
+        const phoneExt = document.getElementById('userPhoneExt').value.trim();
+        const email = document.getElementById('userEmail').value.trim();
         const status = document.getElementById('userStatus').value;
 
-        if (!name || !username || !password || !role) {
+        if (!name || !username || !password || !role || !title || !phoneExt || !email) {
           alert('Please fill in all required fields');
           return;
         }
@@ -739,6 +839,11 @@
         const emailCheckboxes = document.querySelectorAll('.email-checkbox:checked');
         const emailPermissions = Array.from(emailCheckboxes).map(cb => cb.value);
 
+        if (emailPermissions.length === 0) {
+          alert('Please select at least one email address');
+          return;
+        }
+
         // Get permissions
         const permissions = {
           view_applications: document.getElementById('permViewApplications').checked,
@@ -748,11 +853,18 @@
           manage_users: document.getElementById('permManageUsers').checked
         };
 
+        // Auto-generate signature
+        const autoSignature = generateSignature(name, title, phoneExt, email);
+
         const userData = {
           name,
           username,
           password_hash: password, // In production, this should be hashed
           role,
+          title,
+          phone_ext: phoneExt,
+          email: email,
+          signature: autoSignature,
           status,
           permissions,
           email_permissions: emailPermissions
@@ -808,7 +920,13 @@
         document.getElementById('userUsername').value = data.username;
         document.getElementById('userPassword').value = data.password_hash; // Show password
         document.getElementById('userRole').value = data.role;
+        document.getElementById('userTitle').value = data.title || '';
+        document.getElementById('userPhoneExt').value = data.phone_ext || '';
+        document.getElementById('userEmail').value = data.email || '';
         document.getElementById('userStatus').value = data.status;
+
+        // Update signature preview
+        updateSignaturePreview();
 
         // Set permissions
         const permissions = data.permissions || {};
