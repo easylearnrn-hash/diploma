@@ -1,15 +1,109 @@
 // Admin Sidebar Navigation Component
 // Include this script in all admin pages
-// Updated: 2026-01-11 - Email System Link Fixed
+// Updated: 2026-01-12 - Added Permission-Based Access Control
 
 (function() {
   'use strict';
+
+  // Get user permissions from localStorage/sessionStorage
+  function getUserPermissions() {
+    try {
+      const permissionsStr = sessionStorage.getItem('userPermissions') || localStorage.getItem('userPermissions');
+      return permissionsStr ? JSON.parse(permissionsStr) : null;
+    } catch (e) {
+      console.error('Error parsing permissions:', e);
+      return null;
+    }
+  }
+
+  // Check if user has a specific permission
+  function hasPermission(permissionKey) {
+    const permissions = getUserPermissions();
+    if (!permissions) {
+      // If no permissions found, check if user is main admin
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+      return ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+    }
+    return permissions[permissionKey] === true;
+  }
+
+  // Check if user is main admin
+  function isMainAdmin() {
+    const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+    const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+    return ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+  }
 
   // Create sidebar HTML
   function createAdminSidebar() {
     const currentPage = window.location.pathname.split('/').pop();
     const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || 'Admin';
-    const initials = userEmail.charAt(0).toUpperCase();
+    const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName') || userEmail;
+    const userRole = sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || 'Administrator';
+    const initials = userName.split(' ').map(n => n.charAt(0)).join('').toUpperCase().slice(0, 2);
+
+    // Define menu items with their required permissions
+    const menuItems = [
+      { 
+        href: 'admin-home.html', 
+        icon: '🏠', 
+        text: 'Dashboard', 
+        permission: null // Always visible
+      },
+      { 
+        href: 'admin-applications.html', 
+        icon: '📋', 
+        text: 'Applications', 
+        permission: 'view_applications'
+      },
+      { 
+        href: 'email-system.html', 
+        icon: '💬', 
+        text: 'Email System', 
+        permission: 'send_emails'
+      },
+      { 
+        href: 'verify-transcript.html', 
+        icon: '✓', 
+        text: 'Verification', 
+        permission: 'view_applications' // Same as applications
+      },
+      { 
+        href: 'help-handbook.html', 
+        icon: '📖', 
+        text: 'Students', 
+        permission: 'view_applications'
+      },
+      { 
+        href: 'admin-users.html', 
+        icon: '👥', 
+        text: 'User Management', 
+        permission: 'manage_users'
+      },
+      { 
+        href: 'help-grading.html', 
+        icon: '📊', 
+        text: 'Grading Calc', 
+        permission: 'view_reports'
+      },
+      { 
+        href: 'help-appeals.html', 
+        icon: '⚖️', 
+        text: 'Appeals', 
+        permission: 'edit_applications'
+      }
+    ];
+
+    // Filter menu items based on permissions
+    const navItemsHTML = menuItems
+      .filter(item => !item.permission || hasPermission(item.permission) || isMainAdmin())
+      .map(item => `
+        <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}">
+          <span class="icon">${item.icon}</span>
+          <span class="text">${item.text}</span>
+        </a>
+      `).join('');
 
     const sidebarHTML = `
       <!-- Mobile Menu Button -->
@@ -28,53 +122,15 @@
         </div>
         
         <nav class="sidebar-nav">
-          <a href="admin-home.html" class="nav-item ${currentPage === 'admin-home.html' ? 'active' : ''}" data-tooltip="Dashboard">
-            <span class="icon">🏠</span>
-            <span class="text">Dashboard</span>
-          </a>
-          
-          <a href="admin-applications.html" class="nav-item ${currentPage === 'admin-applications.html' ? 'active' : ''}" data-tooltip="Applications">
-            <span class="icon">📋</span>
-            <span class="text">Applications</span>
-          </a>
-          
-          <a href="email-system.html" class="nav-item ${currentPage === 'email-system.html' ? 'active' : ''}" data-tooltip="Email System">
-            <span class="icon">💬</span>
-            <span class="text">Email System</span>
-          </a>
-          
-          <a href="verify-transcript.html" class="nav-item ${currentPage === 'verify-transcript.html' ? 'active' : ''}" data-tooltip="Verification">
-            <span class="icon">✓</span>
-            <span class="text">Verification</span>
-          </a>
-          
-          <a href="help-handbook.html" class="nav-item ${currentPage === 'help-handbook.html' ? 'active' : ''}" data-tooltip="Students">
-            <span class="icon">📖</span>
-            <span class="text">Students</span>
-          </a>
-          
-          <a href="admin-users.html" class="nav-item ${currentPage === 'admin-users.html' ? 'active' : ''}" data-tooltip="User Management">
-            <span class="icon">👥</span>
-            <span class="text">User Management</span>
-          </a>
-          
-          <a href="help-grading.html" class="nav-item ${currentPage === 'help-grading.html' ? 'active' : ''}" data-tooltip="Grading Calc">
-            <span class="icon">📊</span>
-            <span class="text">Grading Calc</span>
-          </a>
-          
-          <a href="help-appeals.html" class="nav-item ${currentPage === 'help-appeals.html' ? 'active' : ''}" data-tooltip="Appeals">
-            <span class="icon">⚖️</span>
-            <span class="text">Appeals</span>
-          </a>
+          ${navItemsHTML}
         </nav>
         
         <div class="sidebar-footer">
           <div class="admin-info">
             <div class="admin-avatar">${initials}</div>
             <div class="admin-details">
-              <div class="name">${userEmail}</div>
-              <div class="role">Administrator</div>
+              <div class="name">${userName}</div>
+              <div class="role">${userRole}</div>
             </div>
           </div>
           <button class="logout-btn" id="adminLogoutBtn">

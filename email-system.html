@@ -968,6 +968,7 @@
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/permission-check.js"></script>
   <script src="js/admin-sidebar.js"></script>
   
   <script>
@@ -1615,15 +1616,31 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     async function loadEmailHistory() {
       showLoading(true);
       try {
+        // Get user's allowed email addresses
+        const userAllowedEmails = getUserAllowedEmails();
+        
         const { data: emails, error } = await db
           .from('email_history')
           .select('*')
           .order('sent_at', { ascending: false })
-          .limit(100);
+          .limit(500);
 
         if (error) throw error;
 
-        emailHistory = emails || [];
+        // Filter emails based on user permissions
+        if (!window.isMainAdmin || !isMainAdmin()) {
+          // Non-admin users: only see emails sent TO or FROM their allowed addresses
+          emailHistory = (emails || []).filter(email => {
+            const recipientMatch = userAllowedEmails.includes(email.recipient?.toLowerCase());
+            const senderMatch = userAllowedEmails.includes(email.sender?.toLowerCase());
+            return recipientMatch || senderMatch;
+          });
+          console.log(`📧 Filtered emails: ${emailHistory.length} of ${emails?.length || 0} (allowed: ${userAllowedEmails.join(', ')})`);
+        } else {
+          // Main admin sees all emails
+          emailHistory = emails || [];
+        }
+        
         renderEmailList();
         updateBadge();
       } catch (error) {
@@ -1632,6 +1649,67 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       } finally {
         showLoading(false);
       }
+    }
+    
+    // Get user's allowed email addresses based on permissions
+    function getUserAllowedEmails() {
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
+      
+      let allowedEmails = [];
+      
+      // Add personal email (firstname initial + lastname @acnhs.am)
+      if (userName) {
+        const nameParts = userName.trim().split(' ');
+        if (nameParts.length >= 2) {
+          const firstInitial = nameParts[0].charAt(0).toLowerCase();
+          const lastName = nameParts[nameParts.length - 1].toLowerCase();
+          const personalEmail = `${firstInitial}.${lastName}@acnhs.am`;
+          allowedEmails.push(personalEmail);
+        }
+      }
+      
+      // Get email permissions from user's account
+      try {
+        const permissionsStr = sessionStorage.getItem('userPermissions') || localStorage.getItem('userPermissions');
+        if (permissionsStr) {
+          const permissions = JSON.parse(permissionsStr);
+          if (permissions.email_permissions && Array.isArray(permissions.email_permissions)) {
+            // Add departmental emails from permissions
+            permissions.email_permissions.forEach(emailId => {
+              if (emailId.includes('@')) {
+                // Already a full email address
+                allowedEmails.push(emailId.toLowerCase());
+              } else {
+                // Convert ID to email (e.g., 'admissions' -> 'admissions@acnhs.am')
+                allowedEmails.push(emailId.replace('_', '.') + '@acnhs.am');
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing email permissions:', e);
+      }
+      
+      // Also check for email_permissions directly in localStorage
+      try {
+        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
+        if (emailPermsStr) {
+          const emailPerms = JSON.parse(emailPermsStr);
+          if (Array.isArray(emailPerms)) {
+            emailPerms.forEach(emailId => {
+              const email = emailId.includes('@') ? emailId : emailId.replace('_', '.') + '@acnhs.am';
+              if (!allowedEmails.includes(email.toLowerCase())) {
+                allowedEmails.push(email.toLowerCase());
+              }
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Error parsing email permissions (alt):', e);
+      }
+      
+      return allowedEmails;
     }
 
     function escapeHtml(text) {
@@ -2028,8 +2106,65 @@ ${email.body}`;
     }
 
     function openComposeModal() {
+      // Populate sender dropdown with user's allowed emails
+      populateSenderDropdown();
+      
       document.getElementById('composeModal').classList.add('active');
       updatePreview();
+    }
+    
+    function populateSenderDropdown() {
+      const senderSelect = document.getElementById('senderEmail');
+      const userAllowedEmails = getUserAllowedEmails();
+      
+      // Email labels mapping
+      const emailLabels = {
+        'admissions@acnhs.am': '📧 ACNHS Admissions',
+        'info@acnhs.am': 'ℹ️ ACNHS Office',
+        'documents@acnhs.am': '📄 ACNHS Documents',
+        'international@acnhs.am': '🌍 ACNHS International Relations',
+        'registrar@acnhs.am': '📋 ACNHS Registrar',
+        'finance@acnhs.am': '💰 ACNHS Finance',
+        'ceo@acnhs.am': '👔 ACNHS CEO',
+        'dean@acnhs.am': '🎓 ACNHS Dean',
+        'academic@acnhs.am': '📚 ACNHS Academic Affairs',
+        'student-services@acnhs.am': '🎓 ACNHS Student Services',
+        'legal@acnhs.am': '⚖️ ACNHS Legal',
+        'hr@acnhs.am': '👥 ACNHS Human Resources',
+        'it@acnhs.am': '💻 ACNHS IT Support',
+        'library@acnhs.am': '📖 ACNHS Library',
+        'alumni@acnhs.am': '🎓 ACNHS Alumni Relations',
+        'research@acnhs.am': '🔬 ACNHS Research',
+        'do-not-reply@acnhs.am': '🚫 ACNHS No Reply (No replies)'
+      };
+      
+      // Clear existing options
+      senderSelect.innerHTML = '';
+      
+      // Add allowed emails as options
+      if (userAllowedEmails.length === 0) {
+        senderSelect.innerHTML = '<option value="">No email addresses available</option>';
+        senderSelect.disabled = true;
+        return;
+      }
+      
+      userAllowedEmails.forEach(email => {
+        const option = document.createElement('option');
+        option.value = email;
+        
+        // Check if it's a personal email (format: x.lastname@acnhs.am)
+        const isPersonal = email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
+        
+        if (isPersonal) {
+          option.textContent = `👤 Personal - ${email}`;
+        } else {
+          option.textContent = `${emailLabels[email] || '📧 ACNHS'} - ${email}`;
+        }
+        
+        senderSelect.appendChild(option);
+      });
+      
+      senderSelect.disabled = false;
     }
 
     function closeComposeModal() {
