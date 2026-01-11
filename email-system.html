@@ -1731,20 +1731,17 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }
       }
       
-      // Get email permissions from user's account
+      // Get email permissions from userEmailPermissions (stored separately during login)
       try {
-        const permissionsStr = sessionStorage.getItem('userPermissions') || localStorage.getItem('userPermissions');
-        if (permissionsStr) {
-          const permissions = JSON.parse(permissionsStr);
-          if (permissions.email_permissions && Array.isArray(permissions.email_permissions)) {
-            // Add departmental emails from permissions
-            permissions.email_permissions.forEach(emailId => {
-              if (emailId.includes('@')) {
-                // Already a full email address
-                allowedEmails.push(emailId.toLowerCase());
-              } else {
-                // Convert ID to email (e.g., 'admissions' -> 'admissions@acnhs.am')
-                allowedEmails.push(emailId.replace('_', '.') + '@acnhs.am');
+        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
+        if (emailPermsStr) {
+          const emailPerms = JSON.parse(emailPermsStr);
+          if (Array.isArray(emailPerms)) {
+            emailPerms.forEach(email => {
+              // Email is already in full format from database (e.g., 'admissions@acnhs.am')
+              const lowerEmail = email.toLowerCase();
+              if (!allowedEmails.includes(lowerEmail)) {
+                allowedEmails.push(lowerEmail);
               }
             });
           }
@@ -1753,24 +1750,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         console.error('Error parsing email permissions:', e);
       }
       
-      // Also check for email_permissions directly in localStorage
-      try {
-        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
-        if (emailPermsStr) {
-          const emailPerms = JSON.parse(emailPermsStr);
-          if (Array.isArray(emailPerms)) {
-            emailPerms.forEach(emailId => {
-              const email = emailId.includes('@') ? emailId : emailId.replace('_', '.') + '@acnhs.am';
-              if (!allowedEmails.includes(email.toLowerCase())) {
-                allowedEmails.push(email.toLowerCase());
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing email permissions (alt):', e);
-      }
-      
+      console.log('📧 User allowed emails:', allowedEmails);
       return allowedEmails;
     }
 
