@@ -1082,32 +1082,59 @@
 
           if (error) throw error;
           
-          // Show updated message
+          // Show updated message - simplified
           let updateBodyHTML = `
             <div style="text-align: center; margin-bottom: 16px;">
-              <div style="font-size: 18px; font-weight: 700; color: var(--text);">${name}</div>
+              <div style="font-size: 18px; font-weight: 700; color: var(--text); margin-bottom: 12px;">${name}</div>
+            </div>
+            <div style="text-align: center; padding: 20px; background: var(--bg-secondary); border-radius: 12px; margin-bottom: 16px;">
+              <div style="font-size: 14px; color: var(--text); margin-bottom: 8px;">✅ User information has been updated successfully.</div>
+              <div style="font-size: 12px; color: var(--text-muted);">
+                <strong>Permissions:</strong> ${Object.values(permissions).filter(p => p).length} active<br>
+                <strong>Email Access:</strong> ${emailPermissions.length} ${emailPermissions.length === 1 ? 'address' : 'addresses'}
+              </div>
             </div>
           `;
           
-          if (personalEmail) {
+          // Check if we're editing the currently logged-in user
+          const currentUserId = sessionStorage.getItem('userId') || localStorage.getItem('userId');
+          const isEditingSelf = editingUserId === currentUserId;
+          
+          if (!isEditingSelf) {
             updateBodyHTML += `
-              <div style="background: rgba(45, 212, 191, 0.1); border-radius: 12px; padding: 16px; border: 1px solid rgba(45, 212, 191, 0.3);">
-                <div style="text-align: center;">
-                  <div style="font-size: 24px; margin-bottom: 8px;">📧</div>
-                  <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 4px;">Personal Email Created</div>
-                  <div style="font-size: 14px; font-weight: 600; color: #2dd4bf;">${personalEmail.email}</div>
+              <div style="text-align: center; padding: 16px; background: rgba(255, 193, 7, 0.1); border-radius: 12px; border: 1px solid rgba(255, 193, 7, 0.3);">
+                <div style="font-size: 13px; color: var(--text); margin-bottom: 6px;">
+                  ⚠️ <strong>Important:</strong> ${name} must log out and log back in to see these changes.
                 </div>
-              </div>
-            `;
-          } else {
-            updateBodyHTML += `
-              <div style="text-align: center; padding: 20px; background: var(--bg-secondary); border-radius: 12px;">
-                <div style="font-size: 14px; color: var(--text);">User information has been updated successfully.</div>
+                <div style="font-size: 11px; color: var(--text-muted);">
+                  Permission changes take effect on next login.
+                </div>
               </div>
             `;
           }
           
           showSuccessModal('User Updated Successfully!', updateBodyHTML);
+          
+          // If editing currently logged-in user, update their session permissions
+          if (isEditingSelf) {
+            // Update permissions in session for immediate effect
+            sessionStorage.setItem('userPermissions', JSON.stringify(permissions));
+            localStorage.setItem('userPermissions', JSON.stringify(permissions));
+            sessionStorage.setItem('userEmailPermissions', JSON.stringify(emailPermissions));
+            localStorage.setItem('userEmailPermissions', JSON.stringify(emailPermissions));
+            sessionStorage.setItem('userName', name);
+            localStorage.setItem('userName', name);
+            sessionStorage.setItem('userRole', role);
+            localStorage.setItem('userRole', role);
+            
+            console.log('✅ Updated session permissions for current user');
+            
+            // Show additional message
+            setTimeout(() => {
+              alert('Your permissions have been updated. The page will reload to apply changes.');
+              window.location.reload();
+            }, 1000);
+          }
         } else {
           // Create new user
           const { error } = await db
