@@ -2340,38 +2340,73 @@ ${email.body}`;
       const senderSelect = document.getElementById('senderEmail');
       const userAllowedEmails = getUserAllowedEmails();
       
-      // Email labels mapping
+      // Valid departmental emails - only these should appear
+      const validDepartmentalEmails = [
+        'admissions@acnhs.am',
+        'info@acnhs.am',
+        'documents@acnhs.am',
+        'international@acnhs.am',
+        'registrar@acnhs.am',
+        'finance@acnhs.am',
+        'ceo@acnhs.am',
+        'dean@acnhs.am',
+        'academic@acnhs.am',
+        'student-services@acnhs.am',
+        'legal@acnhs.am',
+        'hr@acnhs.am',
+        'it@acnhs.am',
+        'library@acnhs.am',
+        'alumni@acnhs.am',
+        'research@acnhs.am',
+        'do-not-reply@acnhs.am'
+      ];
+      
+      // Email labels mapping using officer titles
       const emailLabels = {
-        'admissions@acnhs.am': '📧 ACNHS Admissions',
-        'info@acnhs.am': 'ℹ️ ACNHS Office',
-        'documents@acnhs.am': '📄 ACNHS Documents',
-        'international@acnhs.am': '🌍 ACNHS International Relations',
-        'registrar@acnhs.am': '📋 ACNHS Registrar',
-        'finance@acnhs.am': '💰 ACNHS Finance',
-        'ceo@acnhs.am': '👔 ACNHS CEO',
-        'dean@acnhs.am': '🎓 ACNHS Dean',
-        'academic@acnhs.am': '📚 ACNHS Academic Affairs',
-        'student-services@acnhs.am': '🎓 ACNHS Student Services',
-        'legal@acnhs.am': '⚖️ ACNHS Legal',
-        'hr@acnhs.am': '👥 ACNHS Human Resources',
-        'it@acnhs.am': '💻 ACNHS IT Support',
-        'library@acnhs.am': '📖 ACNHS Library',
-        'alumni@acnhs.am': '🎓 ACNHS Alumni Relations',
-        'research@acnhs.am': '🔬 ACNHS Research',
-        'do-not-reply@acnhs.am': '🚫 ACNHS No Reply (No replies)'
+        'admissions@acnhs.am': 'Admissions Officer',
+        'info@acnhs.am': 'Administrative Officer',
+        'documents@acnhs.am': 'Records & Documentation Officer',
+        'international@acnhs.am': 'International Relations Officer',
+        'registrar@acnhs.am': 'Registrar',
+        'finance@acnhs.am': 'Finance Officer',
+        'ceo@acnhs.am': 'Chief Executive Officer',
+        'dean@acnhs.am': 'Dean',
+        'academic@acnhs.am': 'Academic Affairs Officer',
+        'student-services@acnhs.am': 'Student Services Officer',
+        'legal@acnhs.am': 'Legal Affairs Officer',
+        'hr@acnhs.am': 'Human Resources Officer',
+        'it@acnhs.am': 'Information Technology Officer',
+        'library@acnhs.am': 'Library & Academic Resources Officer',
+        'alumni@acnhs.am': 'Alumni Relations Officer',
+        'research@acnhs.am': 'Research Affairs Officer',
+        'do-not-reply@acnhs.am': 'Automated Notification System'
       };
       
       // Clear existing options
       senderSelect.innerHTML = '';
       
+      // Filter out invalid/malformed emails
+      const validEmails = userAllowedEmails.filter(email => {
+        // Must be a valid email format
+        if (!email || !email.includes('@acnhs.am')) return false;
+        
+        // Check if it's a valid personal email (x.lastname@acnhs.am) or departmental email
+        const isPersonal = email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
+        const isDepartmental = validDepartmentalEmails.includes(email.toLowerCase());
+        
+        return isPersonal || isDepartmental;
+      });
+      
+      console.log('🔍 Filtered emails:', validEmails, 'from', userAllowedEmails);
+      
       // Add allowed emails as options
-      if (userAllowedEmails.length === 0) {
+      if (validEmails.length === 0) {
         senderSelect.innerHTML = '<option value="">No email addresses available</option>';
         senderSelect.disabled = true;
         return;
       }
       
-      userAllowedEmails.forEach(email => {
+      validEmails.forEach(email => {
         const option = document.createElement('option');
         option.value = email;
         
@@ -2379,9 +2414,12 @@ ${email.body}`;
         const isPersonal = email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
         
         if (isPersonal) {
-          option.textContent = `👤 Personal - ${email}`;
+          // Get user's name for personal email label
+          const userName = sessionStorage.getItem('userName') || 'Personal';
+          option.textContent = `👤 ${userName} - ${email}`;
         } else {
-          option.textContent = `${emailLabels[email] || '📧 ACNHS'} - ${email}`;
+          // Use officer title for departmental emails
+          option.textContent = `${emailLabels[email] || 'ACNHS'} - ${email}`;
         }
         
         senderSelect.appendChild(option);
