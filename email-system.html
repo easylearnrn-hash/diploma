@@ -1430,22 +1430,52 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     async function getCurrentUserInfo() {
       try {
         const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+        const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
+        const userRole = sessionStorage.getItem('userRole') || localStorage.getItem('userRole');
+        const userTitle = sessionStorage.getItem('userTitle') || localStorage.getItem('userTitle');
+        const userPhoneExt = sessionStorage.getItem('userPhoneExt') || localStorage.getItem('userPhoneExt');
+        
         if (!userEmail) return null;
         
+        // Try to get from database first
         const { data, error } = await db
           .from('admin_users')
           .select('id, name, email, role, title, phone_ext, signature')
           .eq('email', userEmail)
-          .single();
+          .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows
         
-        if (error) {
-          console.error('Error fetching user info:', error);
-          return null;
+        if (data) {
+          return data;
         }
         
-        return data;
+        // If not found in database, create a fallback object from session storage
+        // This handles cases where admin user exists but not in admin_users table
+        if (userName) {
+          return {
+            name: userName,
+            email: userEmail,
+            role: userRole || 'Admin',
+            title: userTitle || '',
+            phone_ext: userPhoneExt || '',
+            signature: null // Will use generated signature
+          };
+        }
+        
+        return null;
       } catch (e) {
         console.error('Error in getCurrentUserInfo:', e);
+        // Return fallback from session if available
+        const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
+        if (userName) {
+          return {
+            name: userName,
+            email: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'),
+            role: sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || 'Admin',
+            title: sessionStorage.getItem('userTitle') || localStorage.getItem('userTitle') || '',
+            phone_ext: sessionStorage.getItem('userPhoneExt') || localStorage.getItem('userPhoneExt') || '',
+            signature: null
+          };
+        }
         return null;
       }
     }
