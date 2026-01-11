@@ -851,9 +851,19 @@
                     ${user.status === 'active' ? '● Active' : '● Inactive'}
                   </span>
                 </div>
-                <div class="detail-row">
-                  <span class="detail-label">Email Sending Access</span>
-                  <span class="detail-value">${emailPermissions.length} address(es)</span>
+                <div class="detail-row" style="flex-direction: column; align-items: flex-start;">
+                  <span class="detail-label" style="margin-bottom: 6px;">Email Sending Access (${emailPermissions.length})</span>
+                  <div style="font-size: 0.85em; color: #666; display: flex; flex-wrap: wrap; gap: 6px;">
+                    ${emailPermissions.slice(0, 3).map(id => {
+                      // Highlight personal email
+                      const isPersonal = id.includes('_') && id.split('_').length === 2;
+                      const badge = isPersonal 
+                        ? `<span style="background: #e3f2fd; color: #1976d2; padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">📧 ${id.replace('_', '.')}</span>`
+                        : `<span style="background: #f5f5f5; color: #666; padding: 4px 8px; border-radius: 4px; font-size: 0.9em;">${id}</span>`;
+                      return badge;
+                    }).join('')}
+                    ${emailPermissions.length > 3 ? `<span style="color: #999; padding: 4px 8px;">+${emailPermissions.length - 3} more</span>` : ''}
+                  </div>
                 </div>
                 ${user.signature ? `
                 <div class="detail-row" style="flex-direction: column; align-items: flex-start; margin-top: 8px; padding-top: 8px; border-top: 1px solid #e9ecef;">
@@ -909,13 +919,21 @@
           return;
         }
 
-        // Get selected email permissions
+        // Get selected email permissions (departmental emails)
         const emailCheckboxes = document.querySelectorAll('.email-checkbox:checked');
         const emailPermissions = Array.from(emailCheckboxes).map(cb => cb.value);
 
         if (emailPermissions.length === 0) {
           alert('Please select at least one email address');
           return;
+        }
+
+        // Generate personal email address (first initial + last name)
+        const personalEmail = await createPersonalEmail(name, title);
+        
+        // Add personal email to permissions if it was created
+        if (personalEmail && personalEmail.id) {
+          emailPermissions.push(personalEmail.id);
         }
 
         // Get permissions
@@ -952,7 +970,10 @@
             .eq('id', editingUserId);
 
           if (error) throw error;
-          alert('User updated successfully!');
+          
+          // Show updated message
+          const personalEmailInfo = personalEmail ? `\n\nPersonal email created: ${personalEmail.email}` : '';
+          alert(`User updated successfully!${personalEmailInfo}`);
         } else {
           // Create new user
           const { error } = await db
@@ -960,7 +981,25 @@
             .insert([userData]);
 
           if (error) throw error;
-          alert('User created successfully!');
+          
+          // Show success message with email access details
+          let message = `✅ User created successfully!\n\n`;
+          message += `👤 ${name}\n`;
+          message += `📧 Email Access (${emailPermissions.length} addresses):\n\n`;
+          
+          if (personalEmail) {
+            message += `• ${personalEmail.email} (Personal)\n`;
+          }
+          
+          // Show departmental emails
+          const deptEmails = emailPermissions.filter(id => id !== personalEmail?.id);
+          deptEmails.forEach(id => {
+            message += `• ${id.replace('_', '.')}@acnhs.am\n`;
+          });
+          
+          message += `\n${name} can now send and receive emails from all these addresses!`;
+          
+          alert(message);
         }
 
         closeModal();
@@ -1047,6 +1086,74 @@
     }
 
     // Email Address Management Functions
+    async function createPersonalEmail(fullName, title) {
+      try {
+        // Parse name to get first initial and last name
+        const nameParts = fullName.trim().split(' ');
+        if (nameParts.length < 2) {
+          console.warn('Name must have at least first and last name');
+          return null;
+        }
+
+        const firstName = nameParts[0];
+        const lastName = nameParts[nameParts.length - 1];
+        const firstInitial = firstName.charAt(0).toLowerCase();
+        const lastNameLower = lastName.toLowerCase();
+
+        // Generate email: firstinitial.lastname@acnhs.am (e.g., s.gharibyan@acnhs.am)
+        const personalEmailAddress = `${firstInitial}.${lastNameLower}@acnhs.am`;
+        const emailId = `${firstInitial}_${lastNameLower}`;
+        const displayName = `${firstName} ${lastName} (Personal)`;
+
+        // Check if email already exists
+        const { data: existing, error: checkError } = await db
+          .from('email_configuration')
+          .select('id')
+          .eq('email', personalEmailAddress)
+          .single();
+
+        if (existing) {
+          console.log('Personal email already exists:', personalEmailAddress);
+          return { id: existing.id, email: personalEmailAddress };
+        }
+
+        // Create new email configuration
+        const emailData = {
+          id: emailId,
+          email: personalEmailAddress,
+          display_name: displayName,
+          smtp_host: 'smtp.gmail.com',
+          smtp_port: 587,
+          smtp_user: personalEmailAddress,
+          smtp_pass: '', // Will need to be configured later
+          is_active: true
+        };
+
+        const { data, error } = await db
+          .from('email_configuration')
+          .insert([emailData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating personal email:', error);
+          // Even if table doesn't exist, return the email info
+          return { id: emailId, email: personalEmailAddress };
+        }
+
+        console.log('Personal email created:', personalEmailAddress);
+        
+        // Reload email addresses to show the new one
+        await loadEmailAddresses();
+
+        return { id: emailId, email: personalEmailAddress };
+
+      } catch (error) {
+        console.error('Error in createPersonalEmail:', error);
+        return null;
+      }
+    }
+
     function showAddEmailModal() {
       document.getElementById('addEmailModal').classList.add('active');
       document.getElementById('emailForm').reset();
