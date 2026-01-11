@@ -328,6 +328,56 @@ body{
   line-height:1.5;
 }
 
+/* STATUS HISTORY TIMELINE */
+.history-item{
+  position:relative;
+  padding-bottom:24px;
+  border-left:2px solid rgba(255,255,255,0.1);
+}
+
+.history-item:last-child{
+  border-left:2px solid transparent;
+  padding-bottom:0;
+}
+
+.history-dot{
+  position:absolute;
+  left:-6px;
+  top:2px;
+  width:10px;
+  height:10px;
+  border-radius:50%;
+  background:var(--accent);
+  border:2px solid var(--bg-darker);
+}
+
+.history-content{
+  margin-left:20px;
+}
+
+.history-content .history-status{
+  font-size:15px;
+  font-weight:600;
+  color:white;
+  margin-bottom:4px;
+}
+
+.history-content .history-date{
+  font-size:13px;
+  color:rgba(255,255,255,0.5);
+  margin-bottom:8px;
+}
+
+.history-content .history-message{
+  font-size:14px;
+  color:var(--text-light);
+  line-height:1.5;
+  padding:8px 12px;
+  background:rgba(255,255,255,0.05);
+  border-radius:8px;
+  border-left:3px solid var(--accent);
+}
+
 /* LOADING */
 .loading{
   text-align:center;
@@ -517,9 +567,20 @@ body{
           Required Documents
         </h3>
         <p style="color:rgba(255,255,255,0.8);margin-bottom:20px;line-height:1.6;">
-          Please submit the following documents to complete your application. You can upload them through your portal or email them to <strong style="color:var(--accent);">admissions@universitaria.edu</strong>
+          Please submit the following documents to complete your application. You can upload them through your portal or send them to <strong style="color:var(--accent);">documents@acnhs.am</strong>
         </p>
         <div class="doc-list"></div>
+      </div>
+      
+      <!-- Status History Section -->
+      <div id="statusHistorySection" style="display:none;margin-top:32px;background:rgba(26,41,66,0.4);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:24px;">
+        <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:24px;">📋</span>
+          Status History
+        </h3>
+        <div id="statusHistoryTimeline" style="position:relative;padding-left:32px;">
+          <!-- Timeline will be populated here -->
+        </div>
       </div>
       
       <!-- Application Timeline -->
@@ -560,13 +621,64 @@ body{
       <p style="color:var(--text-light);font-size:15px;margin-bottom:20px;">
         If you have questions about your application status or need to provide additional information, please contact our admissions office.
       </p>
-      <a href="mailto:admissions@acnhs.edu" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:#022c22;text-decoration:none;border-radius:12px;font-weight:600;transition:all 0.3s;">
+      <button id="contactAdmissionsBtn" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--accent);color:#022c22;text-decoration:none;border-radius:12px;font-weight:600;transition:all 0.3s;border:none;cursor:pointer;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 8px 16px rgba(45,212,191,0.3)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
         <span>✉️</span> Contact Admissions
-      </a>
+      </button>
     </div>
     
   </div>
   
+</div>
+
+<!-- Contact Admissions Modal -->
+<div id="contactModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.8);z-index:10000;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:#0b1629;border:1px solid rgba(45,212,191,0.3);border-radius:16px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;padding:32px;position:relative;">
+    <button id="closeModalBtn" style="position:absolute;top:16px;right:16px;background:transparent;border:none;color:rgba(255,255,255,0.6);font-size:24px;cursor:pointer;padding:4px 8px;transition:color 0.2s;" onmouseover="this.style.color='white'" onmouseout="this.style.color='rgba(255,255,255,0.6)'">&times;</button>
+    
+    <h2 style="font-size:24px;font-weight:700;margin-bottom:24px;color:white;">Contact Admissions</h2>
+    
+    <form id="contactForm" style="display:flex;flex-direction:column;gap:20px;">
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">From (Your Email)</label>
+        <input type="email" id="fromEmail" readonly style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.6);font-size:14px;" />
+      </div>
+      
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">To</label>
+        <input type="email" value="student-services@acnhs.am" readonly style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.6);font-size:14px;" />
+      </div>
+      
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">Name</label>
+        <input type="text" id="studentName" readonly style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:rgba(255,255,255,0.6);font-size:14px;" />
+      </div>
+      
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">Application Details</label>
+        <div style="background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;padding:12px;font-size:13px;color:var(--text-light);line-height:1.8;">
+          <div><strong>REF:</strong> <span id="refNumber"></span></div>
+          <div><strong>CTRL:</strong> <span id="ctrlNumber"></span></div>
+          <div><strong>DOC ID:</strong> <span id="docId"></span></div>
+          <div><strong>HASH:</strong> <span id="hashValue"></span></div>
+        </div>
+      </div>
+      
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">Subject</label>
+        <input type="text" id="emailSubject" required style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:white;font-size:14px;" placeholder="Enter email subject" />
+      </div>
+      
+      <div>
+        <label style="display:block;color:var(--text-light);font-size:14px;margin-bottom:8px;">Message</label>
+        <textarea id="emailMessage" required rows="6" style="width:100%;padding:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:white;font-size:14px;resize:vertical;" placeholder="Enter your message..."></textarea>
+      </div>
+      
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <button type="button" id="cancelBtn" style="padding:12px 24px;background:rgba(255,255,255,0.1);color:white;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">Cancel</button>
+        <button type="submit" style="padding:12px 24px;background:var(--accent);color:#022c22;border:none;border-radius:8px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.transform='scale(1.05)';this.style.boxShadow='0 4px 12px rgba(45,212,191,0.4)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'">Send Email</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -636,6 +748,24 @@ const STATUS_INFO = {
   }
 };
 
+// Storage bucket and application context
+const STORAGE_BUCKET = 'application-documents';
+let currentApplication = null; // will hold the loaded application object
+
+// Document explanations for students
+const DOCUMENT_EXPLANATIONS = {
+  'Updated Transcript': 'An official transcript from your previous educational institution showing your most recent grades and courses.',
+  'English Proficiency Test (TOEFL/IELTS)': 'Official test results proving English language proficiency. TOEFL score of 80+ or IELTS score of 6.5+ required.',
+  'Letter of Recommendation': 'A formal letter from a teacher, professor, or employer recommending you for admission.',
+  'Statement of Purpose': 'A written essay (500-1000 words) explaining your academic goals and why you want to study at ACNHS.',
+  'Passport Copy': 'A clear, colored photocopy or scan of your passport identification page.',
+  'Diploma/Degree Certificate': 'Official certificate showing completion of your previous degree or diploma program.',
+  'Financial Documents': 'Bank statements or financial guarantee letters proving you can cover tuition and living expenses.',
+  'Medical Records': 'Recent medical examination results and vaccination records as required by the nursing program.',
+  'Background Check': 'Official criminal background check or police clearance certificate from your country of residence.',
+  '3X4 Photo': 'A recent passport-style photograph (3cm x 4cm) with white background, front-facing, professional attire.'
+};
+
 // Check authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
   const isApplicationLogin = sessionStorage.getItem('isApplicationLogin') === 'true';
@@ -689,8 +819,9 @@ async function loadApplicationStatus() {
       throw new Error('Application not found');
     }
     
-    // Display application data
-    displayApplicationStatus(application);
+  // Display application data
+  currentApplication = application;
+  displayApplicationStatus(application);
     
     // Start automatic status polling
     startStatusPolling();
@@ -718,7 +849,6 @@ function displayApplicationStatus(application) {
   const statusBadge = document.getElementById('statusBadge');
   statusBadge.className = `status-badge ${statusInfo.className}`;
   statusBadge.innerHTML = `
-    <span class="status-icon">${statusInfo.icon}</span>
     <span id="statusText">${status}</span>
   `;
   
@@ -755,33 +885,235 @@ function displayApplicationStatus(application) {
   // Display requested documents if RFE
   displayRequestedDocuments(application.rfe_documents_requested || []);
   
+  // Display status history
+  displayStatusHistory(application.status_history || []);
+  
   // Update timeline dots
   updateTimeline(status);
+}
+
+// Display status history timeline
+function displayStatusHistory(statusHistory) {
+  const section = document.getElementById('statusHistorySection');
+  const timeline = document.getElementById('statusHistoryTimeline');
+  
+  if (!section || !timeline) return;
+  
+  // Hide if no history
+  if (!statusHistory || statusHistory.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+  
+  // Show section
+  section.style.display = 'block';
+  
+  // Sort by timestamp (oldest first) 
+  const sorted = [...statusHistory].sort((a, b) => {
+    const dateA = new Date(a.timestamp || a.created_at || a.changed_at || 0);
+    const dateB = new Date(b.timestamp || b.created_at || b.changed_at || 0);
+    return dateA - dateB;
+  });
+  
+  // Build timeline HTML
+  const historyHTML = sorted.map((entry, index) => {
+    const status = entry.status || 'Status Updated';
+    const timestamp = entry.timestamp || entry.created_at || entry.changed_at;
+    let message = entry.message || entry.notes || '';
+    
+    // If no message provided, use the default description from STATUS_INFO
+    if (!message && STATUS_INFO[status]) {
+      message = STATUS_INFO[status].description;
+    }
+    
+    // Format date for display next to status
+    const dateStr = timestamp ? new Date(timestamp).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    }) : '';
+    
+    const messageHTML = message ? `<div class="history-message">${message}</div>` : '';
+    
+    return `
+      <div class="history-item">
+        <div class="history-dot"></div>
+        <div class="history-content">
+          <div class="history-status">${status}${dateStr ? ` - ${dateStr}` : ''}</div>
+          ${messageHTML}
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  timeline.innerHTML = historyHTML;
 }
 
 // Display requested documents section
 function displayRequestedDocuments(documents) {
   const container = document.getElementById('requestedDocumentsContainer');
   if (!container) return;
-  
+
   if (!documents || documents.length === 0) {
     container.style.display = 'none';
     return;
   }
-  
+
   container.style.display = 'block';
   const docList = container.querySelector('.doc-list') || container;
-  
-  const docHTML = documents.map(doc => `
-    <div style="background:rgba(45,212,191,0.05);border-left:3px solid var(--accent);padding:12px 16px;border-radius:6px;margin-bottom:8px;">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:20px;">📎</span>
-        <span style="color:white;font-weight:500;">${doc}</span>
+
+  // Normalize documents to objects {key, name, explanation}
+  const docs = documents.map((d, idx) => {
+    if (typeof d === 'string') {
+      // Use predefined explanation if available, otherwise empty
+      const explanation = DOCUMENT_EXPLANATIONS[d] || '';
+      return { key: `doc_${idx}`, name: d, explanation: explanation };
+    }
+    // support object {name, explanation, key}
+    const explanation = d.explanation || DOCUMENT_EXPLANATIONS[d.name] || '';
+    return { key: d.key || `doc_${idx}`, name: d.name || d.title || `Document ${idx+1}`, explanation: explanation };
+  });
+
+  // Determine whether uploads should be enabled based on current status
+  const statusText = document.getElementById('statusText')?.textContent || '';
+  const uploadsEnabled = ['RFE SENT', 'ADDITIONAL DOCUMENTS REQUESTED', 'RFE PREPARING'].includes(statusText);
+
+  // Get already uploaded documents from application (if any)
+  const uploaded = (currentApplication && currentApplication.uploaded_documents) ? currentApplication.uploaded_documents : [];
+
+  const supabase = initSupabase();
+
+  const docHTML = docs.map(doc => {
+    // try find uploaded item
+    const found = uploaded.find(u => u.doc_name === doc.name || u.key === doc.key);
+    const uploadedLabel = found ? `<div style="margin-top:8px;color:var(--text-light);font-size:13px;"><strong>Uploaded:</strong> <a href="${found.public_url || '#'}" target="_blank" style="color:var(--accent)">View</a></div>` : '';
+
+    const explanationHTML = doc.explanation ? `<div style="color:var(--text-light);font-size:13px;margin-top:8px;">${doc.explanation}</div>` : '';
+
+    const uploadControls = uploadsEnabled ? `
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;justify-content:flex-end;">
+        <input type="file" id="file-input-${doc.key}" style="display:none" accept=".pdf,.jpg,.jpeg,.png" />
+        <button class="refresh-btn" id="select-btn-${doc.key}" style="padding:8px 12px;">${found ? found.filename : 'Choose File'}</button>
+        <button class="refresh-btn" id="upload-btn-${doc.key}" style="padding:8px 12px;">Upload</button>
       </div>
-    </div>
-  `).join('');
-  
+    ` : '';
+
+    return `
+      <div style="background:rgba(45,212,191,0.03);border-left:3px solid var(--accent);padding:12px 16px;border-radius:6px;margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:start;gap:12px;">
+          <div style="display:flex;align-items:center;gap:12px;flex:1;">
+            <span style="font-size:20px;">📎</span>
+            <div style="flex:1;">
+              <div style="color:white;font-weight:700;">${doc.name}</div>
+              ${explanationHTML}
+              ${uploadedLabel}
+            </div>
+          </div>
+          <div style="flex-shrink:0;">${uploadControls}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
   docList.innerHTML = docHTML;
+
+  // Wire up file inputs and upload buttons
+  docs.forEach(doc => {
+    const selectBtn = document.getElementById(`select-btn-${doc.key}`);
+    const fileInput = document.getElementById(`file-input-${doc.key}`);
+    const uploadBtn = document.getElementById(`upload-btn-${doc.key}`);
+
+    if (selectBtn && fileInput) {
+      selectBtn.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (f) selectBtn.textContent = f.name;
+      });
+    }
+
+    if (uploadBtn && fileInput) {
+      uploadBtn.addEventListener('click', async () => {
+        const f = fileInput.files && fileInput.files[0];
+        if (!f) {
+          showCustomAlert('⚠️ Please choose a file first.', 'info');
+          return;
+        }
+
+        try {
+          // Disable buttons while uploading
+          uploadBtn.disabled = true;
+          selectBtn.disabled = true;
+
+          const username = sessionStorage.getItem('applicationUsername');
+          const referenceNumber = sessionStorage.getItem('applicationReference');
+          if (!username || !referenceNumber) throw new Error('Session expired');
+
+          // Upload path: applications/<reference>/<timestamp>_<filename>
+          const timestamp = Date.now();
+          const sanitized = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `applications/${referenceNumber}/${timestamp}_${sanitized}`;
+
+          const { data: uploadData, error: uploadError } = await supabase.storage.from(STORAGE_BUCKET).upload(path, f, { upsert: false });
+          if (uploadError) throw uploadError;
+
+          // Get public url (requires bucket to be public)
+          const { data: urlData } = await supabase.storage.from(STORAGE_BUCKET).getPublicUrl(path);
+          const publicUrl = urlData?.publicUrl || '';
+
+          // Save metadata to application record
+          await saveUploadedDocumentToApplication({ docKey: doc.key, docName: doc.name, filename: f.name, path, public_url: publicUrl });
+
+          // Refresh UI
+          await refreshStatus();
+          showRefreshNotification('Document uploaded successfully', 'success');
+        } catch (err) {
+          console.error('Upload error', err);
+          showRefreshNotification('Upload failed: ' + (err.message || err.error || 'Unknown'), 'error');
+        } finally {
+          uploadBtn.disabled = false;
+          if (selectBtn) selectBtn.disabled = false;
+        }
+      });
+    }
+  });
+}
+
+// Save uploaded document metadata to the application record
+async function saveUploadedDocumentToApplication({ docKey, docName, filename, path, public_url }) {
+  try {
+    const supabase = initSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    if (!currentApplication) throw new Error('Application not loaded');
+
+    const existing = currentApplication.uploaded_documents || [];
+    // Append new entry
+    const newEntry = {
+      key: docKey,
+      doc_name: docName,
+      filename: filename,
+      path: path,
+      public_url: public_url,
+      uploaded_at: new Date().toISOString()
+    };
+
+    const updated = [...existing.filter(e => e.doc_name !== docName && e.key !== docKey), newEntry];
+
+    const { data, error } = await supabase
+      .from('applications')
+      .update({ uploaded_documents: updated })
+      .eq('id', currentApplication.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // Update local copy
+    currentApplication = data;
+    return data;
+  } catch (err) {
+    console.error('Error saving uploaded document metadata', err);
+    throw err;
+  }
 }
 
 // Update timeline based on status
@@ -827,7 +1159,6 @@ function logout() {
   sessionStorage.removeItem('applicationReference');
   sessionStorage.removeItem('applicantName');
   
-  alert('You have been logged out.');
   window.location.href = 'login.html';
 }
 
@@ -972,6 +1303,182 @@ window.addEventListener('beforeunload', () => {
     clearInterval(statusPollInterval);
   }
 });
+
+// Contact Admissions Modal Handler
+document.getElementById('contactAdmissionsBtn')?.addEventListener('click', () => {
+  const modal = document.getElementById('contactModal');
+  if (modal && currentApplication) {
+    // Pre-fill form with application data
+    document.getElementById('fromEmail').value = currentApplication.email || '';
+    document.getElementById('studentName').value = currentApplication.applicant_name || '';
+    document.getElementById('refNumber').textContent = currentApplication.reference_number || '';
+    document.getElementById('ctrlNumber').textContent = currentApplication.control_number || '';
+    document.getElementById('docId').textContent = currentApplication.document_id || '';
+    document.getElementById('hashValue').textContent = currentApplication.verification_hash || '';
+    
+    // Clear subject and message
+    document.getElementById('emailSubject').value = '';
+    document.getElementById('emailMessage').value = '';
+    
+    // Show modal
+    modal.style.display = 'flex';
+  }
+});
+
+// Close modal handlers
+document.getElementById('closeModalBtn')?.addEventListener('click', () => {
+  document.getElementById('contactModal').style.display = 'none';
+});
+
+document.getElementById('cancelBtn')?.addEventListener('click', () => {
+  document.getElementById('contactModal').style.display = 'none';
+});
+
+// Close modal when clicking outside
+document.getElementById('contactModal')?.addEventListener('click', (e) => {
+  if (e.target.id === 'contactModal') {
+    document.getElementById('contactModal').style.display = 'none';
+  }
+});
+
+// Handle form submission
+document.getElementById('contactForm')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  
+  const fromEmail = document.getElementById('fromEmail').value;
+  const subject = document.getElementById('emailSubject').value;
+  const message = document.getElementById('emailMessage').value;
+  const studentName = document.getElementById('studentName').value;
+  const refNumber = document.getElementById('refNumber').textContent;
+  const ctrlNumber = document.getElementById('ctrlNumber').textContent;
+  const docId = document.getElementById('docId').textContent;
+  const hashValue = document.getElementById('hashValue').textContent;
+  
+  // Build email body with application details
+  const emailBody = `
+${message}
+
+---
+Student Information:
+Name: ${studentName}
+Email: ${fromEmail}
+
+Application Details:
+REF: ${refNumber}
+CTRL: ${ctrlNumber}
+DOC ID: ${docId}
+HASH: ${hashValue}
+  `.trim();
+  
+  try {
+    const response = await fetch('https://zlvnxvrzotamhpezqedr.supabase.co/functions/v1/send-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: 'student-services@acnhs.am',
+        subject: `[Student Contact] ${subject}`,
+        replyTo: fromEmail, // Student's email for reply-to and database tracking
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #2d3748;">Student Inquiry</h2>
+            <div style="background: #f7fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0 0 15px 0;"><strong>From:</strong> ${studentName}</p>
+              <p style="margin: 0 0 15px 0;"><strong>Email:</strong> ${fromEmail}</p>
+              <p style="margin: 0;"><strong>Subject:</strong> ${subject}</p>
+            </div>
+            <div style="margin: 20px 0;">
+              <h3 style="color: #2d3748;">Message:</h3>
+              <p style="white-space: pre-wrap;">${message}</p>
+            </div>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+            <div style="background: #edf2f7; padding: 15px; border-radius: 8px;">
+              <h3 style="color: #2d3748; margin-top: 0;">Application Details:</h3>
+              <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                  <td style="padding: 5px 0;"><strong>REF:</strong></td>
+                  <td style="padding: 5px 0;">${refNumber}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0;"><strong>CTRL:</strong></td>
+                  <td style="padding: 5px 0;">${ctrlNumber}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0;"><strong>DOC ID:</strong></td>
+                  <td style="padding: 5px 0;">${docId}</td>
+                </tr>
+                <tr>
+                  <td style="padding: 5px 0;"><strong>HASH:</strong></td>
+                  <td style="padding: 5px 0;">${hashValue}</td>
+                </tr>
+              </table>
+            </div>
+          </div>
+        `,
+        from: 'student-services@acnhs.am'
+      })
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('Email send error:', errorData);
+      throw new Error(errorData.error || 'Failed to send email');
+    }
+    
+    showCustomAlert('✅ Email sent successfully! We will respond to your inquiry shortly.', 'success');
+    document.getElementById('contactModal').style.display = 'none';
+  } catch (error) {
+    console.error('Error sending email:', error);
+    showCustomAlert('❌ Failed to send email. Please try again or contact us directly at student-services@acnhs.am', 'error');
+  }
+});
+
+// Custom Alert Function
+function showCustomAlert(message, type = 'info') {
+  // Remove existing alert if any
+  const existing = document.getElementById('customAlert');
+  if (existing) existing.remove();
+  
+  const bgColor = type === 'success' ? 'rgba(34,197,94,0.2)' : 
+                  type === 'error' ? 'rgba(239,68,68,0.2)' : 
+                  'rgba(45,212,191,0.2)';
+  const borderColor = type === 'success' ? '#22c55e' : 
+                      type === 'error' ? '#ef4444' : 
+                      'var(--accent)';
+  
+  const alertHTML = `
+    <div id="customAlert" style="position:fixed;top:80px;right:20px;z-index:10001;background:${bgColor};border:2px solid ${borderColor};border-radius:12px;padding:16px 24px;max-width:400px;box-shadow:0 8px 24px rgba(0,0,0,0.4);animation:slideInRight 0.3s ease;">
+      <div style="display:flex;align-items:start;gap:12px;">
+        <div style="color:white;font-size:14px;line-height:1.5;">${message}</div>
+        <button onclick="document.getElementById('customAlert').remove()" style="background:transparent;border:none;color:rgba(255,255,255,0.6);font-size:20px;cursor:pointer;padding:0;line-height:1;margin-top:-2px;">&times;</button>
+      </div>
+    </div>
+    <style>
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(100px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+    </style>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', alertHTML);
+  
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    const alert = document.getElementById('customAlert');
+    if (alert) {
+      alert.style.animation = 'slideInRight 0.3s ease reverse';
+      setTimeout(() => alert.remove(), 300);
+    }
+  }, 5000);
+}
 
 </script>
 

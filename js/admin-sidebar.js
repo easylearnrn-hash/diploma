@@ -1,5 +1,6 @@
 // Admin Sidebar Navigation Component
 // Include this script in all admin pages
+// Updated: 2026-01-11 - Email System Link Fixed
 
 (function() {
   'use strict';
@@ -37,24 +38,24 @@
             <span class="text">Applications</span>
           </a>
           
-          <a href="sms-demo.html" class="nav-item ${currentPage === 'sms-demo.html' ? 'active' : ''}" data-tooltip="SMS System">
+          <a href="email-system.html" class="nav-item ${currentPage === 'email-system.html' ? 'active' : ''}" data-tooltip="Email System">
             <span class="icon">💬</span>
-            <span class="text">SMS System</span>
+            <span class="text">Email System</span>
           </a>
           
-          <a href="verify-transcript.html" class="nav-item ${currentPage === 'verify-transcript.html' ? 'active' : ''}" data-tooltip="Verify Transcripts">
+          <a href="verify-transcript.html" class="nav-item ${currentPage === 'verify-transcript.html' ? 'active' : ''}" data-tooltip="Verification">
             <span class="icon">✓</span>
-            <span class="text">Verify Transcripts</span>
+            <span class="text">Verification</span>
           </a>
           
-          <a href="help-handbook.html" class="nav-item ${currentPage === 'help-handbook.html' ? 'active' : ''}" data-tooltip="Handbook">
+          <a href="help-handbook.html" class="nav-item ${currentPage === 'help-handbook.html' ? 'active' : ''}" data-tooltip="Students">
             <span class="icon">📖</span>
-            <span class="text">Handbook</span>
+            <span class="text">Students</span>
           </a>
           
-          <a href="help-grading.html" class="nav-item ${currentPage === 'help-grading.html' ? 'active' : ''}" data-tooltip="Grading System">
+          <a href="help-grading.html" class="nav-item ${currentPage === 'help-grading.html' ? 'active' : ''}" data-tooltip="Grading Calc">
             <span class="icon">📊</span>
-            <span class="text">Grading System</span>
+            <span class="text">Grading Calc</span>
           </a>
           
           <a href="help-appeals.html" class="nav-item ${currentPage === 'help-appeals.html' ? 'active' : ''}" data-tooltip="Appeals">

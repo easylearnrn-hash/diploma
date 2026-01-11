@@ -1102,6 +1102,9 @@
         <button class="action-btn" onclick="viewApplicationPreview()" style="background:rgba(59,130,246,0.15);color:#60a5fa;border:1px solid rgba(59,130,246,0.3);grid-column:1/-1;">
           <span>📄</span> View Application Preview
         </button>
+        <button class="action-btn" onclick="generateApplicationPdf()" style="background:rgba(14,165,233,0.15);color:#38bdf8;border:1px solid rgba(14,165,233,0.3);grid-column:1/-1;">
+          <span>🧾</span> Generate a PDF
+        </button>
         <button class="action-btn" onclick="requestReupload()" style="background:rgba(234,179,8,0.15);color:#eab308;border:1px solid rgba(234,179,8,0.3);grid-column:1/-1;">
           <span>📤</span> Request Re-upload of Missing Files
         </button>
@@ -1566,6 +1569,22 @@
       }
     }
 
+    // Status descriptions for consistent messaging
+    const STATUS_INFO = {
+      'SUBMITTED': 'Your application has been successfully submitted and is in our queue for review. Our admissions team will begin processing your application shortly.',
+      'UNDER REVIEW': 'Our admissions committee is currently reviewing your application materials. This process typically takes 2-4 weeks. We appreciate your patience.',
+      'ACTIVELY REVIEWING': 'Your application is currently being actively reviewed by our admissions committee. We are carefully evaluating all aspects of your submission.',
+      'RFE PREPARING': 'We are preparing a Request for Evidence (RFE). Additional documentation or information is needed to complete your application review.',
+      'RFE SENT': 'A Request for Evidence (RFE) has been sent to your email. Please review and submit the requested documents as soon as possible to avoid delays.',
+      'ADDITIONAL DOCUMENTS REQUESTED': 'Additional documents have been requested to complete your application review. Please check the list below and submit the required materials.',
+      'DOCUMENTS RECEIVED': 'Thank you for submitting the requested documents. We are now reviewing the additional materials you provided.',
+      'FINAL REVIEW': 'Your application is in final review. An admissions decision will be communicated to you soon.',
+      'APPROVED': 'Congratulations! Your application has been approved. You will receive your official acceptance letter and enrollment instructions via email within 24-48 hours.',
+      'DENIED': 'Unfortunately, we are unable to offer you admission at this time. You will receive a detailed letter explaining the decision and information about reapplication options.',
+      'ON HOLD': 'Your application has been placed on hold. This may be due to pending documentation or additional review requirements. Please check for any messages from our admissions office.',
+      'WITHDRAWN': 'This application has been withdrawn. If you have questions, please contact our admissions office.'
+    };
+
     let applicationsData = [];
     let registrationsData = [];
     let currentTab = 'applications';
@@ -1585,6 +1604,98 @@
       'printSection',
       'applicationActions'
     ];
+
+    const PDF_GENERATOR_URL = 'pdf.html?preview=true&postMessage=true';
+    let pdfGeneratorIframe = null;
+    let pdfGenerationSession = null;
+    let isPdfGenerationInProgress = false;
+
+    function createDeferred() {
+      let resolve;
+      let reject;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    function ensurePdfGeneratorIframe() {
+      if (pdfGeneratorIframe && document.body.contains(pdfGeneratorIframe)) {
+        return pdfGeneratorIframe;
+      }
+      pdfGeneratorIframe = document.createElement('iframe');
+      pdfGeneratorIframe.id = 'pdfGeneratorIframe';
+      pdfGeneratorIframe.setAttribute('aria-hidden', 'true');
+      pdfGeneratorIframe.style.position = 'fixed';
+      pdfGeneratorIframe.style.width = '1px';
+      pdfGeneratorIframe.style.height = '1px';
+      pdfGeneratorIframe.style.opacity = '0';
+      pdfGeneratorIframe.style.pointerEvents = 'none';
+      pdfGeneratorIframe.style.border = '0';
+      pdfGeneratorIframe.style.top = '-9999px';
+      pdfGeneratorIframe.style.left = '-9999px';
+      document.body.appendChild(pdfGeneratorIframe);
+      return pdfGeneratorIframe;
+    }
+
+    function beginPdfGenerationSession(iframe) {
+      pdfGenerationSession = {
+        iframe,
+        ready: createDeferred(),
+        complete: createDeferred()
+      };
+      return {
+        readyPromise: pdfGenerationSession.ready.promise,
+        completePromise: pdfGenerationSession.complete.promise
+      };
+    }
+
+    function cleanupPdfGenerationSession() {
+      if (pdfGenerationSession?.iframe) {
+        pdfGenerationSession.iframe.onload = null;
+        if (pdfGenerationSession.iframe.src && pdfGenerationSession.iframe.src !== 'about:blank') {
+          pdfGenerationSession.iframe.src = 'about:blank';
+        }
+      }
+      pdfGenerationSession = null;
+    }
+
+    function createTimeoutPromise(ms, message) {
+      return new Promise((_, reject) => {
+        const timer = setTimeout(() => {
+          clearTimeout(timer);
+          reject(new Error(message));
+        }, ms);
+      });
+    }
+
+    function handlePdfGeneratorMessage(event) {
+      if (!pdfGenerationSession?.iframe || event.source !== pdfGenerationSession.iframe.contentWindow) {
+        return;
+      }
+
+      const { type, message } = event.data || {};
+      if (type === 'PREVIEW_READY') {
+        if (pdfGenerationSession.ready?.resolve) {
+          pdfGenerationSession.ready.resolve();
+        }
+      } else if (type === 'PDF_COMPLETE') {
+        if (pdfGenerationSession.complete?.resolve) {
+          pdfGenerationSession.complete.resolve();
+        }
+      } else if (type === 'PDF_ERROR') {
+        const error = new Error(message || 'PDF generation failed.');
+        if (pdfGenerationSession.ready?.reject) {
+          pdfGenerationSession.ready.reject(error);
+        }
+        if (pdfGenerationSession.complete?.reject) {
+          pdfGenerationSession.complete.reject(error);
+        }
+      }
+    }
+
+    window.addEventListener('message', handlePdfGeneratorMessage);
 
     function toggleSection(id, show) {
       const el = document.getElementById(id);
@@ -1606,6 +1717,45 @@
       applicationOnlySections.forEach(section => toggleSection(section, false));
       toggleSection('registrationDetails', true);
       toggleSection('actionButtons', true);
+    }
+
+    async function ensureApplicationPayloadLoaded(app) {
+      if (!app) {
+        throw new Error('Application not found. Please refresh the page.');
+      }
+
+      if (!app.payload) {
+        const supabase = getSupabaseClient();
+        if (!supabase) {
+          throw new Error('Supabase is not configured.');
+        }
+
+        const { data, error } = await supabase
+          .from('applications')
+          .select('payload, control_number, document_id, verification_hash, username, credentials_screenshot, status, status_message, admin_notes, rfe_documents_requested, status_updated_at, status_history')
+          .eq('id', app.id)
+          .single();
+
+        if (error) {
+          throw error;
+        }
+
+        app.payload = data.payload;
+        app.control_number = data.control_number;
+        app.document_id = data.document_id;
+        app.verification_hash = data.verification_hash;
+        app.username = data.username || app.username;
+        app.credentials_screenshot = data.credentials_screenshot || app.credentials_screenshot;
+        app.status = data.status || app.status;
+        app.status_message = data.status_message || app.status_message;
+        app.admin_notes = data.admin_notes || app.admin_notes;
+        app.rfe_documents_requested = data.rfe_documents_requested || app.rfe_documents_requested;
+        app.status_updated_at = data.status_updated_at || app.status_updated_at;
+        app.status_history = data.status_history || app.status_history;
+      }
+
+      currentApplicationPayload = clonePayload(app.payload || {});
+      return currentApplicationPayload;
     }
 
     function setDrawerValue(id, value, fallback = '—') {
@@ -1897,6 +2047,82 @@
       modal.classList.remove('active');
     }
 
+    function buildPreviewDocuments(payload = {}) {
+      if (Array.isArray(payload.documentPreviews) && payload.documentPreviews.length) return payload.documentPreviews;
+      if (Array.isArray(payload.uploadedDocuments) && payload.uploadedDocuments.length) return payload.uploadedDocuments;
+      if (Array.isArray(payload.documentUploads) && payload.documentUploads.length) return payload.documentUploads;
+      if (Array.isArray(payload.documents) && payload.documents.length) return payload.documents;
+      return [];
+    }
+
+    function buildApplicationPreviewData(app) {
+      if (!app) return {};
+      const payload = currentApplicationPayload || clonePayload(app.payload || {}) || {};
+      const previewPhoto = payload.applicantPhoto || payload.applicantPhotoUrl || payload.applicantPhotoMeta?.url;
+      const previewDocuments = buildPreviewDocuments(payload);
+
+      return {
+        documentId: app.document_id || payload.documentId,
+        referenceNumber: app.reference_number || payload.referenceNumber,
+        controlNumber: app.control_number || payload.controlNumber,
+        verificationHash: app.verification_hash || payload.verificationHash,
+        barcode: app.barcode || payload.barcode,
+        applicantName: payload.applicantName || app.applicant_name,
+        dob: payload.dob,
+        gender: payload.gender,
+        nationality: payload.nationality,
+        birthLocation: payload.birthLocation,
+        email: payload.email || app.email,
+        phone: payload.phone || app.phone,
+        altPhone: payload.altPhone,
+        addressLine: payload.addressLine,
+        city: payload.city,
+        state: payload.state,
+        zip: payload.zip,
+        country: payload.country,
+        programChoice: payload.programChoice || app.program,
+        startTerm: payload.startTerm || app.start_term,
+        previousApplication: payload.previousApplication,
+        educationLevel: payload.educationLevel,
+        institution: payload.institution,
+        fieldOfStudy: payload.fieldOfStudy,
+        graduationYear: payload.graduationYear,
+        gradYear: payload.gradYear,
+        gpa: payload.gpa,
+        emergencyName: payload.emergencyName,
+        emergencyRelation: payload.emergencyRelation,
+        emergencyPhone: payload.emergencyPhone,
+        isTransferStudent: payload.isTransferStudent,
+        prevInstitution: payload.prevInstitution,
+        prevProgram: payload.prevProgram,
+        prevStudentId: payload.prevStudentId,
+        prevStartDate: payload.prevStartDate,
+        prevEndDate: payload.prevEndDate,
+        academicStatus: payload.academicStatus,
+        creditsEarned: payload.creditsEarned,
+        creditsTransfer: payload.creditsTransfer,
+        prevGPA: payload.prevGPA,
+        transferReason: payload.transferReason,
+        completedCourses: payload.completedCourses,
+        applicantPhoto: previewPhoto,
+        applicantPhotoMeta: payload.applicantPhotoMeta,
+        documents: previewDocuments,
+        documentPreviews: previewDocuments,
+        uploadedDocuments: payload.uploadedDocuments || payload.documentUploads || [],
+        statement: payload.statement,
+        signature: payload.signature || payload.applicantName,
+        termsAgreed: payload.termsAgreed,
+        dataProcessingAgreed: payload.dataProcessingAgreed,
+        submissionDate: app.submission_date || payload.submissionDate
+      };
+    }
+
+    function buildApplicationPdfFilename(app) {
+      const raw = (app?.reference_number || currentApplicationPayload?.referenceNumber || app?.id || 'application').toString();
+      const sanitized = raw.replace(/[^A-Za-z0-9_-]/g, '');
+      return `ACNHS-Application-${sanitized || 'record'}.pdf`;
+    }
+
     // APPLICATION PREVIEW MODAL (SINGLE SOURCE OF TRUTH)
     // Uses the exact same pdf.html that applicants see
     async function viewApplicationPreview() {
@@ -1912,120 +2138,17 @@
         return;
       }
 
-      // ===== ENSURE DATA IS LOADED: Wait for payload if still loading =====
-      if (!app.payload) {
-        showNotification('Info', 'Loading application data...', 'info');
-        const supabase = getSupabaseClient(); // Use global client
-        if (supabase) {
-          try {
-            const { data, error } = await supabase
-              .from('applications')
-              .select('payload, control_number, document_id, verification_hash')
-              .eq('id', app.id)
-              .single();
-            
-            if (error) {
-              console.error('Error loading payload:', error);
-              showNotification('Error', 'Failed to load application data', 'error');
-              return;
-            }
-            
-            if (data) {
-              app.payload = data.payload;
-              app.control_number = data.control_number;
-              app.document_id = data.document_id;
-              app.verification_hash = data.verification_hash;
-              
-              // Update the drawer with the loaded data
-              currentApplicationPayload = clonePayload(app.payload || {});
-            }
-          } catch (err) {
-            console.error('Unexpected error loading payload:', err);
-            showNotification('Error', 'Failed to load application data', 'error');
-            return;
-          }
-        }
+      try {
+        await ensureApplicationPayloadLoaded(app);
+      } catch (error) {
+        console.error('Error loading payload:', error);
+        showNotification('Error', error.message || 'Failed to load application data', 'error');
+        return;
       }
 
-      const payload = app.payload || {};
+      const payload = currentApplicationPayload || app.payload || {};
+      const previewData = buildApplicationPreviewData(app);
       
-      console.log('Preview data:', { app, payload }); // Debug log
-      
-      // Prepare data in the EXACT same format as admission-form.html does
-      const previewPhoto = payload.applicantPhoto || payload.applicantPhotoUrl || payload.applicantPhotoMeta?.url;
-      const previewDocuments = (() => {
-        if (Array.isArray(payload.documentPreviews) && payload.documentPreviews.length) return payload.documentPreviews;
-        if (Array.isArray(payload.uploadedDocuments) && payload.uploadedDocuments.length) return payload.uploadedDocuments;
-        if (Array.isArray(payload.documentUploads) && payload.documentUploads.length) return payload.documentUploads;
-        if (Array.isArray(payload.documents) && payload.documents.length) return payload.documents;
-        return [];
-      })();
-
-      const previewData = {
-        // Document IDs
-        documentId: app.document_id || payload.documentId,
-        referenceNumber: app.reference_number || payload.referenceNumber,
-        controlNumber: app.control_number || payload.controlNumber,
-        verificationHash: app.verification_hash || payload.verificationHash,
-        barcode: app.barcode || payload.barcode,
-        
-        // Personal Information
-        applicantName: payload.applicantName || app.applicant_name,
-        dob: payload.dob,
-        gender: payload.gender,
-        nationality: payload.nationality,
-        birthLocation: payload.birthLocation,
-        
-        // Contact Information
-        email: payload.email || app.email,
-        phone: payload.phone || app.phone,
-        altPhone: payload.altPhone,
-        addressLine: payload.addressLine,
-        city: payload.city,
-        state: payload.state,
-        zip: payload.zip,
-        country: payload.country,
-        
-        // Program Selection
-        programChoice: payload.programChoice || app.program,
-        startTerm: payload.startTerm || app.start_term,
-        previousApplication: payload.previousApplication,
-        
-        // Academic History
-        educationLevel: payload.educationLevel,
-        institution: payload.institution,
-        fieldOfStudy: payload.fieldOfStudy,
-        graduationYear: payload.graduationYear,
-        gpa: payload.gpa,
-        
-        // Emergency Contact
-        emergencyName: payload.emergencyName,
-        emergencyRelation: payload.emergencyRelation,
-        emergencyPhone: payload.emergencyPhone,
-        
-  // Photo (from payload or storage)
-  applicantPhoto: previewPhoto,
-  applicantPhotoMeta: payload.applicantPhotoMeta,
-        
-  // Documents
-  documents: previewDocuments,
-  documentPreviews: previewDocuments,
-  uploadedDocuments: payload.uploadedDocuments || payload.documentUploads || [],
-        
-        // Statement
-        statement: payload.statement,
-        
-        // Signature (if application was signed/submitted)
-        signature: payload.signature || payload.applicantName,
-        
-        // Agreement
-        termsAgreed: payload.termsAgreed,
-        dataProcessingAgreed: payload.dataProcessingAgreed,
-        
-        // Submission
-        submissionDate: app.submission_date || payload.submissionDate
-      };
-
       console.log('Preview data:', { app, payload }); // Debug log
       
       // Open modal
@@ -2049,22 +2172,20 @@
       iframe.style.background = '#0f1f3a';
       
       // Store data to send via postMessage after iframe loads
-      window.pendingPreviewData = previewData;
-      
       // Set up onload BEFORE setting src (critical order!)
       iframe.onload = function() {
         console.log('✅ Preview iframe loaded, sending data via postMessage...');
         setTimeout(() => {
-          if (iframe.contentWindow && window.pendingPreviewData) {
+          if (iframe.contentWindow) {
             iframe.contentWindow.postMessage({
               type: 'PREVIEW_DATA',
-              data: window.pendingPreviewData
+              data: previewData
             }, '*');
             console.log('📤 Sent preview data to iframe');
           } else {
             console.error('❌ DEBUG: Cannot send postMessage!', {
               hasContentWindow: !!iframe.contentWindow,
-              hasPendingData: !!window.pendingPreviewData
+              hasPendingData: true
             });
           }
         }, 100);
@@ -2083,6 +2204,73 @@
       document.body.style.overflow = 'hidden';
       
       console.log('✅ DEBUG: Modal display set to block');
+    }
+
+    async function generateApplicationPdf() {
+      if (!currentApplicationId) {
+        showModal('Open an application to generate its PDF.', 'warning');
+        return;
+      }
+
+      if (isPdfGenerationInProgress) {
+        showNotification('PDF Generator Busy', 'Please wait for the current PDF to finish.', 'info');
+        return;
+      }
+
+      const app = getApplicationById(currentApplicationId);
+      if (!app) {
+        showModal('Application not found. Please refresh and try again.', 'error');
+        return;
+      }
+
+      isPdfGenerationInProgress = true;
+      try {
+        await ensureApplicationPayloadLoaded(app);
+        const previewData = buildApplicationPreviewData(app);
+        const iframe = ensurePdfGeneratorIframe();
+        const { readyPromise, completePromise } = beginPdfGenerationSession(iframe);
+        const cacheBuster = `ts=${Date.now()}`;
+
+        iframe.onload = () => {
+          setTimeout(() => {
+            if (iframe.contentWindow) {
+              iframe.contentWindow.postMessage({
+                type: 'PREVIEW_DATA',
+                data: previewData
+              }, '*');
+            }
+          }, 50);
+        };
+
+        iframe.src = `${PDF_GENERATOR_URL}${PDF_GENERATOR_URL.includes('?') ? '&' : '?'}${cacheBuster}`;
+        showNotification('Preparing PDF...', 'Generating an exact, pixel-perfect copy...', 'info');
+
+        await Promise.race([
+          readyPromise,
+          createTimeoutPromise(12000, 'PDF renderer timed out while preparing the document.')
+        ]);
+
+        const filename = buildApplicationPdfFilename(app);
+        if (iframe.contentWindow) {
+          iframe.contentWindow.postMessage({
+            type: 'GENERATE_PDF',
+            options: { filename }
+          }, '*');
+        }
+
+        await Promise.race([
+          completePromise,
+          createTimeoutPromise(20000, 'PDF generation took too long to finish.')
+        ]);
+
+        showNotification('PDF Download', 'An exact copy of the application is downloading now.', 'success');
+      } catch (error) {
+        console.error('generateApplicationPdf error:', error);
+        showNotification('PDF Error', error.message || 'Failed to generate PDF.', 'error');
+      } finally {
+        isPdfGenerationInProgress = false;
+        cleanupPdfGenerationSession();
+      }
     }
 
     function closePreviewModal() {
@@ -3161,12 +3349,18 @@
           return [];
         })();
 
+        // Get student-uploaded documents from application record
+        const studentUploads = app.uploaded_documents || [];
+
         const statusMap = payload.documentStatuses || (!Array.isArray(payload.documents) ? payload.documents : null);
         const hasDocumentFiles = documentFiles.length > 0;
+        const hasStudentUploads = studentUploads.length > 0;
         const hasDocumentStatus = statusMap && Object.keys(statusMap).length > 0;
         
-        if (hasDocumentFiles) {
+        if (hasDocumentFiles || hasStudentUploads) {
           docList.innerHTML = '';
+          
+          // Display original admission form documents
           documentFiles.forEach(doc => {
             const li = document.createElement('li');
             li.style.transition = 'all 0.2s';
@@ -3197,6 +3391,55 @@
             badge.style.color = viewSrc ? '#2dd4bf' : '#a1a1aa';
             badge.textContent = viewSrc ? '👁️ View' : '📦 Stored';
             li.appendChild(badge);
+
+            docList.appendChild(li);
+          });
+
+          // Display student-uploaded documents (from RFE/document requests)
+          studentUploads.forEach(upload => {
+            const li = document.createElement('li');
+            li.style.transition = 'all 0.2s';
+            li.style.cursor = 'pointer';
+            
+            const docTitle = upload.doc_name || upload.filename || 'Uploaded Document';
+            const viewUrl = upload.public_url;
+            
+            if (viewUrl) {
+              li.addEventListener('click', () => window.open(viewUrl, '_blank'));
+              li.addEventListener('mouseover', () => {
+                li.style.background = 'rgba(45,212,191,0.1)';
+                li.style.transform = 'translateX(4px)';
+              });
+              li.addEventListener('mouseout', () => {
+                li.style.background = '';
+                li.style.transform = 'translateX(0)';
+              });
+            }
+
+            const titleEl = document.createElement('strong');
+            titleEl.textContent = `📎 ${docTitle}`;
+            li.appendChild(titleEl);
+
+            const badge = document.createElement('span');
+            badge.style.fontSize = '11px';
+            badge.style.marginLeft = '8px';
+            badge.style.padding = '2px 6px';
+            badge.style.borderRadius = '4px';
+            badge.style.background = 'rgba(45,212,191,0.2)';
+            badge.style.color = '#2dd4bf';
+            badge.textContent = '🔗 View Upload';
+            li.appendChild(badge);
+
+            // Add upload date if available
+            if (upload.uploaded_at) {
+              const dateSpan = document.createElement('span');
+              dateSpan.style.fontSize = '10px';
+              dateSpan.style.marginLeft = '8px';
+              dateSpan.style.color = '#64748b';
+              const uploadDate = new Date(upload.uploaded_at);
+              dateSpan.textContent = uploadDate.toLocaleDateString();
+              li.appendChild(dateSpan);
+            }
 
             docList.appendChild(li);
           });
@@ -3345,7 +3588,7 @@
       'RFE SENT': [
         'A request for additional documents has been sent to your email. Please review and respond at your earliest convenience.',
         'We have requested additional documentation to support your application. Please check your email for details.',
-        'Additional materials are needed to complete your application review. Please see the requested documents below.'
+        'Additional materials are required to complete the review of your application. Please refer to the list of requested documents.'
       ],
       'ADDITIONAL DOCUMENTS REQUESTED': [
         'Please submit the requested documents to complete your application. You may upload them through your portal or email them to admissions@universitaria.edu',
@@ -3462,7 +3705,8 @@
         'Diploma/Degree Certificate',
         'Financial Documents',
         'Medical Records',
-        'Background Check'
+        'Background Check',
+        '3X4 Photo'
       ];
       
       container.innerHTML = commonDocuments.map(doc => {
@@ -3560,7 +3804,10 @@
             <div style="background:rgba(45,212,191,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;padding:12px;">
               <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:8px;">
                 <span style="color:white;font-weight:600;font-size:14px;">${entry.status}</span>
-                ${isFirst ? '<span style="background:rgba(34,197,94,0.2);color:#22c55e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">CURRENT</span>' : ''}
+                <div style="display:flex;gap:8px;align-items:center;">
+                  ${isFirst ? '<span style="background:rgba(34,197,94,0.2);color:#22c55e;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;">CURRENT</span>' : ''}
+                  <button onclick="deleteStatusHistoryEntry(${index})" style="background:rgba(239,68,68,0.2);color:#ef4444;border:1px solid rgba(239,68,68,0.3);padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">🗑️ Delete</button>
+                </div>
               </div>
               <div style="color:rgba(255,255,255,0.6);font-size:12px;margin-bottom:${entry.message ? '8px' : '0'};">
                 <span>📅 ${formattedDate}</span>
@@ -3575,6 +3822,61 @@
           </div>
         `;
       }).join('');
+    }
+
+    async function deleteStatusHistoryEntry(index) {
+      if (!currentApplicationId) return;
+      
+      const supabase = initSupabase();
+      if (!supabase) return;
+      
+      // Confirm deletion
+      if (!confirm('Are you sure you want to delete this status history entry?')) {
+        return;
+      }
+      
+      try {
+        // Get current application
+        const currentApp = applicationsData.find(a => a.id === currentApplicationId);
+        const currentHistory = currentApp?.status_history || [];
+        
+        // Sort by date (newest first) to match the display order
+        const sorted = [...currentHistory].sort((a, b) => new Date(b.changed_at) - new Date(a.changed_at));
+        
+        console.log('🗑️ DEBUG: Deleting status history entry', {
+          index,
+          entry: sorted[index],
+          totalEntries: sorted.length
+        });
+        
+        // Remove the entry at the specified index
+        sorted.splice(index, 1);
+        
+        // Update the database
+        const { error } = await supabase
+          .from('applications')
+          .update({
+            status_history: sorted
+          })
+          .eq('id', currentApplicationId);
+        
+        if (error) throw error;
+        
+        console.log('✅ Status history entry deleted successfully');
+        
+        // Update local data
+        if (currentApp) {
+          currentApp.status_history = sorted;
+        }
+        
+        // Refresh the drawer to show updated history
+        await refreshApplicationDrawer(currentApplicationId);
+        
+        alert('Status history entry deleted successfully');
+      } catch (error) {
+        console.error('❌ Error deleting status history entry:', error);
+        alert('Failed to delete status history entry: ' + error.message);
+      }
     }
 
     function getStatusColor(status) {
@@ -3605,6 +3907,9 @@
       const statusMessage = statusMessageInput.value.trim();
       const adminNotes = adminNotesInput.value.trim();
       
+      // If no custom message provided, use default description for the status
+      const finalStatusMessage = statusMessage || STATUS_INFO[newStatus] || null;
+      
       // Collect checked RFE documents
       const rfeDocuments = [];
       if (rfeContainer) {
@@ -3629,7 +3934,7 @@
         // Create new history entry
         const historyEntry = {
           status: newStatus,
-          message: statusMessage || null,
+          message: finalStatusMessage,
           changed_at: new Date().toISOString(),
           changed_by: 'admin' // You can update this with actual admin user info
         };
@@ -3646,7 +3951,7 @@
           .from('applications')
           .update({
             status: newStatus,
-            status_message: statusMessage || null,
+            status_message: finalStatusMessage,
             admin_notes: adminNotes || null,
             rfe_documents_requested: rfeDocuments,
             status_updated_at: new Date().toISOString(),
@@ -3661,7 +3966,7 @@
         // ===== UPDATE LOCAL DATA IMMEDIATELY =====
         if (currentApp) {
           currentApp.status = newStatus;
-          currentApp.status_message = statusMessage || null;
+          currentApp.status_message = finalStatusMessage;
           currentApp.admin_notes = adminNotes || null;
           currentApp.rfe_documents_requested = rfeDocuments;
           currentApp.status_updated_at = new Date().toISOString();
@@ -4707,9 +5012,15 @@
 
       const options = {
         filename: `${app.reference_number || 'ACNHS-Application'}.pdf`,
-        margin: [20, 20, 20, 20],
+        margin: 0,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          allowTaint: false,
+          backgroundColor: '#ffffff',
+          logging: false
+        },
         jsPDF: { unit: 'pt', format: 'letter', orientation: 'portrait' }
       };
       // If the page is opened using file:// protocol, html2pdf/html2canvas often

@@ -1,0 +1,2043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Email System - ACNHS Admin</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: #0f172a;
+      min-height: 100vh;
+      color: #e2e8f0;
+    }
+
+    .admin-content {
+      margin-left: 260px;
+      padding: 0;
+      transition: margin-left 0.3s ease;
+      min-height: 100vh;
+    }
+
+    .admin-sidebar.collapsed ~ .admin-content {
+      margin-left: 70px;
+    }
+
+    @media (max-width: 768px) {
+      .admin-content {
+        margin-left: 0;
+      }
+    }
+
+    /* Header */
+    .email-header {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+      padding: 24px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .header-title h1 {
+      font-size: 24px;
+      font-weight: 800;
+      color: #f8fafc;
+      letter-spacing: -0.02em;
+    }
+
+    .header-badge {
+      background: rgba(45, 212, 191, 0.1);
+      color: #2dd4bf;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+      color: #022c22;
+      box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4);
+    }
+
+    .btn-secondary {
+      background: rgba(148, 163, 184, 0.1);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(148, 163, 184, 0.15);
+    }
+
+    /* Main Content */
+    .email-container {
+      display: flex;
+      height: calc(100vh - 72px);
+    }
+
+    /* Inbox List */
+    .inbox-section {
+      width: 380px;
+      background: #1e293b;
+      border-right: 1px solid rgba(45, 212, 191, 0.1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .inbox-header {
+      padding: 20px;
+      border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+    }
+
+    .inbox-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(45, 212, 191, 0.1);
+      color: #2dd4bf;
+    }
+
+    .inbox-search {
+      margin-top: 12px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: #2dd4bf;
+    }
+
+    .inbox-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .email-item {
+      padding: 16px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.1);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .email-item:hover {
+      background: rgba(15, 23, 42, 0.8);
+      border-color: rgba(45, 212, 191, 0.3);
+      transform: translateX(4px);
+    }
+
+    .email-item.active {
+      background: rgba(45, 212, 191, 0.1);
+      border-color: #2dd4bf;
+    }
+
+    .email-item.new-email {
+      border-color: #0ff;
+      box-shadow: 0 0 10px #0ff, 0 0 20px #0ff, 0 0 30px #0ff, 0 0 40px #00ffff;
+      background: rgba(0, 255, 255, 0.05);
+    }
+
+    .email-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 8px;
+    }
+
+    .email-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      margin-right: 12px;
+      flex-shrink: 0;
+    }
+
+    .email-content {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+    }
+
+    .email-item-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .select-all-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 12px 16px;
+      background: rgba(15, 23, 42, 0.3);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      margin-bottom: 12px;
+    }
+
+    .btn-delete-elegant {
+      padding: 6px 16px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 6px;
+      color: #ef4444;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-delete-elegant:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    }
+
+    .select-all-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    .select-all-label {
+      color: #94a3b8;
+      font-size: 13px;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .email-from {
+      font-weight: 700;
+      color: #f8fafc;
+      font-size: 14px;
+    }
+
+    .email-time {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+    }
+
+    .email-subject {
+      font-size: 13px;
+      color: #cbd5e1;
+      font-weight: 600;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .email-preview {
+      font-size: 12px;
+      color: #64748b;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .email-status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-top: 8px;
+    }
+
+    .status-sent {
+      background: rgba(45, 212, 191, 0.15);
+      color: #2dd4bf;
+    }
+
+    .status-failed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+
+    /* Email Detail View */
+    .detail-section {
+      flex: 1;
+      background: #0f172a;
+      overflow-y: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .detail-empty {
+      text-align: center;
+      color: #64748b;
+    }
+
+    .detail-empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .email-detail {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .detail-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+      background: #1e293b;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .detail-header-content {
+      flex: 1;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-delete {
+      padding: 10px 16px;
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-delete:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+    }
+
+    .detail-subject {
+      font-size: 22px;
+      font-weight: 800;
+      color: #f8fafc;
+      margin-bottom: 12px;
+      letter-spacing: -0.02em;
+    }
+
+    .detail-meta {
+      display: flex;
+      gap: 24px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+
+    .detail-meta-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .detail-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px;
+    }
+
+    .detail-body iframe {
+      width: 100%;
+      min-height: 600px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 12px;
+      background: white;
+    }
+
+    /* Compose Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: #1e293b;
+      border-radius: 16px;
+      width: 90%;
+      max-width: 1400px;
+      max-height: 90vh;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .modal-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid rgba(45, 212, 191, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: #f8fafc;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 4px 8px;
+    }
+
+    .modal-close:hover {
+      color: #ef4444;
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      gap: 24px;
+      padding: 24px 32px;
+    }
+
+    .compose-form {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 500px;
+    }
+
+    .preview-pane {
+      flex: 1;
+      background: #0f172a;
+      border-radius: 12px;
+      border: 1px solid rgba(45, 212, 191, 0.1);
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .preview-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #2dd4bf;
+      margin-bottom: 16px;
+    }
+
+    .preview-frame {
+      background: white;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .preview-frame iframe {
+      width: 100%;
+      min-height: 800px;
+      border: none;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-input,
+    .form-select,
+    .form-textarea {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus,
+    .form-select:focus,
+    .form-textarea:focus {
+      outline: none;
+      border-color: #2dd4bf;
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+    }
+
+    .form-textarea {
+      min-height: 200px;
+      resize: vertical;
+      font-family: inherit;
+      line-height: 1.6;
+    }
+
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .template-card {
+      padding: 16px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .template-card:hover {
+      border-color: #2dd4bf;
+      background: rgba(45, 212, 191, 0.05);
+    }
+
+    .template-card.active {
+      border-color: #2dd4bf;
+      background: rgba(45, 212, 191, 0.1);
+    }
+
+    .template-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+
+    .template-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #cbd5e1;
+    }
+
+    .modal-footer {
+      padding: 24px 32px;
+      border-top: 1px solid rgba(45, 212, 191, 0.1);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* Elegant Delete Modal Styles */
+    .delete-modal-content {
+      max-width: 420px;
+      background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(30, 41, 59, 0.98) 100%);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .delete-modal-header {
+      padding: 32px 32px 24px;
+      text-align: center;
+    }
+
+    .delete-icon {
+      font-size: 56px;
+      margin-bottom: 16px;
+      filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.3));
+      animation: deleteIconPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes deleteIconPulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    .delete-modal-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin: 0 0 12px 0;
+      letter-spacing: -0.5px;
+    }
+
+    .delete-modal-subtitle {
+      font-size: 14px;
+      color: #94a3b8;
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .delete-modal-footer {
+      padding: 24px 32px 32px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+
+    .btn-modal-cancel {
+      padding: 12px 32px;
+      background: rgba(148, 163, 184, 0.1);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      border-radius: 8px;
+      color: #cbd5e1;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 120px;
+    }
+
+    .btn-modal-cancel:hover {
+      background: rgba(148, 163, 184, 0.2);
+      border-color: rgba(148, 163, 184, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .btn-modal-delete {
+      padding: 12px 32px;
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+      min-width: 120px;
+    }
+
+    .btn-modal-delete:hover {
+      background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+      border-color: #ef4444;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-modal-delete:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    }
+
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 16px 24px;
+      border-radius: 12px;
+      font-weight: 700;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      z-index: 10001;
+      animation: slideIn 0.3s ease;
+      border: 1px solid;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .notification.success {
+      background: rgba(45, 212, 191, 0.15);
+      color: #2dd4bf;
+      border-color: #2dd4bf;
+    }
+
+    .notification.error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border-color: #ef4444;
+    }
+
+    .loading {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .loading.active {
+      display: flex;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid rgba(45, 212, 191, 0.2);
+      border-top-color: #2dd4bf;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar will be injected by admin-sidebar.js -->
+  
+  <div class="admin-content">
+    <!-- Header -->
+    <div class="email-header">
+      <div class="header-title">
+        <h1>📧 Email System</h1>
+        <span class="header-badge" id="totalEmailsBadge">0 Emails</span>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" id="refreshBtn">
+          🔄 Refresh
+        </button>
+        <button class="btn btn-primary" id="composeBtn">
+          ✏️ Compose Email
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="email-container">
+      <!-- Inbox List -->
+      <div class="inbox-section">
+        <div class="inbox-header">
+          <div class="inbox-tabs">
+            <button class="tab-btn active" data-tab="inbox">Inbox</button>
+            <button class="tab-btn" data-tab="sent">Sent</button>
+            <button class="tab-btn" data-tab="failed">Failed</button>
+            <button class="tab-btn" data-tab="all">All</button>
+          </div>
+          <div class="inbox-search">
+            <input type="text" class="search-input" placeholder="🔍 Search emails..." id="searchInput">
+          </div>
+        </div>
+        
+        <!-- Select All Row with Delete Button -->
+        <div class="select-all-row">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <input type="checkbox" class="select-all-checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
+            <label class="select-all-label" for="selectAllCheckbox">Select All</label>
+          </div>
+          <button class="btn-delete-elegant" id="deleteSelectedBtn" onclick="bulkDeleteEmails()" style="display: none;">
+            🗑️ Delete (<span id="selectedCountInline">0</span>)
+          </button>
+        </div>
+        
+        <div class="inbox-list" id="emailList">
+          <!-- Emails will be loaded here -->
+        </div>
+      </div>
+
+      <!-- Detail View -->
+      <div class="detail-section" id="detailSection">
+        <div class="detail-empty">
+          <div class="detail-empty-icon">📭</div>
+          <h3>No email selected</h3>
+          <p>Select an email from the list to view details</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compose Modal -->
+  <div class="modal" id="composeModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">✏️ Compose New Email</h2>
+        <button class="modal-close" id="closeModalBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <!-- Compose Form -->
+        <div class="compose-form">
+          <!-- Template Selection -->
+          <div class="form-group">
+            <label class="form-label">Email Template</label>
+            <div class="template-grid">
+              <div class="template-card" data-template="acceptance">
+                <div class="template-icon">✅</div>
+                <div class="template-name">Acceptance</div>
+              </div>
+              <div class="template-card" data-template="rejection">
+                <div class="template-icon">❌</div>
+                <div class="template-name">Rejection</div>
+              </div>
+              <div class="template-card" data-template="interview">
+                <div class="template-icon">📅</div>
+                <div class="template-name">Interview</div>
+              </div>
+              <div class="template-card" data-template="documents">
+                <div class="template-icon">📄</div>
+                <div class="template-name">Documents</div>
+              </div>
+              <div class="template-card" data-template="reminder">
+                <div class="template-icon">⏰</div>
+                <div class="template-name">Reminder</div>
+              </div>
+              <div class="template-card active" data-template="custom">
+                <div class="template-icon">✏️</div>
+                <div class="template-name">Custom</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sender Selection -->
+          <div class="form-group">
+            <label class="form-label">Send From</label>
+            <select class="form-select" id="senderEmail">
+              <option value="admissions@acnhs.am">ACNHS Admissions - admissions@acnhs.am</option>
+              <option value="info@acnhs.am">ACNHS Office - info@acnhs.am</option>
+              <option value="documents@acnhs.am">ACNHS Documents - documents@acnhs.am</option>
+              <option value="international@acnhs.am">ACNHS International Relations - international@acnhs.am</option>
+              <option value="registrar@acnhs.am">ACNHS Registrar - registrar@acnhs.am</option>
+              <option value="finance@acnhs.am">ACNHS Finance - finance@acnhs.am</option>
+              <option value="ceo@acnhs.am">ACNHS CEO - ceo@acnhs.am</option>
+              <option value="dean@acnhs.am">ACNHS Dean - dean@acnhs.am</option>
+              <option value="academic@acnhs.am">ACNHS Academic Affairs - academic@acnhs.am</option>
+              <option value="student-services@acnhs.am">ACNHS Student Services - student-services@acnhs.am</option>
+              <option value="legal@acnhs.am">ACNHS Legal - legal@acnhs.am</option>
+              <option value="hr@acnhs.am">ACNHS Human Resources - hr@acnhs.am</option>
+              <option value="it@acnhs.am">ACNHS IT Support - it@acnhs.am</option>
+              <option value="library@acnhs.am">ACNHS Library - library@acnhs.am</option>
+              <option value="alumni@acnhs.am">ACNHS Alumni Relations - alumni@acnhs.am</option>
+              <option value="research@acnhs.am">ACNHS Research - research@acnhs.am</option>
+              <option value="do-not-reply@acnhs.am">ACNHS No Reply - do-not-reply@acnhs.am (No replies)</option>
+            </select>
+          </div>
+
+          <!-- Recipients -->
+          <div class="form-group">
+            <label class="form-label">Recipient Type</label>
+            <select class="form-select" id="recipientType">
+              <option value="single">Single Applicant</option>
+              <option value="status">By Status</option>
+              <option value="program">By Program</option>
+              <option value="all">All Applicants</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="singleRecipientGroup">
+            <label class="form-label">Applicant Name</label>
+            <input type="text" class="form-input" id="applicantName" placeholder="Enter applicant name">
+          </div>
+
+          <div class="form-group" id="singleRecipientGroup2">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="recipientEmail" placeholder="Enter email address">
+          </div>
+
+          <div class="form-group" id="statusFilterGroup" style="display: none;">
+            <label class="form-label">Application Status</label>
+            <select class="form-select" id="statusFilter">
+              <option value="pending">Pending</option>
+              <option value="under-review">Under Review</option>
+              <option value="accepted">Accepted</option>
+              <option value="rejected">Rejected</option>
+            </select>
+          </div>
+
+          <div class="form-group" id="programFilterGroup" style="display: none;">
+            <label class="form-label">Program</label>
+            <select class="form-select" id="programFilter"></select>
+          </div>
+
+          <!-- Subject -->
+          <div class="form-group">
+            <label class="form-label">Subject</label>
+            <input type="text" class="form-input" id="emailSubject" placeholder="Enter email subject">
+          </div>
+
+          <!-- Body -->
+          <div class="form-group">
+            <label class="form-label">Message Body</label>
+            <textarea class="form-textarea" id="emailBody" placeholder="Enter your message here..."></textarea>
+          </div>
+        </div>
+
+        <!-- Preview Pane -->
+        <div class="preview-pane">
+          <div class="preview-title">📧 Live Email Preview</div>
+          <div class="preview-frame">
+            <iframe id="previewFrame" frameborder="0"></iframe>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="sendEmailBtn">
+          <span id="sendBtnText">📤 Send Email</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal" id="deleteModal">
+    <div class="modal-content delete-modal-content">
+      <div class="delete-modal-header">
+        <div class="delete-icon">🗑️</div>
+        <h2 class="delete-modal-title" id="deleteModalTitle">Delete Email</h2>
+        <p class="delete-modal-subtitle" id="deleteModalMessage">
+          Are you sure you want to delete this email? This action cannot be undone.
+        </p>
+      </div>
+      <div class="delete-modal-footer">
+        <button class="btn-modal-cancel" id="cancelDeleteBtn">Cancel</button>
+        <button class="btn-modal-delete" id="confirmDeleteBtn">
+          Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div class="loading" id="loadingOverlay">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/admin-sidebar.js"></script>
+  
+  <script>
+    // Initialize Supabase client
+    let db;
+    
+    // Configuration
+    const USE_EDGE_FUNCTION = true; // Set to true after deploying Edge Function
+    const EDGE_FUNCTION_URL = 'https://zlvnxvrzotamhpezqedr.supabase.co/functions/v1/send-email';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4MTEzMTcsImV4cCI6MjA3ODM4NzMxN30.-IoSqKhDrA9NuG4j3GufIbfmodWqCoppEklE1nTmw38';
+    const TEST_MODE = false; // Fallback if Edge Function not deployed
+    
+    // Email HTML template (embedded)
+    const EMAIL_HTML_TEMPLATE = `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{SUBJECT}}</title>
+  <style>
+    html,body{margin:0!important;padding:0!important;height:100%!important;width:100%!important}
+    *{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}
+    table,td{mso-table-lspace:0pt!important;mso-table-rspace:0pt!important;border-collapse:collapse!important}
+    img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;display:block}
+    a{color:inherit;text-decoration:none}
+    .u-link{color:#2dd4bf!important;text-decoration:underline!important}
+    @media (max-width: 620px){
+      .container{width:100%!important}
+      .px{padding-left:18px!important;padding-right:18px!important}
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
+    <tr>
+      <td align="center" style="padding:24px 10px;">
+        <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
+          <tr>
+            <td style="height:6px;background:#2dd4bf;border-radius:14px 14px 0 0;"></td>
+          </tr>
+          <tr>
+            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:20px 26px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="68" valign="middle">
+                    <img src="https://acnhs.am/assets/images/Seal.png" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                  </td>
+                  <td valign="middle" style="padding-left:14px;">
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#ffffff;font-weight:700;opacity:0.96;">&amp; Health Sciences</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#cbd5e1;font-weight:600;margin-top:6px;">Yerevan, Armenia</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="height:1px;background:rgba(255,255,255,0.10);margin:16px 0;"></div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:26px;color:#ffffff;font-weight:900;letter-spacing:-0.4px;">{{EMAIL_TITLE}}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#94a3b8;font-weight:600;margin-top:6px;">{{DATE}}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:17px;color:#0f172a;font-weight:800;">Dear {{APPLICANT_NAME}},</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:23px;color:#334155;margin-top:12px;">{{BODY_CONTENT}}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#0f172a;font-weight:800;margin-top:24px;">Respectfully,</div>
+              <div style="margin-top:12px;">
+                <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f172a;font-weight:900;">ACNHS Admissions Team</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#475569;font-weight:700;">Office of Admissions</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:6px;">+374 93 798879 • admissions@acnhs.am</div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#020617;border-radius:0 0 14px 14px;padding:16px 26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#94a3b8;">© {{YEAR}} Armenian College of Nursing &amp; Health Sciences</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    // Email templates
+    const emailTemplates = {
+      acceptance: {
+        subject: 'Congratulations! Your Application Has Been Accepted - ACNHS',
+        body: `We are delighted to inform you that your application to the Armenian College of Nursing & Health Sciences has been accepted!
+
+Your dedication and qualifications have impressed our admissions committee. We look forward to welcoming you to our academic community.
+
+Next Steps:
+• Complete your enrollment by the deadline
+• Submit any remaining required documents
+• Attend orientation
+
+If you have any questions, please don't hesitate to contact us.
+
+Congratulations once again on this achievement!`
+      },
+      rejection: {
+        subject: 'Update on Your Application Status - ACNHS',
+        body: `Thank you for your interest in the Armenian College of Nursing & Health Sciences and for taking the time to submit your application.
+
+After careful consideration of all applications, we regret to inform you that we are unable to offer you admission at this time. This decision was difficult, as we received many qualified applications for a limited number of positions.
+
+We encourage you to reapply in the future and wish you every success in your educational pursuits.`
+      },
+      interview: {
+        subject: 'Interview Invitation - ACNHS Admissions',
+        body: `Thank you for your application to the Armenian College of Nursing & Health Sciences.
+
+We would like to invite you for an interview to discuss your application further.
+
+Interview Details:
+• Date: [Please confirm availability]
+• Time: [To be scheduled]
+• Location: ACNHS Campus / Online
+
+Please reply to this email to confirm your attendance.
+
+We look forward to meeting you!`
+      },
+      documents: {
+        subject: 'Additional Documents Required - ACNHS Application',
+        body: `Thank you for your application to ACNHS.
+
+To complete the review of your application, we need the following documents:
+
+Required Documents:
+• Official transcript
+• Letters of recommendation
+• Proof of English proficiency (if applicable)
+
+Please upload these documents through your portal within 7 days.
+
+If you need assistance, please contact our admissions office.`
+      },
+      reminder: {
+        subject: 'Reminder: Complete Your ACNHS Application',
+        body: `This is a friendly reminder that your application to the Armenian College of Nursing & Health Sciences is incomplete.
+
+To proceed:
+• Complete all required fields
+• Upload necessary documents
+• Submit your application
+
+We're here to help! Contact us if you need assistance.`
+      },
+      custom: {
+        subject: '',
+        body: ''
+      }
+    };
+
+    // State
+    let emailHistory = [];
+    let currentFilter = 'inbox';
+    let selectedEmail = null;
+    let selectedTemplate = 'custom';
+    let selectedEmails = new Set(); // Track selected email IDs
+    let emailToDelete = null;
+    let bulkDeleteMode = false;
+    let viewedEmails = new Set(); // Track viewed email IDs to remove glow
+    let autoRefreshInterval = null;
+
+    // Load viewed emails from localStorage
+    function loadViewedEmails() {
+      try {
+        const stored = localStorage.getItem('viewedEmails');
+        if (stored) {
+          viewedEmails = new Set(JSON.parse(stored));
+        }
+      } catch (e) {
+        console.error('Error loading viewed emails:', e);
+      }
+    }
+
+    // Save viewed emails to localStorage
+    function saveViewedEmails() {
+      try {
+        localStorage.setItem('viewedEmails', JSON.stringify([...viewedEmails]));
+      } catch (e) {
+        console.error('Error saving viewed emails:', e);
+      }
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async function() {
+      // Initialize Supabase
+      db = initSupabase();
+      if (!db) {
+        showNotification('Failed to initialize Supabase', 'error');
+        return;
+      }
+      
+      // Load viewed emails from storage
+      loadViewedEmails();
+      
+      await loadEmailHistory();
+      setupEventListeners();
+      await loadPrograms();
+
+      // Auto-refresh emails every 10 seconds
+      autoRefreshInterval = setInterval(async () => {
+        console.log('🔄 Auto-refreshing emails...');
+        const previousCount = emailHistory.length;
+        await loadEmailHistory();
+        const newCount = emailHistory.length;
+        
+        // Show notification if new emails arrived
+        if (newCount > previousCount) {
+          const diff = newCount - previousCount;
+          showNotification(`📬 ${diff} new email${diff > 1 ? 's' : ''} received!`, 'info');
+        }
+      }, 10000); // 10 seconds
+
+      console.log('✅ Auto-refresh enabled (every 10 seconds)');
+    });
+
+    function setupEventListeners() {
+      // Tab switching
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          currentFilter = this.dataset.tab;
+          renderEmailList();
+        });
+      });
+
+      // Search
+      document.getElementById('searchInput').addEventListener('input', renderEmailList);
+
+      // Compose button
+      document.getElementById('composeBtn').addEventListener('click', openComposeModal);
+      document.getElementById('closeModalBtn').addEventListener('click', closeComposeModal);
+      document.getElementById('cancelBtn').addEventListener('click', closeComposeModal);
+
+      // Delete modal
+      document.getElementById('cancelDeleteBtn').addEventListener('click', cancelDelete);
+      document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
+
+      // Refresh
+      document.getElementById('refreshBtn').addEventListener('click', loadEmailHistory);
+
+      // Template selection
+      document.querySelectorAll('.template-card').forEach(card => {
+        card.addEventListener('click', function() {
+          document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
+          this.classList.add('active');
+          selectedTemplate = this.dataset.template;
+          loadTemplate(selectedTemplate);
+        });
+      });
+
+      // Recipient type
+      document.getElementById('recipientType').addEventListener('change', function() {
+        const type = this.value;
+        document.getElementById('singleRecipientGroup').style.display = type === 'single' ? 'block' : 'none';
+        document.getElementById('singleRecipientGroup2').style.display = type === 'single' ? 'block' : 'none';
+        document.getElementById('statusFilterGroup').style.display = type === 'status' ? 'block' : 'none';
+        document.getElementById('programFilterGroup').style.display = type === 'program' ? 'block' : 'none';
+      });
+
+      // Real-time preview - also listen to applicant name
+      document.getElementById('applicantName').addEventListener('input', updatePreview);
+      document.getElementById('emailSubject').addEventListener('input', updatePreview);
+      document.getElementById('emailBody').addEventListener('input', updatePreview);
+
+      // Send email
+      document.getElementById('sendEmailBtn').addEventListener('click', sendEmail);
+    }
+
+    function loadTemplate(template) {
+      const templateData = emailTemplates[template];
+      document.getElementById('emailSubject').value = templateData.subject;
+      document.getElementById('emailBody').value = templateData.body;
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const subject = document.getElementById('emailSubject').value || 'Email Subject';
+      const body = document.getElementById('emailBody').value || 'Your email content will appear here...';
+      const applicantName = document.getElementById('applicantName').value || 'Applicant';
+      
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      
+      let html = EMAIL_HTML_TEMPLATE
+        .replace(/{{SUBJECT}}/g, subject)
+        .replace(/{{EMAIL_TITLE}}/g, subject)
+        .replace(/{{DATE}}/g, dateStr)
+        .replace(/{{APPLICANT_NAME}}/g, applicantName)
+        .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+        .replace(/{{YEAR}}/g, now.getFullYear());
+
+      const iframe = document.getElementById('previewFrame');
+      iframe.srcdoc = html;
+    }
+
+    async function loadPrograms() {
+      try {
+        const { data: programs, error } = await db
+          .from('applications')
+          .select('program')
+          .not('program', 'is', null);
+
+        if (error) throw error;
+
+        const uniquePrograms = [...new Set(programs.map(p => p.program))];
+        const programSelect = document.getElementById('programFilter');
+        
+        programSelect.innerHTML = uniquePrograms.map(program => 
+          `<option value="${program}">${program}</option>`
+        ).join('');
+      } catch (error) {
+        console.error('Error loading programs:', error);
+      }
+    }
+
+    async function loadEmailHistory() {
+      showLoading(true);
+      try {
+        const { data: emails, error } = await db
+          .from('email_history')
+          .select('*')
+          .order('sent_at', { ascending: false })
+          .limit(100);
+
+        if (error) throw error;
+
+        emailHistory = emails || [];
+        renderEmailList();
+        updateBadge();
+      } catch (error) {
+        console.error('Error loading email history:', error);
+        showNotification('Error loading emails', 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function stripHtmlTags(html) {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return div.textContent || div.innerText || '';
+    }
+
+    function renderEmailList() {
+      const container = document.getElementById('emailList');
+      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+      
+      let filtered = emailHistory;
+      
+      console.log('📧 Total emails in history:', emailHistory.length);
+      console.log('📧 Current filter:', currentFilter);
+      
+      // ACNHS email addresses
+      const acnhsEmails = [
+        'admissions@acnhs.am',
+        'info@acnhs.am',
+        'documents@acnhs.am',
+        'international@acnhs.am',
+        'registrar@acnhs.am',
+        'finance@acnhs.am',
+        'ceo@acnhs.am',
+        'dean@acnhs.am',
+        'academic@acnhs.am',
+        'student-services@acnhs.am',
+        'legal@acnhs.am',
+        'hr@acnhs.am',
+        'it@acnhs.am',
+        'library@acnhs.am',
+        'alumni@acnhs.am',
+        'research@acnhs.am',
+        'do-not-reply@acnhs.am'
+      ];
+      
+      // Filter by tab
+      if (currentFilter === 'inbox') {
+        // INBOX: Emails received TO any ACNHS address (recipient is ACNHS)
+        filtered = filtered.filter(e => {
+          const isInbox = acnhsEmails.includes(e.recipient?.toLowerCase());
+          console.log('📧 Inbox check - Recipient:', e.recipient, 'Sender:', e.sender, 'Is inbox:', isInbox);
+          return isInbox;
+        });
+        console.log('📧 Filtered inbox emails:', filtered.length);
+      } else if (currentFilter === 'sent') {
+        // SENT: Emails sent FROM any ACNHS address (sender is ACNHS)
+        // OR emails with status='sent' but no sender (backward compatibility)
+        filtered = filtered.filter(e => {
+          const isSent = acnhsEmails.includes(e.sender?.toLowerCase()) || 
+                         (!e.sender && e.status === 'sent');
+          console.log('📧 Sent check - Sender:', e.sender, 'Recipient:', e.recipient, 'Status:', e.status, 'Is sent:', isSent);
+          return isSent;
+        });
+        console.log('📧 Filtered sent emails:', filtered.length);
+      } else if (currentFilter === 'failed') {
+        // FAILED: Emails with failed status
+        filtered = filtered.filter(e => e.status === 'failed');
+        console.log('📧 Filtered failed emails:', filtered.length);
+      }
+      // 'all' shows everything, no filter needed
+      
+      // Filter by search
+      if (searchTerm) {
+        filtered = filtered.filter(e => 
+          e.recipient.toLowerCase().includes(searchTerm) ||
+          e.subject.toLowerCase().includes(searchTerm)
+        );
+      }
+
+      if (filtered.length === 0) {
+        container.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">No emails found</div>';
+        return;
+      }
+
+      container.innerHTML = filtered.map(email => {
+        // Strip HTML tags and escape for safe display
+        const bodyPreview = escapeHtml(stripHtmlTags(email.body || '').substring(0, 60));
+        
+        // Check if email is new (received in last 5 minutes AND not yet viewed)
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const emailDate = new Date(email.sent_at);
+        const isNew = email.status === 'received' && emailDate > fiveMinutesAgo && !viewedEmails.has(email.id);
+        const isChecked = selectedEmails.has(email.id);
+        
+        return `<div class="email-item ${selectedEmail?.id === email.id ? 'active' : ''} ${isNew ? 'new-email' : ''}">
+  <div class="email-item-row">
+    <input type="checkbox" class="email-checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleEmailSelection('${email.id}')" />
+    <div class="email-content" onclick="selectEmail('${email.id}')">
+      <div class="email-item-header">
+        <div style="flex: 1;">
+          <div style="font-weight: 700; color: #f8fafc; font-size: 14px;">From: ${escapeHtml(email.sender || 'Unknown')}</div>
+          <div style="font-weight: 700; color: #f8fafc; font-size: 14px; margin-top: 4px;">To: ${escapeHtml(email.recipient || 'Unknown')}</div>
+        </div>
+        <span class="email-time">${new Date(email.sent_at).toLocaleDateString()}</span>
+      </div>
+      <div class="email-subject">${escapeHtml(email.subject || 'No Subject')}</div>
+      <div class="email-preview">${bodyPreview}...</div>
+      <span class="email-status status-${email.status}">${email.status.toUpperCase()}</span>
+    </div>
+  </div>
+</div>`;
+      }).join('');
+      
+      updateSelectionUI();
+    }
+
+    window.selectEmail = function(emailId) {
+      selectedEmail = emailHistory.find(e => e.id === emailId);
+      
+      // Mark email as viewed to remove glow
+      viewedEmails.add(emailId);
+      saveViewedEmails(); // Persist to localStorage
+      
+      renderEmailList();
+      showEmailDetail();
+    }
+
+    // Delete email with modal
+    window.deleteEmail = async function(emailId) {
+      bulkDeleteMode = false;
+      emailToDelete = emailId;
+      document.getElementById('deleteModalTitle').textContent = '🗑️ Delete Email';
+      document.getElementById('deleteModalMessage').textContent = 'Are you sure you want to delete this email? This action cannot be undone.';
+      document.getElementById('deleteModal').classList.add('active');
+    }
+
+    async function confirmDelete() {
+      document.getElementById('deleteModal').classList.remove('active');
+      showLoading(true);
+      
+      try {
+        if (bulkDeleteMode) {
+          // Bulk delete
+          const idsToDelete = Array.from(selectedEmails);
+          console.log('🗑️ Bulk deleting:', idsToDelete);
+          if (idsToDelete.length === 0) {
+            console.warn('No emails selected for deletion');
+            return;
+          }
+          
+          const { data, error } = await db
+            .from('email_history')
+            .delete()
+            .in('id', idsToDelete)
+            .select();
+
+          if (error) {
+            console.error('Delete error:', error);
+            throw error;
+          }
+
+          console.log('✅ Deleted:', data);
+          showNotification(`✅ ${idsToDelete.length} email(s) deleted successfully`, 'success');
+          clearSelection();
+        } else {
+          // Single delete
+          if (!emailToDelete) {
+            console.warn('No email ID to delete');
+            return;
+          }
+          
+          console.log('🗑️ Deleting single email:', emailToDelete);
+          const { data, error } = await db
+            .from('email_history')
+            .delete()
+            .eq('id', emailToDelete)
+            .select();
+
+          if (error) {
+            console.error('Delete error:', error);
+            throw error;
+          }
+
+          console.log('✅ Deleted:', data);
+          showNotification('✅ Email deleted successfully', 'success');
+          emailToDelete = null;
+        }
+        
+        // Clear selection and reload
+        selectedEmail = null;
+        await loadEmailHistory();
+        
+        // Show empty state
+        document.getElementById('detailSection').innerHTML = `
+          <div class="detail-empty">
+            <div class="detail-empty-icon">📭</div>
+            <h3>No email selected</h3>
+            <p>Select an email from the list to view details</p>
+          </div>
+        `;
+      } catch (error) {
+        console.error('Error deleting email:', error);
+        showNotification('❌ Error deleting email: ' + error.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    function cancelDelete() {
+      emailToDelete = null;
+      document.getElementById('deleteModal').classList.remove('active');
+    }
+
+    function showEmailDetail() {
+      if (!selectedEmail) {
+        document.getElementById('detailSection').innerHTML = `
+          <div class="detail-empty">
+            <div class="detail-empty-icon">📭</div>
+            <h3>No email selected</h3>
+            <p>Select an email from the list to view details</p>
+          </div>
+        `;
+        return;
+      }
+
+      console.log('📧 Selected email full data:', selectedEmail);
+      console.log('📧 Email body:', selectedEmail.body);
+      console.log('📧 Email body length:', selectedEmail.body?.length);
+
+      const detailSection = document.getElementById('detailSection');
+      const now = new Date(selectedEmail.sent_at);
+      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      
+      // For received emails, show plain body. For sent emails, use template
+      let bodyHtml;
+      if (selectedEmail.status === 'received') {
+        // If there's html_body, show the reply text first, then separator, then original HTML
+        if (selectedEmail.html_body) {
+          // Extract just the reply text (before the email client's quote)
+          let replyText = selectedEmail.body;
+          
+          // Try to extract the actual reply before the quoted email
+          const quoteMarkers = [
+            /On .+? wrote:/i,
+            /From:.+?Sent:/s,
+            />+\s*Armenian College/i,
+            /_{5,}/,  // underscores
+            /-{5,}/   // dashes
+          ];
+          
+          for (const marker of quoteMarkers) {
+            const match = replyText.match(marker);
+            if (match) {
+              replyText = replyText.substring(0, match.index).trim();
+              break;
+            }
+          }
+          
+          bodyHtml = `
+            <div style="padding: 30px; background: white; border-radius: 12px 12px 0 0; border: 1px solid rgba(148, 163, 184, 0.2); border-bottom: none;">
+              <div style="font-family: Arial, sans-serif; color: #000000; line-height: 1.6; font-size: 15px;">
+                ${replyText.replace(/\n/g, '<br>')}
+              </div>
+            </div>
+            <div style="margin: 0; border-top: 3px solid #cbd5e1; position: relative; background: #f8fafc; padding: 8px 0;">
+              <div style="text-align: center; color: #64748b; font-size: 13px; font-weight: 600; font-family: Arial, sans-serif;">
+                ──────  Original Email  ──────
+              </div>
+            </div>
+            <div style="padding: 30px; background: white; border-radius: 0 0 12px 12px; border: 1px solid rgba(148, 163, 184, 0.2); border-top: none;">
+              ${selectedEmail.html_body}
+            </div>
+          `;
+        } else {
+          // Fallback to plain body if no HTML
+          bodyHtml = `
+            <div style="padding: 30px; background: white; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
+              <div style="font-family: Arial, sans-serif; color: #000000; line-height: 1.6;">
+                ${selectedEmail.body.replace(/\n/g, '<br>')}
+              </div>
+            </div>
+          `;
+        }
+      } else {
+        // Use fancy template for sent emails
+        let html = EMAIL_HTML_TEMPLATE
+          .replace(/{{SUBJECT}}/g, selectedEmail.subject)
+          .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
+          .replace(/{{DATE}}/g, dateStr)
+          .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
+          .replace(/{{BODY_CONTENT}}/g, selectedEmail.body.replace(/\n/g, '<br>'))
+          .replace(/{{YEAR}}/g, now.getFullYear());
+        
+        bodyHtml = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+      }
+
+      detailSection.innerHTML = `
+        <div class="email-detail">
+          <div class="detail-header">
+            <div class="detail-header-content">
+              <h2 class="detail-subject">${selectedEmail.subject}</h2>
+              <div class="detail-meta">
+                <div class="detail-meta-item">
+                  <strong>From:</strong> ${selectedEmail.sender || 'N/A'}
+                </div>
+                <div class="detail-meta-item">
+                  <strong>To:</strong> ${selectedEmail.recipient}
+                </div>
+                <div class="detail-meta-item">
+                  <strong>Sent:</strong> ${new Date(selectedEmail.sent_at).toLocaleString()}
+                </div>
+                <div class="detail-meta-item">
+                  <strong>Status:</strong> <span class="email-status status-${selectedEmail.status}">${selectedEmail.status.toUpperCase()}</span>
+                </div>
+              </div>
+            </div>
+            <div class="detail-actions">
+              <button class="btn-icon-reply" onclick="replyToEmail('${selectedEmail.id}')" title="Reply" style="background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%); color: white; padding: 8px 12px; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-right: 6px; transition: all 0.2s;">
+                ↩️
+              </button>
+              <button class="btn-icon-forward" onclick="forwardEmail('${selectedEmail.id}')" title="Forward" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; padding: 8px 12px; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; font-size: 16px; cursor: pointer; margin-right: 6px; transition: all 0.2s;">
+                ⤴️
+              </button>
+              <button class="btn-delete" onclick="window.deleteEmail('${selectedEmail.id}')" title="Delete" style="padding: 8px 12px; font-size: 16px;">
+                🗑️
+              </button>
+            </div>
+          </div>
+          <div class="detail-body">
+            ${bodyHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    window.replyToEmail = function(emailId) {
+      const email = emailHistory.find(e => e.id === emailId);
+      if (!email) return;
+      
+      // Open compose modal with pre-filled data
+      document.getElementById('recipientType').value = 'single';
+      document.getElementById('singleRecipientGroup').style.display = 'block';
+      document.getElementById('singleRecipientGroup2').style.display = 'block';
+      document.getElementById('statusFilterGroup').style.display = 'none';
+      document.getElementById('programFilterGroup').style.display = 'none';
+      
+      // Set recipient to the sender of the original email
+      document.getElementById('recipientEmail').value = email.sender || '';
+      document.getElementById('applicantName').value = '';
+      
+      // Set subject with Re: prefix
+      const subject = email.subject.startsWith('Re: ') ? email.subject : 'Re: ' + email.subject;
+      document.getElementById('emailSubject').value = subject;
+      
+      // Clear body for the reply
+      document.getElementById('emailBody').value = '';
+      
+      openComposeModal();
+      updatePreview();
+    }
+
+    window.forwardEmail = function(emailId) {
+      const email = emailHistory.find(e => e.id === emailId);
+      if (!email) return;
+      
+      // Open compose modal with pre-filled data
+      document.getElementById('recipientType').value = 'single';
+      document.getElementById('singleRecipientGroup').style.display = 'block';
+      document.getElementById('singleRecipientGroup2').style.display = 'block';
+      document.getElementById('statusFilterGroup').style.display = 'none';
+      document.getElementById('programFilterGroup').style.display = 'none';
+      
+      // Leave recipient empty for user to fill
+      document.getElementById('recipientEmail').value = '';
+      document.getElementById('applicantName').value = '';
+      
+      // Set subject with Fwd: prefix
+      const subject = email.subject.startsWith('Fwd: ') ? email.subject : 'Fwd: ' + email.subject;
+      document.getElementById('emailSubject').value = subject;
+      
+      // Include original message in body
+      const forwardedMessage = `
+
+---------- Forwarded message ---------
+From: ${email.sender}
+To: ${email.recipient}
+Date: ${new Date(email.sent_at).toLocaleString()}
+Subject: ${email.subject}
+
+${email.body}`;
+      
+      document.getElementById('emailBody').value = forwardedMessage;
+      
+      openComposeModal();
+      updatePreview();
+    }
+
+    function updateBadge() {
+      document.getElementById('totalEmailsBadge').textContent = `${emailHistory.length} Email${emailHistory.length !== 1 ? 's' : ''}`;
+    }
+
+    function openComposeModal() {
+      document.getElementById('composeModal').classList.add('active');
+      updatePreview();
+    }
+
+    function closeComposeModal() {
+      document.getElementById('composeModal').classList.remove('active');
+    }
+
+    async function sendEmail() {
+      const recipientType = document.getElementById('recipientType').value;
+      const subject = document.getElementById('emailSubject').value;
+      const body = document.getElementById('emailBody').value;
+
+      if (!subject || !body) {
+        showNotification('Please fill in subject and message', 'error');
+        return;
+      }
+
+      let recipients = [];
+
+      if (recipientType === 'single') {
+        const email = document.getElementById('recipientEmail').value;
+        const name = document.getElementById('applicantName').value;
+        if (!email || !validateEmail(email)) {
+          showNotification('Please enter a valid email address', 'error');
+          return;
+        }
+        if (!name) {
+          showNotification('Please enter the applicant name', 'error');
+          return;
+        }
+        recipients = [{ email, name }];
+      } else {
+        // Load recipients based on filter
+        let query = db.from('applications').select('email, applicant_name');
+        
+        if (recipientType === 'status') {
+          const status = document.getElementById('statusFilter').value;
+          query = query.eq('status', status);
+        } else if (recipientType === 'program') {
+          const program = document.getElementById('programFilter').value;
+          query = query.eq('program', program);
+        }
+
+        const { data: applicants, error } = await query;
+        if (error) throw error;
+        
+        recipients = applicants.map(a => ({ email: a.email, name: a.applicant_name || 'Applicant' }));
+      }
+
+      if (recipients.length === 0) {
+        showNotification('No recipients found', 'error');
+        return;
+      }
+
+      showLoading(true);
+      document.getElementById('sendBtnText').textContent = 'Sending...';
+
+      try {
+        let successCount = 0;
+        let failCount = 0;
+        
+        // Get selected sender email
+        const senderEmail = document.getElementById('senderEmail').value;
+
+        for (const recipient of recipients) {
+          const now = new Date();
+          const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          
+          let emailHtml = EMAIL_HTML_TEMPLATE
+            .replace(/{{SUBJECT}}/g, subject)
+            .replace(/{{EMAIL_TITLE}}/g, subject)
+            .replace(/{{DATE}}/g, dateStr)
+            .replace(/{{APPLICANT_NAME}}/g, recipient.name)
+            .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+            .replace(/{{YEAR}}/g, now.getFullYear());
+          
+          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail);
+          
+          if (result.success) {
+            successCount++;
+            // Only save to history if NOT using Edge Function (Edge Function saves itself)
+            if (!USE_EDGE_FUNCTION) {
+              await saveEmailToHistory({
+                recipient: recipient.email,
+                sender: senderEmail,
+                subject,
+                body: body,
+                status: 'sent',
+                sent_at: now.toISOString(),
+                resend_id: result.id
+              });
+            }
+          } else {
+            failCount++;
+            // Always save failed emails locally
+            await saveEmailToHistory({
+              recipient: recipient.email,
+              sender: senderEmail,
+              subject,
+              body: body,
+              status: 'failed',
+              sent_at: now.toISOString(),
+              error: result.error
+            });
+          }
+        }
+
+        showNotification(`✅ Sent ${successCount} email(s)` + (failCount > 0 ? ` (${failCount} failed)` : ''), 'success');
+        
+        await loadEmailHistory();
+        closeComposeModal();
+        clearForm();
+      } catch (error) {
+        console.error('Error sending email:', error);
+        showNotification('Error: ' + error.message, 'error');
+      } finally {
+        showLoading(false);
+        document.getElementById('sendBtnText').textContent = '📤 Send Email';
+      }
+    }
+
+    async function sendEmailViaResend(to, subject, html, from) {
+      // Use Edge Function if enabled
+      if (USE_EDGE_FUNCTION) {
+        try {
+          const response = await fetch(EDGE_FUNCTION_URL, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              to: to,
+              subject: subject,
+              html: html,
+              from: from
+            })
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            console.error('Edge Function Error:', response.status, data);
+            throw new Error(data.error || `API Error: ${response.status}`);
+          }
+
+          return { success: true, id: data.id };
+        } catch (error) {
+          console.error('Edge Function error:', error);
+          return { success: false, error: error.message };
+        }
+      }
+
+      // Test mode - simulate successful send without calling API
+      if (TEST_MODE) {
+        console.log('📧 TEST MODE: Email simulated', { to, subject });
+        return { 
+          success: true, 
+          id: 'test_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+        };
+      }
+
+      // Fallback error if neither is enabled
+      return { 
+        success: false, 
+        error: 'Email sending not configured. Deploy Edge Function or enable TEST_MODE.' 
+      };
+    }
+
+    async function saveEmailToHistory(emailData) {
+      try {
+        const { error } = await db
+          .from('email_history')
+          .insert([emailData]);
+
+        if (error) throw error;
+      } catch (error) {
+        console.error('Error saving email:', error);
+      }
+    }
+
+    function clearForm() {
+      document.getElementById('emailSubject').value = '';
+      document.getElementById('emailBody').value = '';
+      document.getElementById('recipientEmail').value = '';
+      document.getElementById('applicantName').value = '';
+    }
+
+    function validateEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      setTimeout(() => {
+        notification.remove();
+      }, 4000);
+    }
+
+    function showLoading(show) {
+      document.getElementById('loadingOverlay').classList.toggle('active', show);
+    }
+
+    // Selection management functions
+    window.toggleEmailSelection = function(emailId) {
+      if (selectedEmails.has(emailId)) {
+        selectedEmails.delete(emailId);
+      } else {
+        selectedEmails.add(emailId);
+      }
+      renderEmailList();
+    }
+
+    window.toggleSelectAll = function() {
+      const checkbox = document.getElementById('selectAllCheckbox');
+      const container = document.getElementById('emailList');
+      
+      // Get currently filtered emails
+      let filtered = [...emailHistory];
+      
+      if (currentFilter === 'inbox') {
+        filtered = filtered.filter(e => e.status === 'received');
+      } else if (currentFilter === 'sent') {
+        filtered = filtered.filter(e => e.status === 'sent');
+      } else if (currentFilter === 'failed') {
+        filtered = filtered.filter(e => e.status === 'failed');
+      }
+      
+      if (checkbox.checked) {
+        // Select all visible emails
+        filtered.forEach(email => selectedEmails.add(email.id));
+      } else {
+        // Deselect all
+        selectedEmails.clear();
+      }
+      
+      renderEmailList();
+    }
+
+    window.clearSelection = function() {
+      selectedEmails.clear();
+      document.getElementById('selectAllCheckbox').checked = false;
+      renderEmailList();
+    }
+
+    window.bulkDeleteEmails = function() {
+      if (selectedEmails.size === 0) {
+        showNotification('No emails selected', 'error');
+        return;
+      }
+      
+      bulkDeleteMode = true;
+      const count = selectedEmails.size;
+      document.getElementById('deleteModalTitle').textContent = '🗑️ Delete Multiple Emails';
+      document.getElementById('deleteModalMessage').textContent = `Are you sure you want to delete ${count} email(s)? This action cannot be undone.`;
+      document.getElementById('deleteModal').classList.add('active');
+    }
+
+    function updateSelectionUI() {
+      const count = selectedEmails.size;
+      
+      // Show/hide delete button and update count
+      const deleteBtn = document.getElementById('deleteSelectedBtn');
+      const countSpan = document.getElementById('selectedCountInline');
+      
+      if (count > 0) {
+        deleteBtn.style.display = 'block';
+        countSpan.textContent = count;
+      } else {
+        deleteBtn.style.display = 'none';
+      }
+      
+      // Update select all checkbox state
+      const checkbox = document.getElementById('selectAllCheckbox');
+      if (count === 0) {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+      } else {
+        // Get currently filtered emails count
+        let filtered = [...emailHistory];
+        if (currentFilter === 'inbox') {
+          filtered = filtered.filter(e => e.status === 'received');
+        } else if (currentFilter === 'sent') {
+          filtered = filtered.filter(e => e.status === 'sent');
+        } else if (currentFilter === 'failed') {
+          filtered = filtered.filter(e => e.status === 'failed');
+        }
+        
+        if (count === filtered.length && filtered.length > 0) {
+          checkbox.checked = true;
+          checkbox.indeterminate = false;
+        } else {
+          checkbox.checked = false;
+          checkbox.indeterminate = true;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

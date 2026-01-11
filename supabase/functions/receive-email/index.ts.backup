@@ -1,0 +1,437 @@
+// Supabase Edge Function to receive inbound emails via Resend webhook
+// This function processes incoming emails and saves them to the database
+
+// @ts-ignore Remote import provided by Deno runtime
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+// @ts-ignore Remote import provided by Deno runtime
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders } from "../_shared/cors.ts"
+
+declare const Deno: {
+  env: {
+    get: (key: string) => string | undefined
+  }
+}
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA')!
+
+const textDecoder = new TextDecoder()
+
+const htmlEntities: Record<string, string> = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>'
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>(?=\s*<)/gi, '\n')
+    .replace(/<br\s*\/?>(?!\n)/gi, '\n')
+    .replace(/<p[^>]*>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\n\s*\n/g, '\n')
+    .replace(/&(nbsp|amp|lt|gt);/gi, (entity) => htmlEntities[entity.toLowerCase()] ?? entity)
+    .trim()
+}
+
+function decodeBase64ToString(value: string) {
+  const cleaned = value.replace(/\s+/g, '')
+  try {
+    const binary = atob(cleaned)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i)
+    }
+    return textDecoder.decode(bytes)
+  } catch (error) {
+    console.error('⚠️ Failed to decode base64 payload, returning raw string', error)
+    return value
+  }
+}
+
+function stripHtml(html: string) {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>(?=\s*<)/gi, '\n')
+    .replace(/<br\s*\/?>(?!\n)/gi, '\n')
+    .replace(/<p[^>]*>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\n\s*\n/g, '\n')
+    .replace(/&(nbsp|amp|lt|gt);/gi, (entity) => htmlEntities[entity.toLowerCase()] ?? entity)
+    .trim()
+}
+
+function looksBase64(candidate: string) {
+  const trimmed = candidate.trim()
+  // Base64 data is usually long and only includes base64 chars and padding
+  return trimmed.length > 120 && /^[A-Za-z0-9+/=\r\n]+$/.test(trimmed)
+}
+
+function decodeQuotedPrintable(value: string) {
+  const normalized = value.replace(/=(\r\n|\n|\r)/g, '')
+  const bytes: number[] = []
+  for (let i = 0; i < normalized.length; i++) {
+    if (normalized[i] === '=' && /^[0-9A-Fa-f]{2}$/.test(normalized.substring(i + 1, i + 3))) {
+      bytes.push(parseInt(normalized.substring(i + 1, i + 3), 16))
+      i += 2
+    } else {
+      bytes.push(normalized.charCodeAt(i))
+    }
+  }
+  return textDecoder.decode(new Uint8Array(bytes))
+}
+
+function splitHeadersAndBody(section: string) {
+  const crlfIndex = section.indexOf('\r\n\r\n')
+  if (crlfIndex !== -1) {
+    return {
+      headers: section.slice(0, crlfIndex),
+      body: section.slice(crlfIndex + 4)
+    }
+  }
+
+  const lfIndex = section.indexOf('\n\n')
+  if (lfIndex !== -1) {
+    return {
+      headers: section.slice(0, lfIndex),
+      body: section.slice(lfIndex + 2)
+    }
+  }
+
+  return { headers: section, body: '' }
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function decodeMimeBody(headers: string, body: string) {
+  const encodingMatch = headers.match(/Content-Transfer-Encoding:\s*([^\r\n]+)/i)
+  const encoding = encodingMatch ? encodingMatch[1].toLowerCase() : '7bit'
+  const trimmedBody = body.trim()
+
+  if (!trimmedBody) return ''
+
+  switch (encoding) {
+    case 'base64':
+      return decodeBase64ToString(trimmedBody)
+    case 'quoted-printable':
+      return decodeQuotedPrintable(trimmedBody)
+    default:
+      return trimmedBody
+  }
+}
+
+function parseMimeBody(rawString: string) {
+  const boundaryMatch = rawString.match(/boundary=\"?([^\";]+)\"?/i)
+  const sections: string[] = []
+
+  if (boundaryMatch) {
+    const boundary = boundaryMatch[1]
+    const parts = rawString.split(new RegExp(`--${escapeRegExp(boundary)}(?:--)?`, 'g'))
+    for (const part of parts) {
+      const trimmedPart = part.trim()
+      if (!trimmedPart || trimmedPart === '--') continue
+      sections.push(trimmedPart)
+    }
+  } else {
+    sections.push(rawString)
+  }
+
+  let fallbackBody = ''
+
+  for (const section of sections) {
+    const { headers, body } = splitHeadersAndBody(section)
+    if (/Content-Type:\s*text\/plain/i.test(headers)) {
+      const decoded = decodeMimeBody(headers, body)
+      if (decoded.trim()) {
+        return decoded.trim()
+      }
+    }
+    if (!fallbackBody && /Content-Type:\s*text\/html/i.test(headers)) {
+      fallbackBody = stripHtml(decodeMimeBody(headers, body))
+    }
+    if (!fallbackBody) {
+      fallbackBody = body.trim()
+    }
+  }
+
+  return fallbackBody.trim()
+}
+
+function extractBodyFromRaw(emailData: Record<string, unknown>) {
+  const rawCandidates = [
+    emailData.raw,
+    emailData.raw_email,
+    emailData.rawEmail,
+    emailData.raw_body,
+    emailData.body,
+    emailData.email && (emailData.email as Record<string, unknown>).raw,
+    emailData.email && (emailData.email as Record<string, unknown>).raw_email,
+    emailData.email && (emailData.email as Record<string, unknown>).raw_body,
+    emailData.email && (emailData.email as Record<string, unknown>).body
+  ].filter(Boolean)
+
+  for (const candidate of rawCandidates) {
+    try {
+      let rawString: string | null = null
+
+      if (typeof candidate === 'string') {
+        rawString = looksBase64(candidate) ? decodeBase64ToString(candidate) : candidate
+      } else if (candidate && typeof candidate === 'object') {
+        const maybeData = (candidate as { data?: string; encoding?: string; value?: string })
+        if (maybeData.data) {
+          if ((maybeData.encoding || '').toLowerCase() === 'base64' || looksBase64(maybeData.data)) {
+            rawString = decodeBase64ToString(maybeData.data)
+          } else {
+            rawString = maybeData.data
+          }
+        } else if (maybeData.value) {
+          rawString = looksBase64(maybeData.value) ? decodeBase64ToString(maybeData.value) : maybeData.value
+        }
+      }
+
+      if (!rawString) continue
+
+      const parsedBody = parseMimeBody(rawString)
+      if (parsedBody) {
+        return parsedBody
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to parse raw email candidate', error)
+    }
+  }
+
+  return ''
+}
+
+function decodeFieldValue(value: unknown) {
+  if (!value) return ''
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+
+  if (typeof value === 'object') {
+    const candidate = value as { data?: string; encoding?: string; value?: string; content?: string }
+    if (candidate.data) {
+      if ((candidate.encoding || '').toLowerCase() === 'base64' || looksBase64(candidate.data)) {
+        return decodeBase64ToString(candidate.data)
+      }
+      return candidate.data
+    }
+
+    if (candidate.value) {
+      return looksBase64(candidate.value) ? decodeBase64ToString(candidate.value) : candidate.value
+    }
+
+    if (candidate.content) {
+      return typeof candidate.content === 'string' ? candidate.content : ''
+    }
+  }
+
+  return ''
+}
+
+function findBodyInRecord(record: Record<string, unknown> | undefined, visited = new Set<unknown>()): string {
+  if (!record || typeof record !== 'object' || visited.has(record)) return ''
+  visited.add(record)
+
+  for (const key of TEXT_BODY_KEYS) {
+    const decoded = decodeFieldValue((record as Record<string, unknown>)[key])
+    if (decoded) {
+      return decoded
+    }
+  }
+
+  for (const key of HTML_BODY_KEYS) {
+    const decoded = decodeFieldValue((record as Record<string, unknown>)[key])
+    if (decoded) {
+      return stripHtml(decoded)
+    }
+  }
+
+  for (const [_key, value] of Object.entries(record)) {
+    if (!value) continue
+    if (typeof value === 'string') {
+      // We've already checked explicit body keys above, so skip other strings
+      continue
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item && typeof item === 'object') {
+          const nested: string = findBodyInRecord(item as Record<string, unknown>, visited)
+          if (nested) return nested
+        } else if (typeof item === 'string' && item.trim()) {
+          return item.trim()
+        }
+      }
+      continue
+    }
+
+    if (typeof value === 'object') {
+      const nested: string = findBodyInRecord(value as Record<string, unknown>, visited)
+      if (nested) return nested
+    }
+  }
+
+  return ''
+}
+
+export async function extractEmailBody(emailData: Record<string, any>) {
+  let emailBody = findBodyInRecord(emailData)
+
+  if (!emailBody && emailData.email) {
+    emailBody = findBodyInRecord(emailData.email as Record<string, unknown>)
+  }
+
+  if (!emailBody) {
+    emailBody = extractBodyFromRaw(emailData)
+  }
+
+  if (!emailBody && emailData.parts && Array.isArray(emailData.parts)) {
+    for (const part of emailData.parts) {
+      if (part && typeof part === 'object') {
+        const candidate = await extractEmailBody(part as Record<string, unknown>)
+        if (candidate) {
+          emailBody = candidate
+          break
+        }
+      }
+    }
+  }
+
+  if (emailBody && emailBody.includes('<') && emailBody.includes('>')) {
+    const plainText = stripHtml(emailBody)
+    if (plainText) {
+      emailBody = plainText
+    }
+  }
+
+  return emailBody.trim()
+}
+
+const shouldStartServer = (import.meta as ImportMeta & { main?: boolean }).main ?? true
+
+if (shouldStartServer) {
+  serve(async (req: Request) => {
+    // Handle CORS preflight requests
+    if (req.method === 'OPTIONS') {
+      return new Response('ok', { headers: corsHeaders })
+    }
+
+    // Log the request for debugging
+    console.log('📨 Webhook request received from:', req.headers.get('user-agent'))
+    console.log('📨 Request method:', req.method)
+
+    try {
+      // Parse the incoming email webhook from Resend
+      const payload = await req.json()
+      
+      console.log('📧 Full webhook payload:', JSON.stringify(payload, null, 2))
+      
+      // Resend inbound emails can have different structures depending on configuration
+      // Check for both nested data and direct payload
+      const emailData = payload.data || payload
+      
+      console.log('📧 Email data keys:', Object.keys(emailData))
+      console.log('📧 Checking for body fields:', {
+        hasText: 'text' in emailData,
+        hasHtml: 'html' in emailData,
+        hasRawText: 'raw_text' in emailData,
+        hasBody: 'body' in emailData,
+        hasRawBody: 'raw_body' in emailData,
+      })
+
+      // Try to extract email body from various possible fields (raw + MIME parsing fallback)
+      const emailBody = await extractEmailBody(emailData)
+      
+      console.log('📧 Email body extracted, length:', emailBody.length)
+      console.log('📧 Body preview (first 500 chars):', emailBody.substring(0, 500))
+
+      // Extract sender email safely - handle string or array, with or without angle brackets
+      const fromField = Array.isArray(emailData.from) ? emailData.from[0] : emailData.from
+      const toField = Array.isArray(emailData.to) ? emailData.to[0] : emailData.to
+      
+      // Safely extract email from formats like "Name <email@domain.com>" or just "email@domain.com"
+      let senderEmail = 'unknown@unknown.com'
+      if (fromField) {
+        if (typeof fromField === 'string' && fromField.includes('<') && fromField.includes('>')) {
+          const match = fromField.match(/<(.+?)>/)
+          senderEmail = match ? match[1] : fromField
+        } else {
+          senderEmail = fromField
+        }
+      }
+
+      // Extract recipient email
+      let recipientEmail = 'unknown@acnhs.am'
+      if (toField) {
+        if (typeof toField === 'string' && toField.includes('<') && toField.includes('>')) {
+          const match = toField.match(/<(.+?)>/)
+          recipientEmail = match ? match[1] : toField
+        } else {
+          recipientEmail = toField
+        }
+      }
+
+      console.log('📧 Final extracted - Sender:', senderEmail, 'Recipient:', recipientEmail)
+      console.log('📧 Email body length:', emailBody.length)
+      console.log('📧 Body preview:', emailBody.substring(0, 200))
+
+      // Connect to Supabase
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+      // Save to email_history database
+      const { data, error } = await supabase
+        .from('email_history')
+        .insert([{ 
+          recipient: recipientEmail,
+          sender: senderEmail,
+          subject: emailData.subject,
+          body: emailBody.substring(0, 5000), // Store more of the body (5000 chars instead of 500)
+          status: 'received',
+          sent_at: new Date().toISOString()
+        }])
+        .select()
+
+      if (error) {
+        console.error('❌ Database save error:', error)
+        throw error
+      }
+
+      console.log('✅ Email saved to database:', data)
+
+      return new Response(
+        JSON.stringify({ 
+          success: true,
+          message: 'Email received and saved'
+        }),
+        { 
+          status: 200,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    } catch (error) {
+      console.error('❌ Error processing inbound email:', error)
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: (error as Error).message || 'Internal server error'
+        }),
+        { 
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      )
+    }
+  })
+}
