@@ -1426,6 +1426,68 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
     }
 
+    // Fetch current user info including signature
+    async function getCurrentUserInfo() {
+      try {
+        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+        if (!userEmail) return null;
+        
+        const { data, error } = await db
+          .from('admin_users')
+          .select('id, name, email, role, title, phone_ext, signature')
+          .eq('email', userEmail)
+          .single();
+        
+        if (error) {
+          console.error('Error fetching user info:', error);
+          return null;
+        }
+        
+        return data;
+      } catch (e) {
+        console.error('Error in getCurrentUserInfo:', e);
+        return null;
+      }
+    }
+    
+    // Get department name from email address
+    function getDepartmentName(email) {
+      const departmentMap = {
+        'admissions@acnhs.am': 'ACNHS Admissions',
+        'info@acnhs.am': 'ACNHS Office',
+        'documents@acnhs.am': 'ACNHS Documents',
+        'international@acnhs.am': 'ACNHS International Relations',
+        'registrar@acnhs.am': 'ACNHS Registrar',
+        'finance@acnhs.am': 'ACNHS Finance',
+        'ceo@acnhs.am': 'ACNHS CEO',
+        'dean@acnhs.am': 'ACNHS Dean',
+        'academic@acnhs.am': 'ACNHS Academic Affairs',
+        'student-services@acnhs.am': 'ACNHS Student Services',
+        'legal@acnhs.am': 'ACNHS Legal',
+        'hr@acnhs.am': 'ACNHS Human Resources',
+        'it@acnhs.am': 'ACNHS IT Support',
+        'library@acnhs.am': 'ACNHS Library',
+        'alumni@acnhs.am': 'ACNHS Alumni Relations',
+        'research@acnhs.am': 'ACNHS Research',
+        'do-not-reply@acnhs.am': 'ACNHS No Reply'
+      };
+      
+      // Check if it's a personal email (format: x.lastname@acnhs.am)
+      const isPersonal = email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
+      if (isPersonal) {
+        // Extract name from email (e.g., d.smith -> David Smith)
+        const namePart = email.split('@')[0];
+        const parts = namePart.split('.');
+        if (parts.length === 2) {
+          const firstName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+          const lastName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
+          return `${firstName} ${lastName} - ACNHS`;
+        }
+      }
+      
+      return departmentMap[email] || 'ACNHS';
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', async function() {
       // Initialize Supabase
@@ -2227,6 +2289,25 @@ ${email.body}`;
         
         // Get selected sender email
         const senderEmail = document.getElementById('senderEmail').value;
+        
+        // Get current user info including signature
+        const userInfo = await getCurrentUserInfo();
+        let userSignatureHtml = '';
+        
+        if (userInfo && userInfo.signature) {
+          // Convert plain text signature to HTML (signature is stored as HTML from admin-users.html)
+          userSignatureHtml = userInfo.signature;
+        } else {
+          // Fallback signature if user info not found
+          userSignatureHtml = `
+            <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f172a;font-weight:900;">ACNHS Team</div>
+            <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#475569;font-weight:700;">Armenian College of Nursing & Health Sciences</div>
+            <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:6px;">+374 93 798879 • info@acnhs.am</div>
+          `;
+        }
+        
+        // Get department name for "from" field
+        const fromName = getDepartmentName(senderEmail);
 
         for (const recipient of recipients) {
           const now = new Date();
@@ -2265,7 +2346,13 @@ ${email.body}`;
             .replace(/{{YEAR}}/g, now.getFullYear())
             .replace(/{{STUDENT_INFO}}/g, studentInfo);
           
-          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail);
+          // Replace the hardcoded signature with user's actual signature
+          emailHtml = emailHtml.replace(
+            /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
+            `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
+          );
+          
+          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName);
           
           if (result.success) {
             successCount++;
@@ -2310,7 +2397,7 @@ ${email.body}`;
       }
     }
 
-    async function sendEmailViaResend(to, subject, html, from) {
+    async function sendEmailViaResend(to, subject, html, from, fromName) {
       // Use Edge Function if enabled
       if (USE_EDGE_FUNCTION) {
         try {
@@ -2324,7 +2411,8 @@ ${email.body}`;
               to: to,
               subject: subject,
               html: html,
-              from: from
+              from: from,
+              fromName: fromName || 'ACNHS'
             })
           });
 

@@ -14,6 +14,7 @@ interface EmailRequest {
   subject: string
   html: string
   from?: string
+  fromName?: string
   replyTo?: string
 }
 
@@ -25,7 +26,7 @@ serve(async (req) => {
 
   try {
     // Parse request body
-    const { to, subject, html, from, replyTo }: EmailRequest = await req.json()
+    const { to, subject, html, from, fromName, replyTo }: EmailRequest = await req.json()
 
     // Validate inputs
     if (!to || !subject || !html) {
@@ -58,7 +59,7 @@ serve(async (req) => {
 
     // Determine sender name and email
     const senderEmail = from || 'admissions@acnhs.am'
-    const senderNames: { [key: string]: string } = {
+    const defaultSenderNames: { [key: string]: string } = {
       'admissions@acnhs.am': 'ACNHS Admissions',
       'info@acnhs.am': 'ACNHS Office',
       'documents@acnhs.am': 'ACNHS Documents',
@@ -77,7 +78,8 @@ serve(async (req) => {
       'research@acnhs.am': 'ACNHS Research',
       'do-not-reply@acnhs.am': 'ACNHS - Do Not Reply'
     }
-    const senderName = senderNames[senderEmail] || 'ACNHS'
+    // Use provided fromName or fallback to default mapping or 'ACNHS'
+    const senderName = fromName || defaultSenderNames[senderEmail] || 'ACNHS'
 
     // Build email payload with proper name format
     const emailPayload: any = {
