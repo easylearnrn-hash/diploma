@@ -780,11 +780,17 @@
 
     async function loadEmailAddresses() {
       try {
+        console.log('🔄 Loading email addresses...');
+        const container = document.getElementById('emailPermissions');
+        console.log('📧 Container found:', container);
+        
         // Try to load from email_configuration table first
         let { data, error } = await db
           .from('email_configuration')
           .select('*')
           .order('email');
+
+        console.log('📧 Database query result:', { data, error });
 
         // If email_configuration doesn't exist or is empty, use comprehensive default list
         if (error || !data || data.length === 0) {
@@ -811,7 +817,7 @@
           data = defaultEmails;
         }
 
-        const container = document.getElementById('emailPermissions');
+        console.log('📧 Email data to render:', data);
         
         // Filter out personal emails (format: firstinitial_lastname or firstinitial.lastname)
         // Personal emails are auto-added, so don't show in checkboxes
@@ -821,6 +827,8 @@
                            sender.email.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
           return !isPersonal;
         });
+        
+        console.log('📧 Departmental emails after filtering:', departmentalEmails);
         
         // Create a scrollable container with departmental emails only
         let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 12px;">';
@@ -843,9 +851,10 @@
         `;
         
         container.innerHTML = html;
+        console.log('✅ Email checkboxes rendered successfully');
 
       } catch (error) {
-        console.error('Error loading email addresses:', error);
+        console.error('❌ Error loading email addresses:', error);
         // Fallback to comprehensive list
         const container = document.getElementById('emailPermissions');
         container.innerHTML = `
