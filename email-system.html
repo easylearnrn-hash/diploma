@@ -1443,11 +1443,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
       // Auto-refresh emails every 5 minutes
       autoRefreshInterval = setInterval(async () => {
-        console.log('🔄 Auto-refreshing emails...');
         await loadEmailHistory();
       }, 300000); // 5 minutes (300,000ms)
-
-      console.log('✅ Auto-refresh enabled (every 5 minutes)');
     });
 
     function setupEventListeners() {
@@ -1586,9 +1583,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             
             // Set iframe height to fit all content
             iframe.style.height = (height + 50) + 'px'; // Add 50px padding for safety
-            console.log('Preview iframe resized to:', height + 50 + 'px');
+            // Removed noisy console log - iframe auto-resizes silently
           } catch (e) {
-            console.log('Could not resize iframe:', e);
             // Fallback: set a reasonable default height
             iframe.style.height = '800px';
           }
@@ -1656,9 +1652,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       let filtered = emailHistory;
       
-      console.log('📧 Total emails in history:', emailHistory.length);
-      console.log('📧 Current filter:', currentFilter);
-      
       // ACNHS email addresses
       const acnhsEmails = [
         'admissions@acnhs.am',
@@ -1685,24 +1678,19 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // INBOX: Emails received TO any ACNHS address (recipient is ACNHS)
         filtered = filtered.filter(e => {
           const isInbox = acnhsEmails.includes(e.recipient?.toLowerCase());
-          console.log('📧 Inbox check - Recipient:', e.recipient, 'Sender:', e.sender, 'Is inbox:', isInbox);
           return isInbox;
         });
-        console.log('📧 Filtered inbox emails:', filtered.length);
       } else if (currentFilter === 'sent') {
         // SENT: Emails sent FROM any ACNHS address (sender is ACNHS)
         // OR emails with status='sent' but no sender (backward compatibility)
         filtered = filtered.filter(e => {
           const isSent = acnhsEmails.includes(e.sender?.toLowerCase()) || 
                          (!e.sender && e.status === 'sent');
-          console.log('📧 Sent check - Sender:', e.sender, 'Recipient:', e.recipient, 'Status:', e.status, 'Is sent:', isSent);
           return isSent;
         });
-        console.log('📧 Filtered sent emails:', filtered.length);
       } else if (currentFilter === 'failed') {
         // FAILED: Emails with failed status
         filtered = filtered.filter(e => e.status === 'failed');
-        console.log('📧 Filtered failed emails:', filtered.length);
       }
       // 'all' shows everything, no filter needed
       
@@ -1764,11 +1752,22 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
     // Delete email with modal
     window.deleteEmail = async function(emailId) {
-      bulkDeleteMode = false;
-      emailToDelete = emailId;
-      document.getElementById('deleteModalTitle').textContent = '🗑️ Delete Email';
-      document.getElementById('deleteModalMessage').textContent = 'Are you sure you want to delete this email? This action cannot be undone.';
-      document.getElementById('deleteModal').classList.add('active');
+      try {
+        if (!emailId) {
+          console.error('No email ID provided');
+          showNotification('❌ Cannot delete: No email ID', 'error');
+          return;
+        }
+        
+        bulkDeleteMode = false;
+        emailToDelete = emailId;
+        document.getElementById('deleteModalTitle').textContent = '🗑️ Delete Email';
+        document.getElementById('deleteModalMessage').textContent = 'Are you sure you want to delete this email? This action cannot be undone.';
+        document.getElementById('deleteModal').classList.add('active');
+      } catch (error) {
+        console.error('Error opening delete modal:', error);
+        showNotification('❌ Error: ' + error.message, 'error');
+      }
     }
 
     async function confirmDelete() {
@@ -1779,7 +1778,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         if (bulkDeleteMode) {
           // Bulk delete
           const idsToDelete = Array.from(selectedEmails);
-          console.log('🗑️ Bulk deleting:', idsToDelete);
           if (idsToDelete.length === 0) {
             console.warn('No emails selected for deletion');
             return;
@@ -1796,7 +1794,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             throw error;
           }
 
-          console.log('✅ Deleted:', data);
           showNotification(`✅ ${idsToDelete.length} email(s) deleted successfully`, 'success');
           clearSelection();
         } else {
@@ -1806,7 +1803,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             return;
           }
           
-          console.log('🗑️ Deleting single email:', emailToDelete);
           const { data, error } = await db
             .from('email_history')
             .delete()
@@ -1818,7 +1814,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             throw error;
           }
 
-          console.log('✅ Deleted:', data);
           showNotification('✅ Email deleted successfully', 'success');
           emailToDelete = null;
         }
@@ -1859,10 +1854,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         `;
         return;
       }
-
-      console.log('📧 Selected email full data:', selectedEmail);
-      console.log('📧 Email body:', selectedEmail.body);
-      console.log('📧 Email body length:', selectedEmail.body?.length);
 
       const detailSection = document.getElementById('detailSection');
       const now = new Date(selectedEmail.sent_at);
@@ -1958,7 +1949,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
               <button class="btn-icon-forward" onclick="forwardEmail('${selectedEmail.id}')" title="Forward" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; padding: 8px 12px; border: 1px solid rgba(148, 163, 184, 0.3); border-radius: 6px; font-size: 16px; cursor: pointer; margin-right: 6px; transition: all 0.2s;">
                 ⤴️
               </button>
-              <button class="btn-delete" onclick="window.deleteEmail('${selectedEmail.id}')" title="Delete" style="padding: 8px 12px; font-size: 16px;">
+              <button class="btn-delete" onclick="deleteEmail('${selectedEmail.id}')" title="Delete" style="padding: 8px 12px; font-size: 16px; cursor: pointer;">
                 🗑️
               </button>
             </div>

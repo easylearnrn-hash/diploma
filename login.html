@@ -608,7 +608,51 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       throw new Error('Supabase not configured');
     }
 
-    // Authenticate with Supabase
+    // First, try checking admin_users table (for custom admin login)
+    const passwordHash = await hashPassword(password);
+    
+    const { data: adminUsers, error: adminError } = await supabase
+      .from('admin_users')
+      .select('id, name, email, username, password_hash, role, permissions, status')
+      .or(`email.eq.${email},username.eq.${email}`)
+      .eq('status', 'active')
+      .limit(1);
+
+    if (!adminError && adminUsers && adminUsers.length > 0) {
+      const adminUser = adminUsers[0];
+      
+      // Verify password hash
+      if (adminUser.password_hash === passwordHash) {
+        // Admin user authenticated successfully
+        console.log('✅ Admin user authenticated:', adminUser.name);
+        
+        // Store session info
+        sessionStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('isLoggedIn', 'true');
+        sessionStorage.setItem('userEmail', adminUser.email);
+        localStorage.setItem('userEmail', adminUser.email);
+        sessionStorage.setItem('userId', adminUser.id);
+        localStorage.setItem('userId', adminUser.id);
+        sessionStorage.setItem('userName', adminUser.name);
+        localStorage.setItem('userName', adminUser.name);
+        sessionStorage.setItem('userRole', adminUser.role);
+        localStorage.setItem('userRole', adminUser.role);
+        
+        // Set admin flag
+        sessionStorage.setItem('isAdmin', 'true');
+        localStorage.setItem('isAdmin', 'true');
+        
+        submitBtn.textContent = 'Redirecting to dashboard...';
+        
+        showLoginAlert('Welcome back, ' + adminUser.name + '!', 'success');
+        setTimeout(() => {
+          window.location.href = 'admin-home.html';
+        }, 1000);
+        return;
+      }
+    }
+
+    // If admin_users check failed, try Supabase Auth
     const { data, error } = await supabase.auth.signInWithPassword({
       email: email,
       password: password
