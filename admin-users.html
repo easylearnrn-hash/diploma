@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management - ACNHS Admin</title>
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <style>
+    :root {
+      --primary: #2dd4bf;
+      --primary-dark: #14b8a6;
+      --bg-dark: #0b1629;
+      --bg-card: #0f1f3a;
+      --bg-hover: #162844;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+      --shadow: rgba(0,0,0,0.3);
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(45,212,191,0.12), transparent 40%),
+                  radial-gradient(circle at 80% 80%, rgba(56,189,248,0.08), transparent 35%),
+                  var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .main-content {
+      padding: 32px 40px;
+      min-height: 100vh;
+    }
+
+    header {
+      margin-bottom: 40px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--primary) 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+      color: #022c22;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4);
+    }
+
+    .users-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .user-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s;
+    }
+
+    .user-card:hover {
+      border-color: rgba(45, 212, 191, 0.3);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+
+    .user-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .user-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--primary) 0%, #38bdf8 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 700;
+      color: #022c22;
+    }
+
+    .user-info h3 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .user-role {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .user-details {
+      margin-bottom: 20px;
+    }
+
+    .detail-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    .detail-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .detail-value {
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .status-badge {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .status-active {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+    }
+
+    .status-inactive {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+    }
+
+    .user-permissions {
+      margin-bottom: 20px;
+    }
+
+    .permission-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .permission-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .permission-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .permission-icon {
+      color: var(--primary);
+    }
+
+    .user-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 13px;
+      flex: 1;
+    }
+
+    .btn-edit {
+      background: rgba(45, 212, 191, 0.1);
+      color: var(--primary);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+    }
+
+    .btn-edit:hover {
+      background: rgba(45, 212, 191, 0.2);
+    }
+
+    .btn-delete {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-delete:hover {
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Modal Styles */
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 9999;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      width: 90%;
+      max-width: 600px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+
+    .modal-body {
+      padding: 32px;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .form-input, .form-select {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus, .form-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .checkbox-item label {
+      font-size: 14px;
+      color: var(--text);
+      cursor: pointer;
+      flex: 1;
+    }
+
+    .form-help {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 6px;
+    }
+
+    .modal-footer {
+      padding: 24px 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .btn-cancel {
+      background: rgba(148, 163, 184, 0.1);
+      color: var(--text-muted);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
+    .btn-cancel:hover {
+      background: rgba(148, 163, 184, 0.2);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .empty-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .empty-description {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar will be injected by admin-sidebar.js -->
+
+  <div class="main-content">
+    <header>
+      <div class="header-top">
+        <div>
+          <h1>👥 User Management</h1>
+          <p class="subtitle">Manage employee accounts and permissions</p>
+        </div>
+        <button class="btn-primary" id="addUserBtn">
+          <span>➕</span>
+          <span>Add New User</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="users-grid" id="usersGrid">
+      <!-- Users will be loaded here -->
+    </div>
+
+    <div class="empty-state" id="emptyState" style="display: none;">
+      <div class="empty-icon">👤</div>
+      <div class="empty-title">No Users Yet</div>
+      <div class="empty-description">Create your first employee account to get started</div>
+    </div>
+  </div>
+
+  <!-- Add/Edit User Modal -->
+  <div class="modal" id="userModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title" id="modalTitle">Add New User</h2>
+        <button class="close-btn" id="closeModalBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="userForm">
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-input" id="userName" placeholder="Enter full name" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-input" id="userUsername" placeholder="Enter username" required>
+            <p class="form-help">Used for login (no spaces or special characters)</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" id="userPassword" placeholder="Enter password" required>
+            <p class="form-help">Minimum 8 characters</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <input type="text" class="form-input" id="userRole" placeholder="e.g. Accountant, Admin Assistant" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Email Addresses</label>
+            <div class="checkbox-group" id="emailPermissions">
+              <!-- Email addresses will be loaded here -->
+            </div>
+            <p class="form-help">Select which email addresses this user can send from</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Permissions</label>
+            <div class="checkbox-group">
+              <div class="checkbox-item">
+                <input type="checkbox" id="permViewApplications">
+                <label for="permViewApplications">View Applications</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="permEditApplications">
+                <label for="permEditApplications">Edit Applications</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="permSendEmails">
+                <label for="permSendEmails">Send Emails</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="permViewReports">
+                <label for="permViewReports">View Reports</label>
+              </div>
+              <div class="checkbox-item">
+                <input type="checkbox" id="permManageUsers">
+                <label for="permManageUsers">Manage Users (Admin)</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="userStatus">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-cancel" id="cancelBtn">Cancel</button>
+        <button class="btn-primary" id="saveUserBtn">Save User</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/admin-sidebar.js"></script>
+  <script>
+    let db;
+    let editingUserId = null;
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', async function() {
+      db = initSupabase();
+      if (!db) {
+        alert('Failed to initialize Supabase');
+        return;
+      }
+
+      await loadUsers();
+      await loadEmailAddresses();
+      setupEventListeners();
+    });
+
+    function setupEventListeners() {
+      document.getElementById('addUserBtn').addEventListener('click', openModal);
+      document.getElementById('closeModalBtn').addEventListener('click', closeModal);
+      document.getElementById('cancelBtn').addEventListener('click', closeModal);
+      document.getElementById('saveUserBtn').addEventListener('click', saveUser);
+    }
+
+    function openModal(userId = null) {
+      editingUserId = userId;
+      document.getElementById('modalTitle').textContent = userId ? 'Edit User' : 'Add New User';
+      
+      if (userId) {
+        loadUserData(userId);
+      } else {
+        document.getElementById('userForm').reset();
+      }
+      
+      document.getElementById('userModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('userModal').classList.remove('active');
+      document.getElementById('userForm').reset();
+      editingUserId = null;
+    }
+
+    async function loadEmailAddresses() {
+      try {
+        // Load from email_senders table
+        const { data, error } = await db
+          .from('email_senders')
+          .select('*')
+          .order('email');
+
+        if (error) throw error;
+
+        const container = document.getElementById('emailPermissions');
+        container.innerHTML = data.map(sender => `
+          <div class="checkbox-item">
+            <input type="checkbox" id="email_${sender.id}" value="${sender.id}" class="email-checkbox">
+            <label for="email_${sender.id}">${sender.email} (${sender.display_name})</label>
+          </div>
+        `).join('');
+
+      } catch (error) {
+        console.error('Error loading email addresses:', error);
+      }
+    }
+
+    async function loadUsers() {
+      try {
+        const { data, error } = await db
+          .from('admin_users')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        const grid = document.getElementById('usersGrid');
+        const emptyState = document.getElementById('emptyState');
+
+        if (!data || data.length === 0) {
+          grid.style.display = 'none';
+          emptyState.style.display = 'block';
+          return;
+        }
+
+        grid.style.display = 'grid';
+        emptyState.style.display = 'none';
+
+        grid.innerHTML = data.map(user => {
+          const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase();
+          const permissions = user.permissions || {};
+          const emailPermissions = user.email_permissions || [];
+          
+          return `
+            <div class="user-card">
+              <div class="user-header">
+                <div class="user-avatar">${initials}</div>
+                <div class="user-info">
+                  <h3>${user.name}</h3>
+                  <div class="user-role">${user.role}</div>
+                </div>
+              </div>
+              
+              <div class="user-details">
+                <div class="detail-row">
+                  <span class="detail-label">Username</span>
+                  <span class="detail-value">@${user.username}</span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Status</span>
+                  <span class="status-badge ${user.status === 'active' ? 'status-active' : 'status-inactive'}">
+                    ${user.status === 'active' ? '● Active' : '● Inactive'}
+                  </span>
+                </div>
+                <div class="detail-row">
+                  <span class="detail-label">Email Access</span>
+                  <span class="detail-value">${emailPermissions.length} address(es)</span>
+                </div>
+              </div>
+
+              <div class="user-permissions">
+                <div class="permission-title">Permissions</div>
+                <div class="permission-list">
+                  ${permissions.view_applications ? '<div class="permission-item"><span class="permission-icon">✓</span> View Applications</div>' : ''}
+                  ${permissions.edit_applications ? '<div class="permission-item"><span class="permission-icon">✓</span> Edit Applications</div>' : ''}
+                  ${permissions.send_emails ? '<div class="permission-item"><span class="permission-icon">✓</span> Send Emails</div>' : ''}
+                  ${permissions.view_reports ? '<div class="permission-item"><span class="permission-icon">✓</span> View Reports</div>' : ''}
+                  ${permissions.manage_users ? '<div class="permission-item"><span class="permission-icon">✓</span> Manage Users</div>' : ''}
+                </div>
+              </div>
+
+              <div class="user-actions">
+                <button class="btn btn-edit" onclick="editUser('${user.id}')">Edit</button>
+                <button class="btn btn-delete" onclick="deleteUser('${user.id}', '${user.name}')">Delete</button>
+              </div>
+            </div>
+          `;
+        }).join('');
+
+      } catch (error) {
+        console.error('Error loading users:', error);
+        alert('Failed to load users');
+      }
+    }
+
+    async function saveUser() {
+      try {
+        const name = document.getElementById('userName').value.trim();
+        const username = document.getElementById('userUsername').value.trim().toLowerCase();
+        const password = document.getElementById('userPassword').value;
+        const role = document.getElementById('userRole').value.trim();
+        const status = document.getElementById('userStatus').value;
+
+        if (!name || !username || !password || !role) {
+          alert('Please fill in all required fields');
+          return;
+        }
+
+        if (password.length < 8) {
+          alert('Password must be at least 8 characters');
+          return;
+        }
+
+        // Get selected email permissions
+        const emailCheckboxes = document.querySelectorAll('.email-checkbox:checked');
+        const emailPermissions = Array.from(emailCheckboxes).map(cb => cb.value);
+
+        // Get permissions
+        const permissions = {
+          view_applications: document.getElementById('permViewApplications').checked,
+          edit_applications: document.getElementById('permEditApplications').checked,
+          send_emails: document.getElementById('permSendEmails').checked,
+          view_reports: document.getElementById('permViewReports').checked,
+          manage_users: document.getElementById('permManageUsers').checked
+        };
+
+        const userData = {
+          name,
+          username,
+          password_hash: password, // In production, this should be hashed
+          role,
+          status,
+          permissions,
+          email_permissions: emailPermissions
+        };
+
+        if (editingUserId) {
+          // Update existing user
+          const { error } = await db
+            .from('admin_users')
+            .update(userData)
+            .eq('id', editingUserId);
+
+          if (error) throw error;
+          alert('User updated successfully!');
+        } else {
+          // Create new user
+          const { error } = await db
+            .from('admin_users')
+            .insert([userData]);
+
+          if (error) throw error;
+          alert('User created successfully!');
+        }
+
+        closeModal();
+        await loadUsers();
+
+      } catch (error) {
+        console.error('Error saving user:', error);
+        alert('Failed to save user: ' + error.message);
+      }
+    }
+
+    async function editUser(userId) {
+      try {
+        const { data, error } = await db
+          .from('admin_users')
+          .select('*')
+          .eq('id', userId)
+          .single();
+
+        if (error) throw error;
+
+        document.getElementById('userName').value = data.name;
+        document.getElementById('userUsername').value = data.username;
+        document.getElementById('userPassword').value = data.password_hash; // Show password
+        document.getElementById('userRole').value = data.role;
+        document.getElementById('userStatus').value = data.status;
+
+        // Set permissions
+        const permissions = data.permissions || {};
+        document.getElementById('permViewApplications').checked = permissions.view_applications || false;
+        document.getElementById('permEditApplications').checked = permissions.edit_applications || false;
+        document.getElementById('permSendEmails').checked = permissions.send_emails || false;
+        document.getElementById('permViewReports').checked = permissions.view_reports || false;
+        document.getElementById('permManageUsers').checked = permissions.manage_users || false;
+
+        // Set email permissions
+        const emailPermissions = data.email_permissions || [];
+        document.querySelectorAll('.email-checkbox').forEach(cb => {
+          cb.checked = emailPermissions.includes(cb.value);
+        });
+
+        openModal(userId);
+
+      } catch (error) {
+        console.error('Error loading user:', error);
+        alert('Failed to load user');
+      }
+    }
+
+    async function deleteUser(userId, userName) {
+      if (!confirm(`Are you sure you want to delete ${userName}?`)) {
+        return;
+      }
+
+      try {
+        const { error } = await db
+          .from('admin_users')
+          .delete()
+          .eq('id', userId);
+
+        if (error) throw error;
+
+        alert('User deleted successfully!');
+        await loadUsers();
+
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        alert('Failed to delete user');
+      }
+    }
+  </script>
+</body>
+</html>

@@ -53,6 +53,11 @@
             <span class="text">Students</span>
           </a>
           
+          <a href="admin-users.html" class="nav-item ${currentPage === 'admin-users.html' ? 'active' : ''}" data-tooltip="User Management">
+            <span class="icon">👥</span>
+            <span class="text">User Management</span>
+          </a>
+          
           <a href="help-grading.html" class="nav-item ${currentPage === 'help-grading.html' ? 'active' : ''}" data-tooltip="Grading Calc">
             <span class="icon">📊</span>
             <span class="text">Grading Calc</span>
