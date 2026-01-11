@@ -560,6 +560,47 @@
     </div>
   </div>
 
+  <!-- Add Email Address Modal -->
+  <div class="modal" id="addEmailModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">Add New Email Address</h2>
+        <button class="close-btn" id="closeEmailModalBtn">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="emailForm">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input type="email" class="form-input" id="newEmailAddress" placeholder="e.g. department@acnhs.am" required>
+            <p class="form-help">Enter a valid email address</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Display Name</label>
+            <input type="text" class="form-input" id="newEmailDisplayName" placeholder="e.g. Department Name" required>
+            <p class="form-help">Friendly name for this email address</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">SMTP Username</label>
+            <input type="text" class="form-input" id="newEmailSmtpUser" placeholder="Optional SMTP username">
+            <p class="form-help">Leave blank to use email address as username</p>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">SMTP Password</label>
+            <input type="password" class="form-input" id="newEmailSmtpPass" placeholder="SMTP password">
+            <p class="form-help">Required for sending emails from this address</p>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-cancel" id="cancelEmailBtn">Cancel</button>
+        <button class="btn-primary" id="saveEmailBtn">Add Email Address</button>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/admin-sidebar.js"></script>
@@ -666,39 +707,72 @@
           .select('*')
           .order('email');
 
-        // If email_configuration doesn't exist, use default list
+        // If email_configuration doesn't exist or is empty, use comprehensive default list
         if (error || !data || data.length === 0) {
-          console.log('Using default email addresses');
+          console.log('Using comprehensive email addresses list');
           const defaultEmails = [
             { id: 'admissions', email: 'admissions@acnhs.am', display_name: 'ACNHS Admissions' },
             { id: 'info', email: 'info@acnhs.am', display_name: 'ACNHS Info' },
             { id: 'registrar', email: 'registrar@acnhs.am', display_name: 'ACNHS Registrar' },
-            { id: 'finance', email: 'finance@acnhs.am', display_name: 'ACNHS Finance' }
+            { id: 'finance', email: 'finance@acnhs.am', display_name: 'ACNHS Finance' },
+            { id: 'bursar', email: 'bursar@acnhs.am', display_name: 'ACNHS Bursar' },
+            { id: 'academics', email: 'academics@acnhs.am', display_name: 'ACNHS Academics' },
+            { id: 'dean', email: 'dean@acnhs.am', display_name: 'Dean Office' },
+            { id: 'students', email: 'students@acnhs.am', display_name: 'Student Services' },
+            { id: 'support', email: 'support@acnhs.am', display_name: 'Technical Support' },
+            { id: 'library', email: 'library@acnhs.am', display_name: 'Library Services' },
+            { id: 'hr', email: 'hr@acnhs.am', display_name: 'Human Resources' },
+            { id: 'careers', email: 'careers@acnhs.am', display_name: 'Career Services' },
+            { id: 'international', email: 'international@acnhs.am', display_name: 'International Office' },
+            { id: 'housing', email: 'housing@acnhs.am', display_name: 'Housing Office' },
+            { id: 'health', email: 'health@acnhs.am', display_name: 'Health Services' },
+            { id: 'counseling', email: 'counseling@acnhs.am', display_name: 'Counseling Services' },
+            { id: 'alumni', email: 'alumni@acnhs.am', display_name: 'Alumni Relations' }
           ];
           data = defaultEmails;
         }
 
         const container = document.getElementById('emailPermissions');
-        container.innerHTML = data.map(sender => `
+        
+        // Create a scrollable container with all emails
+        let html = '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 12px;">';
+        
+        html += data.map(sender => `
           <div class="checkbox-item">
             <input type="checkbox" id="email_${sender.id}" value="${sender.id}" class="email-checkbox">
             <label for="email_${sender.id}">${sender.email}${sender.display_name ? ' (' + sender.display_name + ')' : ''}</label>
           </div>
         `).join('');
+        
+        html += '</div>';
+        
+        // Add button to create new email address
+        html += `
+          <button type="button" class="btn" onclick="showAddEmailModal()" style="width: 100%; margin-top: 8px;">
+            ➕ Add New Email Address
+          </button>
+        `;
+        
+        container.innerHTML = html;
 
       } catch (error) {
         console.error('Error loading email addresses:', error);
-        // Fallback to basic list
+        // Fallback to comprehensive list
         const container = document.getElementById('emailPermissions');
         container.innerHTML = `
-          <div class="checkbox-item">
-            <input type="checkbox" id="email_admissions" value="admissions" class="email-checkbox">
-            <label for="email_admissions">admissions@acnhs.am</label>
+          <div style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; margin-bottom: 12px;">
+            <div class="checkbox-item">
+              <input type="checkbox" id="email_admissions" value="admissions" class="email-checkbox">
+              <label for="email_admissions">admissions@acnhs.am (ACNHS Admissions)</label>
+            </div>
+            <div class="checkbox-item">
+              <input type="checkbox" id="email_info" value="info" class="email-checkbox">
+              <label for="email_info">info@acnhs.am (ACNHS Info)</label>
+            </div>
           </div>
-          <div class="checkbox-item">
-            <input type="checkbox" id="email_info" value="info" class="email-checkbox">
-            <label for="email_info">info@acnhs.am</label>
-          </div>
+          <button type="button" class="btn" onclick="showAddEmailModal()" style="width: 100%; margin-top: 8px;">
+            ➕ Add New Email Address
+          </button>
         `;
       }
     }
@@ -971,6 +1045,96 @@
         alert('Failed to delete user');
       }
     }
+
+    // Email Address Management Functions
+    function showAddEmailModal() {
+      document.getElementById('addEmailModal').classList.add('active');
+      document.getElementById('emailForm').reset();
+    }
+
+    function closeEmailModal() {
+      document.getElementById('addEmailModal').classList.remove('active');
+      document.getElementById('emailForm').reset();
+    }
+
+    async function saveNewEmail() {
+      try {
+        const email = document.getElementById('newEmailAddress').value.trim();
+        const displayName = document.getElementById('newEmailDisplayName').value.trim();
+        const smtpUser = document.getElementById('newEmailSmtpUser').value.trim();
+        const smtpPass = document.getElementById('newEmailSmtpPass').value.trim();
+
+        if (!email || !displayName) {
+          alert('Please fill in email address and display name');
+          return;
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          alert('Please enter a valid email address');
+          return;
+        }
+
+        // Generate ID from email
+        const emailId = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+        const emailData = {
+          id: emailId,
+          email: email,
+          display_name: displayName,
+          smtp_host: 'smtp.gmail.com', // Default to Gmail, can be customized
+          smtp_port: 587,
+          smtp_user: smtpUser || email,
+          smtp_pass: smtpPass,
+          is_active: true
+        };
+
+        // Try to insert into email_configuration table
+        const { error } = await db
+          .from('email_configuration')
+          .insert([emailData]);
+
+        if (error) {
+          console.error('Error saving email:', error);
+          if (error.message && error.message.includes('does not exist')) {
+            alert('Email configuration table does not exist. Email addresses will be available in the current session only.');
+          } else {
+            alert('Failed to save email address: ' + error.message);
+            return;
+          }
+        } else {
+          alert('Email address added successfully!');
+        }
+
+        closeEmailModal();
+        await loadEmailAddresses();
+
+        // Auto-check the newly added email
+        setTimeout(() => {
+          const checkbox = document.getElementById(`email_${emailId}`);
+          if (checkbox) checkbox.checked = true;
+        }, 100);
+
+      } catch (error) {
+        console.error('Error saving email:', error);
+        alert('Failed to save email address');
+      }
+    }
+
+    // Setup email modal event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+      // Existing setup...
+      
+      // Add email modal listeners
+      const closeEmailModalBtn = document.getElementById('closeEmailModalBtn');
+      const cancelEmailBtn = document.getElementById('cancelEmailBtn');
+      const saveEmailBtn = document.getElementById('saveEmailBtn');
+
+      if (closeEmailModalBtn) closeEmailModalBtn.addEventListener('click', closeEmailModal);
+      if (cancelEmailBtn) cancelEmailBtn.addEventListener('click', closeEmailModal);
+      if (saveEmailBtn) saveEmailBtn.addEventListener('click', saveNewEmail);
+    });
   </script>
 </body>
 </html>
