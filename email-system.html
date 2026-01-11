@@ -1627,6 +1627,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       document.getElementById('recipientEmail').addEventListener('input', updatePreview);
       document.getElementById('applicantName').addEventListener('input', updatePreview);
       document.getElementById('emailSubject').addEventListener('input', updatePreview);
+      document.getElementById('senderEmail').addEventListener('change', updatePreview); // Update preview when sender changes
       
       const emailBodyTextarea = document.getElementById('emailBody');
       emailBodyTextarea.addEventListener('input', function() {
@@ -1658,9 +1659,16 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       const body = document.getElementById('emailBody').value || 'Your email content will appear here...';
       const applicantName = document.getElementById('applicantName').value || 'Applicant';
       const recipientEmail = document.getElementById('recipientEmail').value;
+      const senderEmail = document.getElementById('senderEmail').value || 'admissions@acnhs.am';
       
       const now = new Date();
       const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      
+      // Get user info for signature
+      const userInfo = await getCurrentUserInfo();
+      
+      // Generate dynamic signature based on selected sender email
+      const dynamicSignature = generateDepartmentSignature(senderEmail, userInfo);
       
       // Fetch student data if email is provided
       let studentInfo = '';
@@ -1696,6 +1704,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
         .replace(/{{YEAR}}/g, now.getFullYear())
         .replace(/{{STUDENT_INFO}}/g, studentInfo);
+      
+      // Replace the hardcoded signature with the dynamic one
+      html = html.replace(
+        /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
+        `<div style="margin-top:12px;">${dynamicSignature}</div></td>`
+      );
 
       const iframe = document.getElementById('previewFrame');
       iframe.srcdoc = html;
