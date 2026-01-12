@@ -908,6 +908,18 @@
             <select class="form-select" id="programFilter"></select>
           </div>
 
+          <!-- Recipients Preview List -->
+          <div class="form-group" id="recipientsListGroup" style="display: none;">
+            <label class="form-label">
+              Recipients (<span id="recipientCount">0</span> selected)
+              <button type="button" onclick="selectAllRecipients()" style="margin-left: 10px; padding: 2px 8px; font-size: 11px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer;">Select All</button>
+              <button type="button" onclick="deselectAllRecipients()" style="margin-left: 5px; padding: 2px 8px; font-size: 11px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Deselect All</button>
+            </label>
+            <div id="recipientsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; background: #f8f9fa;">
+              <!-- Recipients will be loaded here -->
+            </div>
+          </div>
+
           <!-- Subject -->
           <div class="form-group">
             <label class="form-label">Subject</label>
@@ -1744,7 +1756,16 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         document.getElementById('singleRecipientGroup2').style.display = type === 'single' ? 'block' : 'none';
         document.getElementById('statusFilterGroup').style.display = type === 'status' ? 'block' : 'none';
         document.getElementById('programFilterGroup').style.display = type === 'program' ? 'block' : 'none';
+        document.getElementById('recipientsListGroup').style.display = 'none';
+        
+        // Clear recipients list when changing type
+        document.getElementById('recipientsList').innerHTML = '';
+        updateRecipientCount();
       });
+      
+      // Status/Program filter change - load recipients
+      document.getElementById('statusFilter').addEventListener('change', loadRecipientsList);
+      document.getElementById('programFilter').addEventListener('change', loadRecipientsList);
 
       // Real-time preview - also listen to applicant name and email
       document.getElementById('recipientEmail').addEventListener('input', updatePreview);
@@ -1862,6 +1883,81 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           }
         }, 100); // Small delay to ensure content is fully rendered
       };
+    }
+
+    // Load recipients list when status or program is selected
+    async function loadRecipientsList() {
+      const recipientType = document.getElementById('recipientType').value;
+      if (recipientType !== 'status' && recipientType !== 'program') return;
+      
+      try {
+        let query = db.from('applications').select('email, applicant_name, status');
+        
+        if (recipientType === 'status') {
+          const status = document.getElementById('statusFilter').value;
+          if (!status) return;
+          query = query.eq('status', status);
+        } else if (recipientType === 'program') {
+          const program = document.getElementById('programFilter').value;
+          if (!program) return;
+          query = query.eq('program', program);
+        }
+        
+        const { data: applicants, error } = await query;
+        if (error) throw error;
+        
+        const recipientsList = document.getElementById('recipientsList');
+        const recipientsListGroup = document.getElementById('recipientsListGroup');
+        
+        if (!applicants || applicants.length === 0) {
+          recipientsList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 8px;">No recipients found for this selection</div>';
+          recipientsListGroup.style.display = 'block';
+          updateRecipientCount();
+          return;
+        }
+        
+        // Create checkboxes for each recipient
+        recipientsList.innerHTML = applicants.map((applicant, index) => `
+          <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input type="checkbox" 
+                     class="recipient-checkbox" 
+                     data-email="${applicant.email}" 
+                     data-name="${applicant.applicant_name || 'Applicant'}"
+                     checked
+                     onchange="updateRecipientCount()"
+                     style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
+              <span style="font-size: 13px; color: #0f172a;">
+                <strong>${applicant.applicant_name || 'Applicant'}</strong>
+                <span style="color: #64748b; margin-left: 8px;">${applicant.email}</span>
+              </span>
+            </label>
+          </div>
+        `).join('');
+        
+        recipientsListGroup.style.display = 'block';
+        updateRecipientCount();
+        
+        console.log('📋 Loaded recipients list:', applicants.length, 'applicants');
+      } catch (error) {
+        console.error('Error loading recipients list:', error);
+        showNotification('Error loading recipients', 'error');
+      }
+    }
+    
+    function updateRecipientCount() {
+      const checkboxes = document.querySelectorAll('.recipient-checkbox:checked');
+      document.getElementById('recipientCount').textContent = checkboxes.length;
+    }
+    
+    function selectAllRecipients() {
+      document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = true);
+      updateRecipientCount();
+    }
+    
+    function deselectAllRecipients() {
+      document.querySelectorAll('.recipient-checkbox').forEach(cb => cb.checked = false);
+      updateRecipientCount();
     }
 
     async function loadPrograms() {
@@ -2551,24 +2647,20 @@ ${email.body}`;
         }
         recipients = [{ email, name }];
       } else {
-        // Load recipients based on filter
-        let query = db.from('applications').select('email, applicant_name, status');
+        // Get recipients from checked checkboxes
+        const checkedBoxes = document.querySelectorAll('.recipient-checkbox:checked');
         
-        if (recipientType === 'status') {
-          const status = document.getElementById('statusFilter').value;
-          console.log('🔍 Filtering by status:', status);
-          query = query.eq('status', status);
-        } else if (recipientType === 'program') {
-          const program = document.getElementById('programFilter').value;
-          console.log('🔍 Filtering by program:', program);
-          query = query.eq('program', program);
+        if (checkedBoxes.length === 0) {
+          showNotification('Please select at least one recipient', 'error');
+          return;
         }
-
-        const { data: applicants, error } = await query;
-        if (error) throw error;
         
-        console.log('📧 Found applicants:', applicants?.length || 0, applicants);
-        recipients = applicants.map(a => ({ email: a.email, name: a.applicant_name || 'Applicant' }));
+        recipients = Array.from(checkedBoxes).map(checkbox => ({
+          email: checkbox.dataset.email,
+          name: checkbox.dataset.name
+        }));
+        
+        console.log('📧 Sending to selected recipients:', recipients.length, recipients);
       }
 
       if (recipients.length === 0) {
