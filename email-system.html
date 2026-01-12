@@ -2552,24 +2552,29 @@ ${email.body}`;
         recipients = [{ email, name }];
       } else {
         // Load recipients based on filter
-        let query = db.from('applications').select('email, applicant_name');
+        let query = db.from('applications').select('email, applicant_name, status');
         
         if (recipientType === 'status') {
           const status = document.getElementById('statusFilter').value;
+          console.log('🔍 Filtering by status:', status);
           query = query.eq('status', status);
         } else if (recipientType === 'program') {
           const program = document.getElementById('programFilter').value;
+          console.log('🔍 Filtering by program:', program);
           query = query.eq('program', program);
         }
 
         const { data: applicants, error } = await query;
         if (error) throw error;
         
+        console.log('📧 Found applicants:', applicants?.length || 0, applicants);
         recipients = applicants.map(a => ({ email: a.email, name: a.applicant_name || 'Applicant' }));
       }
 
       if (recipients.length === 0) {
-        showNotification('No recipients found', 'error');
+        const statusValue = document.getElementById('statusFilter').value;
+        console.error('❌ No recipients found for status:', statusValue);
+        showNotification(`No recipients found with status: ${statusValue}`, 'error');
         return;
       }
 
