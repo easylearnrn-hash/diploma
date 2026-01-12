@@ -82,11 +82,13 @@ serve(async (req) => {
     const senderName = fromName || defaultSenderNames[senderEmail] || 'ACNHS'
 
     // Build email payload with proper name format
+    // CRITICAL: Send both html and text versions for better email client compatibility
     const emailPayload: any = {
-      from: `"${senderName}" <${senderEmail}>`,
+      from: `${senderName} <${senderEmail}>`,
       to: [to],
       subject: subject,
       html: html,
+      text: html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'), // Fallback plain text version
     }
 
     // Add reply_to based on replyTo parameter or sender email
@@ -94,6 +96,14 @@ serve(async (req) => {
     if (replyToEmail) {
       emailPayload.reply_to = replyToEmail
     }
+    
+    console.log('Sending email with payload:', {
+      from: emailPayload.from,
+      to: emailPayload.to,
+      subject: emailPayload.subject,
+      hasHtml: !!emailPayload.html,
+      htmlLength: html?.length || 0
+    })
 
     // Call Resend API
     const resendResponse = await fetch('https://api.resend.com/emails', {
