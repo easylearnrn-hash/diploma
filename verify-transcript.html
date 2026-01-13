@@ -994,9 +994,26 @@ window.addEventListener('DOMContentLoaded', () => {
   const pathMatch = window.location.pathname.match(/\/verify\/transcript\/([^\/]+)$/);
   const codeFromPath = pathMatch ? pathMatch[1] : null;
   
-  const code = codeFromPath || codeFromUrl || ctrlFromUrl;
+  const code = codeFromPath || codeFromUrl;
   
-  if (code) {
+  // Handle QR code scan with control number (from acceptance letter)
+  if (ctrlFromUrl) {
+    console.log('🔍 QR Code Scan: Control Number detected -', ctrlFromUrl);
+    
+    // Switch to Application Status tab
+    switchTab('application');
+    
+    // Auto-fill the control number
+    document.getElementById('controlNumber').value = ctrlFromUrl;
+    
+    // Auto-check the status after a brief delay
+    setTimeout(() => {
+      console.log('🔍 Auto-checking application status...');
+      checkApplicationStatus();
+    }, 500);
+  } 
+  // Handle transcript verification code
+  else if (code) {
     document.getElementById('verificationCode').value = code;
     // Auto-verify if code is in URL
     setTimeout(() => verifyTranscript(), 500);
@@ -1229,6 +1246,13 @@ async function verifyTranscript() {
 document.getElementById('verificationCode').addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     verifyTranscript();
+  }
+});
+
+// Allow Enter key to check application status
+document.getElementById('controlNumber').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    checkApplicationStatus();
   }
 });
 

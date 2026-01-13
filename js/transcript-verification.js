@@ -79,38 +79,6 @@ async function verifyTranscriptCode(verificationCode) {
     throw new Error('Supabase client not initialized');
   }
   
-  // Check if this looks like an application control number (ACN-YYYY-XXXXXX format)
-  if (verificationCode.startsWith('ACN-')) {
-    // Look up in applications table by control_number
-    const { data: appData, error: appError } = await client
-      .from('applications')
-      .select('*')
-      .eq('control_number', verificationCode)
-      .single();
-    
-    if (appError) {
-      if (appError.code === 'PGRST116') {
-        return null; // No matching application
-      }
-      console.error('Error verifying application:', appError);
-      throw appError;
-    }
-    
-    // Transform application data to transcript format for display
-    return {
-      status: appData.status === 'approved' ? 'valid' : 'invalid',
-      student_name: appData.full_name,
-      student_id: `ACN-${verificationCode.split('-')[2]}`, // Use part of control number as ID
-      program: appData.selected_program || 'Bachelor of Science in Nursing',
-      issue_date: appData.updated_at ? new Date(appData.updated_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
-      total_credits: 'N/A',
-      cumulative_gpa: 'N/A',
-      document_type: 'Official Acceptance Letter',
-      control_number: verificationCode
-    };
-  }
-  
-  // Otherwise, look up in transcripts table
   const { data, error } = await client
     .from('transcripts')
     .select('*')
