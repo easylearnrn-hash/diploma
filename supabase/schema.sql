@@ -464,7 +464,7 @@ ALTER TABLE public.students ALTER COLUMN created_at SET DEFAULT timezone('utc', 
 ALTER TABLE public.students ALTER COLUMN updated_at SET DEFAULT timezone('utc', now());
 
 UPDATE public.students
-SET student_id = CONCAT('TMP-', LPAD((FLOOR(random() * 1000000000))::text, 9, '0'))
+SET student_id = CONCAT('ACNHS-', LPAD((FLOOR(random() * 1000000000))::text, 9, '0'))
 WHERE student_id IS NULL;
 
 ALTER TABLE public.students ALTER COLUMN student_id SET NOT NULL;

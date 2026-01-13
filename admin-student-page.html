@@ -1,0 +1,2433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Profile - ACNHS Admin</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #2dd4bf;
+      --primary-dark: #14b8a6;
+      --bg-dark: #0b1629;
+      --bg-card: #0f1f3a;
+      --bg-hover: #162844;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+      --shadow: rgba(0,0,0,0.3);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      backdrop-filter: blur(8px);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .modal-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      width: 100%;
+      max-width: 1400px;
+      max-height: 95vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 100px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      padding: 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-shrink: 0;
+    }
+
+    .student-avatar {
+      width: 120px;
+      height: 120px;
+      border-radius: 20px;
+      background: linear-gradient(135deg, var(--primary), #38bdf8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      font-weight: 800;
+      color: #022c22;
+      border: 4px solid rgba(45,212,191,0.2);
+      flex-shrink: 0;
+    }
+
+    .student-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 16px;
+    }
+
+    .header-info {
+      flex: 1;
+    }
+
+    .student-name {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .student-id {
+      font-family: 'Courier New', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 12px;
+    }
+
+    .student-meta {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .meta-badge {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .meta-badge.status {
+      background: rgba(16,185,129,0.15);
+      color: var(--success);
+    }
+
+    .meta-badge.program {
+      background: rgba(45,212,191,0.15);
+      color: var(--primary);
+    }
+
+    .close-modal-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.05);
+      border: none;
+      color: var(--text-muted);
+      font-size: 28px;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+
+    .close-modal-btn:hover {
+      background: rgba(239,68,68,0.2);
+      color: var(--danger);
+      transform: rotate(90deg);
+    }
+
+    .modal-body {
+      padding: 32px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 32px;
+      border-bottom: 2px solid var(--border);
+      overflow-x: auto;
+      padding-bottom: 2px;
+    }
+
+    .tab-btn {
+      padding: 14px 24px;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text);
+      background: rgba(45,212,191,0.05);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+
+    .info-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+    }
+
+    .info-card-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .info-item {
+      margin-bottom: 16px;
+    }
+
+    .info-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .info-value {
+      font-size: 15px;
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .documents-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .document-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+    }
+
+    .document-card:hover {
+      background: var(--bg-hover);
+      border-color: var(--primary);
+      transform: translateY(-4px);
+    }
+
+    .document-delete-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--danger);
+      font-size: 18px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      z-index: 10;
+    }
+
+    .document-card:hover .document-delete-btn {
+      display: flex;
+    }
+
+    .document-delete-btn:hover {
+      background: rgba(239,68,68,0.3);
+      transform: scale(1.1);
+    }
+
+    .document-card.deleting {
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    .document-card.deleting::after {
+      content: "Deleting...";
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      font-weight: 600;
+      border-radius: 12px;
+    }
+
+    .document-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    .document-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .document-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .grades-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .grades-table thead {
+      background: rgba(45,212,191,0.08);
+    }
+
+    .grades-table th {
+      padding: 16px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .grades-table td {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+      font-size: 15px;
+    }
+
+    .grade-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .grade-a { background: rgba(16,185,129,0.25); color: #34d399; font-weight: 800; }
+    .grade-b { background: rgba(45,212,191,0.25); color: #5eead4; font-weight: 800; }
+    .grade-c { background: rgba(245,158,11,0.25); color: #fbbf24; font-weight: 800; }
+    .grade-d { background: rgba(251,146,60,0.25); color: #fdba74; font-weight: 800; }
+    .grade-f { background: rgba(239,68,68,0.25); color: #fca5a5; font-weight: 800; }
+
+    .gpa-calculator {
+      background: linear-gradient(135deg, rgba(45,212,191,0.1), rgba(56,189,248,0.05));
+      border: 2px solid rgba(45,212,191,0.3);
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .gpa-value {
+      font-size: 64px;
+      font-weight: 800;
+      color: var(--primary);
+      line-height: 1;
+      margin-bottom: 8px;
+    }
+
+    .gpa-label {
+      font-size: 16px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    .email-list {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .email-item {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .email-item:hover {
+      background: var(--bg-hover);
+      border-color: var(--primary);
+    }
+
+    .email-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .email-subject {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .email-date {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .email-preview {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--text-muted);
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      padding: 24px 32px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .btn {
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #022c22;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(45,212,191,0.3);
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+    }
+
+    .btn-danger {
+      background: rgba(239,68,68,0.15);
+      color: var(--danger);
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239,68,68,0.25);
+    }
+
+    /* Course Selection Modal Styles */
+    #courseSelectionModal input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45,212,191,0.15);
+    }
+
+    #courseSelectionModal button:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body>
+  <div class="modal-overlay" id="studentModal">
+    <div class="modal-container">
+      <!-- Header -->
+      <div class="modal-header">
+        <div class="student-avatar" id="studentAvatar">
+          <img id="studentPhoto" style="display: none;" alt="Student">
+          <span id="studentInitials">ZA</span>
+        </div>
+        <div class="header-info">
+          <h1 class="student-name" id="studentName">Loading...</h1>
+          <div class="student-id" id="studentId">ACNHS-0000000</div>
+          <div class="student-meta">
+            <span class="meta-badge status" id="statusBadge">
+              <span>●</span>
+              <span id="statusText">Active</span>
+            </span>
+            <span class="meta-badge program" id="programBadge">
+              <span>📚</span>
+              <span id="programText">Program</span>
+            </span>
+          </div>
+        </div>
+        <button class="close-modal-btn" onclick="closeModal()">×</button>
+      </div>
+
+      <!-- Tabs -->
+      <div class="modal-body">
+        <div class="tabs">
+          <button class="tab-btn active" onclick="switchTab('overview')">
+            <span>📊</span> Overview
+          </button>
+          <button class="tab-btn" onclick="switchTab('documents')">
+            <span>📄</span> Documents
+          </button>
+          <button class="tab-btn" onclick="switchTab('grades')">
+            <span>🎓</span> Grades & GPA
+          </button>
+          <button class="tab-btn" onclick="switchTab('acceptance')">
+            <span>✉️</span> Acceptance Letter
+          </button>
+          <button class="tab-btn" onclick="switchTab('emails')">
+            <span>📧</span> Email History
+          </button>
+          <button class="tab-btn" onclick="switchTab('application')">
+            <span>📝</span> Application
+          </button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div class="tab-content active" id="overviewTab">
+          <div class="info-grid">
+            <div class="info-card">
+              <div class="info-card-title">
+                <span>👤</span> Personal Information
+              </div>
+              <div class="info-item">
+                <div class="info-label">Full Name</div>
+                <div class="info-value" id="fullName">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Date of Birth</div>
+                <div class="info-value" id="dob">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Gender</div>
+                <div class="info-value" id="gender">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Nationality</div>
+                <div class="info-value" id="nationality">-</div>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-card-title">
+                <span>📞</span> Contact Information
+              </div>
+              <div class="info-item">
+                <div class="info-label">Email</div>
+                <div class="info-value" id="email">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Phone</div>
+                <div class="info-value" id="phone">-</div>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-card-title">
+                <span>🎓</span> Academic Information
+              </div>
+              <div class="info-item">
+                <div class="info-label">Program</div>
+                <div class="info-value" id="program">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Start Term</div>
+                <div class="info-value" id="startTerm">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Expected Graduation</div>
+                <div class="info-value" id="expectedGrad">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Credits Earned</div>
+                <div class="info-value" id="credits">0</div>
+              </div>
+            </div>
+
+            <div class="info-card">
+              <div class="info-card-title">
+                <span>🚨</span> Emergency Contact
+              </div>
+              <div class="info-item">
+                <div class="info-label">Name</div>
+                <div class="info-value" id="emergencyName">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Relation</div>
+                <div class="info-value" id="emergencyRelation">-</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Phone</div>
+                <div class="info-value" id="emergencyPhone">-</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Documents Tab -->
+        <div class="tab-content" id="documentsTab">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div style="font-size: 18px; font-weight: 700; color: #f8fafc;">
+              📄 Student Documents
+            </div>
+          </div>
+          <div class="documents-grid" id="documentsList">
+            <div class="empty-state">
+              <div class="empty-icon">📭</div>
+              <p>No documents uploaded yet</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grades Tab -->
+        <div class="tab-content" id="gradesTab">
+          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px;">
+              <div>
+                <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">Grade Calculator</h2>
+                <p style="color: var(--text-muted); font-size: 14px;">Calculate end-of-semester grades with hard gate enforcement</p>
+              </div>
+              <button onclick="openGradeCalculator()" style="background: var(--primary); color: #022c22; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                Open Calculator
+              </button>
+            </div>
+            <div style="background: rgba(45,212,191,0.08); border: 1px solid rgba(45,212,191,0.15); border-radius: 12px; padding: 16px;">
+              <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <span style="font-size: 20px;">ℹ️</span>
+                <div style="flex: 1;">
+                  <p style="font-weight: 600; margin-bottom: 6px;">Hard Grading Gates (NO ROUNDING)</p>
+                  <ul style="list-style: none; padding: 0; color: var(--text-muted); font-size: 13px; line-height: 1.6;">
+                    <li>✓ Gate A: Exam Average ≥ 78.00%</li>
+                    <li>✓ Gate B: Final Exam ≥ 75.00%</li>
+                    <li>✓ Gate C: Clinical Status = PASS</li>
+                    <li>✓ Progression Threshold: ≥ 78.00% (C+)</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gpa-calculator">
+            <div class="gpa-value" id="gpaValue">0.00</div>
+            <div class="gpa-label">Cumulative GPA</div>
+          </div>
+
+          <table class="grades-table">
+            <thead>
+              <tr>
+                <th>Course Code</th>
+                <th>Course Name</th>
+                <th>Credits</th>
+                <th>Grade</th>
+                <th>Points</th>
+                <th>Term</th>
+              </tr>
+            </thead>
+            <tbody id="gradesTableBody">
+              <tr>
+                <td colspan="6">
+                  <div class="empty-state">
+                    <div class="empty-icon">📚</div>
+                    <p>No grades recorded yet</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Acceptance Letter Tab -->
+        <div class="tab-content" id="acceptanceTab">
+          <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 16px;">
+              <div>
+                <h2 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">Official Acceptance Letter</h2>
+                <p style="color: var(--text-muted); font-size: 14px;">Preview the official acceptance letter for this student</p>
+              </div>
+              <button onclick="printAcceptanceLetter()" style="background: var(--primary); color: #022c22; border: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; cursor: pointer; font-size: 14px;">
+                🖨️ Print / Save PDF
+              </button>
+            </div>
+          </div>
+          <div id="acceptanceLetterContainer" style="background: #0f172a; padding: 24px; border-radius: 16px;">
+            <!-- Acceptance letter will be loaded here -->
+            <div class="empty-state">
+              <div class="empty-icon">✉️</div>
+              <p>Loading acceptance letter...</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Emails Tab -->
+        <div class="tab-content" id="emailsTab">
+          <div class="email-list" id="emailsList">
+            <div class="empty-state">
+              <div class="empty-icon">📧</div>
+              <p>No email history found</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Application Tab -->
+        <div class="tab-content" id="applicationTab">
+          <div class="info-card">
+            <div class="info-card-title">
+              <span>📝</span> Original Application
+            </div>
+            <div id="applicationDetails">
+              <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <p>Loading application details...</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="action-buttons">
+        <button class="btn btn-primary" onclick="editStudent()">
+          <span>✏️</span> Edit Student
+        </button>
+        <button class="btn btn-secondary" onclick="viewApplication()">
+          <span>📄</span> View Full Application
+        </button>
+        <button class="btn btn-secondary" onclick="sendEmail()">
+          <span>📧</span> Send Email
+        </button>
+        <button class="btn btn-danger" onclick="withdrawStudent()">
+          <span>⚠️</span> Withdraw Student
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Course/Semester Selection Modal -->
+  <div id="courseSelectionModal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px); z-index: 10001; align-items: center; justify-content: center;">
+    <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 24px; width: 90%; max-width: 500px; box-shadow: 0 25px 100px rgba(0,0,0,0.5);">
+      <!-- Modal Header -->
+      <div style="padding: 24px; border-bottom: 1px solid var(--border);">
+        <h2 style="margin: 0; font-size: 20px; font-weight: 700; color: var(--text);">Open Grade Calculator</h2>
+        <p style="margin: 8px 0 0; font-size: 14px; color: var(--text-muted);">Select course and semester for <span id="courseModalStudentName" style="color: var(--primary); font-weight: 600;">Student</span></p>
+      </div>
+      
+      <!-- Modal Body -->
+      <div style="padding: 24px;">
+        <div style="margin-bottom: 20px;">
+          <label for="courseCodeInput" style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--text);">Course Code</label>
+          <input type="text" id="courseCodeInput" placeholder="e.g., MED101, NURS201" value="MED101" 
+            style="width: 100%; padding: 12px 16px; background: var(--bg-hover); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; outline: none;">
+          <p style="margin: 6px 0 0; font-size: 12px; color: var(--text-muted);">Enter the course code (e.g., MED101, NURS201, PHARM301)</p>
+        </div>
+        
+        <div style="margin-bottom: 24px;">
+          <label for="semesterInput" style="display: block; margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--text);">Semester</label>
+          <input type="text" id="semesterInput" placeholder="e.g., Fall2026, Spring2027" value="Fall2026"
+            style="width: 100%; padding: 12px 16px; background: var(--bg-hover); border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 14px; outline: none;">
+          <p style="margin: 6px 0 0; font-size: 12px; color: var(--text-muted);">Enter semester (e.g., Fall2026, Spring2027, Summer2026)</p>
+        </div>
+        
+        <!-- Buttons -->
+        <div style="display: flex; gap: 12px; justify-content: flex-end;">
+          <button onclick="closeCourseSelectionModal()" 
+            style="padding: 12px 24px; background: transparent; border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-weight: 600; cursor: pointer; font-size: 14px;">
+            Cancel
+          </button>
+          <button onclick="confirmCourseSelection()" 
+            style="padding: 12px 24px; background: var(--primary); border: none; border-radius: 12px; color: #022c22; font-weight: 600; cursor: pointer; font-size: 14px;">
+            Open Calculator
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script>
+    let currentStudent = null;
+    let sbClient = null;
+    let currentStudentId = null; // Global variable to store current student ID
+
+    // Initialize when page loads
+    window.addEventListener('DOMContentLoaded', function() {
+      sbClient = initSupabase();
+      
+      // Get student ID from URL parameter
+      const urlParams = new URLSearchParams(window.location.search);
+      const studentId = urlParams.get('id');
+      
+      if (studentId) {
+        currentStudentId = studentId; // Store globally
+        loadStudentData(studentId);
+      }
+    });
+
+    // Tab switching
+    function switchTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      
+      // Show selected tab
+      document.getElementById(tabName + 'Tab').classList.add('active');
+      event.target.closest('.tab-btn').classList.add('active');
+      
+      // Load acceptance letter when tab is opened
+      if (tabName === 'acceptance' && currentStudent) {
+        loadAcceptanceLetter();
+      }
+    }
+
+    // Load all student data
+    async function loadStudentData(studentId) {
+      try {
+        // Load student profile
+        const { data: student, error } = await sbClient
+          .from('acnhs_students')
+          .select('*')
+          .eq('id', studentId)
+          .single();
+
+        if (error) throw error;
+        if (!student) throw new Error('Student not found');
+
+        currentStudent = student;
+        populateStudentProfile(student);
+        
+        // Load related data
+        await Promise.all([
+          loadDocuments(student),
+          loadGrades(student),
+          loadEmails(student),
+          loadApplication(student.application_id)
+        ]);
+      } catch (error) {
+        console.error('Error loading student:', error);
+        alert('Failed to load student data');
+      }
+    }
+
+    function populateStudentProfile(student) {
+      // Header
+      document.getElementById('studentName').textContent = student.full_name || 'Unknown Student';
+      document.getElementById('studentId').textContent = student.student_id || 'N/A';
+      document.getElementById('statusText').textContent = (student.enrollment_status || 'active').toUpperCase();
+      document.getElementById('programText').textContent = student.program || 'N/A';
+      
+      // Initials for avatar
+      const initials = (student.full_name || 'U S').split(' ').map(n => n[0]).join('').toUpperCase();
+      document.getElementById('studentInitials').textContent = initials;
+
+      // Overview tab
+      document.getElementById('fullName').textContent = student.full_name || '-';
+      document.getElementById('dob').textContent = student.date_of_birth || '-';
+      document.getElementById('gender').textContent = student.gender || '-';
+      document.getElementById('nationality').textContent = student.nationality || '-';
+      document.getElementById('email').textContent = student.email || '-';
+      document.getElementById('phone').textContent = student.phone || '-';
+      document.getElementById('program').textContent = student.program || '-';
+      document.getElementById('startTerm').textContent = student.start_term || '-';
+      document.getElementById('expectedGrad').textContent = student.expected_graduation || '-';
+      document.getElementById('credits').textContent = student.total_credits_earned || '0';
+      document.getElementById('emergencyName').textContent = student.emergency_contact_name || '-';
+      document.getElementById('emergencyRelation').textContent = student.emergency_contact_relation || '-';
+      document.getElementById('emergencyPhone').textContent = student.emergency_contact_phone || '-';
+
+      // GPA
+      document.getElementById('gpaValue').textContent = (student.current_gpa || 0).toFixed(2);
+    }
+
+    async function loadDocuments(student) {
+      if (!student.application_id) {
+        renderDocuments([]);
+        return;
+      }
+
+      try {
+        const { data: app, error } = await sbClient
+          .from('applications')
+          .select('uploaded_documents, payload')
+          .eq('id', student.application_id)
+          .single();
+
+        if (error) throw error;
+
+        const documents = [];
+        
+        // 1. Get documents from uploaded_documents array (RFE uploads + admission form)
+        if (app.uploaded_documents && Array.isArray(app.uploaded_documents)) {
+          app.uploaded_documents.forEach(doc => {
+            documents.push({
+              name: doc.doc_name || doc.name || 'Document',
+              url: doc.public_url || doc.url,
+              status: 'uploaded',
+              type: getDocumentType(doc.filename || doc.fileName || ''),
+              uploadedAt: doc.uploaded_at || doc.uploadedAt,
+              size: doc.size || null
+            });
+          });
+        }
+
+        // 2. Get documents from payload.documentUploads (admission form uploads)
+        const payload = app.payload || {};
+        if (payload.documentUploads && Array.isArray(payload.documentUploads)) {
+          payload.documentUploads.forEach(doc => {
+            // Avoid duplicates
+            if (!documents.find(d => d.url === doc.url)) {
+              documents.push({
+                name: doc.name || 'Document',
+                url: doc.url,
+                status: 'uploaded',
+                type: getDocumentType(doc.fileName || ''),
+                uploadedAt: doc.uploadedAt,
+                size: doc.size || null
+              });
+            }
+          });
+        }
+
+        // 3. Get photo from payload
+        if (payload.applicantPhotoUrl || payload.applicantPhoto) {
+          const photoUrl = payload.applicantPhotoUrl || payload.applicantPhoto;
+          if (!documents.find(d => d.url === photoUrl)) {
+            documents.push({
+              name: 'Applicant Photo',
+              url: photoUrl,
+              status: 'uploaded',
+              type: 'image',
+              uploadedAt: payload.applicantPhotoMeta?.uploadedAt || null,
+              size: payload.applicantPhotoMeta?.size || null
+            });
+          }
+        }
+
+        // 4. Get document statuses from payload
+        const docStatuses = payload.documentStatuses || payload.documents || {};
+        if (typeof docStatuses === 'object' && !Array.isArray(docStatuses)) {
+          Object.entries(docStatuses).forEach(([key, value]) => {
+            if (value && typeof value === 'object' && value.url) {
+              if (!documents.find(d => d.url === value.url)) {
+                documents.push({
+                  name: formatDocumentLabel(key),
+                  url: value.url,
+                  status: value.status || 'uploaded',
+                  type: getDocumentType(key),
+                  uploadedAt: value.uploadedAt || null,
+                  size: value.size || null
+                });
+              }
+            }
+          });
+        }
+
+        renderDocuments(documents);
+      } catch (error) {
+        console.error('Error loading documents:', error);
+        renderDocuments([]);
+      }
+    }
+
+    function formatDocumentLabel(key) {
+      if (!key) return 'Document';
+      return key
+        .replace(/([A-Z])/g, ' $1')
+        .replace(/[_-]/g, ' ')
+        .trim()
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+    }
+
+    function renderDocuments(documents) {
+      const container = document.getElementById('documentsList');
+      
+      if (documents.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No documents uploaded yet</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = documents.map((doc, index) => {
+        const icon = doc.type === 'pdf' ? '📄' : '🖼️';
+        const uploadDate = doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : '';
+        const fileSize = doc.size ? formatFileSize(doc.size) : '';
+        const meta = [uploadDate, fileSize].filter(Boolean).join(' • ');
+        
+        return `
+          <div class="document-card" onclick="openDocument('${doc.url}')">
+            <button class="document-delete-btn" onclick="event.stopPropagation(); deleteDocument('${doc.url}', '${escapeHtml(doc.name)}', ${index})" title="Delete document">×</button>
+            <div class="document-icon">${icon}</div>
+            <div class="document-name">${escapeHtml(doc.name)}</div>
+            <div class="document-meta">${escapeHtml(meta || doc.status)}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openDocument(url) {
+      window.open(url, '_blank');
+    }
+
+    async function deleteDocument(url, name, index) {
+      if (!confirm(`Are you sure you want to delete "${name}"?\n\nThis action cannot be undone.`)) {
+        return;
+      }
+
+      try {
+        if (!currentStudent || !currentStudent.application_id) {
+          alert('Cannot delete document: No application linked');
+          return;
+        }
+
+        // Show deleting state
+        const cards = document.querySelectorAll('.document-card');
+        if (cards[index]) {
+          cards[index].classList.add('deleting');
+        }
+
+        // Get current uploaded_documents array
+        const { data: app, error: fetchError } = await sbClient
+          .from('applications')
+          .select('uploaded_documents')
+          .eq('id', currentStudent.application_id)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        const uploadedDocs = app?.uploaded_documents || [];
+        
+        // Find and remove the document by URL
+        const updatedDocs = uploadedDocs.filter(doc => 
+          (doc.public_url || doc.url) !== url
+        );
+
+        if (updatedDocs.length === uploadedDocs.length) {
+          alert('Document not found in database');
+          if (cards[index]) {
+            cards[index].classList.remove('deleting');
+          }
+          return;
+        }
+
+        // Update the database
+        const { error: updateError } = await sbClient
+          .from('applications')
+          .update({ uploaded_documents: updatedDocs })
+          .eq('id', currentStudent.application_id);
+
+        if (updateError) throw updateError;
+
+        // Try to delete from storage if it's in the application-documents bucket
+        try {
+          const urlObj = new URL(url);
+          const pathParts = urlObj.pathname.split('/');
+          const bucketIndex = pathParts.indexOf('application-documents');
+          
+          if (bucketIndex !== -1) {
+            const filePath = pathParts.slice(bucketIndex + 1).join('/');
+            await sbClient.storage
+              .from('application-documents')
+              .remove([filePath]);
+            console.log('✅ Deleted from storage:', filePath);
+          }
+        } catch (storageError) {
+          console.warn('Could not delete from storage:', storageError);
+          // Continue even if storage deletion fails
+        }
+
+        // Reload documents to refresh the view
+        await loadDocuments(currentStudent);
+        
+        alert('✅ Document deleted successfully');
+      } catch (error) {
+        console.error('Error deleting document:', error);
+        alert('❌ Error deleting document: ' + error.message);
+        
+        // Remove deleting state on error
+        const cards = document.querySelectorAll('.document-card');
+        if (cards[index]) {
+          cards[index].classList.remove('deleting');
+        }
+      }
+    }
+
+    // Expose globally for onclick handlers
+    window.openDocument = openDocument;
+    window.deleteDocument = deleteDocument;
+    window.loadAcceptanceLetter = loadAcceptanceLetter;
+    window.printAcceptanceLetter = printAcceptanceLetter;
+    window.switchTab = switchTab;
+
+    function formatFileSize(bytes) {
+      if (!bytes) return '';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    async function loadGrades(student) {
+      try {
+        const { data: grades, error } = await sbClient
+          .from('student_grades')
+          .select('*')
+          .eq('student_id', student.id)
+          .order('term', { ascending: false });
+
+        if (error) throw error;
+
+        renderGrades(grades || []);
+        calculateGPA(grades || []);
+      } catch (error) {
+        console.error('Error loading grades:', error);
+        // Show empty state on error
+        renderGrades([]);
+        calculateGPA([]);
+      }
+    }
+
+    function renderGrades(grades) {
+      const tbody = document.getElementById('gradesTableBody');
+      
+      if (grades.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">
+                <div class="empty-icon">📚</div>
+                <p>No grades recorded yet</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = grades.map(grade => {
+        const gradeClass = grade.grade.charAt(0).toLowerCase();
+        return `
+          <tr>
+            <td><strong>${grade.course_code}</strong></td>
+            <td>${grade.course_name}</td>
+            <td>${grade.credits}</td>
+            <td><span class="grade-badge grade-${gradeClass}">${grade.grade}</span></td>
+            <td>${grade.grade_points.toFixed(2)}</td>
+            <td>${grade.term}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function calculateGPA(grades) {
+      if (grades.length === 0) {
+        document.getElementById('gpaValue').textContent = '0.00';
+        return;
+      }
+
+      let totalPoints = 0;
+      let totalCredits = 0;
+
+      grades.forEach(grade => {
+        totalPoints += grade.grade_points * grade.credits;
+        totalCredits += grade.credits;
+      });
+
+      const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
+      document.getElementById('gpaValue').textContent = gpa.toFixed(2);
+      
+      // Also update the student's GPA in the database
+      if (currentStudent && gpa > 0) {
+        sbClient
+          .from('acnhs_students')
+          .update({ current_gpa: gpa, total_credits_earned: totalCredits })
+          .eq('id', currentStudent.id)
+          .then(() => console.log('GPA updated successfully'));
+      }
+    }
+
+    async function loadEmails(student) {
+      try {
+        // Try to load from email_history table - only use recipient column for now
+        const { data: emails, error } = await sbClient
+          .from('email_history')
+          .select('*')
+          .eq('recipient', student.email)
+          .order('sent_at', { ascending: false })
+          .limit(50);
+
+        if (error) {
+          console.error('Error loading emails:', error);
+          renderEmails([]);
+          return;
+        }
+
+        renderEmails(emails || []);
+      } catch (error) {
+        console.error('Error loading emails:', error);
+        renderEmails([]);
+      }
+    }
+
+    function renderEmails(emails) {
+      const container = document.getElementById('emailsList');
+      
+      if (emails.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📧</div>
+            <p>No email history found</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = emails.map(email => `
+        <div class="email-item" onclick="viewEmailDetail('${email.id}')">
+          <div class="email-header">
+            <div class="email-subject">${email.subject || 'No Subject'}</div>
+            <div class="email-date">${formatDate(email.created_at)}</div>
+          </div>
+          <div class="email-preview">${truncate(stripHtml(email.html_body || email.text_body || ''), 150)}</div>
+        </div>
+      `).join('');
+    }
+
+    async function loadApplication(applicationId) {
+      if (!applicationId) {
+        document.getElementById('applicationDetails').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>No application linked</p>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        const { data: app, error } = await sbClient
+          .from('applications')
+          .select('*')
+          .eq('id', applicationId)
+          .single();
+
+        if (error) throw error;
+
+        renderApplication(app);
+      } catch (error) {
+        console.error('Error loading application:', error);
+        document.getElementById('applicationDetails').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⚠️</div>
+            <p>Error loading application</p>
+          </div>
+        `;
+      }
+    }
+
+    function renderApplication(app) {
+      const payload = app.payload || {};
+      const container = document.getElementById('applicationDetails');
+      
+      container.innerHTML = `
+        <!-- Application Header -->
+        <div class="info-grid" style="margin-bottom: 24px;">
+          <div class="info-card">
+            <div class="info-card-title"><span>🔖</span> Reference Information</div>
+            <div class="info-item">
+              <div class="info-label">Reference Number</div>
+              <div class="info-value" style="font-family: 'Courier New', monospace; color: var(--primary);">${escapeHtml(app.reference_number || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Document ID</div>
+              <div class="info-value">${escapeHtml(app.document_id || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Control Number</div>
+              <div class="info-value">${escapeHtml(app.control_number || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Verification Hash</div>
+              <div class="info-value" style="font-size: 13px; word-break: break-all;">${escapeHtml(app.hash || '-')}</div>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div class="info-card-title"><span>📊</span> Application Status</div>
+            <div class="info-item">
+              <div class="info-label">Current Status</div>
+              <div class="info-value"><span class="status-badge status-active">${escapeHtml(app.status || 'Pending')}</span></div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Submitted Date</div>
+              <div class="info-value">${formatDate(app.submission_date || payload.submissionDate)}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Program Applied</div>
+              <div class="info-value">${escapeHtml(app.program || payload.programChoice || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Start Term</div>
+              <div class="info-value">${escapeHtml(app.start_term || payload.startTerm || '-')}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal Information -->
+        <div class="info-grid" style="margin-bottom: 24px;">
+          <div class="info-card">
+            <div class="info-card-title"><span>👤</span> Personal Details</div>
+            <div class="info-item">
+              <div class="info-label">Full Name</div>
+              <div class="info-value">${escapeHtml(payload.applicantName || app.applicant_name || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Date of Birth</div>
+              <div class="info-value">${escapeHtml(payload.dob || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Gender</div>
+              <div class="info-value">${escapeHtml(payload.gender || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Nationality</div>
+              <div class="info-value">${escapeHtml(payload.nationality || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Place of Birth</div>
+              <div class="info-value">${escapeHtml(payload.birthLocation || '-')}</div>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div class="info-card-title"><span>📞</span> Contact Details</div>
+            <div class="info-item">
+              <div class="info-label">Email</div>
+              <div class="info-value">${escapeHtml(app.email || payload.email || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Phone</div>
+              <div class="info-value">${escapeHtml(app.phone || payload.phone || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Alternate Phone</div>
+              <div class="info-value">${escapeHtml(payload.altPhone || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Address</div>
+              <div class="info-value">${escapeHtml(payload.addressLine || '-')}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Academic Background -->
+        <div class="info-grid" style="margin-bottom: 24px;">
+          <div class="info-card">
+            <div class="info-card-title"><span>🎓</span> Education Background</div>
+            <div class="info-item">
+              <div class="info-label">Education Level</div>
+              <div class="info-value">${escapeHtml(payload.educationLevel || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Institution</div>
+              <div class="info-value">${escapeHtml(payload.institution || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Field of Study</div>
+              <div class="info-value">${escapeHtml(payload.fieldOfStudy || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Graduation Year</div>
+              <div class="info-value">${escapeHtml(payload.gradYear || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">GPA</div>
+              <div class="info-value">${escapeHtml(payload.gpa || '-')}</div>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div class="info-card-title"><span>🚨</span> Emergency Contact</div>
+            <div class="info-item">
+              <div class="info-label">Name</div>
+              <div class="info-value">${escapeHtml(payload.emergencyName || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Relation</div>
+              <div class="info-value">${escapeHtml(payload.emergencyRelation || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Phone</div>
+              <div class="info-value">${escapeHtml(payload.emergencyPhone || '-')}</div>
+            </div>
+          </div>
+        </div>
+
+        ${payload.isTransferStudent ? `
+          <!-- Transfer Student Information -->
+          <div class="info-card" style="margin-bottom: 24px;">
+            <div class="info-card-title"><span>🔄</span> Transfer Student Information</div>
+            <div class="info-grid">
+              <div class="info-item">
+                <div class="info-label">Previous Institution</div>
+                <div class="info-value">${escapeHtml(payload.prevInstitution || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Previous Program</div>
+                <div class="info-value">${escapeHtml(payload.prevProgram || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Previous Student ID</div>
+                <div class="info-value">${escapeHtml(payload.prevStudentId || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Academic Status</div>
+                <div class="info-value">${escapeHtml(payload.academicStatus || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Previous GPA</div>
+                <div class="info-value">${escapeHtml(payload.prevGPA || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Credits Earned</div>
+                <div class="info-value">${escapeHtml(payload.creditsEarned || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Credits for Transfer</div>
+                <div class="info-value">${escapeHtml(payload.creditsTransfer || '-')}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Transfer Reason</div>
+                <div class="info-value">${escapeHtml(payload.transferReason || '-')}</div>
+              </div>
+            </div>
+            ${payload.completedCourses ? `
+              <div class="info-item" style="margin-top: 16px;">
+                <div class="info-label">Completed Courses</div>
+                <div class="info-value" style="white-space: pre-wrap;">${escapeHtml(payload.completedCourses)}</div>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+
+        <!-- Personal Statement -->
+        ${payload.statement ? `
+          <div class="info-card" style="margin-bottom: 24px;">
+            <div class="info-card-title"><span>✍️</span> Personal Statement</div>
+            <div style="padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; line-height: 1.8; white-space: pre-wrap;">
+              ${escapeHtml(payload.statement)}
+            </div>
+          </div>
+        ` : ''}
+
+        <!-- Declaration & Consent -->
+        <div class="info-grid">
+          <div class="info-card">
+            <div class="info-card-title"><span>✅</span> Declarations</div>
+            <div class="info-item">
+              <div class="info-label">Information Accuracy</div>
+              <div class="info-value">${payload.declaration ? '✅ Confirmed' : '❌ Not confirmed'}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Data Processing Consent</div>
+              <div class="info-value">${payload.dataProcessingAgreed ? '✅ Agreed' : '❌ Not agreed'}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Terms & Conditions</div>
+              <div class="info-value">${payload.termsAgreed ? '✅ Accepted' : '❌ Not accepted'}</div>
+            </div>
+          </div>
+
+          <div class="info-card">
+            <div class="info-card-title"><span>🔐</span> Portal Credentials</div>
+            <div class="info-item">
+              <div class="info-label">Username</div>
+              <div class="info-value" style="font-family: 'Courier New', monospace;">${escapeHtml(app.username || payload.username || '-')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Status</div>
+              <div class="info-value">${escapeHtml(app.status || payload.status || '-')}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Load and display Acceptance Letter in the tab
+    async function loadAcceptanceLetter() {
+      if (!currentStudent) {
+        document.getElementById('acceptanceLetterContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">❌</div>
+            <p>No student loaded</p>
+          </div>
+        `;
+        return;
+      }
+
+      try {
+        document.getElementById('acceptanceLetterContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">⏳</div>
+            <p>Loading acceptance letter...</p>
+          </div>
+        `;
+
+        // Fetch application data for more details
+        let applicationData = {};
+        if (currentStudent.application_id) {
+          const { data: app } = await sbClient
+            .from('applications')
+            .select('*')
+            .eq('id', currentStudent.application_id)
+            .single();
+          if (app) applicationData = app;
+        }
+
+        // Prepare acceptance letter data
+        const today = new Date();
+        const letterData = {
+          documentId: `ACNHS-ACC-${currentStudent.student_id || today.getTime()}`,
+          issueDate: today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          academicYear: `${today.getFullYear()} - ${today.getFullYear() + 1}`,
+          fullName: currentStudent.full_name || 'Student Name',
+          lastName: (currentStudent.full_name || '').split(' ').pop() || 'Student',
+          salutation: currentStudent.gender === 'female' ? 'Ms.' : 'Mr.',
+          dob: currentStudent.date_of_birth ? new Date(currentStudent.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
+          applicationId: applicationData.reference_number || currentStudent.application_id || 'N/A',
+          programName: currentStudent.program || 'Bachelor of Science in Nursing',
+          credential: "Bachelor's Degree",
+          mode: 'On-Campus / Full-Time',
+          startDate: currentStudent.start_term || 'TBD',
+          authorizedOfficer: 'Dr. Narine K. Hambardzumyan',
+          officerTitle: 'Dean of Academic Affairs',
+          qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${currentStudent.student_id || 'ACNHS'}`,
+          hash: generateHash(currentStudent.student_id || currentStudent.full_name),
+          studentId: currentStudent.student_id || 'TMP-2026-0001'
+        };
+
+        // Try to fetch the acceptance letter template (skip when running from file://)
+        let template = null;
+        let usedInlineTemplate = false;
+        const isFileProtocol = window.location.protocol === 'file:';
+
+        if (!isFileProtocol) {
+          try {
+            const templateResponse = await fetch(`acceptance-letter.html?cache=${Date.now()}`);
+            if (!templateResponse.ok) throw new Error('Failed to load template');
+            template = await templateResponse.text();
+          } catch (fetchError) {
+            console.warn('Could not fetch template, using inline HTML:', fetchError);
+            template = await buildInlineAcceptanceLetterHTML(letterData);
+            usedInlineTemplate = true;
+          }
+        } else {
+          console.info('Running over file:// — using inline acceptance letter template.');
+          template = await buildInlineAcceptanceLetterHTML(letterData);
+          usedInlineTemplate = true;
+        }
+
+        // Inject the data as a script if we have the template
+        if (template && !template.includes('ACCEPTANCE_LETTER_DATA')) {
+          const dataScript = `
+            <script>
+              window.ACCEPTANCE_LETTER_DATA = ${JSON.stringify(letterData)};
+            <\/script>
+          `;
+          
+          // Insert data script before the closing head tag
+          if (template.includes('</head>')) {
+            template = template.replace('</head>', dataScript + '</head>');
+          }
+        }
+
+        // Create an iframe to display the letter
+        const iframe = document.createElement('iframe');
+        iframe.style.width = '100%';
+        iframe.style.height = '1400px';
+        iframe.style.border = 'none';
+        iframe.style.borderRadius = '12px';
+        iframe.style.background = 'white';
+
+        const container = document.getElementById('acceptanceLetterContainer');
+        container.innerHTML = '';
+
+        if (usedInlineTemplate) {
+          container.insertAdjacentHTML('afterbegin', `
+            <div style="margin-bottom: 16px; padding: 16px; border: 1px dashed rgba(148,163,184,0.6); border-radius: 12px; background: rgba(15,23,42,0.55); color: var(--text-muted); font-size: 13px; line-height: 1.6;">
+              <strong style="color: var(--text);">Heads up:</strong>
+              The live HTML template requires the local dev server. You're seeing a pixel-perfect inline copy. For production rendering, run
+              <code style="background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px;">python3 start-server.py</code>
+              and open <code style="background: rgba(0,0,0,0.35); padding: 2px 6px; border-radius: 4px;">http://localhost:8000</code> instead of file://.
+            </div>
+          `);
+        }
+
+        container.appendChild(iframe);
+
+        // Write the template to the iframe
+        iframe.contentWindow.document.open();
+        iframe.contentWindow.document.write(template);
+        iframe.contentWindow.document.close();
+
+      } catch (error) {
+        console.error('Error loading acceptance letter:', error);
+        
+        // Check if it's a CORS/file protocol issue
+        const isCorsError = error.message.includes('Load failed') || error.message.includes('cross origin');
+        
+        document.getElementById('acceptanceLetterContainer').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">❌</div>
+            <p style="color: #ef4444; font-weight: 600;">Error loading acceptance letter</p>
+            ${isCorsError ? `
+              <div style="margin-top: 16px; padding: 16px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; max-width: 600px; margin-left: auto; margin-right: auto;">
+                <p style="font-size: 14px; line-height: 1.6; margin-bottom: 12px;">
+                  <strong>⚠️ Server Required:</strong><br>
+                  The acceptance letter cannot be loaded using file:// protocol.
+                </p>
+                <p style="font-size: 13px; line-height: 1.6; color: var(--text-muted);">
+                  Please run the development server:<br>
+                  <code style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; font-family: monospace;">python3 start-server.py</code><br>
+                  Then access at: <code style="background: rgba(0,0,0,0.3); padding: 4px 8px; border-radius: 4px; font-family: monospace;">localhost:8000</code>
+                </p>
+              </div>
+            ` : `<p style="color: var(--text-muted); margin-top: 8px;">${error.message}</p>`}
+          </div>
+        `;
+      }
+    }
+
+    // Print the acceptance letter from the iframe
+    function printAcceptanceLetter() {
+      const iframe = document.querySelector('#acceptanceLetterContainer iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.print();
+      } else {
+        alert('Acceptance letter not loaded. Please wait for it to load first.');
+      }
+    }
+
+    // Generate Acceptance Letter function
+    async function generateAcceptanceLetter() {
+      if (!currentStudent) {
+        alert('No student loaded');
+        return;
+      }
+
+      try {
+        // Show loading state
+        const btn = event.target;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '⏳ Generating...';
+        btn.disabled = true;
+
+        // Load html2pdf library if not already loaded
+        if (typeof html2pdf === 'undefined') {
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js');
+        }
+
+        // Fetch application data for more details
+        let applicationData = {};
+        if (currentStudent.application_id) {
+          const { data: app } = await sbClient
+            .from('applications')
+            .select('*')
+            .eq('id', currentStudent.application_id)
+            .single();
+          if (app) applicationData = app;
+        }
+
+        // Prepare acceptance letter data
+        const today = new Date();
+        const letterData = {
+          documentId: `ACNHS-ACC-${currentStudent.student_id || today.getTime()}`,
+          issueDate: today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+          academicYear: `${today.getFullYear()} - ${today.getFullYear() + 1}`,
+          fullName: currentStudent.full_name || 'Student Name',
+          lastName: (currentStudent.full_name || '').split(' ').pop() || 'Student',
+          salutation: currentStudent.gender === 'female' ? 'Ms.' : 'Mr.',
+          dob: currentStudent.date_of_birth ? new Date(currentStudent.date_of_birth).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'N/A',
+          applicationId: applicationData.reference_number || currentStudent.application_id || 'N/A',
+          programName: currentStudent.program || 'Bachelor of Science in Nursing',
+          credential: "Bachelor's Degree",
+          mode: 'On-Campus / Full-Time',
+          startDate: currentStudent.start_term || 'TBD',
+          authorizedOfficer: 'Dr. Narine K. Hambardzumyan',
+          officerTitle: 'Dean of Academic Affairs',
+          qrCodeUrl: `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${currentStudent.student_id || 'ACNHS'}`,
+          hash: generateHash(currentStudent.student_id || currentStudent.full_name),
+          studentId: currentStudent.student_id || 'TMP-2026-0001'
+        };
+
+        // Create acceptance letter HTML
+        const letterHTML = await createAcceptanceLetterHTML(letterData);
+
+        // Convert to PDF with exact A4 dimensions matching template
+        const opt = {
+          margin: [28, 25, 28, 25], // Top, Right, Bottom, Left in mm (matches @page CSS)
+          filename: `Acceptance_Letter_${currentStudent.full_name.replace(/\s+/g, '_')}.pdf`,
+          image: { type: 'jpeg', quality: 1.0 },
+          html2canvas: { 
+            scale: 3, // Higher scale for pixel-perfect rendering
+            useCORS: true, 
+            letterRendering: true,
+            windowWidth: 794, // A4 width at 96 DPI (210mm)
+            windowHeight: 1123, // A4 height at 96 DPI (297mm)
+            logging: false,
+            backgroundColor: '#ffffff'
+          },
+          jsPDF: { 
+            unit: 'mm', 
+            format: 'a4', 
+            orientation: 'portrait',
+            compress: true
+          },
+          pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+        };
+
+        const pdfBlob = await html2pdf().from(letterHTML).set(opt).outputPdf('blob');
+        
+        // Upload to Supabase Storage
+        const fileName = `acceptance-letters/${currentStudent.student_id || currentStudent.id}_${Date.now()}.pdf`;
+        const { data: uploadData, error: uploadError } = await sbClient
+          .storage
+          .from('application-documents')
+          .upload(fileName, pdfBlob, {
+            contentType: 'application/pdf',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = sbClient
+          .storage
+          .from('application-documents')
+          .getPublicUrl(fileName);
+
+        // Add to application's uploaded_documents array
+        if (currentStudent.application_id) {
+          const { data: app } = await sbClient
+            .from('applications')
+            .select('uploaded_documents')
+            .eq('id', currentStudent.application_id)
+            .single();
+
+          const updatedDocs = app?.uploaded_documents || [];
+          updatedDocs.push({
+            name: 'Acceptance Letter',
+            doc_name: 'Acceptance Letter',
+            public_url: publicUrl,
+            url: publicUrl,
+            type: 'application/pdf',
+            uploaded_at: new Date().toISOString()
+          });
+
+          await sbClient
+            .from('applications')
+            .update({ uploaded_documents: updatedDocs })
+            .eq('id', currentStudent.application_id);
+        }
+
+        // Reload documents to show the new letter
+        await loadDocuments(currentStudent);
+
+        // Reset button
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+
+        alert('✅ Acceptance Letter generated and added to documents!');
+      } catch (error) {
+        console.error('Error generating acceptance letter:', error);
+        alert('❌ Error generating acceptance letter: ' + error.message);
+        // Reset button
+        if (event?.target) {
+          event.target.innerHTML = '✉️ Generate Acceptance Letter';
+          event.target.disabled = false;
+        }
+      }
+    }
+
+    function generateHash(input = '') {
+      const seed = `${input}|${Date.now().toString(36)}|${Math.random()}`;
+      let h1 = 0xdeadbeef ^ seed.length;
+      let h2 = 0x41c6ce57 ^ seed.length;
+
+      for (let i = 0; i < seed.length; i++) {
+        const ch = seed.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+
+      h1 = (Math.imul(h1 ^ (h1 >>> 16), 2246822507) + Math.imul(h2 ^ (h2 >>> 13), 3266489909)) >>> 0;
+      h2 = (Math.imul(h2 ^ (h2 >>> 16), 2246822507) + Math.imul(h1 ^ (h1 >>> 13), 3266489909)) >>> 0;
+
+      const parts = [h1, h2];
+      if (window.crypto && window.crypto.getRandomValues) {
+        const rnd = new Uint32Array(2);
+        window.crypto.getRandomValues(rnd);
+        parts.push(rnd[0], rnd[1]);
+      } else {
+        parts.push((h1 ^ 0xa5a5a5a5) >>> 0, (h2 ^ 0x5a5a5a5a) >>> 0);
+      }
+
+      return parts
+        .map(num => num.toString(16).padStart(8, '0'))
+        .join('')
+        .substring(0, 32)
+        .toUpperCase();
+    }
+
+    async function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    async function createAcceptanceLetterHTML(data) {
+      try {
+        // Fetch the exact acceptance letter template
+        const templateResponse = await fetch(`acceptance-letter.html?cache=${Date.now()}`);
+        if (!templateResponse.ok) throw new Error('Failed to load acceptance-letter template');
+        let template = await templateResponse.text();
+
+        // Fetch Seal_base64.js script
+        let sealScript = '';
+        try {
+          const sealResponse = await fetch(`Seal_base64.js?cache=${Date.now()}`);
+          if (sealResponse.ok) {
+            sealScript = await sealResponse.text();
+          }
+        } catch (e) {
+          console.warn('Could not load Seal_base64.js, will use fallback URL');
+        }
+
+        // Prepare the data injection script
+        const safeData = JSON.stringify(data).replace(/</g, '\\u003c');
+        const scriptOpen = '<scr' + 'ipt>';
+        const scriptClose = '</scr' + 'ipt>';
+        
+        // Build the complete script block to inject
+        let injectScripts = '';
+        if (sealScript) {
+          injectScripts += scriptOpen + '\n' + sealScript + '\n' + scriptClose + '\n';
+        }
+        injectScripts += scriptOpen + 'window.ACCEPTANCE_LETTER_DATA = ' + safeData + ';' + scriptClose + '\n';
+
+        // Replace the Seal_base64.js script tag reference with inline content + data
+        const sealScriptTag = '<scr' + 'ipt src="./Seal_base64.js"><' + '/script>';
+        if (template.includes(sealScriptTag)) {
+          template = template.replace(sealScriptTag, injectScripts);
+        } else if (template.includes('</head>')) {
+          // Fallback: inject before </head> if the script tag pattern doesn't match
+          template = template.replace('</head>', injectScripts + '</head>');
+        } else {
+          // Last resort: prepend to template
+          template = injectScripts + '\n' + template;
+        }
+
+        return template;
+      } catch (error) {
+        console.error('Error loading acceptance letter template:', error);
+        return buildInlineAcceptanceLetterHTML(data);
+      }
+    }
+
+    function buildInlineAcceptanceLetterHTML(data) {
+      // Pixel-perfect inline version of acceptance-letter.html
+      const sealUrl = 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/images/Seal.png';
+      
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Official Acceptance Letter — ACNHS</title>
+  <meta name="acnhs-document-type" content="Official Acceptance Letter">
+  <meta name="acnhs-document-id" content="${data.documentId}">
+  <meta name="acnhs-student-id" content="${data.studentId}">
+  <meta name="acnhs-hash" content="${data.hash}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --ink: #0f172a;
+      --teal: #14b8a6;
+      --slate: #475569;
+      --paper: #ffffff;
+      --microtext: rgba(15,23,42,0.35);
+    }
+    * { box-sizing: border-box; }
+    @page { size: A4; margin: 28mm 25mm; }
+    body {
+      margin: 0;
+      background: #0f172a;
+      font-family: "Times New Roman", Georgia, serif;
+      color: var(--ink);
+      display: flex;
+      justify-content: center;
+      padding: 24px;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at top, rgba(20,184,166,0.08), transparent 55%);
+      z-index: -1;
+    }
+    .letter-toolbar {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      display: flex;
+      gap: 8px;
+      z-index: 10;
+    }
+    .letter-toolbar button {
+      border: none;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      color: #fff;
+      background: linear-gradient(135deg, #14b8a6, #0f766e);
+      box-shadow: 0 10px 25px rgba(15, 118, 110, 0.25);
+    }
+    .letter-toolbar button.secondary {
+      background: rgba(15,23,42,0.75);
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: auto;
+      background: var(--paper);
+      padding: 36mm 32mm;
+      position: relative;
+      overflow: hidden;
+      background-image: repeating-linear-gradient(45deg, rgba(15,23,42,0.025), rgba(15,23,42,0.025) 1px, transparent 1px, transparent 6px);
+    }
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 16mm;
+      border: 2px solid rgba(15,23,42,0.35);
+      pointer-events: none;
+    }
+    .page::after {
+      content: "";
+      position: absolute;
+      inset: 20mm;
+      border: 1px solid rgba(20,184,166,0.55);
+      pointer-events: none;
+    }
+    .watermark {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0.045;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .watermark img { width: 440px; }
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      position: relative;
+      z-index: 2;
+      gap: 24px;
+    }
+    .header-left {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+    .header-left span {
+      display: block;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--slate);
+      margin-top: 4px;
+      text-transform: none;
+    }
+    .header-right {
+      font-size: 12px;
+      text-align: right;
+      line-height: 1.6;
+      color: var(--slate);
+    }
+    .center-seal {
+      margin: 30px 0 18px;
+      display: flex;
+      justify-content: center;
+      position: relative;
+      z-index: 2;
+    }
+    .center-seal img {
+      width: 110px;
+      padding: 10px;
+      background: white;
+      border-radius: 50%;
+      border: 2px solid rgba(15,23,42,0.25);
+    }
+    .title {
+      text-align: center;
+      margin-bottom: 10px;
+      z-index: 2;
+      position: relative;
+    }
+    .title h1 {
+      font-size: 21px;
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      letter-spacing: 0.5px;
+    }
+    .microtext {
+      font-size: 6px;
+      letter-spacing: 0.7px;
+      text-align: center;
+      color: var(--microtext);
+      margin: 14px 0 22px;
+      user-select: none;
+      text-transform: uppercase;
+    }
+    .content {
+      font-size: 14.6px;
+      line-height: 1.9;
+      position: relative;
+      z-index: 2;
+    }
+    .meta-block {
+      margin-bottom: 22px;
+      font-size: 13.5px;
+    }
+    .meta-block strong {
+      display: inline-block;
+      width: 150px;
+    }
+    .program-box {
+      border-left: 4px solid var(--teal);
+      background: #f8fafc;
+      padding: 14px 18px;
+      margin: 18px 0;
+      font-size: 13.5px;
+    }
+    .signature {
+      margin-top: 52px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 24px;
+    }
+    .sig-line {
+      border-top: 1px solid var(--ink);
+      width: 260px;
+      margin-top: 10px;
+    }
+    .qr {
+      position: absolute;
+      bottom: 28mm;
+      right: 30mm;
+      width: 85px;
+      z-index: 2;
+      border: 1px solid rgba(15,23,42,0.2);
+      padding: 6px;
+      border-radius: 6px;
+      background: white;
+    }
+    .void-copy {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 72px;
+      font-weight: 800;
+      color: rgba(220,38,38,0.06);
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      pointer-events: none;
+      z-index: 1;
+    }
+    .footer {
+      position: absolute;
+      bottom: 18mm;
+      left: 30mm;
+      right: 30mm;
+      font-size: 11px;
+      color: var(--slate);
+      text-align: center;
+      z-index: 2;
+    }
+    .hash {
+      font-size: 9px;
+      letter-spacing: 0.8px;
+      margin-top: 6px;
+    }
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+      .letter-toolbar { display: none; }
+      .page { box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="letter-toolbar" aria-hidden="true">
+    <button type="button" onclick="window.print()">🖨️ Print / Save PDF</button>
+    <button type="button" class="secondary" id="toggleVoidBtn">Toggle VOID Layer</button>
+  </div>
+  <div class="page" id="acceptancePage">
+    <div class="watermark">
+      <img src="${sealUrl}" alt="ACNHS Watermark">
+    </div>
+    <div class="void-copy" id="voidLayer">VOID IF COPIED</div>
+    <div class="header">
+      <div class="header-left">
+        Armenian College of Nursing & Health Sciences
+        <span>Academic Affairs & Admissions Office</span>
+      </div>
+      <div class="header-right">
+        Document ID: ${data.documentId}<br>
+        Issue Date: ${data.issueDate}<br>
+        Academic Year: ${data.academicYear}
+      </div>
+    </div>
+    <div class="center-seal">
+      <img src="${sealUrl}" alt="ACNHS Seal">
+    </div>
+    <div class="title">
+      <h1>Official Letter of Acceptance</h1>
+      <div class="subtitle">Issued under authority of the Academic Council</div>
+    </div>
+    <div class="microtext">
+      ARMENIAN COLLEGE OF NURSING & HEALTH SCIENCES • DOCUMENT ${data.documentId} • VERIFIED ${data.hash} • DO NOT ALTER •
+    </div>
+    <div class="content">
+      <div class="meta-block">
+        <div><strong>Applicant Name:</strong> ${data.fullName}</div>
+        <div><strong>Date of Birth:</strong> ${data.dob}</div>
+        <div><strong>Application ID:</strong> ${data.applicationId}</div>
+      </div>
+      <p><strong>Respected ${data.salutation} ${data.lastName},</strong></p>
+      <p>
+        Following the formal review conducted by the Academic Admissions Committee of the
+        Armenian College of Nursing & Health Sciences, your application has been
+        <strong>approved</strong>.
+      </p>
+      <p>You are hereby granted admission to the following academic program:</p>
+      <div class="program-box">
+        <strong>Program:</strong> ${data.programName}<br>
+        <strong>Credential:</strong> ${data.credential}<br>
+        <strong>Mode of Study:</strong> ${data.mode}<br>
+        <strong>Commencement Date:</strong> ${data.startDate}
+      </div>
+      <p>
+        This letter constitutes an official institutional record and is electronically verifiable. Please retain a copy for your records.
+      </p>
+      <div class="signature">
+        <div>
+          <strong>${data.authorizedOfficer}</strong><br>
+          ${data.officerTitle}<br>
+          Armenian College of Nursing & Health Sciences
+          <div class="sig-line"></div>
+        </div>
+      </div>
+    </div>
+    <img src="${data.qrCodeUrl}" class="qr" alt="Verification QR">
+    <div class="footer">
+      www.acnhs.am • admissions@acnhs.am<br>
+      Unauthorized alteration or duplication is prohibited.
+      <div class="hash">Verification Hash: ${data.hash}</div>
+    </div>
+  </div>
+  <script>
+    document.getElementById('toggleVoidBtn').addEventListener('click', () => {
+      const layer = document.getElementById('voidLayer');
+      layer.style.display = layer.style.display === 'none' ? 'flex' : 'none';
+    });
+  <\/script>
+</body>
+</html>`;
+    }
+
+    // Expose globally for onclick handler
+    window.generateAcceptanceLetter = generateAcceptanceLetter;
+
+    // Helper functions
+    function safePostMessage(message) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(message, '*');
+        }
+      } catch (e) {
+        console.warn('Could not post message to parent:', e);
+        // If we can't communicate with parent, just close this window
+        if (message === 'closeStudentModal') {
+          window.close();
+        }
+      }
+    }
+
+    function closeModal() {
+      safePostMessage('closeStudentModal');
+    }
+
+    // Open Grade Calculator for current student
+    function openGradeCalculator() {
+      if (!currentStudentId) {
+        showCustomAlert('No student selected. Please open this page with a valid student ID.');
+        return;
+      }
+
+      const studentName = document.getElementById('studentName')?.textContent || 'Student';
+      
+      // Show custom modal instead of browser prompt
+      document.getElementById('courseModalStudentName').textContent = studentName;
+      document.getElementById('courseSelectionModal').style.display = 'flex';
+      
+      // Focus on course code input
+      setTimeout(() => {
+        document.getElementById('courseCodeInput').focus();
+        document.getElementById('courseCodeInput').select();
+      }, 100);
+    }
+
+    // Close course selection modal
+    function closeCourseSelectionModal() {
+      document.getElementById('courseSelectionModal').style.display = 'none';
+    }
+
+    // Confirm course selection and open calculator
+    function confirmCourseSelection() {
+      const courseId = document.getElementById('courseCodeInput').value.trim();
+      const semester = document.getElementById('semesterInput').value.trim();
+      
+      if (!courseId) {
+        showCustomAlert('Please enter a course code.');
+        return;
+      }
+      
+      if (!semester) {
+        showCustomAlert('Please enter a semester.');
+        return;
+      }
+      
+      // Close modal
+      closeCourseSelectionModal();
+      
+      // Get student info
+      const studentId = currentStudentId;
+      const studentName = document.getElementById('studentName')?.textContent || 'Student';
+      const programText = document.getElementById('programText')?.textContent || '';
+      
+      // Build URL with full context
+      const calculatorUrl = `admin/GradeCalculator.html?student_id=${encodeURIComponent(studentId)}&student_name=${encodeURIComponent(studentName)}&course_id=${encodeURIComponent(courseId)}&semester=${encodeURIComponent(semester)}&program=${encodeURIComponent(programText)}`;
+      
+      // Open in new window/tab
+      window.open(calculatorUrl, '_blank', 'width=1400,height=900');
+    }
+
+    // Custom alert function (matches design system)
+    function showCustomAlert(message) {
+      // You can implement a custom alert modal here later
+      // For now, use browser alert but with improved styling
+      alert(message);
+    }
+
+    // Allow Enter key to submit in modal
+    document.addEventListener('DOMContentLoaded', () => {
+      const inputs = ['courseCodeInput', 'semesterInput'];
+      inputs.forEach(id => {
+        const input = document.getElementById(id);
+        if (input) {
+          input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+              confirmCourseSelection();
+            }
+          });
+        }
+      });
+    });
+
+
+    function getDocumentType(filename) {
+      return filename.toLowerCase().includes('.pdf') ? 'pdf' : 'image';
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '-';
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function stripHtml(html) {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return div.textContent || div.innerText || '';
+    }
+
+    function truncate(str, length) {
+      return str.length > length ? str.substring(0, length) + '...' : str;
+    }
+
+    // Action functions
+    function editStudent() {
+      safePostMessage({ action: 'editStudent', studentId: currentStudent.id });
+    }
+
+    function viewApplication() {
+      if (currentStudent.application_id) {
+        try {
+          window.parent.location.href = `admin-applications.html?id=${currentStudent.application_id}`;
+        } catch (e) {
+          window.location.href = `admin-applications.html?id=${currentStudent.application_id}`;
+        }
+      }
+    }
+
+    function sendEmail() {
+      try {
+        window.parent.location.href = `email-system.html?to=${currentStudent.email}&name=${currentStudent.full_name}`;
+      } catch (e) {
+        window.location.href = `email-system.html?to=${currentStudent.email}&name=${currentStudent.full_name}`;
+      }
+    }
+
+    function withdrawStudent() {
+      if (confirm(`Are you sure you want to withdraw ${currentStudent.full_name}?`)) {
+        // Update enrollment status
+        sbClient
+          .from('acnhs_students')
+          .update({ enrollment_status: 'withdrawn' })
+          .eq('id', currentStudent.id)
+          .then(() => {
+            alert('Student withdrawn successfully');
+            safePostMessage('reloadStudents');
+          });
+      }
+    }
+
+    function viewEmailDetail(emailId) {
+      console.log('View email:', emailId);
+    }
+  </script>
+</body>
+</html>

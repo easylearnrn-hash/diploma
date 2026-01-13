@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Students Management - ACNHS Admin</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <style>
+    :root {
+      --primary: #2dd4bf;
+      --primary-dark: #14b8a6;
+      --bg-dark: #0b1629;
+      --bg-card: #0f1f3a;
+      --bg-hover: #162844;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border: rgba(255,255,255,0.08);
+      --shadow: rgba(0,0,0,0.3);
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(45,212,191,0.12), transparent 40%),
+                  radial-gradient(circle at 80% 80%, rgba(56,189,248,0.08), transparent 35%),
+                  var(--bg-dark);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .main-content {
+      padding: 32px 40px;
+      min-height: 100vh;
+    }
+
+    header {
+      margin-bottom: 32px;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text);
+      letter-spacing: -0.5px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 16px;
+    }
+
+    /* Stats Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      transition: all 0.3s;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 24px var(--shadow);
+      border-color: rgba(45,212,191,0.3);
+    }
+
+    .stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .stat-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    /* Search & Filter Bar */
+    .controls-bar {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .search-box {
+      flex: 1;
+      min-width: 280px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 14px 20px 14px 48px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 15px;
+      transition: all 0.3s;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45,212,191,0.1);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 20px;
+      color: var(--text-muted);
+    }
+
+    .filter-select {
+      padding: 14px 20px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      color: var(--text);
+      font-size: 15px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .filter-select:hover {
+      border-color: var(--primary);
+    }
+
+    .filter-select:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45,212,191,0.1);
+    }
+
+    .btn {
+      padding: 14px 24px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: #022c22;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 16px rgba(45,212,191,0.3);
+    }
+
+    /* Students Table */
+    .table-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: rgba(45,212,191,0.08);
+      border-bottom: 2px solid var(--border);
+    }
+
+    th {
+      padding: 16px 20px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+    }
+
+    tbody tr {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    tbody tr:hover {
+      background: var(--bg-hover);
+      box-shadow: 0 0 0 2px var(--primary) inset;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .student-id {
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+      color: var(--primary);
+      font-size: 14px;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .status-active {
+      background: rgba(16,185,129,0.15);
+      color: var(--success);
+    }
+
+    .status-inactive {
+      background: rgba(245,158,11,0.15);
+      color: var(--warning);
+    }
+
+    .status-withdrawn {
+      background: rgba(239,68,68,0.15);
+      color: var(--danger);
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: all 0.2s;
+    }
+
+    .action-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: translateY(-2px);
+    }
+
+    /* Loading & Empty States */
+    .loading, .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+      color: var(--text-muted);
+    }
+
+    .loading-spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+    }
+
+    /* Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal.show {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      max-width: 700px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px var(--shadow);
+    }
+
+    .modal-header {
+      padding: 28px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .close-btn {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.05);
+      border: none;
+      color: var(--text-muted);
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .close-btn:hover {
+      background: rgba(239,68,68,0.2);
+      color: var(--danger);
+      transform: rotate(90deg);
+    }
+
+    .modal-body {
+      padding: 32px;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      transition: all 0.3s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45,212,191,0.1);
+    }
+
+    .form-input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .modal-footer {
+      padding: 24px 32px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-hover);
+    }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .info-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="main-content">
+    <header>
+      <div class="header-top">
+        <h1>
+          <span>📚</span>
+          Students Management
+        </h1>
+      </div>
+      <p class="subtitle">View and manage all approved student records</p>
+    </header>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Students</div>
+        <div class="stat-value" id="totalStudents">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Students</div>
+        <div class="stat-value" id="activeStudents">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Inactive Students</div>
+        <div class="stat-value" id="inactiveStudents">0</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Withdrawn Students</div>
+        <div class="stat-value" id="withdrawnStudents">0</div>
+      </div>
+    </div>
+
+    <!-- Controls Bar -->
+    <div class="controls-bar">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="searchInput" placeholder="Search by name, student ID, email...">
+      </div>
+      <select class="filter-select" id="statusFilter">
+        <option value="">All Statuses</option>
+        <option value="active">Active</option>
+        <option value="inactive">Inactive</option>
+        <option value="withdrawn">Withdrawn</option>
+      </select>
+      <select class="filter-select" id="programFilter">
+        <option value="">All Programs</option>
+        <option value="RN">Registered Nursing (RN)</option>
+        <option value="LPN">Licensed Practical Nursing (LPN)</option>
+        <option value="BSN">Bachelor of Science in Nursing (BSN)</option>
+      </select>
+      <button class="btn btn-primary" onclick="refreshData()">
+        <span>🔄</span>
+        Refresh
+      </button>
+    </div>
+
+    <!-- Students Table -->
+    <div class="table-container">
+      <div class="table-wrapper">
+        <table id="studentsTable">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Full Name</th>
+              <th>Email</th>
+              <th>Phone</th>
+              <th>Program</th>
+              <th>Start Term</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="studentsTableBody">
+            <tr>
+              <td colspan="8">
+                <div class="loading">
+                  <div class="loading-spinner"></div>
+                  <p>Loading students...</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Detail Modal -->
+  <div class="modal" id="studentModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 class="modal-title">Student Details</h2>
+        <button class="close-btn" onclick="closeModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-grid">
+          <div class="form-group">
+            <label class="form-label">Student ID</label>
+            <input type="text" class="form-input" id="modalStudentId" disabled>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select class="form-input" id="modalStatus">
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Full Name</label>
+            <input type="text" class="form-input" id="modalFullName">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" id="modalEmail">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Phone</label>
+            <input type="tel" class="form-input" id="modalPhone">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Date of Birth</label>
+            <input type="text" class="form-input" id="modalDOB">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Program</label>
+            <input type="text" class="form-input" id="modalProgram">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Start Term</label>
+            <input type="text" class="form-input" id="modalStartTerm">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Created At</label>
+          <input type="text" class="form-input" id="modalCreatedAt" disabled>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Last Updated</label>
+          <input type="text" class="form-input" id="modalUpdatedAt" disabled>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveStudent()">
+          <span>💾</span>
+          Save Changes
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student Detail Modal (iframe) -->
+  <div id="studentDetailModal" style="display: none; position: fixed; inset: 0; z-index: 10001; background: rgba(0,0,0,0.8); backdrop-filter: blur(8px);">
+    <iframe id="studentDetailFrame" src="" title="Student Detail View" style="width: 100%; height: 100%; border: none;"></iframe>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/admin-sidebar.js"></script>
+  <script>
+    (function() {
+      'use strict';
+      
+      let sbClient;
+      let allStudents = [];
+      let currentStudent = null;
+
+      // Load students on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        sbClient = initSupabase();
+        loadStudents();
+        setupEventListeners();
+      });
+
+      function setupEventListeners() {
+        const searchInput = document.getElementById('searchInput');
+        const statusFilter = document.getElementById('statusFilter');
+        const programFilter = document.getElementById('programFilter');
+
+        searchInput.addEventListener('input', filterStudents);
+        statusFilter.addEventListener('change', filterStudents);
+        programFilter.addEventListener('change', filterStudents);
+      }
+
+      async function loadStudents() {
+        try {
+          // Fetch all students from acnhs_students table
+          const { data, error } = await sbClient
+            .from('acnhs_students')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+
+          allStudents = data || [];
+          updateStats();
+          renderStudents(allStudents);
+        } catch (error) {
+          console.error('Error loading students:', error);
+          showError('Failed to load students. Please try again.');
+        }
+      }
+
+      function updateStats() {
+        const total = allStudents.length;
+        const active = allStudents.filter(s => s.enrollment_status === 'active').length;
+        const inactive = allStudents.filter(s => s.enrollment_status === 'inactive').length;
+        const withdrawn = allStudents.filter(s => s.enrollment_status === 'withdrawn').length;
+
+        document.getElementById('totalStudents').textContent = total;
+        document.getElementById('activeStudents').textContent = active;
+        document.getElementById('inactiveStudents').textContent = inactive;
+        document.getElementById('withdrawnStudents').textContent = withdrawn;
+      }
+
+      function renderStudents(students) {
+      const tbody = document.getElementById('studentsTableBody');
+
+      if (students.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8">
+              <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <p>No students found</p>
+              </div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+        tbody.innerHTML = students.map(student => `
+          <tr onclick="viewStudent('${student.id}')">
+            <td><span class="student-id">${escapeHtml(student.student_id || 'N/A')}</span></td>
+            <td>${escapeHtml(student.full_name || 'N/A')}</td>
+            <td>${escapeHtml(student.email || 'N/A')}</td>
+            <td>${escapeHtml(student.phone || 'N/A')}</td>
+            <td>${escapeHtml(student.program || 'N/A')}</td>
+            <td>${escapeHtml(student.start_term || 'N/A')}</td>
+            <td><span class="status-badge status-${student.enrollment_status || 'active'}">${(student.enrollment_status || 'active').toUpperCase()}</span></td>
+            <td onclick="event.stopPropagation()">
+              <div class="actions">
+                <button class="action-btn" onclick="viewStudent('${student.id}')" title="View Details">👁️</button>
+                <button class="action-btn" onclick="viewApplication('${student.application_id}')" title="View Application" ${!student.application_id ? 'disabled' : ''}>📄</button>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }    function filterStudents() {
+      const search = document.getElementById('searchInput').value.toLowerCase();
+      const statusFilter = document.getElementById('statusFilter').value;
+      const programFilter = document.getElementById('programFilter').value;
+
+      let filtered = allStudents;
+
+      // Apply search filter
+      if (search) {
+        filtered = filtered.filter(student => {
+          const searchStr = [
+            student.student_id,
+            student.full_name,
+            student.email,
+            student.phone
+          ].join(' ').toLowerCase();
+          return searchStr.includes(search);
+        });
+      }
+
+        // Apply status filter
+        if (statusFilter) {
+          filtered = filtered.filter(s => s.enrollment_status === statusFilter);
+        }      // Apply program filter
+      if (programFilter) {
+        filtered = filtered.filter(s => s.program === programFilter);
+      }
+
+      renderStudents(filtered);
+    }
+
+    function viewStudent(studentId) {
+      // Open the student detail page in modal
+      const iframe = document.getElementById('studentDetailFrame');
+      const modal = document.getElementById('studentDetailModal');
+      
+      iframe.src = `admin-student-page.html?id=${studentId}`;
+      modal.style.display = 'flex';
+    }
+
+    // Expose viewStudent globally for onclick handlers
+    window.viewStudent = viewStudent;
+
+    // Listen for messages from the iframe
+    window.addEventListener('message', function(event) {
+      if (event.data === 'closeStudentModal') {
+        document.getElementById('studentDetailModal').style.display = 'none';
+        document.getElementById('studentDetailFrame').src = '';
+      } else if (event.data === 'reloadStudents') {
+        document.getElementById('studentDetailModal').style.display = 'none';
+        document.getElementById('studentDetailFrame').src = '';
+        loadStudents();
+      } else if (event.data && event.data.action === 'editStudent') {
+        // Open old edit modal
+        document.getElementById('studentDetailModal').style.display = 'none';
+        const student = allStudents.find(s => s.id === event.data.studentId);
+        if (student) {
+          currentStudent = student;
+          document.getElementById('modalStudentId').value = student.student_id || '';
+          document.getElementById('modalStatus').value = student.enrollment_status || 'active';
+          document.getElementById('modalFullName').value = student.full_name || '';
+          document.getElementById('modalEmail').value = student.email || '';
+          document.getElementById('modalPhone').value = student.phone || '';
+          document.getElementById('modalDOB').value = student.date_of_birth || '';
+          document.getElementById('modalProgram').value = student.program || '';
+          document.getElementById('modalStartTerm').value = student.start_term || '';
+          document.getElementById('modalCreatedAt').value = formatDate(student.created_at);
+          document.getElementById('modalUpdatedAt').value = formatDate(student.updated_at);
+          document.getElementById('studentModal').classList.add('show');
+        }
+      }
+    });
+
+    function closeModal() {
+      document.getElementById('studentModal').classList.remove('show');
+      currentStudent = null;
+    }
+
+    // Expose globally for onclick handlers
+    window.closeModal = closeModal;
+
+      async function saveStudent() {
+        if (!currentStudent) return;
+
+        try {
+          const updates = {
+            full_name: document.getElementById('modalFullName').value,
+            email: document.getElementById('modalEmail').value,
+            phone: document.getElementById('modalPhone').value,
+            date_of_birth: document.getElementById('modalDOB').value,
+            program: document.getElementById('modalProgram').value,
+            start_term: document.getElementById('modalStartTerm').value,
+            enrollment_status: document.getElementById('modalStatus').value,
+            updated_at: new Date().toISOString()
+          };
+
+          const { error } = await sbClient
+            .from('acnhs_students')
+            .update(updates)
+            .eq('id', currentStudent.id);        if (error) throw error;
+
+        showSuccess('Student record updated successfully');
+        closeModal();
+        loadStudents();
+      } catch (error) {
+        console.error('Error updating student:', error);
+        showError('Failed to update student. Please try again.');
+      }
+    }
+
+    // Expose globally for onclick handlers
+    window.saveStudent = saveStudent;
+
+    function viewApplication(applicationId) {
+      if (!applicationId) return;
+      window.location.href = `admin-applications.html?id=${applicationId}`;
+    }
+
+    // Expose viewApplication globally for onclick handlers
+    window.viewApplication = viewApplication;
+
+    function refreshData() {
+      loadStudents();
+    }
+
+    function formatDate(dateStr) {
+      if (!dateStr) return 'N/A';
+      const date = new Date(dateStr);
+      return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function showSuccess(message) {
+      showNotification(message, false);
+    }
+
+    function showError(message) {
+      showNotification(message, true);
+    }
+
+    function showNotification(message, isError = false) {
+      const notification = document.createElement('div');
+      notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${isError ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #10b981, #059669)'};
+        color: white;
+        padding: 16px 24px;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 600;
+        box-shadow: 0 8px 24px ${isError ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)'};
+        z-index: 10001;
+        animation: slideIn 0.3s ease;
+      `;
+      notification.textContent = message;
+      document.body.appendChild(notification);
+
+      setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+      }, 3000);
+    }
+
+    // Close modal on escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeModal();
+    });
+
+      // Close modal on backdrop click
+      document.getElementById('studentModal').addEventListener('click', function(e) {
+        if (e.target === this) closeModal();
+      });
+    })();
+  </script>
+</body>
+</html>

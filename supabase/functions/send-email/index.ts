@@ -16,6 +16,11 @@ interface EmailRequest {
   from?: string
   fromName?: string
   replyTo?: string
+  attachments?: Array<{
+    filename: string
+    content: string
+    type: string
+  }>
 }
 
 serve(async (req) => {
@@ -26,7 +31,7 @@ serve(async (req) => {
 
   try {
     // Parse request body
-    const { to, subject, html, from, fromName, replyTo }: EmailRequest = await req.json()
+    const { to, subject, html, from, fromName, replyTo, attachments }: EmailRequest = await req.json()
 
     // Validate inputs
     if (!to || !subject || !html) {
@@ -60,26 +65,26 @@ serve(async (req) => {
     // Determine sender name and email
     const senderEmail = from || 'admissions@acnhs.am'
     const defaultSenderNames: { [key: string]: string } = {
-      'admissions@acnhs.am': 'ACNHS Admissions',
-      'info@acnhs.am': 'ACNHS Office',
-      'documents@acnhs.am': 'ACNHS Documents',
-      'international@acnhs.am': 'ACNHS International Relations',
-      'registrar@acnhs.am': 'ACNHS Registrar',
-      'finance@acnhs.am': 'ACNHS Finance',
-      'ceo@acnhs.am': 'ACNHS CEO',
-      'dean@acnhs.am': 'ACNHS Dean',
-      'academic@acnhs.am': 'ACNHS Academic Affairs',
-      'student-services@acnhs.am': 'ACNHS Student Services',
-      'legal@acnhs.am': 'ACNHS Legal',
-      'hr@acnhs.am': 'ACNHS Human Resources',
-      'it@acnhs.am': 'ACNHS IT Support',
-      'library@acnhs.am': 'ACNHS Library',
-      'alumni@acnhs.am': 'ACNHS Alumni Relations',
-      'research@acnhs.am': 'ACNHS Research',
-      'do-not-reply@acnhs.am': 'ACNHS - Do Not Reply'
+      'admissions@acnhs.am': 'Admissions Office - ACNHS',
+      'info@acnhs.am': 'Information Office - ACNHS',
+      'documents@acnhs.am': 'Records & Documentation - ACNHS',
+      'international@acnhs.am': 'International Relations - ACNHS',
+      'registrar@acnhs.am': 'Registrar Office - ACNHS',
+      'finance@acnhs.am': 'Finance Department - ACNHS',
+      'ceo@acnhs.am': 'Chief Executive Officer - ACNHS',
+      'dean@acnhs.am': 'Office of the Dean - ACNHS',
+      'academic@acnhs.am': 'Academic Affairs - ACNHS',
+      'student-services@acnhs.am': 'Student Services - ACNHS',
+      'legal@acnhs.am': 'Legal Affairs - ACNHS',
+      'hr@acnhs.am': 'Human Resources - ACNHS',
+      'it@acnhs.am': 'IT Support - ACNHS',
+      'library@acnhs.am': 'Library & Resources - ACNHS',
+      'alumni@acnhs.am': 'Alumni Relations - ACNHS',
+      'research@acnhs.am': 'Research Department - ACNHS',
+      'do-not-reply@acnhs.am': 'ACNHS Notifications'
     }
     // Use provided fromName or fallback to default mapping or 'ACNHS'
-    const senderName = fromName || defaultSenderNames[senderEmail] || 'ACNHS'
+    const senderName = fromName || defaultSenderNames[senderEmail] || 'Armenian College of Nurses'
 
     // Build email payload with proper name format
     // CRITICAL: Send both html and text versions for better email client compatibility
@@ -95,6 +100,15 @@ serve(async (req) => {
     const replyToEmail = replyTo || (senderEmail !== 'do-not-reply@acnhs.am' ? senderEmail : undefined)
     if (replyToEmail) {
       emailPayload.reply_to = replyToEmail
+    }
+
+    // Add attachments if provided
+    if (attachments && attachments.length > 0) {
+      emailPayload.attachments = attachments.map((att: any) => ({
+        filename: att.filename,
+        content: att.content
+      }))
+      console.log(`Adding ${attachments.length} attachment(s) to email`)
     }
     
     console.log('Sending email with payload:', {
@@ -154,6 +168,7 @@ serve(async (req) => {
           sender: emailSender,
           subject: subject,
           body: html.replace(/<[^>]*>/g, '').substring(0, 500), // Strip HTML tags for preview
+          html_body: html.substring(0, 50000), // Store full HTML for display (limit 50KB)
           status: 'sent',
           sent_at: new Date().toISOString(),
           resend_id: resendData.id

@@ -17,7 +17,7 @@
 **Critical tables** (see `supabase/schema.sql` for full DDL):
 - `applications`: Student admissions with `document_id`, `control_number`, `verification_hash`, `username`, `password_hash`, `credentials_screenshot` (base64 image)
 - `registrations`: Waiting list with `status` (pending/contacted/approved/rejected), `reminder_date`
-- `students`: Approved applicants with `student_id` (TMP-xxxxxxx format), `application_id` FK
+- `students`: Approved applicants with `student_id` (ACNHS-xxxxxxx format), `application_id` FK
 - `transcripts`: QR verification codes with cryptographic `verification_code` (4-char hex)
 - `sms_verifications`, `sms_logs`: Phone verification codes and delivery tracking
 - `email_history`: Outbound email audit trail

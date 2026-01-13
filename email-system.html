@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Email System - ACNHS Admin</title>
   <link rel="stylesheet" href="css/admin-sidebar.css">
+  <script src="Seal_base64.js"></script>
   <style>
     * {
       margin: 0;
@@ -560,6 +561,157 @@
       overflow: hidden;
     }
 
+    /* Formatting Toolbar */
+    .formatting-toolbar {
+      display: flex;
+      gap: 4px;
+      padding: 8px;
+      background: #0f172a;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      margin-bottom: 0;
+    }
+
+    .format-btn {
+      padding: 8px 12px;
+      background: transparent;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 6px;
+      color: #94a3b8;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+    }
+
+    .format-btn:hover {
+      background: rgba(45, 212, 191, 0.1);
+      border-color: #2dd4bf;
+      color: #2dd4bf;
+    }
+
+    .format-btn.active {
+      background: rgba(45, 212, 191, 0.2);
+      border-color: #2dd4bf;
+      color: #2dd4bf;
+    }
+
+    .formatting-toolbar + .form-textarea {
+      border-radius: 0 0 8px 8px;
+      border-top: none;
+    }
+
+    /* File Attachments */
+    .attachment-area {
+      margin-top: 12px;
+      padding: 12px;
+      background: rgba(45, 212, 191, 0.05);
+      border: 1px dashed rgba(45, 212, 191, 0.3);
+      border-radius: 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .attachment-area:hover {
+      background: rgba(45, 212, 191, 0.1);
+      border-color: #2dd4bf;
+    }
+
+    .attachment-area.dragover {
+      background: rgba(45, 212, 191, 0.15);
+      border-color: #2dd4bf;
+      border-style: solid;
+    }
+
+    .attachment-icon {
+      font-size: 24px;
+      margin-bottom: 4px;
+    }
+
+    .attachment-text {
+      color: #94a3b8;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+
+    .attachment-hint {
+      color: #64748b;
+      font-size: 11px;
+    }
+
+    .attachment-list {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .attachment-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+
+    .attachment-item:hover {
+      background: rgba(30, 41, 59, 0.8);
+      border-color: rgba(45, 212, 191, 0.4);
+    }
+
+    .attachment-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .attachment-icon-small {
+      font-size: 18px;
+    }
+
+    .attachment-details {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    .attachment-name {
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .attachment-size {
+      color: #64748b;
+      font-size: 10px;
+    }
+
+    .attachment-remove {
+      padding: 4px 8px;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-radius: 4px;
+      color: #ef4444;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .attachment-remove:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+    }
+
     .form-select {
       width: 100%;
       padding: 14px 16px;
@@ -748,6 +900,26 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+
+    /* Custom scrollbar for recipients list */
+    #recipientsList::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    #recipientsList::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 4px;
+    }
+
+    #recipientsList::-webkit-scrollbar-thumb {
+      background: rgba(45, 212, 191, 0.3);
+      border-radius: 4px;
+      transition: all 0.2s;
+    }
+
+    #recipientsList::-webkit-scrollbar-thumb:hover {
+      background: rgba(45, 212, 191, 0.5);
+    }
   </style>
 </head>
 <body>
@@ -910,12 +1082,16 @@
 
           <!-- Recipients Preview List -->
           <div class="form-group" id="recipientsListGroup" style="display: none;">
-            <label class="form-label">
-              Recipients (<span id="recipientCount">0</span> selected)
-              <button type="button" onclick="selectAllRecipients()" style="margin-left: 10px; padding: 2px 8px; font-size: 11px; background: #10b981; color: white; border: none; border-radius: 4px; cursor: pointer;">Select All</button>
-              <button type="button" onclick="deselectAllRecipients()" style="margin-left: 5px; padding: 2px 8px; font-size: 11px; background: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Deselect All</button>
+            <label class="form-label" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+              <span style="font-size: 13px; font-weight: 700; color: #f8fafc; letter-spacing: 0.5px; text-transform: uppercase;">
+                Recipients (<span id="recipientCount" style="color: #2dd4bf;">0</span> selected)
+              </span>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" onclick="selectAllRecipients()" style="padding: 6px 12px; font-size: 11px; font-weight: 600; background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%); color: #0a2540; border: none; border-radius: 6px; cursor: pointer; transition: all 0.2s; box-shadow: 0 2px 8px rgba(45, 212, 191, 0.3);" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 12px rgba(45, 212, 191, 0.5)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(45, 212, 191, 0.3)'">Select All</button>
+                <button type="button" onclick="deselectAllRecipients()" style="padding: 6px 12px; font-size: 11px; font-weight: 600; background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 6px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'; this.style.borderColor='#ef4444'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'; this.style.transform='translateY(0)'">Deselect All</button>
+              </div>
             </label>
-            <div id="recipientsList" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 12px; background: #f8f9fa;">
+            <div id="recipientsList" style="max-height: 300px; overflow-y: auto; border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 8px; padding: 8px; background: #1e293b; box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);">
               <!-- Recipients will be loaded here -->
             </div>
           </div>
@@ -929,7 +1105,30 @@
           <!-- Body -->
           <div class="form-group">
             <label class="form-label">Message Body</label>
+            <div class="formatting-toolbar">
+              <button type="button" class="format-btn" onclick="applyFormat('bold')" title="Bold (Ctrl+B)">
+                <strong>B</strong>
+              </button>
+              <button type="button" class="format-btn" onclick="applyFormat('italic')" title="Italic (Ctrl+I)">
+                <em>I</em>
+              </button>
+              <button type="button" class="format-btn" onclick="applyFormat('underline')" title="Underline (Ctrl+U)">
+                <u>U</u>
+              </button>
+            </div>
             <textarea class="form-textarea" id="emailBody" placeholder="Enter your message here..."></textarea>
+          </div>
+
+          <!-- Attachments -->
+          <div class="form-group">
+            <label class="form-label">Attachments (Optional)</label>
+            <input type="file" id="attachmentInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" style="display: none;">
+            <div class="attachment-area" id="attachmentArea" onclick="document.getElementById('attachmentInput').click()">
+              <div class="attachment-icon">📎</div>
+              <div class="attachment-text">Click to upload or drag & drop files here</div>
+              <div class="attachment-hint">Images, PDFs, Documents (Max 10MB per file)</div>
+            </div>
+            <div class="attachment-list" id="attachmentList"></div>
           </div>
         </div>
 
@@ -1016,14 +1215,11 @@
       <td align="center" style="padding:24px 10px;">
         <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
           <tr>
-            <td style="height:6px;background:#2dd4bf;border-radius:14px 14px 0 0;"></td>
-          </tr>
-          <tr>
-            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:20px 26px;">
+            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);border-radius:14px 14px 0 0;padding:20px 26px;">
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td width="68" valign="middle">
-                    <img src="https://acnhs.am/assets/images/Seal.png" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                    <img src="{{ACNHS_SEAL_BASE64}}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
                   </td>
                   <td valign="middle" style="padding-left:14px;">
                     <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
@@ -1494,25 +1690,25 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       const userEmail = sessionStorage.getItem('userEmail') || '';
       const isMainAdmin = userEmail.toLowerCase() === 'hrachfilm@gmail.com';
       
-      // Officer titles that will appear as the "From" name
+      // Department names that will appear as the "From" name in emails
       const departmentMap = {
-        'admissions@acnhs.am': 'Admissions Officer',
-        'info@acnhs.am': 'Administrative Officer',
-        'documents@acnhs.am': 'Records & Documentation Officer',
-        'international@acnhs.am': 'International Relations Officer',
-        'registrar@acnhs.am': 'Registrar',
-        'finance@acnhs.am': 'Finance Officer',
-        'ceo@acnhs.am': isMainAdmin ? 'Chief Executive Officer - Hrachya Vardanyan' : 'Chief Executive Officer',
-        'dean@acnhs.am': 'Dean',
-        'academic@acnhs.am': 'Academic Affairs Officer',
-        'student-services@acnhs.am': 'Student Services Officer',
-        'legal@acnhs.am': 'Legal Affairs Officer',
-        'hr@acnhs.am': 'Human Resources Officer',
-        'it@acnhs.am': 'Information Technology Officer',
-        'library@acnhs.am': 'Library & Academic Resources Officer',
-        'alumni@acnhs.am': 'Alumni Relations Officer',
-        'research@acnhs.am': 'Research Affairs Officer',
-        'do-not-reply@acnhs.am': 'Automated Notification System'
+        'admissions@acnhs.am': 'ACNHS Admissions',
+        'info@acnhs.am': 'ACNHS Information Office',
+        'documents@acnhs.am': 'ACNHS Records & Documentation',
+        'international@acnhs.am': 'ACNHS International Relations',
+        'registrar@acnhs.am': 'ACNHS Registrar',
+        'finance@acnhs.am': 'ACNHS Finance',
+        'ceo@acnhs.am': isMainAdmin ? 'ACNHS Chief Executive Officer' : 'ACNHS Office of the CEO',
+        'dean@acnhs.am': 'ACNHS Dean\'s Office',
+        'academic@acnhs.am': 'ACNHS Academic Affairs',
+        'student-services@acnhs.am': 'ACNHS Student Services',
+        'legal@acnhs.am': 'ACNHS Legal Office',
+        'hr@acnhs.am': 'ACNHS Human Resources',
+        'it@acnhs.am': 'ACNHS Information Technology',
+        'library@acnhs.am': 'ACNHS Library & Academic Resources',
+        'alumni@acnhs.am': 'ACNHS Alumni Relations',
+        'research@acnhs.am': 'ACNHS Research Affairs',
+        'do-not-reply@acnhs.am': 'ACNHS Automated System'
       };
       
       // Check if it's a personal email (format: x.lastname@acnhs.am)
@@ -1577,7 +1773,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         'international@acnhs.am': 'International Relations',
         'registrar@acnhs.am': 'Registrar Office',
         'finance@acnhs.am': 'Finance Department',
-        'ceo@acnhs.am': 'Office of the CEO',
+        'ceo@acnhs.am': 'Chief Executive Officer',
         'dean@acnhs.am': 'Dean\'s Office',
         'academic@acnhs.am': 'Academic Affairs',
         'student-services@acnhs.am': 'Student Services',
@@ -1592,32 +1788,51 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       // Determine the display name and title
       let displayName = userName;
-      let displayTitle = officerTitles[senderEmail] || '';
+      let displayTitle = '';
       let departmentName = departmentNames[senderEmail] || '';
       
+      // IMPORTANT: Use the logged-in user's actual job title, not the email department's title
+      // This ensures that if Simona (Student Services Officer) sends from legal@acnhs.am,
+      // her signature still shows "Student Services Officer"
+      if (userInfo?.title) {
+        displayTitle = userInfo.title;
+      } else {
+        // Fallback to department title only if user has no title set
+        displayTitle = officerTitles[senderEmail] || '';
+      }
+      
       // If no user name, use the officer title as the name for departmental emails
-      if (!displayName && displayTitle) {
-        displayName = displayTitle;
+      if (!displayName && officerTitles[senderEmail]) {
+        displayName = officerTitles[senderEmail];
         displayTitle = departmentName; // Show department as subtitle
         departmentName = ''; // Don't show department twice
       } else if (!displayName) {
         displayName = 'ACNHS Officer'; // Ultimate fallback
       }
       
-      // Special handling for CEO - always use Hrachya Vardanyan when sent by admin
-      if (senderEmail === 'ceo@acnhs.am' && isMainAdmin) {
-        displayName = 'Hrachya Vardanyan';
+      // Special handling for CEO email
+      if (senderEmail === 'ceo@acnhs.am') {
+        if (isMainAdmin) {
+          // Only Hrachya Vardanyan can use CEO title
+          displayName = 'Hrachya Vardanyan';
+          displayTitle = 'Chief Executive Officer';
+        } else {
+          // Other users sending from CEO email keep their own title
+          // displayName already set to userName above
+          // displayTitle already set to userInfo.title above
+          // This ensures Simona shows "Student Services Officer" not "CEO"
+        }
       }
       
       // For Dean - only show username if NOT sent by admin
       if (senderEmail === 'dean@acnhs.am' && !isMainAdmin) {
-        displayTitle = `Dean`; // Will show username in name field
+        displayTitle = userInfo?.title || 'Dean'; // Use user's title or fallback to Dean
       }
       
       // Build signature HTML
       let signatureHtml = '<table style="border:none;padding:0;margin:0;line-height:1.3;font-family:Arial,sans-serif;">';
       signatureHtml += '<tr><td style="padding:2px 8px 2px 2px;vertical-align:middle;">';
-      signatureHtml += '<img src="https://acnhs.am/assets/images/Seal.png" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">';
+      signatureHtml += `<img src="${ACNHS_LOGO_BASE64}" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">`;
       signatureHtml += '</td><td style="padding:2px;vertical-align:middle;">';
       
       if (isPersonal) {
@@ -1781,6 +1996,123 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
       // Send email
       document.getElementById('sendEmailBtn').addEventListener('click', sendEmail);
+
+      // Attachment handling
+      setupAttachmentHandlers();
+    }
+
+    // File attachment management
+    let attachedFiles = [];
+
+    function setupAttachmentHandlers() {
+      const attachmentInput = document.getElementById('attachmentInput');
+      const attachmentArea = document.getElementById('attachmentArea');
+
+      // File input change
+      attachmentInput.addEventListener('change', function(e) {
+        handleFiles(e.target.files);
+      });
+
+      // Drag and drop
+      attachmentArea.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attachmentArea.classList.add('dragover');
+      });
+
+      attachmentArea.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attachmentArea.classList.remove('dragover');
+      });
+
+      attachmentArea.addEventListener('drop', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        attachmentArea.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+      });
+    }
+
+    function handleFiles(files) {
+      const maxSize = 10 * 1024 * 1024; // 10MB
+      
+      for (let file of files) {
+        // Check file size
+        if (file.size > maxSize) {
+          showNotification(`File "${file.name}" is too large. Maximum size is 10MB.`, 'error');
+          continue;
+        }
+
+        // Check if already added
+        if (attachedFiles.some(f => f.name === file.name && f.size === file.size)) {
+          showNotification(`File "${file.name}" is already attached.`, 'error');
+          continue;
+        }
+
+        // Add to list
+        attachedFiles.push(file);
+      }
+
+      renderAttachmentList();
+      document.getElementById('attachmentInput').value = ''; // Reset input
+    }
+
+    function renderAttachmentList() {
+      const list = document.getElementById('attachmentList');
+      
+      if (attachedFiles.length === 0) {
+        list.innerHTML = '';
+        return;
+      }
+
+      list.innerHTML = attachedFiles.map((file, index) => {
+        const sizeKB = (file.size / 1024).toFixed(1);
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        const sizeText = file.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
+        
+        // Determine icon based on file type
+        let icon = '📄';
+        if (file.type.startsWith('image/')) icon = '🖼️';
+        else if (file.type === 'application/pdf') icon = '📕';
+        else if (file.type.includes('word')) icon = '📘';
+        else if (file.type.includes('sheet') || file.type.includes('excel')) icon = '📊';
+        
+        return `
+          <div class="attachment-item">
+            <div class="attachment-info">
+              <span class="attachment-icon-small">${icon}</span>
+              <div class="attachment-details">
+                <div class="attachment-name">${file.name}</div>
+                <div class="attachment-size">${sizeText}</div>
+              </div>
+            </div>
+            <button class="attachment-remove" onclick="removeAttachment(${index})" type="button">
+              Remove
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function removeAttachment(index) {
+      attachedFiles.splice(index, 1);
+      renderAttachmentList();
+    }
+
+    function clearAttachments() {
+      attachedFiles = [];
+      renderAttachmentList();
+    }
+
+    // Convert file to base64 for email sending
+    async function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+      });
     }
 
     // Auto-resize textarea to fit content
@@ -1788,6 +2120,72 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       textarea.style.height = 'auto';
       textarea.style.height = Math.max(textarea.scrollHeight, 300) + 'px';
     }
+
+    // Apply text formatting (Bold, Italic, Underline)
+    function applyFormat(format) {
+      const textarea = document.getElementById('emailBody');
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const selectedText = textarea.value.substring(start, end);
+      
+      if (!selectedText) {
+        alert('Please select text to format');
+        return;
+      }
+
+      let formattedText = '';
+      switch(format) {
+        case 'bold':
+          formattedText = `<strong>${selectedText}</strong>`;
+          break;
+        case 'italic':
+          formattedText = `<em>${selectedText}</em>`;
+          break;
+        case 'underline':
+          formattedText = `<u>${selectedText}</u>`;
+          break;
+      }
+
+      // Replace selected text with formatted version
+      const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+      textarea.value = newValue;
+      
+      // Update cursor position after the formatted text
+      const newCursorPos = start + formattedText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      
+      // Trigger preview update
+      autoResizeTextarea(textarea);
+      updatePreview();
+      
+      // Focus back on textarea
+      textarea.focus();
+    }
+
+    // Add keyboard shortcuts for formatting
+    document.addEventListener('DOMContentLoaded', function() {
+      const emailBody = document.getElementById('emailBody');
+      if (emailBody) {
+        emailBody.addEventListener('keydown', function(e) {
+          if (e.ctrlKey || e.metaKey) {
+            switch(e.key.toLowerCase()) {
+              case 'b':
+                e.preventDefault();
+                applyFormat('bold');
+                break;
+              case 'i':
+                e.preventDefault();
+                applyFormat('italic');
+                break;
+              case 'u':
+                e.preventDefault();
+                applyFormat('underline');
+                break;
+            }
+          }
+        });
+      }
+    });
 
     function loadTemplate(template) {
       const templateData = emailTemplates[template];
@@ -1847,7 +2245,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         .replace(/{{APPLICANT_NAME}}/g, applicantName)
         .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
         .replace(/{{YEAR}}/g, now.getFullYear())
-        .replace(/{{STUDENT_INFO}}/g, studentInfo);
+        .replace(/{{STUDENT_INFO}}/g, studentInfo)
+        .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_BASE64);
       
       // Replace the hardcoded signature with the dynamic one
       html = html.replace(
@@ -1910,7 +2309,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const recipientsListGroup = document.getElementById('recipientsListGroup');
         
         if (!applicants || applicants.length === 0) {
-          recipientsList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 8px;">No recipients found for this selection</div>';
+          recipientsList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 16px; text-align: center; font-size: 13px;">No recipients found for this selection</div>';
           recipientsListGroup.style.display = 'block';
           updateRecipientCount();
           return;
@@ -1918,19 +2317,23 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         
         // Create checkboxes for each recipient
         recipientsList.innerHTML = applicants.map((applicant, index) => `
-          <div style="padding: 6px 0; border-bottom: 1px solid #e2e8f0;">
-            <label style="display: flex; align-items: center; cursor: pointer;">
+          <div style="padding: 10px 12px; border-bottom: 1px solid rgba(45, 212, 191, 0.1); transition: all 0.2s; border-radius: 6px; margin-bottom: 4px;" onmouseover="this.style.background='rgba(45, 212, 191, 0.05)'" onmouseout="this.style.background='transparent'">
+            <label style="display: flex; align-items: center; cursor: pointer; gap: 10px;">
               <input type="checkbox" 
                      class="recipient-checkbox" 
                      data-email="${applicant.email}" 
                      data-name="${applicant.applicant_name || 'Applicant'}"
                      checked
                      onchange="updateRecipientCount()"
-                     style="margin-right: 8px; width: 16px; height: 16px; cursor: pointer;">
-              <span style="font-size: 13px; color: #0f172a;">
-                <strong>${applicant.applicant_name || 'Applicant'}</strong>
-                <span style="color: #64748b; margin-left: 8px;">${applicant.email}</span>
-              </span>
+                     style="margin: 0; width: 18px; height: 18px; cursor: pointer; accent-color: #2dd4bf; border-radius: 4px;">
+              <div style="flex: 1; display: flex; align-items: center; justify-content: space-between;">
+                <span style="font-size: 13px; font-weight: 700; color: #f8fafc;">
+                  ${applicant.applicant_name || 'Applicant'}
+                </span>
+                <span style="font-size: 12px; color: #64748b; font-weight: 500;">
+                  ${applicant.email}
+                </span>
+              </div>
             </label>
           </div>
         `).join('');
@@ -2145,6 +2548,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       // ACNHS email addresses
       const acnhsEmails = [
+        's.gharibyan@acnhs.am',
+        's_gharibyan@acnhs.am',
         'admissions@acnhs.am',
         'info@acnhs.am',
         'documents@acnhs.am',
@@ -2177,8 +2582,16 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         filtered = filtered.filter(e => {
           const isSent = acnhsEmails.includes(e.sender?.toLowerCase()) || 
                          (!e.sender && e.status === 'sent');
+          console.log('Checking email:', {
+            sender: e.sender,
+            recipient: e.recipient,
+            subject: e.subject,
+            isSent: isSent,
+            senderInList: acnhsEmails.includes(e.sender?.toLowerCase())
+          });
           return isSent;
         });
+        console.log(`📤 SENT tab: Showing ${filtered.length} sent emails`);
       } else if (currentFilter === 'failed') {
         // FAILED: Emails with failed status
         filtered = filtered.filter(e => e.status === 'failed');
@@ -2402,15 +2815,40 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }
       } else {
         // Use fancy template for sent emails
-        let html = EMAIL_HTML_TEMPLATE
-          .replace(/{{SUBJECT}}/g, selectedEmail.subject)
-          .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
-          .replace(/{{DATE}}/g, dateStr)
-          .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
-          .replace(/{{BODY_CONTENT}}/g, selectedEmail.body.replace(/\n/g, '<br>'))
-          .replace(/{{YEAR}}/g, now.getFullYear());
-        
-        bodyHtml = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+        // If we have the full HTML stored, use it directly
+        if (selectedEmail.html_body) {
+          // Check if html_body is already escaped or contains HTML entities
+          let htmlContent = selectedEmail.html_body;
+          
+          // If the content looks like escaped HTML (contains &lt; or &gt;), decode it
+          if (htmlContent.includes('&lt;') || htmlContent.includes('&gt;')) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = htmlContent;
+            htmlContent = tempDiv.textContent || tempDiv.innerText || htmlContent;
+          }
+          
+          // Properly escape for srcdoc attribute
+          const escapedHtml = htmlContent
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+          
+          bodyHtml = `<iframe srcdoc="${escapedHtml}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+        } else {
+          // Fallback: reconstruct from body text (for old emails without html_body)
+          let html = EMAIL_HTML_TEMPLATE
+            .replace(/{{SUBJECT}}/g, selectedEmail.subject)
+            .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
+            .replace(/{{DATE}}/g, dateStr)
+            .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
+            .replace(/{{BODY_CONTENT}}/g, selectedEmail.body.replace(/\n/g, '<br>'))
+            .replace(/{{YEAR}}/g, now.getFullYear())
+            .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_BASE64);
+          
+          bodyHtml = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+        }
       }
 
       detailSection.innerHTML = `
@@ -2620,6 +3058,8 @@ ${email.body}`;
 
     function closeComposeModal() {
       document.getElementById('composeModal').classList.remove('active');
+      // Clear attachments when closing modal
+      clearAttachments();
     }
 
     async function sendEmail() {
@@ -2724,7 +3164,8 @@ ${email.body}`;
             .replace(/{{APPLICANT_NAME}}/g, recipient.name)
             .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
             .replace(/{{YEAR}}/g, now.getFullYear())
-            .replace(/{{STUDENT_INFO}}/g, studentInfo);
+            .replace(/{{STUDENT_INFO}}/g, studentInfo)
+            .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_BASE64);
           
           // Replace the hardcoded signature with user's actual signature
           emailHtml = emailHtml.replace(
@@ -2732,7 +3173,28 @@ ${email.body}`;
             `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
           );
           
-          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName);
+          // Prepare attachments for sending
+          let attachments = [];
+          if (attachedFiles.length > 0) {
+            showNotification(`Processing ${attachedFiles.length} attachment(s)...`, 'info');
+            for (const file of attachedFiles) {
+              try {
+                const base64Content = await fileToBase64(file);
+                // Remove data URL prefix to get just the base64 content
+                const base64Data = base64Content.split(',')[1];
+                attachments.push({
+                  filename: file.name,
+                  content: base64Data,
+                  type: file.type
+                });
+              } catch (error) {
+                console.error('Error converting file to base64:', error);
+                showNotification(`Failed to attach ${file.name}`, 'error');
+              }
+            }
+          }
+
+          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
           
           if (result.success) {
             successCount++;
@@ -2777,7 +3239,7 @@ ${email.body}`;
       }
     }
 
-    async function sendEmailViaResend(to, subject, html, from, fromName) {
+    async function sendEmailViaResend(to, subject, html, from, fromName, attachments = []) {
       // Use Edge Function if enabled
       if (USE_EDGE_FUNCTION) {
         try {
@@ -2792,7 +3254,8 @@ ${email.body}`;
               subject: subject,
               html: html,
               from: from,
-              fromName: fromName || 'ACNHS'
+              fromName: fromName || 'ACNHS',
+              attachments: attachments
             })
           });
 
@@ -2812,7 +3275,7 @@ ${email.body}`;
 
       // Test mode - simulate successful send without calling API
       if (TEST_MODE) {
-        console.log('📧 TEST MODE: Email simulated', { to, subject });
+        console.log('📧 TEST MODE: Email simulated', { to, subject, attachments: attachments.length });
         return { 
           success: true, 
           id: 'test_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
