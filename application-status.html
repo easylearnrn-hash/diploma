@@ -275,6 +275,39 @@ body{
   margin:0;
 }
 
+/* ACCEPTANCE LETTER BUTTON */
+.acceptance-letter-container{
+  margin-top:24px;
+  padding-top:24px;
+  border-top:1px solid rgba(255,255,255,0.1);
+  display:none;
+}
+
+.acceptance-letter-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:12px;
+  padding:16px 32px;
+  background:linear-gradient(135deg, #10b981, #059669);
+  color:white;
+  border:none;
+  border-radius:12px;
+  font-size:16px;
+  font-weight:700;
+  cursor:pointer;
+  transition:all 0.3s;
+  box-shadow:0 4px 16px rgba(16,185,129,0.3);
+}
+
+.acceptance-letter-btn:hover{
+  transform:translateY(-2px);
+  box-shadow:0 8px 24px rgba(16,185,129,0.4);
+}
+
+.acceptance-letter-btn:active{
+  transform:translateY(0);
+}
+
 /* TIMELINE */
 .timeline{
   position:relative;
@@ -558,6 +591,14 @@ body{
       <div id="statusDescription" class="status-description">
         <h3>What This Means</h3>
         <p id="statusDescriptionText">Your application has been successfully submitted and is in our queue for review.</p>
+        
+        <!-- Acceptance Letter Button (only shown when approved) -->
+        <div id="acceptanceLetterContainer" class="acceptance-letter-container">
+          <button id="viewAcceptanceLetterBtn" class="acceptance-letter-btn" onclick="viewAcceptanceLetter()">
+            <span style="font-size:24px;">📜</span>
+            <span>View Your Acceptance Letter</span>
+          </button>
+        </div>
       </div>
       
       <!-- Requested Documents Section -->
@@ -1016,8 +1057,19 @@ function displayApplicationStatus(application) {
   const displayDescription = application.status_message || statusInfo.description;
   statusDescriptionEl.textContent = displayDescription;
   
+  // Show acceptance letter button if status is APPROVED
+  const acceptanceLetterContainer = document.getElementById('acceptanceLetterContainer');
+  if (status === 'APPROVED' || status === 'CONFIRMED') {
+    acceptanceLetterContainer.style.display = 'block';
+    // Store application data for acceptance letter generation
+    window.currentApplicationData = application;
+  } else {
+    acceptanceLetterContainer.style.display = 'none';
+  }
+  
   // Display requested documents if RFE
   displayRequestedDocuments(application.rfe_documents_requested || []);
+
   
   // Display status history
   displayStatusHistory(application.status_history || []);
@@ -1617,6 +1669,52 @@ function showCustomAlert(message, type = 'info') {
       setTimeout(() => alert.remove(), 300);
     }
   }, 5000);
+}
+
+// View Acceptance Letter function
+async function viewAcceptanceLetter() {
+  try {
+    const app = window.currentApplicationData;
+    if (!app) {
+      showCustomAlert('⚠️ Unable to load acceptance letter. Please refresh the page.', 'error');
+      return;
+    }
+    
+    // Open acceptance letter in a new window with the application data
+    const letterWindow = window.open('acceptance-letter.html', '_blank');
+    
+    // Wait for the new window to load, then pass the data
+    letterWindow.addEventListener('load', () => {
+      // Format the data for the acceptance letter
+      const letterData = {
+        documentId: app.control_number || app.reference_number || 'N/A',
+        issueDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        academicYear: '2026-2027',
+        fullName: app.applicant_name || 'Student',
+        lastName: app.applicant_name ? app.applicant_name.split(' ').pop() : 'Student',
+        salutation: 'Dear',
+        dob: app.dob || 'N/A',
+        applicationId: app.reference_number || 'N/A',
+        programName: app.program || 'Bachelor of Science in Nursing',
+        credential: "Bachelor's Degree",
+        mode: 'On-Campus / Full-Time',
+        startDate: app.preferred_start_date || 'September 2026',
+        authorizedOfficer: 'Dr. Narine K. Hambardzumyan',
+        officerTitle: 'Dean of Academic Affairs',
+        controlNumber: app.control_number || app.reference_number,
+        studentId: app.student_id || 'TMP-2026-0001'
+      };
+      
+      // Render the acceptance letter with the data
+      if (letterWindow.renderAcceptanceLetter) {
+        letterWindow.renderAcceptanceLetter(letterData);
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error viewing acceptance letter:', error);
+    showCustomAlert('⚠️ Unable to open acceptance letter. Please try again.', 'error');
+  }
 }
 
 </script>
