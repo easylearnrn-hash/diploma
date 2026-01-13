@@ -768,6 +768,30 @@ const DOCUMENT_EXPLANATIONS = {
 
 // Check authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
+  // PRIORITY: Check if control number is provided in URL (for QR code access)
+  const urlParams = new URLSearchParams(window.location.search);
+  const ctrlNumber = urlParams.get('ctrl');
+  const autoCheck = urlParams.get('autocheck');
+  
+  console.log('URL params:', window.location.search);
+  console.log('Control number from URL:', ctrlNumber);
+  console.log('Auto-check enabled:', autoCheck);
+  
+  if (ctrlNumber && ctrlNumber.trim() !== '') {
+    // Direct access via QR code with control number - bypass login check
+    console.log('Loading via QR code with control number:', ctrlNumber);
+    
+    // If autocheck is enabled, show verification message immediately
+    if (autoCheck === 'true') {
+      sessionStorage.setItem('qrCodeAccess', 'true');
+      sessionStorage.setItem('autoVerify', 'true');
+    }
+    
+    loadApplicationByControlNumber(ctrlNumber);
+    return; // EXIT HERE - don't check login
+  }
+  
+  // Normal login check (only if no control number)
   const isApplicationLogin = sessionStorage.getItem('isApplicationLogin') === 'true';
   
   if (!isApplicationLogin) {
@@ -779,6 +803,125 @@ window.addEventListener('DOMContentLoaded', function() {
   // Load application status
   loadApplicationStatus();
 });
+
+// Load application by control number (for QR code access)
+async function loadApplicationByControlNumber(ctrlNumber) {
+  const loadingState = document.getElementById('loadingState');
+  const errorState = document.getElementById('errorState');
+  const mainContent = document.getElementById('mainContent');
+  
+  loadingState.style.display = 'block';
+  errorState.style.display = 'none';
+  mainContent.style.display = 'none';
+  
+  try {
+    const supabase = initSupabase();
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
+    // Fetch application by control number
+    const { data: application, error } = await supabase
+      .from('applications')
+      .select('*')
+      .eq('control_number', ctrlNumber)
+      .single();
+    
+    if (error) {
+      throw error;
+    }
+    
+    if (!application) {
+      throw new Error('Application not found with this control number');
+    }
+    
+    // Store in sessionStorage for refresh functionality
+    sessionStorage.setItem('isApplicationLogin', 'true');
+    sessionStorage.setItem('applicationUsername', application.username);
+    sessionStorage.setItem('applicationReference', application.reference_number);
+    sessionStorage.setItem('qrCodeAccess', 'true');
+    
+    // Display application data
+    currentApplication = application;
+    displayApplicationStatus(application);
+    
+    // Add verification message for QR code access
+    showVerificationMessage();
+    
+    // Hide logout button for QR code access
+    const logoutBtn = document.querySelector('.logout-btn');
+    if (logoutBtn) {
+      logoutBtn.style.display = 'none';
+    }
+    
+    // Start automatic status polling
+    startStatusPolling();
+    
+    loadingState.style.display = 'none';
+    mainContent.style.display = 'block';
+    
+  } catch (error) {
+    console.error('Error loading application:', error);
+    loadingState.style.display = 'none';
+    errorState.style.display = 'block';
+    document.getElementById('errorMessage').textContent = error.message || 'Unable to verify document. Please check the control number.';
+  }
+}
+
+// Show verification message for QR code access
+function showVerificationMessage() {
+  const verificationBanner = document.createElement('div');
+  verificationBanner.style.cssText = `
+    position: fixed;
+    top: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10000;
+    background: rgba(16, 185, 129, 0.15);
+    border: 2px solid rgba(16, 185, 129, 0.3);
+    border-radius: 12px;
+    padding: 16px 32px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    backdrop-filter: blur(10px);
+    animation: slideDown 0.5s ease;
+    max-width: 600px;
+    text-align: center;
+  `;
+  
+  verificationBanner.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: center; gap: 12px;">
+      <div style="color: #34d399; font-size: 24px;">✓</div>
+      <div>
+        <div style="color: white; font-weight: 600; font-size: 16px; margin-bottom: 4px;">
+          Document Verified & Authentic
+        </div>
+        <div style="color: var(--text-light); font-size: 13px;">
+          This acceptance letter has been validated by ACNHS
+        </div>
+      </div>
+    </div>
+    <style>
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -20px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+    </style>
+  `;
+  
+  document.body.appendChild(verificationBanner);
+  
+  // Auto-remove after 8 seconds
+  setTimeout(() => {
+    verificationBanner.style.animation = 'slideDown 0.5s ease reverse';
+    setTimeout(() => verificationBanner.remove(), 500);
+  }, 8000);
+}
 
 // Load application status from Supabase
 async function loadApplicationStatus() {
@@ -1154,12 +1297,17 @@ function updateTimeline(status) {
 
 // Logout function
 function logout() {
+  // Check if this was QR code access
+  const isQRAccess = sessionStorage.getItem('qrCodeAccess') === 'true';
+  
   sessionStorage.removeItem('isApplicationLogin');
   sessionStorage.removeItem('applicationUsername');
   sessionStorage.removeItem('applicationReference');
   sessionStorage.removeItem('applicantName');
+  sessionStorage.removeItem('qrCodeAccess');
   
-  window.location.href = 'login.html';
+  // If QR access, redirect to home instead of login
+  window.location.href = isQRAccess ? 'index.html' : 'login.html';
 }
 
 // Refresh status function

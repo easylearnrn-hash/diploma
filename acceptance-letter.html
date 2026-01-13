@@ -104,7 +104,10 @@
     .page::after {
       content: "";
       position: absolute;
-      inset: 20mm;
+      top: 20mm;
+      left: 20mm;
+      right: 20mm;
+      bottom: 32mm;
       border: 1px solid rgba(20,184,166,0.55);
       pointer-events: none;
     }
@@ -223,11 +226,53 @@
     }
 
     .program-box {
-      border-left: 4px solid var(--teal);
-      background: #f8fafc;
+      position: relative;
       padding: 14px 18px;
       margin: 18px 0;
       font-size: 13.5px;
+      border: none;
+      background: transparent;
+    }
+
+    .program-box::before {
+      content: "VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED";
+      position: absolute;
+      top: -1px;
+      left: 0;
+      right: 0;
+      font-size: 7px;
+      font-weight: 700;
+      color: rgba(220,38,38,0.12);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+      line-height: 1;
+    }
+
+    .program-box::after {
+      content: "VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED • VOID IF COPIED";
+      position: absolute;
+      bottom: -1px;
+      left: 0;
+      right: 0;
+      font-size: 7px;
+      font-weight: 700;
+      color: rgba(220,38,38,0.12);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+      line-height: 1;
+    }
+
+    .program-box > * {
+      position: relative;
+      z-index: 1;
     }
 
     .signature-row {
@@ -373,7 +418,7 @@
       <p>
         Following the formal review conducted by the Academic Admissions Committee of the
         Armenian College of Nursing & Health Sciences, your application has been
-        <strong>approved</strong>.
+        <strong>APPROVED</strong>.
       </p>
 
       <p>You are hereby granted admission to the following academic program:</p>
@@ -433,7 +478,7 @@
         startDate: 'September 09, 2026',
         authorizedOfficer: 'Dr. Hrachya A. Vardanyan',
         officerTitle: 'Dean of Academic Affairs',
-        qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=ACNHS-ADM-00001',
+        qrCodeUrl: 'https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=https://www.acnhs.am/verify?ctrl=ACN-2026-661805',
         hash: '74F9B4F2C1CBE0E6A5D6B3C9A3A1F8AF',
         documentType: 'Official Acceptance Letter',
         studentId: 'TMP-2026-0001',
@@ -480,7 +525,17 @@
 
         const qrImg = document.getElementById('qrCodeImage');
         if (qrImg) {
-          qrImg.src = payload.qrCodeUrl || `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(payload.documentId)}`;
+          // Use provided QR URL or generate one with control number if available
+          if (payload.qrCodeUrl) {
+            qrImg.src = payload.qrCodeUrl;
+          } else if (payload.controlNumber) {
+            const verificationUrl = `https://www.acnhs.am/verify?ctrl=${encodeURIComponent(payload.controlNumber)}`;
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(verificationUrl)}`;
+          } else {
+            // Fallback to document ID
+            const verificationUrl = `https://www.acnhs.am/verify?doc=${encodeURIComponent(payload.documentId)}`;
+            qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(verificationUrl)}`;
+          }
           qrImg.alt = `Verification QR for ${payload.documentId}`;
         }
 
