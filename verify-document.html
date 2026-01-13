@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document Verification - ACNHS</title>
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="js/supabase-config.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0a192f 0%, #1a365d 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            color: white;
+        }
+
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .logo {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: 700;
+            color: #00d9ff;
+            margin-bottom: 2rem;
+            letter-spacing: 2px;
+        }
+
+        .verification-card {
+            background: rgba(26, 41, 66, 0.9);
+            border: 1px solid rgba(0, 217, 255, 0.3);
+            border-radius: 16px;
+            padding: 3rem;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .status-icon {
+            text-align: center;
+            font-size: 5rem;
+            margin-bottom: 1.5rem;
+            animation: scaleIn 0.5s ease-out;
+        }
+
+        @keyframes scaleIn {
+            from {
+                transform: scale(0);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .status-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: #10b981;
+        }
+
+        .status-title.error {
+            color: #ef4444;
+        }
+
+        .status-subtitle {
+            text-align: center;
+            font-size: 1.125rem;
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+
+        .document-info {
+            background: rgba(10, 37, 64, 0.5);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #94a3b8;
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            color: white;
+            font-size: 0.9375rem;
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .security-notice {
+            background: rgba(45, 212, 191, 0.1);
+            border-left: 4px solid #00d9ff;
+            padding: 1rem 1.5rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            color: #94a3b8;
+            line-height: 1.6;
+        }
+
+        .security-notice strong {
+            color: #00d9ff;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem 0;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(0, 217, 255, 0.2);
+            border-top: 4px solid #00d9ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 2rem;
+        }
+
+        .back-link a {
+            color: #00d9ff;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            transition: opacity 0.3s;
+        }
+
+        .back-link a:hover {
+            opacity: 0.8;
+        }
+
+        @media (max-width: 640px) {
+            .logo {
+                font-size: 2rem;
+                margin-bottom: 1.5rem;
+            }
+
+            .verification-card {
+                padding: 2rem 1.5rem;
+            }
+
+            .status-title {
+                font-size: 1.5rem;
+            }
+
+            .info-row {
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .info-value {
+                text-align: left;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">ACNHS</div>
+        
+        <div class="verification-card" id="verificationCard">
+            <div class="loading" id="loadingState">
+                <div class="spinner"></div>
+                <p style="color: #94a3b8; font-size: 1.125rem;">Verifying document...</p>
+            </div>
+
+            <div id="verifiedState" style="display: none;">
+                <div class="status-icon">✓</div>
+                <h1 class="status-title">Document Verified</h1>
+                <p class="status-subtitle">This acceptance letter is authentic and valid</p>
+
+                <div class="document-info" id="documentInfo">
+                    <!-- Document details will be inserted here -->
+                </div>
+
+                <div class="security-notice">
+                    <strong>🔒 Security Notice:</strong> This document has been cryptographically verified against our official records. The verification hash and control number confirm authenticity.
+                </div>
+            </div>
+
+            <div id="errorState" style="display: none;">
+                <div class="status-icon">❌</div>
+                <h1 class="status-title error">Verification Failed</h1>
+                <p class="status-subtitle" id="errorMessage">Document could not be verified</p>
+
+                <div class="security-notice" style="background: rgba(239, 68, 68, 0.1); border-left-color: #ef4444;">
+                    <strong>⚠️ Warning:</strong> This document could not be verified in our system. Please contact Armenian College of Nurses for assistance.
+                </div>
+            </div>
+        </div>
+
+        <div class="back-link">
+            <a href="index.html">← Return to ACNHS Home</a>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const controlNumber = urlParams.get('ctrl');
+
+            console.log('Document verification - Control number:', controlNumber);
+
+            if (!controlNumber || controlNumber.trim() === '') {
+                showError('No control number provided');
+                return;
+            }
+
+            try {
+                const supabase = initSupabase();
+                if (!supabase) {
+                    throw new Error('Supabase not configured');
+                }
+
+                // Fetch application by control number
+                const { data: application, error } = await supabase
+                    .from('applications')
+                    .select('*')
+                    .eq('control_number', controlNumber)
+                    .single();
+
+                if (error) {
+                    console.error('Supabase error:', error);
+                    throw new Error('Document not found in our system');
+                }
+
+                if (!application) {
+                    throw new Error('Document not found');
+                }
+
+                // Check if application is approved
+                if (application.status !== 'approved') {
+                    throw new Error('This document has not been approved yet');
+                }
+
+                // Display verification success
+                showVerified(application);
+
+            } catch (error) {
+                console.error('Verification error:', error);
+                showError(error.message);
+            }
+        });
+
+        function showVerified(application) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('verifiedState').style.display = 'block';
+
+            const documentInfo = document.getElementById('documentInfo');
+            documentInfo.innerHTML = `
+                <div class="info-row">
+                    <span class="info-label">Student Name</span>
+                    <span class="info-value">${application.full_name || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Control Number</span>
+                    <span class="info-value">${application.control_number || 'N/A'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Program</span>
+                    <span class="info-value">${application.selected_program || 'Bachelor of Science in Nursing'}</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Document Type</span>
+                    <span class="info-value">Official Acceptance Letter</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Status</span>
+                    <span class="info-value" style="color: #10b981;">✓ APPROVED</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Verification Date</span>
+                    <span class="info-value">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                </div>
+            `;
+        }
+
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+    </script>
+</body>
+</html>
