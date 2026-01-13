@@ -73,13 +73,16 @@
     </div>
 
     <script>
-        // Extract control number from URL parameter
+        // Extract parameters from URL
         const urlParams = new URLSearchParams(window.location.search);
         const controlNumber = urlParams.get('ctrl');
+        const verificationCode = urlParams.get('code');
 
         console.log('Verify page - Control number:', controlNumber);
+        console.log('Verify page - Verification code:', verificationCode);
 
-        if (controlNumber) {
+        // Check if it's an application control number (ACN format)
+        if (controlNumber && controlNumber.trim() !== '') {
             // Display the control number
             document.getElementById('controlNumber').textContent = controlNumber;
 
@@ -90,12 +93,30 @@
             // Redirect to application-status.html with auto-check parameter
             setTimeout(() => {
                 const redirectUrl = `../application-status.html?ctrl=${encodeURIComponent(controlNumber)}&autocheck=true`;
-                console.log('Redirecting to:', redirectUrl);
+                console.log('Redirecting to Application Status:', redirectUrl);
                 window.location.href = redirectUrl;
             }, 1000);
-        } else {
-            // No control number provided, redirect to transcript verification
-            window.location.replace("../verify-transcript.html" + window.location.search + window.location.hash);
+        } 
+        // Check if it's a transcript verification code (TR format)
+        else if (verificationCode && verificationCode.trim() !== '') {
+            // Display the verification code
+            document.getElementById('controlNumber').textContent = verificationCode;
+            document.querySelector('.message').textContent = 'Verifying transcript...';
+
+            // Redirect to transcript verification page with the code
+            setTimeout(() => {
+                const redirectUrl = `../verify-transcript.html?code=${encodeURIComponent(verificationCode)}&autocheck=true`;
+                console.log('Redirecting to Transcript Verification:', redirectUrl);
+                window.location.href = redirectUrl;
+            }, 1000);
+        } 
+        // No parameters provided, show default verification page
+        else {
+            document.querySelector('.message').textContent = 'No verification code provided';
+            document.querySelector('.spinner').style.display = 'none';
+            setTimeout(() => {
+                window.location.replace("../verify-transcript.html");
+            }, 2000);
         }
     </script>
 </body>
