@@ -39,10 +39,10 @@ SELECT
     COUNT(*) FILTER (WHERE sender IS NULL) as null_sender
 FROM email_history;
 
--- 4. Clean up dead rows (vacuum the table)
-VACUUM email_history;
+-- 4. Check vacuum status (VACUUM must be run separately, not in transaction)
+-- To clean up dead rows, run this command separately in a new query:
+-- VACUUM email_history;
 
--- 5. After vacuum, check row count again
 SELECT 
     schemaname,
     relname as tablename,
