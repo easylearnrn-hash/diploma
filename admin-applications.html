@@ -2408,9 +2408,17 @@
     }
 
     function buildApplicationPdfFilename(app) {
-      const raw = (app?.reference_number || currentApplicationPayload?.referenceNumber || app?.id || 'application').toString();
-      const sanitized = raw.replace(/[^A-Za-z0-9_-]/g, '');
-      return `ACNHS-Application-${sanitized || 'record'}.pdf`;
+      // Get student name from app data or payload
+      const studentName = app?.applicant_name || currentApplicationPayload?.applicantName || 'Student';
+      
+      // Get current year
+      const currentYear = new Date().getFullYear();
+      
+      // Sanitize the name (remove special characters, keep spaces and letters)
+      const sanitizedName = studentName.replace(/[^A-Za-z\s]/g, '').trim().replace(/\s+/g, ' ');
+      
+      // Format: "Name Lastname 2026.pdf"
+      return `${sanitizedName} ${currentYear}.pdf`;
     }
 
     // APPLICATION PREVIEW MODAL (SINGLE SOURCE OF TRUTH)
@@ -3218,6 +3226,26 @@
       link.download = `credentials-${currentApplicationPayload.referenceNumber || 'screenshot'}.png`;
       link.click();
       showNotification('Success', 'Screenshot downloaded', 'success');
+    }
+
+    // Helper function to build document filename with student name
+    function buildDocumentFilename(docTitle) {
+      // Get student name
+      const app = getApplicationById(currentApplicationId);
+      const studentName = app?.applicant_name || currentApplicationPayload?.applicantName || 'Student';
+      
+      // Sanitize the name (remove special characters, keep spaces and letters)
+      const sanitizedName = studentName.replace(/[^A-Za-z\s]/g, '').trim().replace(/\s+/g, ' ');
+      
+      // Extract file extension from original title if present
+      const extensionMatch = docTitle.match(/\.(pdf|jpg|jpeg|png|doc|docx|txt)$/i);
+      const extension = extensionMatch ? extensionMatch[0] : '';
+      
+      // Remove extension from docTitle to get clean document type
+      const docType = docTitle.replace(extensionMatch ? extensionMatch[0] : '', '').trim();
+      
+      // Format: "Name Lastname Document Type.ext"
+      return `${sanitizedName} ${docType}${extension}`;
     }
 
     // Download any document (works with base64 data URLs and regular URLs)
@@ -4190,7 +4218,8 @@
               
               downloadBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                downloadDocument(viewSrc, docTitle);
+                const filename = buildDocumentFilename(docTitle);
+                downloadDocument(viewSrc, filename);
               });
               
               downloadBtn.addEventListener('mouseover', () => {
@@ -4280,7 +4309,8 @@
               
               downloadBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                downloadDocument(viewUrl, docTitle);
+                const filename = buildDocumentFilename(docTitle);
+                downloadDocument(viewUrl, filename);
               });
               
               downloadBtn.addEventListener('mouseover', () => {
