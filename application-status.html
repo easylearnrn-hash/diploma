@@ -1698,15 +1698,18 @@ async function viewAcceptanceLetter() {
     const today = new Date();
     
     // Format date of birth properly
+    // DOB is stored in payload.dob, not as a separate column
     let formattedDOB = 'N/A';
-    console.log('🔍 DEBUG: Checking date_of_birth field:', app.date_of_birth);
-    console.log('🔍 DEBUG: All app keys:', Object.keys(app));
+    const dobValue = app.date_of_birth || (app.payload && app.payload.dob);
+    console.log('🔍 DEBUG: Checking DOB - date_of_birth field:', app.date_of_birth);
+    console.log('🔍 DEBUG: Checking DOB - payload.dob field:', app.payload?.dob);
+    console.log('🔍 DEBUG: Final dobValue:', dobValue);
     
-    if (app.date_of_birth) {
+    if (dobValue) {
       try {
-        console.log('📅 Original DOB from database:', app.date_of_birth);
+        console.log('📅 Original DOB from database:', dobValue);
         // Parse date locally to avoid timezone issues
-        const dobParts = app.date_of_birth.split('-');
+        const dobParts = dobValue.split('-');
         if (dobParts.length === 3) {
           const dobDate = new Date(parseInt(dobParts[0]), parseInt(dobParts[1]) - 1, parseInt(dobParts[2]));
           formattedDOB = dobDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -1714,10 +1717,10 @@ async function viewAcceptanceLetter() {
         }
       } catch (e) {
         console.error('❌ Error formatting DOB:', e);
-        formattedDOB = app.date_of_birth;
+        formattedDOB = dobValue;
       }
     } else {
-      console.warn('⚠️ date_of_birth field is missing or empty in application data');
+      console.warn('⚠️ date_of_birth field is missing in both app.date_of_birth and app.payload.dob');
     }
     
     const letterData = {
