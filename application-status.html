@@ -1685,6 +1685,10 @@ function showCustomAlert(message, type = 'info') {
 async function viewAcceptanceLetter() {
   try {
     const app = window.currentApplicationData;
+    
+    console.log('🔍 DEBUG: Opening acceptance letter');
+    console.log('📋 Application data:', app);
+    
     if (!app) {
       showCustomAlert('⚠️ Unable to load acceptance letter. Please refresh the page.', 'error');
       return;
@@ -1697,11 +1701,13 @@ async function viewAcceptanceLetter() {
     let formattedDOB = 'N/A';
     if (app.date_of_birth) {
       try {
+        console.log('📅 Original DOB from database:', app.date_of_birth);
         // Parse date locally to avoid timezone issues
         const dobParts = app.date_of_birth.split('-');
         if (dobParts.length === 3) {
           const dobDate = new Date(parseInt(dobParts[0]), parseInt(dobParts[1]) - 1, parseInt(dobParts[2]));
           formattedDOB = dobDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          console.log('✅ Formatted DOB:', formattedDOB);
         }
       } catch (e) {
         console.error('Error formatting DOB:', e);
@@ -1729,8 +1735,11 @@ async function viewAcceptanceLetter() {
       qrCodeUrl: app.control_number ? `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(`https://www.acnhs.am/verify-transcript.html?ctrl=${encodeURIComponent(app.control_number)}`)}` : ''
     };
     
+    console.log('📬 Letter data prepared:', letterData);
+    
     // Store data in sessionStorage for the new window to access
     sessionStorage.setItem('ACCEPTANCE_LETTER_DATA', JSON.stringify(letterData));
+    console.log('💾 Stored in sessionStorage');
     
     // Open acceptance letter in a new window
     window.open('acceptance-letter.html', '_blank');
