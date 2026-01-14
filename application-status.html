@@ -846,6 +846,150 @@ const DOCUMENT_EXPLANATIONS = {
   '3X4 Photo': 'A recent passport-style photograph (3cm x 4cm) with white background, front-facing, professional attire.'
 };
 
+const DOB_CANDIDATE_PATHS = [
+  'date_of_birth',
+  'dob',
+  'rawDob',
+  'dobIso',
+  'metadata.date_of_birth',
+  'metadata.dob',
+  'metadata.rawDob',
+  'metadata.dateOfBirth',
+  'payload.dob',
+  'payload.rawDob',
+  'payload.dobIso',
+  'payload.dateOfBirth',
+  'payload.personalInfo.dob',
+  'payload.personalInfo.dateOfBirth',
+  'payload.personal_information.dob',
+  'payload.personal_information.date_of_birth',
+  'payload.personal_information.dateOfBirth',
+  'payload.profile.dob',
+  'payload.profile.dateOfBirth',
+  'student.date_of_birth',
+  'student.dob',
+  'students.date_of_birth',
+  'students.dob'
+];
+
+const DOB_KEY_PATTERNS = ['dob', 'dateofbirth', 'date_of_birth', 'birthdate', 'birth_date', 'birthday', 'rawdob'];
+
+function getNestedValue(obj, path) {
+  if (!obj || typeof obj !== 'object') return null;
+  return path.split('.').reduce((acc, key) => {
+    if (acc && acc[key] !== undefined && acc[key] !== null) {
+      return acc[key];
+    }
+    return null;
+  }, obj);
+}
+
+function normalizeDobCandidate(value) {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const fromNumber = new Date(value);
+    if (!Number.isNaN(fromNumber.getTime())) {
+      return `${fromNumber.getFullYear()}-${String(fromNumber.getMonth() + 1).padStart(2, '0')}-${String(fromNumber.getDate()).padStart(2, '0')}`;
+    }
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed || trimmed === '—' || trimmed === '-' || trimmed.toUpperCase() === 'N/A') return null;
+    return trimmed;
+  }
+  return null;
+}
+
+function searchDobDeep(source, visited = new WeakSet()) {
+  if (!source || typeof source !== 'object') return null;
+  if (visited.has(source)) return null;
+  visited.add(source);
+
+  const entries = Array.isArray(source)
+    ? source.map((value, index) => [String(index), value])
+    : Object.entries(source);
+
+  for (const [key, value] of entries) {
+    const lowerKey = key.toLowerCase();
+    if ((typeof value === 'string' || typeof value === 'number' || value instanceof Date) && DOB_KEY_PATTERNS.some(pattern => lowerKey.includes(pattern))) {
+      const normalized = normalizeDobCandidate(value);
+      if (normalized) return normalized;
+    }
+    if (value && typeof value === 'object') {
+      const nested = searchDobDeep(value, visited);
+      if (nested) return nested;
+    }
+  }
+
+  return null;
+}
+
+function getApplicationDob(application) {
+  if (!application) return null;
+  for (const path of DOB_CANDIDATE_PATHS) {
+    const candidate = getNestedValue(application, path);
+    const normalized = normalizeDobCandidate(candidate);
+    if (normalized) return normalized;
+  }
+
+  const payloadDob = searchDobDeep(application.payload);
+  if (payloadDob) return payloadDob;
+
+  const metadataDob = searchDobDeep(application.metadata);
+  if (metadataDob) return metadataDob;
+
+  return null;
+}
+
+function formatDobForDisplay(rawDob) {
+  const normalized = normalizeDobCandidate(rawDob);
+  if (!normalized) {
+    return { display: 'N/A', iso: null };
+  }
+
+  const isoPattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (isoPattern.test(normalized)) {
+    const [year, month, day] = normalized.split('-').map(Number);
+    const fromIso = new Date(year, month - 1, day);
+    if (!Number.isNaN(fromIso.getTime())) {
+      return {
+        display: fromIso.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        iso: normalized
+      };
+    }
+  }
+
+  // Fallback: Try parsing as generic date (RISKY - timezone issues possible)
+  const parsed = new Date(normalized);
+  if (!Number.isNaN(parsed.getTime())) {
+    // Use UTC extraction to minimize timezone bugs
+    const year = parsed.getUTCFullYear();
+    const month = parsed.getUTCMonth();
+    const day = parsed.getUTCDate();
+    const localDate = new Date(year, month, day);
+    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return {
+      display: localDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+      iso
+    };
+  }
+
+  return { display: normalized, iso: null };
+}
+
+function deriveApplicationDob(application) {
+  const normalized = getApplicationDob(application);
+  const formatted = formatDobForDisplay(normalized);
+  return {
+    raw: normalized,
+    display: formatted.display,
+    iso: formatted.iso
+  };
+}
+
 // Check authentication on page load
 window.addEventListener('DOMContentLoaded', function() {
   // PRIORITY: Check if control number is provided in URL (for QR code access)
@@ -1587,6 +1731,93 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
+// Contact form helpers for consistent formatting and sanitization
+function escapeHtmlForEmail(value) {
+  if (value === undefined || value === null) return '';
+  return value
+    .toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatDisplayDateTime(value) {
+  if (!value) return 'Not provided';
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return 'Not provided';
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatMessageHtmlForEmail(raw) {
+  if (!raw || !raw.trim()) {
+    return `<p style="margin:0;color:#0f172a;line-height:1.6;">(No message provided)</p>`;
+  }
+  return raw.trim().split(/\n{2,}/).map(paragraph => {
+    const safeParagraph = escapeHtmlForEmail(paragraph).replace(/\n/g, '<br>');
+    return `<p style="margin:0 0 14px 0;color:#0f172a;line-height:1.6;">${safeParagraph}</p>`;
+  }).join('');
+}
+
+function buildInfoRows(rows) {
+  return rows.map(row => `
+    <tr>
+      <td style="width:40%;padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-size:12px;color:#475569;font-weight:600;">${row.label}</td>
+      <td style="padding:8px 12px;border:1px solid #e2e8f0;font-size:14px;color:#0f172a;">${row.value}</td>
+    </tr>
+  `).join('');
+}
+
+function buildPlainTextContactEmail(details) {
+  const {
+    studentName,
+    fromEmail,
+    subject,
+    message,
+    statusLabel,
+    lastUpdated,
+    submissionDate,
+    refNumber,
+    ctrlNumber,
+    docId,
+    hashValue,
+    portalTimestamp
+  } = details;
+
+  const lines = [
+    'Student Inquiry via Application Status Portal',
+    '--------------------------------------------------',
+    `Name: ${studentName || 'N/A'}`,
+    `Email: ${fromEmail || 'N/A'}`,
+    `Subject: ${subject || 'General question'}`,
+    '',
+    'Message:',
+    message || '(no message provided)',
+    '',
+    'Application Snapshot:',
+    `Status: ${statusLabel || 'N/A'}`,
+    `Last Updated: ${lastUpdated || 'N/A'}`,
+    `Submission Date: ${submissionDate || 'N/A'}`,
+    `Reference #: ${refNumber || 'N/A'}`,
+    `Control #: ${ctrlNumber || 'N/A'}`,
+    `Document ID: ${docId || 'N/A'}`,
+    `Verification Hash: ${hashValue || 'N/A'}`,
+    '',
+    `Portal Timestamp: ${portalTimestamp || 'N/A'}`,
+    '',
+    'Reply directly to this email to reach the student.'
+  ];
+
+  return lines.join('\n');
+}
+
 // Contact Admissions Modal Handler
 document.getElementById('contactAdmissionsBtn')?.addEventListener('click', () => {
   const modal = document.getElementById('contactModal');
@@ -1628,30 +1859,118 @@ document.getElementById('contactModal')?.addEventListener('click', (e) => {
 document.getElementById('contactForm')?.addEventListener('submit', async (e) => {
   e.preventDefault();
   
-  const fromEmail = document.getElementById('fromEmail').value;
-  const subject = document.getElementById('emailSubject').value;
-  const message = document.getElementById('emailMessage').value;
-  const studentName = document.getElementById('studentName').value;
+  const fromEmail = document.getElementById('fromEmail').value.trim();
+  const subjectInput = document.getElementById('emailSubject').value.trim();
+  const messageInput = document.getElementById('emailMessage').value;
+  const studentName = document.getElementById('studentName').value.trim();
   const refNumber = document.getElementById('refNumber').textContent;
   const ctrlNumber = document.getElementById('ctrlNumber').textContent;
   const docId = document.getElementById('docId').textContent;
   const hashValue = document.getElementById('hashValue').textContent;
-  
-  // Build email body with application details
-  const emailBody = `
-${message}
+  const normalizedSubject = subjectInput.replace(/\s+/g, ' ');
+  const subjectLine = normalizedSubject || 'General Inquiry';
 
----
-Student Information:
-Name: ${studentName}
-Email: ${fromEmail}
+  const currentStatus = currentApplication?.status || 'SUBMITTED';
+  const statusLabel = STATUS_INFO[currentStatus]?.displayText || currentStatus;
+  const lastUpdatedText = formatDisplayDateTime(currentApplication?.status_updated_at);
+  const submissionDateText = formatDisplayDateTime(currentApplication?.submission_date);
+  const portalTimestampDisplay = formatDisplayDateTime(new Date().toISOString());
 
-Application Details:
-REF: ${refNumber}
-CTRL: ${ctrlNumber}
-DOC ID: ${docId}
-HASH: ${hashValue}
-  `.trim();
+  const safeStudentName = escapeHtmlForEmail(studentName || 'Applicant');
+  const safeFromEmail = escapeHtmlForEmail(fromEmail || 'Not provided');
+  const safeSubjectLine = escapeHtmlForEmail(subjectLine);
+  const safeRefNumber = escapeHtmlForEmail(refNumber || 'Not assigned');
+  const safeCtrlNumber = escapeHtmlForEmail(ctrlNumber || 'Not assigned');
+  const safeDocId = escapeHtmlForEmail(docId || 'Not assigned');
+  const safeHashValue = escapeHtmlForEmail(hashValue || 'Not assigned');
+  const safeStatusLabel = escapeHtmlForEmail(statusLabel || 'SUBMITTED');
+  const formattedMessageHtml = formatMessageHtmlForEmail(messageInput);
+
+  const statusRowsHtml = buildInfoRows([
+    { label: 'Status', value: safeStatusLabel || 'Not available' },
+    { label: 'Last Updated', value: escapeHtmlForEmail(lastUpdatedText) },
+    { label: 'Submission Date', value: escapeHtmlForEmail(submissionDateText) }
+  ]);
+
+  const identifierRowsHtml = buildInfoRows([
+    { label: 'Reference #', value: safeRefNumber || '—' },
+    { label: 'Control #', value: safeCtrlNumber || '—' },
+    { label: 'Document ID', value: safeDocId || '—' },
+    { label: 'Verification Hash', value: safeHashValue || '—' }
+  ]);
+
+  const emailLinkHtml = fromEmail
+    ? `<a href="mailto:${encodeURIComponent(fromEmail)}" style="color:#0ea5e9;text-decoration:none;">${safeFromEmail}</a>`
+    : 'Not provided';
+
+  const contactRowsHtml = buildInfoRows([
+    { label: 'Student', value: safeStudentName || 'Not provided' },
+    { label: 'Email', value: emailLinkHtml }
+  ]);
+
+  const emailHtml = `
+    <div style="font-family:'Inter', Arial, sans-serif; background-color:#f5f7fb; padding:32px 0;">
+      <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;border:1px solid #e2e8f0;box-shadow:0 20px 60px rgba(15,23,42,0.08);overflow:hidden;">
+        <div style="background:#0b1629;padding:24px 32px;color:#ecfeff;">
+          <p style="margin:0;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#67e8f9;">ACNHS Student Services Portal</p>
+          <h1 style="margin:6px 0 0;font-size:22px;">${safeStudentName || 'Applicant'} sent a message</h1>
+          <p style="margin:6px 0 0;color:#bae6fd;">Reference ${safeRefNumber || 'Pending'}</p>
+        </div>
+        <div style="padding:32px;">
+          <div style="margin-bottom:24px;">
+            <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:8px;">Subject</div>
+            <div style="font-size:18px;font-weight:600;color:#0f172a;">${safeSubjectLine}</div>
+          </div>
+          <div style="margin-bottom:28px;padding:24px;border:1px solid #e2e8f0;border-radius:16px;background:#fdfefe;">
+            <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:12px;">Message</div>
+            ${formattedMessageHtml}
+          </div>
+          <div style="margin-bottom:28px;">
+            <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:12px;">Application Snapshot</div>
+            <table style="width:100%;border-collapse:collapse;">
+              ${statusRowsHtml}
+            </table>
+          </div>
+          <div style="margin-bottom:28px;">
+            <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:12px;">Application Identifiers</div>
+            <table style="width:100%;border-collapse:collapse;">
+              ${identifierRowsHtml}
+            </table>
+          </div>
+          <div style="margin-bottom:28px;">
+            <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#94a3b8;margin-bottom:12px;">Student Contact</div>
+            <table style="width:100%;border-collapse:collapse;">
+              ${contactRowsHtml}
+            </table>
+          </div>
+          <div style="padding:16px;border-radius:12px;background:#f8fafc;border:1px solid #e2e8f0;font-size:12px;color:#475569;">
+            Sent via the ACNHS Application Status Portal on ${escapeHtmlForEmail(portalTimestampDisplay)}. You can reply directly to reach the student.
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const plainTextEmail = buildPlainTextContactEmail({
+    studentName: studentName || 'Applicant',
+    fromEmail,
+    subject: subjectLine,
+    message: messageInput.trim(),
+    statusLabel,
+    lastUpdated: lastUpdatedText,
+    submissionDate: submissionDateText,
+    refNumber: refNumber || 'N/A',
+    ctrlNumber: ctrlNumber || 'N/A',
+    docId: docId || 'N/A',
+    hashValue: hashValue || 'N/A',
+    portalTimestamp: portalTimestampDisplay
+  });
+
+  const emailHeaders = {
+    'X-ACNHS-Contact-Source': 'application-status',
+    ...(fromEmail ? { 'X-ACNHS-Contact-Email': fromEmail } : {}),
+    ...(studentName ? { 'X-ACNHS-Contact-Name': studentName } : {})
+  };
   
   try {
     const response = await fetch('https://zlvnxvrzotamhpezqedr.supabase.co/functions/v1/send-email', {
@@ -1661,45 +1980,12 @@ HASH: ${hashValue}
       },
       body: JSON.stringify({
         to: 'student-services@acnhs.am',
-        subject: `[Student Contact] ${subject}`,
-        replyTo: fromEmail, // Student's email for reply-to and database tracking
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2d3748;">Student Inquiry</h2>
-            <div style="background: #f7fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0 0 15px 0;"><strong>From:</strong> ${studentName}</p>
-              <p style="margin: 0 0 15px 0;"><strong>Email:</strong> ${fromEmail}</p>
-              <p style="margin: 0;"><strong>Subject:</strong> ${subject}</p>
-            </div>
-            <div style="margin: 20px 0;">
-              <h3 style="color: #2d3748;">Message:</h3>
-              <p style="white-space: pre-wrap;">${message}</p>
-            </div>
-            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-            <div style="background: #edf2f7; padding: 15px; border-radius: 8px;">
-              <h3 style="color: #2d3748; margin-top: 0;">Application Details:</h3>
-              <table style="width: 100%; border-collapse: collapse;">
-                <tr>
-                  <td style="padding: 5px 0;"><strong>REF:</strong></td>
-                  <td style="padding: 5px 0;">${refNumber}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>CTRL:</strong></td>
-                  <td style="padding: 5px 0;">${ctrlNumber}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>DOC ID:</strong></td>
-                  <td style="padding: 5px 0;">${docId}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 5px 0;"><strong>HASH:</strong></td>
-                  <td style="padding: 5px 0;">${hashValue}</td>
-                </tr>
-              </table>
-            </div>
-          </div>
-        `,
-        from: 'student-services@acnhs.am'
+        subject: `[Student Contact] ${subjectLine}`,
+        replyTo: fromEmail || undefined,
+        text: plainTextEmail,
+        html: emailHtml,
+        from: 'student-services@acnhs.am',
+        headers: emailHeaders
       })
     });
     
@@ -1778,38 +2064,10 @@ async function viewAcceptanceLetter() {
     
     // Format the data for the acceptance letter
     const today = new Date();
-    
-    // Format date of birth properly
-    // DOB is stored in payload.dob, not as a separate column
-    let formattedDOB = 'N/A';
-    const dobValue = app.date_of_birth || (app.payload && app.payload.dob);
-    console.log('🔍 DEBUG: Checking DOB - date_of_birth field:', app.date_of_birth);
-    console.log('🔍 DEBUG: Checking DOB - payload.dob field:', app.payload?.dob);
-    console.log('🔍 DEBUG: Final dobValue:', dobValue);
-    
-    if (dobValue) {
-      console.log('📅 Original DOB from database:', dobValue);
-      
-      // Check if it's already formatted (contains letters) or needs formatting (YYYY-MM-DD)
-      if (dobValue.includes('-') && /^\d{4}-\d{2}-\d{2}$/.test(dobValue)) {
-        // It's in YYYY-MM-DD format, parse it
-        try {
-          const dobParts = dobValue.split('-');
-          const dobDate = new Date(parseInt(dobParts[0]), parseInt(dobParts[1]) - 1, parseInt(dobParts[2]));
-          formattedDOB = dobDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-          console.log('✅ Formatted DOB from date:', formattedDOB);
-        } catch (e) {
-          console.error('❌ Error formatting DOB:', e);
-          formattedDOB = dobValue;
-        }
-      } else {
-        // It's already formatted text, use it directly
-        formattedDOB = dobValue;
-        console.log('✅ Using pre-formatted DOB:', formattedDOB);
-      }
-    } else {
-      console.warn('⚠️ date_of_birth field is missing in both app.date_of_birth and app.payload.dob');
-    }
+
+    const dobInfo = deriveApplicationDob(app);
+    const formattedDOB = dobInfo.display;
+    console.log('📅 Derived DOB info:', dobInfo);
     
     const letterData = {
       documentId: `ACNHS-ACC-${app.control_number || app.reference_number || today.getTime()}`,
@@ -1819,6 +2077,7 @@ async function viewAcceptanceLetter() {
       lastName: app.applicant_name ? app.applicant_name.split(' ').pop() : 'Student',
       salutation: app.gender === 'female' ? 'Ms.' : 'Mr.',
       dob: formattedDOB,
+      dobIso: dobInfo.iso || null,
       applicationId: app.reference_number || 'N/A',
       programName: app.program || 'Bachelor of Science in Nursing',
       credential: "Bachelor's Degree",

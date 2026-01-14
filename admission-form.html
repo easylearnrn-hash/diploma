@@ -3145,6 +3145,8 @@ function gatherAdmissionData() {
     .filter(Boolean)
     .join(', ') || '—';
 
+  const dobInputValue = getValue('dob') || getValue('dateOfBirth');
+
   const documents = {
     passport: documentStatus('passportUpload'),
     diploma: documentStatus('diplomaUpload'),
@@ -3155,7 +3157,9 @@ function gatherAdmissionData() {
 
   return {
     applicantName,
-    dob: formatDateValue(getValue('dob')),
+  dob: formatDateValue(dobInputValue),
+  rawDob: dobInputValue || null,
+  dobIso: formatDateIsoValue(dobInputValue),
     gender: getSelectText('gender') || '—',
     nationality: getValue('nationality') || '—',
     birthLocation,
@@ -3392,6 +3396,24 @@ function formatDateValue(value) {
   // Fallback for other formats
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? '—' : dateFormatter.format(parsed);
+}
+
+function formatDateIsoValue(value) {
+  if (!value) return null;
+  
+  // CRITICAL FIX: Do NOT use new Date() for date-only values
+  // HTML date input provides YYYY-MM-DD format already
+  // Using new Date() causes timezone conversion and ±1 day bugs
+  
+  // Validate YYYY-MM-DD format
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  if (!datePattern.test(value)) {
+    console.warn('Invalid date format, expected YYYY-MM-DD:', value);
+    return null;
+  }
+  
+  // Return exact string - no parsing, no timezone conversion
+  return value;
 }
 
 function documentStatus(inputId, optional = false) {

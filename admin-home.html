@@ -2009,11 +2009,15 @@
     async function loadStats() {
       try {
         const supabase = initSupabase();
-        if (!supabase) return;
+        if (!supabase) {
+          console.warn('⚠️ Supabase not initialized');
+          return;
+        }
 
+        // Use count query without selecting all columns (more efficient and less error-prone)
         const { count, error } = await supabase
           .from('applications')
-          .select('*', { count: 'exact', head: true });
+          .select('id', { count: 'exact', head: true });
 
         if (!error && count !== null) {
           const total = count || 0;
@@ -2022,7 +2026,13 @@
           if (totalEl) totalEl.textContent = total;
           if (pendingEl) pendingEl.textContent = total;
         } else if (error) {
-          console.error('Error loading stats:', error);
+          console.error('❌ Error loading stats:', error);
+          console.error('Error details:', {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           // Set to 0 if error
           const totalEl = document.getElementById('totalApplications');
           const pendingEl = document.getElementById('pendingReviews');

@@ -8,11 +8,74 @@ import { corsHeaders } from "../_shared/cors.ts"
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+const ATTACHMENTS_BUCKET = 'email-attachments'
+
+function normalizeEmailAddress(value?: string | null) {
+  if (!value) return value
+  return value.trim().toLowerCase()
+}
+
+function base64ToUint8Array(base64: string) {
+  const clean = base64.replace(/\s/g, '')
+  const binary = atob(clean)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i)
+  }
+  return bytes
+}
+
+async function storeAttachmentsInBucket(
+  supabase: ReturnType<typeof createClient>,
+  attachments: Array<{ filename: string; content: string; type?: string }> = [],
+  direction: 'outgoing' | 'incoming' = 'outgoing'
+) {
+  if (!attachments || attachments.length === 0) return []
+
+  const stored: Array<Record<string, unknown>> = []
+  for (let index = 0; index < attachments.length; index++) {
+    const attachment = attachments[index]
+    try {
+      if (!attachment?.content) continue
+      const bytes = base64ToUint8Array(attachment.content)
+      const sanitizedName = (attachment.filename || `attachment-${index}`).replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${direction}/${Date.now()}-${index}-${sanitizedName}`
+
+      const { data: uploadData, error: uploadError } = await supabase
+        .storage
+        .from(ATTACHMENTS_BUCKET)
+        .upload(path, bytes, {
+          contentType: attachment.type || 'application/octet-stream'
+        })
+
+      if (uploadError) {
+        console.error('Attachment upload error:', uploadError)
+        continue
+      }
+
+      const { data: publicUrlData } = supabase.storage.from(ATTACHMENTS_BUCKET).getPublicUrl(uploadData?.path || path)
+
+      stored.push({
+        filename: attachment.filename || sanitizedName,
+        content_type: attachment.type || 'application/octet-stream',
+        size: bytes.length,
+        storage_path: uploadData?.path || path,
+        public_url: publicUrlData?.publicUrl || null,
+        direction
+      })
+    } catch (error) {
+      console.error('Error processing attachment:', error)
+    }
+  }
+
+  return stored
+}
 
 interface EmailRequest {
   to: string
   subject: string
   html: string
+  text?: string
   from?: string
   fromName?: string
   replyTo?: string
@@ -21,9 +84,10 @@ interface EmailRequest {
     content: string
     type: string
   }>
+  headers?: Record<string, string>
 }
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -31,7 +95,7 @@ serve(async (req) => {
 
   try {
     // Parse request body
-    const { to, subject, html, from, fromName, replyTo, attachments }: EmailRequest = await req.json()
+  const { to, subject, html, text, from, fromName, replyTo, attachments, headers: customHeaders }: EmailRequest = await req.json()
 
     // Validate inputs
     if (!to || !subject || !html) {
@@ -88,12 +152,26 @@ serve(async (req) => {
 
     // Build email payload with proper name format
     // CRITICAL: Send both html and text versions for better email client compatibility
+    const strippedHtml = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
     const emailPayload: any = {
       from: `${senderName} <${senderEmail}>`,
       to: [to],
       subject: subject,
       html: html,
-      text: html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&'), // Fallback plain text version
+      text: (text?.trim() || strippedHtml)
+    }
+
+    if (customHeaders && typeof customHeaders === 'object') {
+      const filteredHeaders = Object.entries(customHeaders)
+        .filter(([key, value]) => typeof key === 'string' && key && typeof value === 'string' && value.trim().length > 0)
+        .reduce((acc, [key, value]) => {
+          acc[key] = value
+          return acc
+        }, {} as Record<string, string>)
+
+      if (Object.keys(filteredHeaders).length > 0) {
+        emailPayload.headers = filteredHeaders
+      }
     }
 
     // Add reply_to based on replyTo parameter or sender email
@@ -153,33 +231,75 @@ serve(async (req) => {
       
       // For contact form emails (with replyTo), the sender is the student
       // For admin emails (no replyTo), the sender is the ACNHS email
-      const emailSender = replyTo || senderEmail
+      const emailSender = normalizeEmailAddress(replyTo || senderEmail)
+      const normalizedRecipient = normalizeEmailAddress(to)
+      
+      console.log('🔍 Routing check:', {
+        senderEmail,
+        to,
+        replyTo,
+        senderIsAcnhs: senderEmail?.toLowerCase().includes('acnhs.am'),
+        recipientIsAcnhs: to?.toLowerCase().includes('acnhs.am'),
+        hasReplyTo: !!replyTo,
+        replyToIsExternal: replyTo ? !replyTo?.toLowerCase().includes('acnhs.am') : false
+      })
+      
+      // Skip logging for internal routing (contact form submissions that loop back)
+      // These have: from=acnhs.am, to=acnhs.am, replyTo=student@external.com
+      // They will be logged by receive-email webhook instead
+      const isInternalRouting = 
+        senderEmail?.toLowerCase().includes('acnhs.am') &&
+        to?.toLowerCase().includes('acnhs.am') &&
+        !!replyTo &&
+        !replyTo?.toLowerCase().includes('acnhs.am')
+      
+      console.log('🔍 isInternalRouting:', isInternalRouting)
+      
+      if (isInternalRouting) {
+        console.log('⏭️ Skipping database log for internal routing email (will be captured by receive-email webhook)')
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Email sent successfully',
+            id: resendData.id 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
       
       // Determine if this is incoming or outgoing
       // Incoming: Student/External → ACNHS (recipient is @acnhs.am)
       // Outgoing: ACNHS → Student/External (sender is @acnhs.am)
-      const isIncoming = to.toLowerCase().includes('@acnhs.am')
+      const isIncoming = normalizedRecipient?.endsWith('@acnhs.am') || false
       const emailStatus = isIncoming ? 'received' : 'sent'
+      const textPreview = (text?.trim() || strippedHtml).substring(0, 500)
+      const storedAttachments = await storeAttachmentsInBucket(
+        supabase,
+        attachments || [],
+        isIncoming ? 'incoming' : 'outgoing'
+      )
       
       console.log('Attempting to save email to database:', {
-        recipient: to,
+        recipient: normalizedRecipient,
         sender: emailSender,
         subject: subject,
         direction: isIncoming ? '📥 Incoming' : '📤 Outgoing',
-        status: emailStatus
+        status: emailStatus,
+        attachmentCount: storedAttachments.length
       })
-      
+
       const { data, error } = await supabase
         .from('email_history')
         .insert([{
-          recipient: to,
+          recipient: normalizedRecipient,
           sender: emailSender,
           subject: subject,
-          body: html.replace(/<[^>]*>/g, '').substring(0, 500), // Strip HTML tags for preview
+          body: textPreview,
           html_body: html.substring(0, 50000), // Store full HTML for display (limit 50KB)
           status: emailStatus,
           sent_at: new Date().toISOString(),
-          resend_id: resendData.id
+          resend_id: resendData.id,
+          attachments: storedAttachments.length ? storedAttachments : null
         }])
         .select()
       
@@ -207,11 +327,12 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Edge function error:', error)
+    const err = error instanceof Error ? error : new Error(String(error))
+    console.error('Edge function error:', err)
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: error.message || 'Internal server error' 
+        error: err.message || 'Internal server error' 
       }),
       { 
         status: 500, 

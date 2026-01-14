@@ -3145,6 +3145,48 @@
       showNotification('Success', 'Screenshot downloaded', 'success');
     }
 
+    // Download any document (works with base64 data URLs and regular URLs)
+    async function downloadDocument(url, filename = 'document') {
+      try {
+        // Clean filename (remove special characters, keep extension)
+        const cleanFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+        
+        if (url.startsWith('data:')) {
+          // Handle base64 data URLs
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = cleanFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          showNotification('Success', `Downloaded ${filename}`, 'success');
+        } else {
+          // Handle regular URLs - fetch and download
+          const response = await fetch(url);
+          if (!response.ok) throw new Error('Failed to fetch document');
+          
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          
+          const link = document.createElement('a');
+          link.href = blobUrl;
+          link.download = cleanFilename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          // Clean up blob URL
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+          showNotification('Success', `Downloaded ${filename}`, 'success');
+        }
+      } catch (error) {
+        console.error('Download error:', error);
+        showNotification('Error', `Failed to download ${filename}. Opening in new tab instead.`, 'error');
+        // Fallback: open in new tab
+        window.open(url, '_blank');
+      }
+    }
+
     async function handleScreenshotUpload(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -3962,32 +4004,88 @@
           documentFiles.forEach(doc => {
             const li = document.createElement('li');
             li.style.transition = 'all 0.2s';
+            li.style.display = 'flex';
+            li.style.alignItems = 'center';
+            li.style.justifyContent = 'space-between';
+            li.style.gap = '8px';
+            
             const docTitle = doc.name || doc.fileName || 'Document';
             const viewSrc = doc.data || doc.url;
+            
+            // Create left side container (title + badge)
+            const leftContainer = document.createElement('div');
+            leftContainer.style.display = 'flex';
+            leftContainer.style.alignItems = 'center';
+            leftContainer.style.gap = '8px';
+            leftContainer.style.flex = '1';
+            leftContainer.style.minWidth = '0'; // Allow text truncation
+            
             if (viewSrc) {
-              li.style.cursor = 'pointer';
-              li.addEventListener('click', () => viewImage(viewSrc, docTitle));
-              li.addEventListener('mouseover', () => {
-                li.style.background = 'rgba(45,212,191,0.1)';
-                li.style.transform = 'translateX(4px)';
+              leftContainer.style.cursor = 'pointer';
+              leftContainer.addEventListener('click', () => viewImage(viewSrc, docTitle));
+              leftContainer.addEventListener('mouseover', () => {
+                leftContainer.style.background = 'rgba(45,212,191,0.1)';
+                leftContainer.style.transform = 'translateX(4px)';
               });
-              li.addEventListener('mouseout', () => {
-                li.style.background = '';
-                li.style.transform = 'translateX(0)';
+              leftContainer.addEventListener('mouseout', () => {
+                leftContainer.style.background = '';
+                leftContainer.style.transform = 'translateX(0)';
               });
             } else {
-              li.style.cursor = 'default';
+              leftContainer.style.cursor = 'default';
             }
 
             const titleEl = document.createElement('strong');
             titleEl.textContent = `📄 ${docTitle}`;
-            li.appendChild(titleEl);
+            titleEl.style.overflow = 'hidden';
+            titleEl.style.textOverflow = 'ellipsis';
+            titleEl.style.whiteSpace = 'nowrap';
+            leftContainer.appendChild(titleEl);
 
             const badge = document.createElement('span');
             badge.style.fontSize = '11px';
-            badge.style.marginLeft = '8px';
+            badge.style.padding = '2px 6px';
+            badge.style.borderRadius = '4px';
             badge.style.color = viewSrc ? '#2dd4bf' : '#a1a1aa';
+            badge.style.whiteSpace = 'nowrap';
             badge.textContent = viewSrc ? '👁️ View' : '📦 Stored';
+            leftContainer.appendChild(badge);
+            
+            li.appendChild(leftContainer);
+            
+            // Create download button
+            if (viewSrc) {
+              const downloadBtn = document.createElement('button');
+              downloadBtn.style.padding = '4px 10px';
+              downloadBtn.style.fontSize = '11px';
+              downloadBtn.style.fontWeight = '600';
+              downloadBtn.style.background = 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)';
+              downloadBtn.style.color = '#0a2540';
+              downloadBtn.style.border = 'none';
+              downloadBtn.style.borderRadius = '6px';
+              downloadBtn.style.cursor = 'pointer';
+              downloadBtn.style.transition = 'all 0.2s';
+              downloadBtn.style.whiteSpace = 'nowrap';
+              downloadBtn.textContent = '⬇️ Download';
+              downloadBtn.title = `Download ${docTitle}`;
+              
+              downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadDocument(viewSrc, docTitle);
+              });
+              
+              downloadBtn.addEventListener('mouseover', () => {
+                downloadBtn.style.transform = 'translateY(-2px)';
+                downloadBtn.style.boxShadow = '0 4px 12px rgba(45, 212, 191, 0.5)';
+              });
+              
+              downloadBtn.addEventListener('mouseout', () => {
+                downloadBtn.style.transform = 'translateY(0)';
+                downloadBtn.style.boxShadow = 'none';
+              });
+              
+              li.appendChild(downloadBtn);
+            }
             li.appendChild(badge);
 
             docList.appendChild(li);
@@ -3997,36 +4095,87 @@
           studentUploads.forEach(upload => {
             const li = document.createElement('li');
             li.style.transition = 'all 0.2s';
-            li.style.cursor = 'pointer';
+            li.style.display = 'flex';
+            li.style.alignItems = 'center';
+            li.style.justifyContent = 'space-between';
+            li.style.gap = '8px';
             
             const docTitle = upload.doc_name || upload.filename || 'Uploaded Document';
             const viewUrl = upload.public_url;
             
+            // Create left side container (title + badges)
+            const leftContainer = document.createElement('div');
+            leftContainer.style.display = 'flex';
+            leftContainer.style.alignItems = 'center';
+            leftContainer.style.gap = '8px';
+            leftContainer.style.flex = '1';
+            leftContainer.style.cursor = 'pointer';
+            leftContainer.style.minWidth = '0'; // Allow text truncation
+            
             if (viewUrl) {
-              li.addEventListener('click', () => window.open(viewUrl, '_blank'));
-              li.addEventListener('mouseover', () => {
-                li.style.background = 'rgba(45,212,191,0.1)';
-                li.style.transform = 'translateX(4px)';
+              leftContainer.addEventListener('click', () => window.open(viewUrl, '_blank'));
+              leftContainer.addEventListener('mouseover', () => {
+                leftContainer.style.background = 'rgba(45,212,191,0.1)';
+                leftContainer.style.transform = 'translateX(4px)';
               });
-              li.addEventListener('mouseout', () => {
-                li.style.background = '';
-                li.style.transform = 'translateX(0)';
+              leftContainer.addEventListener('mouseout', () => {
+                leftContainer.style.background = '';
+                leftContainer.style.transform = 'translateX(0)';
               });
             }
 
             const titleEl = document.createElement('strong');
             titleEl.textContent = `📎 ${docTitle}`;
-            li.appendChild(titleEl);
+            titleEl.style.overflow = 'hidden';
+            titleEl.style.textOverflow = 'ellipsis';
+            titleEl.style.whiteSpace = 'nowrap';
+            leftContainer.appendChild(titleEl);
 
             const badge = document.createElement('span');
             badge.style.fontSize = '11px';
-            badge.style.marginLeft = '8px';
             badge.style.padding = '2px 6px';
             badge.style.borderRadius = '4px';
             badge.style.background = 'rgba(45,212,191,0.2)';
             badge.style.color = '#2dd4bf';
-            badge.textContent = '🔗 View Upload';
-            li.appendChild(badge);
+            badge.style.whiteSpace = 'nowrap';
+            badge.textContent = '🔗 View';
+            leftContainer.appendChild(badge);
+            
+            li.appendChild(leftContainer);
+
+            // Create download button
+            if (viewUrl) {
+              const downloadBtn = document.createElement('button');
+              downloadBtn.style.padding = '4px 10px';
+              downloadBtn.style.fontSize = '11px';
+              downloadBtn.style.fontWeight = '600';
+              downloadBtn.style.background = 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)';
+              downloadBtn.style.color = '#0a2540';
+              downloadBtn.style.border = 'none';
+              downloadBtn.style.borderRadius = '6px';
+              downloadBtn.style.cursor = 'pointer';
+              downloadBtn.style.transition = 'all 0.2s';
+              downloadBtn.style.whiteSpace = 'nowrap';
+              downloadBtn.textContent = '⬇️ Download';
+              downloadBtn.title = `Download ${docTitle}`;
+              
+              downloadBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                downloadDocument(viewUrl, docTitle);
+              });
+              
+              downloadBtn.addEventListener('mouseover', () => {
+                downloadBtn.style.transform = 'translateY(-2px)';
+                downloadBtn.style.boxShadow = '0 4px 12px rgba(45, 212, 191, 0.5)';
+              });
+              
+              downloadBtn.addEventListener('mouseout', () => {
+                downloadBtn.style.transform = 'translateY(0)';
+                downloadBtn.style.boxShadow = 'none';
+              });
+              
+              li.appendChild(downloadBtn);
+            }
 
             // Add upload date if available
             if (upload.uploaded_at) {

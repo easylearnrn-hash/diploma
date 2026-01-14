@@ -405,6 +405,97 @@
       padding: 32px;
     }
 
+    .detail-attachments {
+      margin-top: 32px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 16px;
+      padding: 20px 24px;
+    }
+
+    .detail-attachments h3 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .detail-attachment-cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .detail-attachment-card {
+      flex: 1 1 220px;
+      min-width: 200px;
+      background: rgba(30, 41, 59, 0.85);
+      border: 1px solid rgba(45, 212, 191, 0.15);
+      border-radius: 12px;
+      padding: 14px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+
+    .detail-attachment-card:hover {
+      border-color: rgba(45, 212, 191, 0.4);
+      transform: translateY(-2px);
+    }
+
+    .detail-attachment-icon {
+      font-size: 26px;
+    }
+
+    .detail-attachment-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-attachment-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    .detail-attachment-size {
+      font-size: 12px;
+      color: #94a3b8;
+    }
+
+    .detail-attachment-download {
+      color: #2dd4bf;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid rgba(45, 212, 191, 0.4);
+      border-radius: 8px;
+      padding: 6px 10px;
+      transition: all 0.2s;
+    }
+
+    .detail-attachment-download:hover {
+      background: rgba(45, 212, 191, 0.15);
+    }
+
+    .detail-attachment-download.disabled {
+      color: #94a3b8;
+      border-color: rgba(148, 163, 184, 0.3);
+      cursor: not-allowed;
+    }
+
+    .email-attachment-indicator {
+      margin-left: 6px;
+      font-size: 14px;
+    }
+
     .detail-body iframe {
       width: 100%;
       min-height: 600px;
@@ -1976,6 +2067,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // Clear recipients list when changing type
         document.getElementById('recipientsList').innerHTML = '';
         updateRecipientCount();
+        
+        // Load all applicants immediately when "All Applicants" is selected
+        if (type === 'all') {
+          loadRecipientsList();
+        }
       });
       
       // Status/Program filter change - load recipients
@@ -2287,7 +2383,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     // Load recipients list when status or program is selected
     async function loadRecipientsList() {
       const recipientType = document.getElementById('recipientType').value;
-      if (recipientType !== 'status' && recipientType !== 'program') return;
+      if (recipientType !== 'status' && recipientType !== 'program' && recipientType !== 'all') return;
       
       try {
         let query = db.from('applications').select('email, applicant_name, status');
@@ -2301,6 +2397,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           if (!program) return;
           query = query.eq('program', program);
         }
+        // For 'all', no filter is applied - query all applicants
         
         const { data: applicants, error } = await query;
         if (error) throw error;
@@ -2540,60 +2637,39 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       return div.textContent || div.innerText || '';
     }
 
+    function formatAttachmentSize(bytes) {
+      if (!bytes || bytes <= 0) return '';
+      if (bytes < 1024) return `${bytes} B`;
+      const kb = bytes / 1024;
+      if (kb < 1024) return `${kb.toFixed(1)} KB`;
+      const mb = kb / 1024;
+      return `${mb.toFixed(2)} MB`;
+    }
+
+    function resolveAttachmentUrl(attachment) {
+      if (attachment?.public_url) return attachment.public_url;
+      if (!attachment?.storage_path || !db?.storage) return null;
+      try {
+        const { data } = db.storage.from('email-attachments').getPublicUrl(attachment.storage_path);
+        return data?.publicUrl || null;
+      } catch (error) {
+        console.warn('Unable to resolve attachment URL', error);
+        return null;
+      }
+    }
+
     function renderEmailList() {
       const container = document.getElementById('emailList');
       const searchTerm = document.getElementById('searchInput').value.toLowerCase();
       
       let filtered = emailHistory;
       
-      // ACNHS email addresses
-      const acnhsEmails = [
-        's.gharibyan@acnhs.am',
-        's_gharibyan@acnhs.am',
-        'admissions@acnhs.am',
-        'info@acnhs.am',
-        'documents@acnhs.am',
-        'international@acnhs.am',
-        'registrar@acnhs.am',
-        'finance@acnhs.am',
-        'ceo@acnhs.am',
-        'dean@acnhs.am',
-        'academic@acnhs.am',
-        'student-services@acnhs.am',
-        'legal@acnhs.am',
-        'hr@acnhs.am',
-        'it@acnhs.am',
-        'library@acnhs.am',
-        'alumni@acnhs.am',
-        'research@acnhs.am',
-        'do-not-reply@acnhs.am'
-      ];
-      
       // Filter by tab
       if (currentFilter === 'inbox') {
-        // INBOX: Emails received TO any ACNHS address (recipient is ACNHS)
-        filtered = filtered.filter(e => {
-          const isInbox = acnhsEmails.includes(e.recipient?.toLowerCase());
-          return isInbox;
-        });
+        filtered = filtered.filter(e => e.status === 'received');
       } else if (currentFilter === 'sent') {
-        // SENT: Emails sent FROM any ACNHS address (sender is ACNHS)
-        // OR emails with status='sent' but no sender (backward compatibility)
-        filtered = filtered.filter(e => {
-          const isSent = acnhsEmails.includes(e.sender?.toLowerCase()) || 
-                         (!e.sender && e.status === 'sent');
-          console.log('Checking email:', {
-            sender: e.sender,
-            recipient: e.recipient,
-            subject: e.subject,
-            isSent: isSent,
-            senderInList: acnhsEmails.includes(e.sender?.toLowerCase())
-          });
-          return isSent;
-        });
-        console.log(`📤 SENT tab: Showing ${filtered.length} sent emails`);
+        filtered = filtered.filter(e => e.status === 'sent');
       } else if (currentFilter === 'failed') {
-        // FAILED: Emails with failed status
         filtered = filtered.filter(e => e.status === 'failed');
       }
       // 'all' shows everything, no filter needed
@@ -2620,6 +2696,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const emailDate = new Date(email.sent_at);
         const isNew = email.status === 'received' && emailDate > fiveMinutesAgo && !viewedEmails.has(email.id);
         const isChecked = selectedEmails.has(email.id);
+        const hasAttachments = Array.isArray(email.attachments) && email.attachments.length > 0;
         
         return `<div class="email-item ${selectedEmail?.id === email.id ? 'active' : ''} ${isNew ? 'new-email' : ''}">
   <div class="email-item-row">
@@ -2632,7 +2709,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         </div>
         <span class="email-time">${new Date(email.sent_at).toLocaleDateString()}</span>
       </div>
-      <div class="email-subject">${escapeHtml(email.subject || 'No Subject')}</div>
+  <div class="email-subject">${escapeHtml(email.subject || 'No Subject')}${hasAttachments ? '<span class="email-attachment-indicator" title="Has attachments">📎</span>' : ''}</div>
       <div class="email-preview">${bodyPreview}...</div>
       <span class="email-status status-${email.status}">${email.status.toUpperCase()}</span>
     </div>
@@ -2650,7 +2727,16 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       viewedEmails.add(emailId);
       saveViewedEmails(); // Persist to localStorage
       
-      renderEmailList();
+      // Update active state in the list
+      document.querySelectorAll('.email-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      const activeItem = document.querySelector(`.email-item [onclick*="selectEmail('${emailId}')"]`)?.closest('.email-item');
+      if (activeItem) {
+        activeItem.classList.add('active');
+        activeItem.classList.remove('new-email'); // Remove new email glow
+      }
+      
       showEmailDetail();
     }
 
@@ -2684,8 +2770,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           const idsToDelete = Array.from(selectedEmails);
           if (idsToDelete.length === 0) {
             console.warn('No emails selected for deletion');
+            showLoading(false);
             return;
           }
+          
+          console.log('🗑️ Deleting emails:', idsToDelete);
           
           const { data, error } = await db
             .from('email_history')
@@ -2698,6 +2787,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             throw error;
           }
 
+          console.log('✅ Deleted:', data);
           showNotification(`✅ ${idsToDelete.length} email(s) deleted successfully`, 'success');
           clearSelection();
         } else {
@@ -2759,56 +2849,54 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         return;
       }
 
-      const detailSection = document.getElementById('detailSection');
-      const now = new Date(selectedEmail.sent_at);
-      const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const detailSection = document.getElementById('detailSection');
+  const now = new Date(selectedEmail.sent_at);
+  const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const safeSubject = escapeHtml(selectedEmail.subject || 'No Subject');
+  const safeSender = escapeHtml(selectedEmail.sender || 'N/A');
+  const safeRecipient = escapeHtml(selectedEmail.recipient || 'N/A');
+  const plainBody = selectedEmail.body || '';
+  const htmlBody = selectedEmail.html_body || '';
+  
+  console.log('📧 Rendering email detail:', {
+    subject: selectedEmail.subject,
+    status: selectedEmail.status,
+    hasPlainBody: !!plainBody,
+    plainBodyLength: plainBody.length,
+    hasHtmlBody: !!htmlBody,
+    htmlBodyLength: htmlBody.length,
+    bodyPreview: plainBody.substring(0, 100)
+  });
       
       // For received emails, show plain body. For sent emails, use template
       let bodyHtml;
       if (selectedEmail.status === 'received') {
-        // If there's html_body, show the reply text first, then separator, then original HTML
-        if (selectedEmail.html_body) {
-          // Extract just the reply text (before the email client's quote)
-          let replyText = selectedEmail.body;
+        // If there's html_body, display it in an iframe for proper rendering
+        if (htmlBody && htmlBody.trim()) {
+          // Escape for srcdoc
+          const escapedHtml = htmlBody
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
           
-          // Try to extract the actual reply before the quoted email
-          const quoteMarkers = [
-            /On .+? wrote:/i,
-            /From:.+?Sent:/s,
-            />+\s*Armenian College/i,
-            /_{5,}/,  // underscores
-            /-{5,}/   // dashes
-          ];
-          
-          for (const marker of quoteMarkers) {
-            const match = replyText.match(marker);
-            if (match) {
-              replyText = replyText.substring(0, match.index).trim();
-              break;
-            }
-          }
-          
-          bodyHtml = `
-            <div style="padding: 30px; background: white; border-radius: 12px 12px 0 0; border: 1px solid rgba(148, 163, 184, 0.2); border-bottom: none;">
-              <div style="font-family: Arial, sans-serif; color: #000000; line-height: 1.6; font-size: 15px;">
-                ${replyText.replace(/\n/g, '<br>')}
-              </div>
-            </div>
-            <div style="margin: 0; border-top: 3px solid #cbd5e1; position: relative; background: #f8fafc; padding: 8px 0;">
-              <div style="text-align: center; color: #64748b; font-size: 13px; font-weight: 600; font-family: Arial, sans-serif;">
-                ──────  Original Email  ──────
-              </div>
-            </div>
-            <div style="padding: 30px; background: white; border-radius: 0 0 12px 12px; border: 1px solid rgba(148, 163, 184, 0.2); border-top: none;">
-              ${selectedEmail.html_body}
-            </div>
-          `;
-        } else {
+          bodyHtml = `<iframe srcdoc="${escapedHtml}" style="width: 100%; min-height: 600px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+        } else if (plainBody && plainBody.trim()) {
           // Fallback to plain body if no HTML
           bodyHtml = `
             <div style="padding: 30px; background: white; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
               <div style="font-family: Arial, sans-serif; color: #000000; line-height: 1.6;">
-                ${selectedEmail.body.replace(/\n/g, '<br>')}
+                ${plainBody.replace(/\n/g, '<br>')}
+              </div>
+            </div>
+          `;
+        } else {
+          // No body content at all - show placeholder
+          bodyHtml = `
+            <div style="padding: 30px; background: white; border-radius: 12px; border: 1px solid rgba(148, 163, 184, 0.2);">
+              <div style="font-family: Arial, sans-serif; color: #94a3b8; line-height: 1.6; text-align: center; font-style: italic;">
+                (No message content available)
               </div>
             </div>
           `;
@@ -2816,9 +2904,9 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       } else {
         // Use fancy template for sent emails
         // If we have the full HTML stored, use it directly
-        if (selectedEmail.html_body) {
+        if (htmlBody) {
           // Check if html_body is already escaped or contains HTML entities
-          let htmlContent = selectedEmail.html_body;
+          let htmlContent = htmlBody;
           
           // If the content looks like escaped HTML (contains &lt; or &gt;), decode it
           if (htmlContent.includes('&lt;') || htmlContent.includes('&gt;')) {
@@ -2843,7 +2931,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
             .replace(/{{DATE}}/g, dateStr)
             .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
-            .replace(/{{BODY_CONTENT}}/g, selectedEmail.body.replace(/\n/g, '<br>'))
+            .replace(/{{BODY_CONTENT}}/g, plainBody.replace(/\n/g, '<br>'))
             .replace(/{{YEAR}}/g, now.getFullYear())
             .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_BASE64);
           
@@ -2851,17 +2939,69 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }
       }
 
+      const attachmentsData = (() => {
+        if (Array.isArray(selectedEmail.attachments)) return selectedEmail.attachments;
+        if (typeof selectedEmail.attachments === 'string') {
+          try {
+            const parsed = JSON.parse(selectedEmail.attachments);
+            return Array.isArray(parsed) ? parsed : [];
+          } catch (parseError) {
+            console.warn('Unable to parse attachments JSON for email', selectedEmail.id, parseError);
+            return [];
+          }
+        }
+        return [];
+      })();
+
+      let attachmentsHtml = '';
+      if (attachmentsData.length > 0) {
+        const attachmentCards = attachmentsData.map((attachment, index) => {
+          const contentTypeLower = (attachment.content_type || '').toLowerCase();
+          const icon = contentTypeLower.startsWith('image/')
+            ? '🖼️'
+            : contentTypeLower.includes('pdf')
+              ? '📄'
+              : '📎';
+          const fileName = escapeHtml(attachment.filename || `Attachment ${index + 1}`);
+          const sizeLabel = formatAttachmentSize(attachment.size) || 'Unknown size';
+          const contentType = attachment.content_type ? attachment.content_type.toUpperCase() : 'FILE';
+          const resolvedUrl = resolveAttachmentUrl(attachment);
+          const safeDownloadUrl = resolvedUrl ? encodeURI(resolvedUrl) : null;
+          const downloadMarkup = safeDownloadUrl
+            ? `<a class="detail-attachment-download" href="${safeDownloadUrl}" target="_blank" rel="noopener noreferrer" download>Download</a>`
+            : '<span class="detail-attachment-download disabled" title="Attachment stored without public link">No link</span>';
+          return `
+            <div class="detail-attachment-card">
+              <div class="detail-attachment-icon">${icon}</div>
+              <div class="detail-attachment-meta">
+                <div class="detail-attachment-name">${fileName}</div>
+                <div class="detail-attachment-size">${sizeLabel} • ${contentType}</div>
+              </div>
+              ${downloadMarkup}
+            </div>
+          `;
+        }).join('');
+        attachmentsHtml = `
+          <div class="detail-attachments">
+            <h3>📎 Attachments (${selectedEmail.attachments.length})</h3>
+            <div class="detail-attachment-cards">
+              ${attachmentCards}
+            </div>
+          </div>
+        `;
+      }
+
       detailSection.innerHTML = `
         <div class="email-detail">
           <div class="detail-header">
             <div class="detail-header-content">
-              <h2 class="detail-subject">${selectedEmail.subject}</h2>
+              <h2 class="detail-subject">${safeSubject}</h2>
               <div class="detail-meta">
                 <div class="detail-meta-item">
-                  <strong>From:</strong> ${selectedEmail.sender || 'N/A'}
+                  <strong>From:</strong> ${safeSender}
                 </div>
                 <div class="detail-meta-item">
-                  <strong>To:</strong> ${selectedEmail.recipient}
+                  <strong>To:</strong> ${safeRecipient}
                 </div>
                 <div class="detail-meta-item">
                   <strong>Sent:</strong> ${new Date(selectedEmail.sent_at).toLocaleString()}
@@ -2885,6 +3025,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           </div>
           <div class="detail-body">
             ${bodyHtml}
+            ${attachmentsHtml}
           </div>
         </div>
       `;
