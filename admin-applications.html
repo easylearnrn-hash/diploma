@@ -366,6 +366,52 @@
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 24px;
+      gap: 12px;
+    }
+    
+    .drawer-nav-buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    
+    .drawer-nav-btn {
+      background: rgba(45, 212, 191, 0.1);
+      border: 1px solid rgba(45, 212, 191, 0.3);
+      color: #2dd4bf;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 18px;
+      font-weight: 700;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    
+    .drawer-nav-btn:hover:not(:disabled) {
+      background: rgba(45, 212, 191, 0.2);
+      border-color: rgba(45, 212, 191, 0.5);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+    }
+    
+    .drawer-nav-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      border-color: rgba(100, 116, 139, 0.3);
+      color: #64748b;
+    }
+    
+    .drawer-nav-counter {
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+      white-space: nowrap;
+      user-select: none;
     }
 
     .drawer h2 {
@@ -1133,10 +1179,19 @@
   <div class="drawer-backdrop" id="drawerBackdrop"></div>
   <aside class="drawer" id="drawer">
     <div class="drawer-header">
-      <div>
+      <div style="flex: 1; min-width: 0;">
         <h2 id="drawerName" style="display:inline-block;">Applicant</h2>
         <input type="text" id="drawerNameEdit" class="edit-input" style="display:none;font-size:24px;font-weight:700;margin-bottom:8px;width:100%;" placeholder="Applicant Full Name">
         <p class="reference" id="drawerReference"></p>
+      </div>
+      <div class="drawer-nav-buttons">
+        <button class="drawer-nav-btn" id="prevAppBtn" onclick="navigateToPreviousApplication()" title="Previous Application (←)">
+          ←
+        </button>
+        <span class="drawer-nav-counter" id="appNavCounter">1/1</span>
+        <button class="drawer-nav-btn" id="nextAppBtn" onclick="navigateToNextApplication()" title="Next Application (→)">
+          →
+        </button>
       </div>
       <button class="close-btn" id="closeDrawer">×</button>
     </div>
@@ -1720,6 +1775,7 @@
     let currentApplicationPayload = null;
     let currentApplicationData = null; // Store full application object for fallbacks
     let isApplicationEditMode = false;
+    let currentApplicationIndex = -1; // Track current position in applications list
 
     const applicationOnlySections = [
       'applicationDetails',
@@ -2847,6 +2903,25 @@
       setupDrawer();
     });
 
+    // Keyboard navigation for drawer (arrow keys)
+    document.addEventListener('keydown', (e) => {
+      // Check if drawer is open
+      const drawer = document.getElementById('drawer');
+      if (!drawer || !drawer.classList.contains('open')) return;
+      
+      // Don't interfere if user is typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      // Handle left/right arrow keys
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateToPreviousApplication();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateToNextApplication();
+      }
+    });
+
     // ===== PERFORMANCE: Track which tabs have been loaded =====
     const tabsLoaded = {
       applications: false,
@@ -3736,8 +3811,52 @@
       if (deleteBtn) deleteBtn.disabled = disabled;
     }
 
+    // ===== APPLICATION DRAWER NAVIGATION FUNCTIONS =====
+    
+    function updateNavigationState() {
+      const prevBtn = document.getElementById('prevAppBtn');
+      const nextBtn = document.getElementById('nextAppBtn');
+      const counter = document.getElementById('appNavCounter');
+      
+      if (!prevBtn || !nextBtn || !counter) return;
+      
+      const total = applicationsData.length;
+      const current = currentApplicationIndex + 1; // 1-indexed for display
+      
+      counter.textContent = `${current}/${total}`;
+      
+      prevBtn.disabled = currentApplicationIndex <= 0;
+      nextBtn.disabled = currentApplicationIndex >= total - 1;
+    }
+    
+    function navigateToPreviousApplication() {
+      if (currentApplicationIndex > 0) {
+        currentApplicationIndex--;
+        const app = applicationsData[currentApplicationIndex];
+        if (app) {
+          openApplicationDrawer(app.id);
+        }
+      }
+    }
+    
+    function navigateToNextApplication() {
+      if (currentApplicationIndex < applicationsData.length - 1) {
+        currentApplicationIndex++;
+        const app = applicationsData[currentApplicationIndex];
+        if (app) {
+          openApplicationDrawer(app.id);
+        }
+      }
+    }
+    
+    // ===== END APPLICATION DRAWER NAVIGATION FUNCTIONS =====
+
     async function openApplicationDrawer(id) {
       console.time('⏱️ Total drawer open time');
+      
+      // Update current index
+      currentApplicationIndex = applicationsData.findIndex(a => a.id === id);
+      
       const app = applicationsData.find(a => a.id === id);
       if (!app) {
         console.warn('Application not found:', id);
@@ -4269,6 +4388,9 @@
       
       console.timeEnd('⏱️ Total drawer open time');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      
+      // Update navigation state (arrow buttons and counter)
+      updateNavigationState();
     }
 
     // Refresh drawer after status update (refetch data from Supabase)
