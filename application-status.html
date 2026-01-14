@@ -1696,23 +1696,42 @@ async function viewAcceptanceLetter() {
     // Wait for the new window to load, then pass the data
     letterWindow.addEventListener('load', () => {
       // Format the data for the acceptance letter
+      const today = new Date();
+      
+      // Format date of birth properly
+      let formattedDOB = 'N/A';
+      if (app.date_of_birth) {
+        try {
+          // Parse date locally to avoid timezone issues
+          const dobParts = app.date_of_birth.split('-');
+          if (dobParts.length === 3) {
+            const dobDate = new Date(parseInt(dobParts[0]), parseInt(dobParts[1]) - 1, parseInt(dobParts[2]));
+            formattedDOB = dobDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          }
+        } catch (e) {
+          console.error('Error formatting DOB:', e);
+          formattedDOB = app.date_of_birth;
+        }
+      }
+      
       const letterData = {
-        documentId: app.control_number || app.reference_number || 'N/A',
-        issueDate: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
-        academicYear: '2026-2027',
+        documentId: `ACNHS-ACC-${app.control_number || app.reference_number || today.getTime()}`,
+        issueDate: today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }),
+        academicYear: `${today.getFullYear()} - ${today.getFullYear() + 1}`,
         fullName: app.applicant_name || 'Student',
         lastName: app.applicant_name ? app.applicant_name.split(' ').pop() : 'Student',
-        salutation: 'Dear',
-        dob: app.dob || 'N/A',
+        salutation: app.gender === 'female' ? 'Ms.' : 'Mr.',
+        dob: formattedDOB,
         applicationId: app.reference_number || 'N/A',
         programName: app.program || 'Bachelor of Science in Nursing',
         credential: "Bachelor's Degree",
         mode: 'On-Campus / Full-Time',
-        startDate: app.preferred_start_date || 'September 2026',
+        startDate: app.preferred_start_date || `September ${today.getFullYear()}`,
         authorizedOfficer: 'Dr. Narine K. Hambardzumyan',
         officerTitle: 'Dean of Academic Affairs',
-        controlNumber: app.control_number || app.reference_number,
-        studentId: app.student_id || 'TMP-2026-0001'
+        controlNumber: app.control_number,
+        studentId: app.student_id || `ACNHS-${today.getFullYear()}-${String(app.id || '0001').padStart(4, '0')}`,
+        qrCodeUrl: app.control_number ? `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(`https://www.acnhs.am/verify-transcript.html?ctrl=${encodeURIComponent(app.control_number)}`)}` : ''
       };
       
       // Render the acceptance letter with the data
