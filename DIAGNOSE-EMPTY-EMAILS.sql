@@ -33,11 +33,11 @@ ORDER BY ordinal_position;
 -- 4. Check if table has any rows at all
 SELECT 
     schemaname,
-    tablename,
+    relname as tablename,
     n_live_tup as row_count,
     n_dead_tup as dead_rows
 FROM pg_stat_user_tables
-WHERE tablename = 'email_history';
+WHERE relname = 'email_history';
 
 -- DIAGNOSIS:
 -- If COUNT(*) = 0 → No emails have been sent through the system yet
