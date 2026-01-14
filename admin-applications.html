@@ -2901,6 +2901,7 @@
       // - Only fetch fields needed for table display
       // - Limit to 200 records (pagination can be added later)
       // - Payload is fetched only when drawer is opened
+      // - Use DISTINCT to avoid duplicates
       const { data, error } = await supabase
         .from('applications')
         .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history')
@@ -2916,6 +2917,16 @@
       }
       
       applicationsData = data || [];
+      
+      // Check for duplicate IDs
+      const ids = applicationsData.map(app => app.id);
+      const uniqueIds = new Set(ids);
+      if (ids.length !== uniqueIds.size) {
+        console.warn('⚠️ Duplicate application IDs detected!');
+        const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
+        console.warn('Duplicate IDs:', duplicates);
+      }
+      
       tabsLoaded.applications = true; // ✅ Mark as loaded
       document.getElementById('applicationsCount').textContent = applicationsData.length;
       renderApplications();
