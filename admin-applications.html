@@ -5063,9 +5063,13 @@
       const gradYear = document.getElementById('drawerGradYearEdit')?.value.trim() || '';
       const gpa = document.getElementById('drawerGPAEdit')?.value.trim() || '';
 
+      console.log('📝 Saving edited values:', {
+        applicantName, email, phone, dob, gender, nationality, programChoice, startTerm
+      });
+
       const updatedPayload = {
         ...(currentApplicationPayload || {}),
-        // Update ALL fields in payload
+        // Update ALL fields in payload - use new values if provided, otherwise keep old
         applicantName: applicantName || currentApplicationPayload?.applicantName || '',
         email: email || currentApplicationPayload?.email || '',
         phone: phone || currentApplicationPayload?.phone || '',
@@ -5088,24 +5092,32 @@
         gpa: gpa || currentApplicationPayload?.gpa || ''
       };
 
+      console.log('💾 Updated payload to save:', updatedPayload);
+
       // Update both payload AND top-level columns for fields that exist in both places
+      const updateData = {
+        applicant_name: applicantName || null,
+        email: email || null,
+        phone: phone || null,
+        program: programChoice || null,
+        start_term: startTerm || null,
+        payload: updatedPayload
+      };
+      
+      console.log('🔄 Updating database with:', updateData);
+      
       const { error } = await supabase
         .from('applications')
-        .update({
-          applicant_name: applicantName || null,
-          email: email || null,
-          phone: phone || null,
-          program: programChoice || null,
-          start_term: startTerm || null,
-          payload: updatedPayload
-        })
+        .update(updateData)
         .eq('id', currentApplicationId);
 
       if (error) {
-        console.error('Error updating application:', error);
+        console.error('❌ Error updating application:', error);
         showModal('Failed to save application changes: ' + error.message, 'error');
         return;
       }
+
+      console.log('✅ Database updated successfully');
 
       // Update local cache with ALL new values
       currentApplicationPayload = updatedPayload;
@@ -5118,9 +5130,27 @@
         payload: updatedPayload
       });
 
-      showModal('✅ All application fields updated successfully!', 'success');
+      console.log('✅ Local cache updated');
+      
+      const changedFields = [];
+      if (applicantName) changedFields.push('Name');
+      if (dob) changedFields.push('DOB');
+      if (gender) changedFields.push('Gender');
+      if (programChoice) changedFields.push('Program');
+      if (email) changedFields.push('Email');
+      
+      const changesText = changedFields.length > 0 ? ` (${changedFields.join(', ')})` : '';
+
+      showModal(`✅ Application updated successfully!${changesText}`, 'success');
       resetApplicationEditMode();
       filterApplications();
+      
+      // Force clear the payload cache so it reloads from database
+      const app = applicationsData.find(a => a.id === currentApplicationId);
+      if (app) {
+        app.payload = null; // Force reload
+      }
+      
       openApplicationDrawer(currentApplicationId);
     }
 
