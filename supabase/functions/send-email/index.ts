@@ -155,10 +155,18 @@ serve(async (req) => {
       // For admin emails (no replyTo), the sender is the ACNHS email
       const emailSender = replyTo || senderEmail
       
+      // Determine if this is incoming or outgoing
+      // Incoming: Student/External → ACNHS (recipient is @acnhs.am)
+      // Outgoing: ACNHS → Student/External (sender is @acnhs.am)
+      const isIncoming = to.toLowerCase().includes('@acnhs.am')
+      const emailStatus = isIncoming ? 'received' : 'sent'
+      
       console.log('Attempting to save email to database:', {
         recipient: to,
         sender: emailSender,
-        subject: subject
+        subject: subject,
+        direction: isIncoming ? '📥 Incoming' : '📤 Outgoing',
+        status: emailStatus
       })
       
       const { data, error } = await supabase
@@ -169,7 +177,7 @@ serve(async (req) => {
           subject: subject,
           body: html.replace(/<[^>]*>/g, '').substring(0, 500), // Strip HTML tags for preview
           html_body: html.substring(0, 50000), // Store full HTML for display (limit 50KB)
-          status: 'sent',
+          status: emailStatus,
           sent_at: new Date().toISOString(),
           resend_id: resendData.id
         }])
