@@ -1140,7 +1140,9 @@ function displayApplicationStatus(application) {
   displayStatusHistory(application.status_history || []);
   
   // Update timeline dots
+  console.log('📍 About to call updateTimeline with status:', status);
   updateTimeline(status);
+  console.log('✅ updateTimeline call completed');
 }
 
 // Display status history timeline
@@ -1369,14 +1371,29 @@ async function saveUploadedDocumentToApplication({ docKey, docName, filename, pa
 
 // Update timeline based on status
 function updateTimeline(status) {
+  console.log('🔄 updateTimeline called with status:', status);
+  
   const dotSubmitted = document.getElementById('dot-submitted');
   const dotReview = document.getElementById('dot-review');
   const dotDecision = document.getElementById('dot-decision');
+  
+  if (!dotSubmitted || !dotReview || !dotDecision) {
+    console.error('❌ Timeline dots not found in DOM!');
+    return;
+  }
+  
+  console.log('✅ Timeline dots found:', {
+    submitted: dotSubmitted.id,
+    review: dotReview.id,
+    decision: dotDecision.id
+  });
   
   // Reset all dots
   dotSubmitted.classList.remove('inactive');
   dotReview.classList.add('inactive');
   dotDecision.classList.add('inactive');
+  
+  console.log('🔄 Reset dots - Submitted active, Review/Decision inactive');
   
   // Activate dots based on status
   // All intermediate review statuses activate the review dot
@@ -1390,17 +1407,27 @@ function updateTimeline(status) {
     'FINAL REVIEW',
     'ON HOLD',
     'APPROVED',
+    'CONFIRMED',
+    'ACCEPTANCE LETTER SENT',
     'DENIED'
   ];
   
   if (reviewStatuses.includes(status)) {
     dotReview.classList.remove('inactive');
+    console.log('✅ Activated Review dot (status in reviewStatuses)');
   }
   
   // Only final decisions activate the decision dot
-  if (['APPROVED', 'DENIED'].includes(status)) {
+  if (['APPROVED', 'CONFIRMED', 'ACCEPTANCE LETTER SENT', 'DENIED'].includes(status)) {
     dotDecision.classList.remove('inactive');
+    console.log('✅ Activated Decision dot (status is APPROVED/CONFIRMED/ACCEPTANCE LETTER SENT/DENIED)');
   }
+  
+  console.log('📊 Final dot states:', {
+    submitted: !dotSubmitted.classList.contains('inactive'),
+    review: !dotReview.classList.contains('inactive'),
+    decision: !dotDecision.classList.contains('inactive')
+  });
 }
 
 // Logout function
