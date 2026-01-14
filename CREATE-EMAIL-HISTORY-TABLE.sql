@@ -10,7 +10,7 @@ CREATE TABLE email_history (
   recipient TEXT NOT NULL,
   subject TEXT NOT NULL,
   body TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'pending')),
+  status TEXT NOT NULL CHECK (status IN ('sent', 'failed', 'pending', 'received')),
   sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   resend_id TEXT,
   error TEXT,
