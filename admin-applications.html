@@ -1718,6 +1718,7 @@
     let currentTab = 'applications';
     let currentApplicationId = null;
     let currentApplicationPayload = null;
+    let currentApplicationData = null; // Store full application object for fallbacks
     let isApplicationEditMode = false;
 
     const applicationOnlySections = [
@@ -1899,7 +1900,38 @@
     function setInputValue(id, value = '') {
       const el = document.getElementById(id);
       if (!el) return;
-      el.value = value;
+      
+      // For select elements, ensure the option exists and set it properly
+      if (el.tagName === 'SELECT') {
+        // If no value provided, leave as default
+        if (!value) return;
+        
+        // Try exact match first
+        let optionExists = Array.from(el.options).some(option => option.value === value);
+        
+        // If no exact match, try case-insensitive match
+        if (!optionExists) {
+          const lowerValue = value.toLowerCase();
+          const matchingOption = Array.from(el.options).find(
+            option => option.value.toLowerCase() === lowerValue
+          );
+          if (matchingOption) {
+            el.value = matchingOption.value;
+            return;
+          }
+        }
+        
+        if (optionExists) {
+          el.value = value;
+        } else if (value) {
+          // If value doesn't exist as an option but we have a value, log warning
+          console.warn(`Option "${value}" not found in select #${id}. Available options:`, 
+            Array.from(el.options).map(o => o.value));
+        }
+      } else {
+        // For text inputs, textareas, etc.
+        el.value = value;
+      }
     }
 
     function formatDocumentLabel(key) {
@@ -3766,6 +3798,7 @@
 
       currentApplicationId = id;
       currentApplicationPayload = clonePayload(app.payload || {});
+      currentApplicationData = app; // Store full application object for fallbacks
       isApplicationEditMode = false;
       resetApplicationEditMode();
 
@@ -3850,27 +3883,41 @@
       setDrawerValue('drawerBarcodeValue', app.barcode || payload.barcode || '—');
   setDrawerValue('drawerStudentId', payload.studentId || 'Pending Assignment');
 
-      // Populate EDIT inputs with current values
-      setInputValue('drawerNameEdit', payload.applicantName || app.applicant_name || '');
-      setInputValue('drawerEmailEdit', payload.email || app.email || '');
-      setInputValue('drawerPhoneEdit', payload.phone || app.phone || '');
-      setInputValue('drawerAltPhoneEdit', payload.altPhone || '');
-      setInputValue('drawerAddressEdit', payload.addressLine || '');
-      setInputValue('drawerProgramEdit', payload.programChoice || app.program || '');
-      setInputValue('drawerStartEdit', payload.startTerm || app.start_term || '');
-      setInputValue('drawerPreviousApplicationEdit', payload.previousApplication || '');
-      setInputValue('drawerDOBDetailEdit', payload.dob || '');
-      setInputValue('drawerGenderEdit', payload.gender || '');
-      setInputValue('drawerNationalityEdit', payload.nationality || '');
-      setInputValue('drawerBirthLocationEdit', payload.birthLocation || '');
-      setInputValue('drawerEmergencyNameEdit', payload.emergencyName || '');
-      setInputValue('drawerEmergencyRelationEdit', payload.emergencyRelation || '');
-      setInputValue('drawerEmergencyPhoneEdit', payload.emergencyPhone || '');
-      setInputValue('drawerEducationLevelEdit', payload.educationLevel || '');
-      setInputValue('drawerInstitutionEdit', payload.institution || '');
-      setInputValue('drawerFieldOfStudyEdit', payload.fieldOfStudy || '');
-      setInputValue('drawerGradYearEdit', payload.gradYear || '');
-      setInputValue('drawerGPAEdit', payload.gpa || '');
+      // Populate EDIT inputs with current values - use SAME values as display fields
+      // This ensures edit inputs show exactly what's currently displayed
+      const getCleanValue = (value) => {
+        if (!value || value === '—' || value === 'Not provided' || value === 'Pending') return '';
+        return value;
+      };
+      
+      console.log('🔍 Populating edit inputs with values:', {
+        gender: payload.gender,
+        startTerm: payload.startTerm || app.start_term,
+        program: payload.programChoice || app.program,
+        previousApplication: payload.previousApplication,
+        educationLevel: payload.educationLevel
+      });
+      
+      setInputValue('drawerNameEdit', getCleanValue(payload.applicantName || app.applicant_name));
+      setInputValue('drawerEmailEdit', getCleanValue(payload.email || app.email));
+      setInputValue('drawerPhoneEdit', getCleanValue(payload.phone || app.phone));
+      setInputValue('drawerAltPhoneEdit', getCleanValue(payload.altPhone));
+      setInputValue('drawerAddressEdit', getCleanValue(payload.addressLine));
+      setInputValue('drawerProgramEdit', getCleanValue(payload.programChoice || app.program));
+      setInputValue('drawerStartEdit', getCleanValue(payload.startTerm || app.start_term));
+      setInputValue('drawerPreviousApplicationEdit', getCleanValue(payload.previousApplication));
+      setInputValue('drawerDOBDetailEdit', getCleanValue(payload.dob));
+      setInputValue('drawerGenderEdit', getCleanValue(payload.gender));
+      setInputValue('drawerNationalityEdit', getCleanValue(payload.nationality));
+      setInputValue('drawerBirthLocationEdit', getCleanValue(payload.birthLocation));
+      setInputValue('drawerEmergencyNameEdit', getCleanValue(payload.emergencyName));
+      setInputValue('drawerEmergencyRelationEdit', getCleanValue(payload.emergencyRelation));
+      setInputValue('drawerEmergencyPhoneEdit', getCleanValue(payload.emergencyPhone));
+      setInputValue('drawerEducationLevelEdit', getCleanValue(payload.educationLevel));
+      setInputValue('drawerInstitutionEdit', getCleanValue(payload.institution));
+      setInputValue('drawerFieldOfStudyEdit', getCleanValue(payload.fieldOfStudy));
+      setInputValue('drawerGradYearEdit', getCleanValue(payload.gradYear));
+      setInputValue('drawerGPAEdit', getCleanValue(payload.gpa));
 
       statusBadge = document.getElementById('drawerApplicationStatus');
       if (statusBadge) {
@@ -5103,12 +5150,13 @@
       console.log('💾 Updated payload to save:', updatedPayload);
 
       // Update both payload AND top-level columns for fields that exist in both places
+      // Use currentApplicationData as fallback to preserve existing values
       const updateData = {
-        applicant_name: applicantName || null,
-        email: email || null,
-        phone: phone || null,
-        program: programChoice || null,
-        start_term: startTerm || null,
+        applicant_name: applicantName || currentApplicationData?.applicant_name || null,
+        email: email || currentApplicationData?.email || null,
+        phone: phone || currentApplicationData?.phone || null,
+        program: programChoice || currentApplicationData?.program || null,
+        start_term: startTerm || currentApplicationData?.start_term || null,
         payload: updatedPayload
       };
       
@@ -5129,14 +5177,20 @@
 
       // Update local cache with ALL new values
       currentApplicationPayload = updatedPayload;
-      updateApplicationRecordLocally(currentApplicationId, {
-        applicant_name: applicantName || null,
-        email: email || null,
-        phone: phone || null,
-        program: programChoice || null,
-        start_term: startTerm || null,
+      const updatedFields = {
+        applicant_name: applicantName || currentApplicationData?.applicant_name || null,
+        email: email || currentApplicationData?.email || null,
+        phone: phone || currentApplicationData?.phone || null,
+        program: programChoice || currentApplicationData?.program || null,
+        start_term: startTerm || currentApplicationData?.start_term || null,
         payload: updatedPayload
-      });
+      };
+      updateApplicationRecordLocally(currentApplicationId, updatedFields);
+      
+      // Update currentApplicationData to reflect the changes
+      if (currentApplicationData) {
+        Object.assign(currentApplicationData, updatedFields);
+      }
 
       console.log('✅ Local cache updated');
       
