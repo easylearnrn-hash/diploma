@@ -153,11 +153,48 @@ serve(async (req: Request) => {
     // Build email payload with proper name format
     // CRITICAL: Send both html and text versions for better email client compatibility
     const strippedHtml = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    
+    // CRITICAL FIX: Extract base64 images from HTML and convert to attachments
+    const base64ImageRegex = /<img[^>]+src=["']data:image\/(png|jpg|jpeg|gif|webp);base64,([^"']+)["'][^>]*>/gi
+    const extractedImages: Array<{filename: string, content: string, type: string, cid: string}> = []
+    let processedHtml = html
+    let imageIndex = 0
+    
+    // Find all base64 images
+    let match
+    while ((match = base64ImageRegex.exec(html)) !== null) {
+      const fullMatch = match[0]
+      const imageType = match[1]
+      const base64Data = match[2]
+      
+      // Create unique CID for this image (without @ symbol for Resend compatibility)
+      const cid = `image${imageIndex}`
+      const filename = `image${imageIndex}.${imageType === 'jpg' ? 'jpeg' : imageType}`
+      
+      // Add to attachments array
+      extractedImages.push({
+        filename: filename,
+        content: base64Data,
+        type: `image/${imageType}`,
+        cid: cid
+      })
+      
+      // Replace base64 src with cid reference
+      const cidImg = fullMatch.replace(/src=["']data:image\/[^;]+;base64,[^"']+["']/, `src="cid:${cid}"`)
+      processedHtml = processedHtml.replace(fullMatch, cidImg)
+      
+      imageIndex++
+    }
+    
+    if (extractedImages.length > 0) {
+      console.log(`✅ Extracted ${extractedImages.length} base64 images and converted to attachments`)
+    }
+    
     const emailPayload: any = {
       from: `${senderName} <${senderEmail}>`,
       to: [to],
       subject: subject,
-      html: html,
+      html: processedHtml, // Use processed HTML with CID references
       text: (text?.trim() || strippedHtml)
     }
 
@@ -180,13 +217,33 @@ serve(async (req: Request) => {
       emailPayload.reply_to = replyToEmail
     }
 
-    // Add attachments if provided
+    // Merge extracted images with provided attachments
+    const allAttachments: Array<any> = [...extractedImages]
     if (attachments && attachments.length > 0) {
-      emailPayload.attachments = attachments.map((att: any) => ({
+      // Add provided attachments (they don't need CIDs as they're not inline)
+      allAttachments.push(...attachments.map((att: any) => ({
         filename: att.filename,
-        content: att.content
-      }))
-      console.log(`Adding ${attachments.length} attachment(s) to email`)
+        content: att.content,
+        type: att.type
+      })))
+    }
+    
+    // Add attachments if any exist
+    if (allAttachments.length > 0) {
+      emailPayload.attachments = allAttachments.map((att: any, idx: number) => {
+        const attachment: any = {
+          filename: att.filename,
+          content: att.content
+        }
+        
+        // Add content_id for inline images (extracted from HTML)
+        if (att.cid) {
+          attachment.content_id = att.cid
+        }
+        
+        return attachment
+      })
+      console.log(`Adding ${allAttachments.length} attachment(s) to email (${extractedImages.length} inline images, ${attachments?.length || 0} regular attachments)`)
     }
     
     console.log('Sending email with payload:', {
