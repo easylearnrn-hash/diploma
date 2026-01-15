@@ -331,6 +331,7 @@ body{
 }
 
 .file-dropzone{
+  width: 100%;
   border:2px dashed rgba(255,255,255,0.2);
   border-radius:12px;
   padding:20px;
@@ -338,6 +339,7 @@ body{
   background:rgba(10, 37, 64, 0.4);
   cursor:pointer;
   transition:border-color 0.3s, background 0.3s;
+  box-sizing: border-box;
 }
 
 .file-dropzone:hover{
@@ -383,10 +385,50 @@ body{
   color:white;
   font-size:13px;
   border-bottom:1px solid rgba(255,255,255,0.05);
+  gap: 8px;
 }
 
 .selected-files-list li:last-child{
   border-bottom:none;
+}
+
+.file-remove-btn{
+  background:transparent;
+  border:1px solid rgba(148,163,184,0.3);
+  color:#94a3b8;
+  border-radius:4px;
+  width:20px;
+  height:20px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  font-size:12px;
+  padding:0;
+  transition:all 0.2s;
+  flex-shrink:0;
+  line-height:1;
+}
+
+.file-remove-btn:hover{
+  background:rgba(239,68,68,0.2);
+  border-color:#ef4444;
+  color:#ef4444;
+}
+
+.file-info{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex:1;
+  min-width:0;
+}
+
+.file-info span:first-child{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  margin-right:8px;
 }
 
 /* REGISTRATION MODAL */
@@ -1235,12 +1277,37 @@ function updateSelectedDocumentsList() {
     return;
   }
 
-  const listItems = files.map(file => {
+  const listItems = files.map((file, index) => {
     const size = formatFileSize(file.size);
-    return `<li><span>${file.name}</span><span>${size}</span></li>`;
+    return `
+      <li>
+        <div class="file-info">
+          <span>${file.name}</span>
+          <span>${size}</span>
+        </div>
+        <button type="button" class="file-remove-btn" onclick="removeSelectedFile(${index})" title="Remove file">×</button>
+      </li>
+    `;
   }).join('');
 
   fileList.innerHTML = `<ul>${listItems}</ul>`;
+}
+
+function removeSelectedFile(index) {
+  if (!requestedDocumentsInput || !requestedDocumentsInput.files) return;
+  
+  // Create a new FileList without the removed file
+  const dt = new DataTransfer();
+  const files = Array.from(requestedDocumentsInput.files);
+  
+  files.forEach((file, i) => {
+    if (i !== index) {
+      dt.items.add(file);
+    }
+  });
+  
+  requestedDocumentsInput.files = dt.files;
+  updateSelectedDocumentsList();
 }
 
 function formatFileSize(bytes) {
