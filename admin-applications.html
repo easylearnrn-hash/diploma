@@ -1786,6 +1786,101 @@
     let isApplicationEditMode = false;
     let currentApplicationIndex = -1; // Track current position in applications list
 
+    // ===== PERFORMANCE OPTIMIZATIONS =====
+    
+    // Debounce helper for search/filter inputs
+    function debounce(func, wait) {
+      let timeout;
+      return function executedFunction(...args) {
+        const later = () => {
+          clearTimeout(timeout);
+          func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+      };
+    }
+    
+    // RequestAnimationFrame wrapper for smooth UI updates
+    function rafUpdate(callback) {
+      if ('requestAnimationFrame' in window) {
+        requestAnimationFrame(callback);
+      } else {
+        callback();
+      }
+    }
+    
+    // Memoization cache for expensive calculations
+    const memoCache = new Map();
+    function memoize(fn, keyFn) {
+      return function(...args) {
+        const key = keyFn ? keyFn(...args) : JSON.stringify(args);
+        if (memoCache.has(key)) {
+          return memoCache.get(key);
+        }
+        const result = fn(...args);
+        memoCache.set(key, result);
+        return result;
+      };
+    }
+    
+    // Clear memo cache when data changes
+    function clearMemoCache() {
+      memoCache.clear();
+    }
+    
+    // Index map for O(1) lookups instead of O(n) find operations
+    const applicationIndexMap = new Map();
+    const registrationIndexMap = new Map();
+    
+    function buildApplicationIndex() {
+      applicationIndexMap.clear();
+      applicationsData.forEach((app, index) => {
+        applicationIndexMap.set(app.id, index);
+      });
+    }
+    
+    function buildRegistrationIndex() {
+      registrationIndexMap.clear();
+      registrationsData.forEach((reg, index) => {
+        registrationIndexMap.set(reg.id, index);
+      });
+    }
+    
+    // Fast lookup using index map
+    function findApplicationById(id) {
+      const index = applicationIndexMap.get(id);
+      return index !== undefined ? applicationsData[index] : null;
+    }
+    
+    function findRegistrationById(id) {
+      const index = registrationIndexMap.get(id);
+      return index !== undefined ? registrationsData[index] : null;
+    }
+    
+    // Batch DOM updates
+    let pendingDOMUpdates = [];
+    let domUpdateScheduled = false;
+    
+    function scheduleDOMUpdate(callback) {
+      pendingDOMUpdates.push(callback);
+      if (!domUpdateScheduled) {
+        domUpdateScheduled = true;
+        rafUpdate(() => {
+          const updates = pendingDOMUpdates.splice(0);
+          updates.forEach(cb => cb());
+          domUpdateScheduled = false;
+        });
+      }
+    }
+    
+    // Pagination state
+    const ITEMS_PER_PAGE = 50;
+    let currentPage = 1;
+    let totalPages = 1;
+    
+    // ===== END PERFORMANCE OPTIMIZATIONS =====
+
     const applicationOnlySections = [
       'applicationDetails',
       'personalDetails',
@@ -3101,14 +3196,13 @@
       
       // ===== PERFORMANCE: Optimized query - Don't load payload initially =====
       // - Only fetch fields needed for table display
-      // - Limit to 200 records (pagination can be added later)
+      // - Limit to 500 records (increased for better UX)
       // - Payload is fetched only when drawer is opened
-      // - Use DISTINCT to avoid duplicates
       const { data, error } = await supabase
         .from('applications')
         .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history')
         .order('submission_date', { ascending: false })
-        .limit(200);
+        .limit(500);
       
       console.timeEnd('⏱️ Applications query');
       
@@ -3119,6 +3213,10 @@
       }
       
       applicationsData = data || [];
+      
+      // ===== PERFORMANCE: Build index map for O(1) lookups =====
+      buildApplicationIndex();
+      clearMemoCache(); // Clear cache when new data loads
       
       // Check for duplicate IDs
       const ids = applicationsData.map(app => app.id);
@@ -3145,25 +3243,39 @@
         return;
       }
       
+      // ===== PERFORMANCE: Pagination for better rendering speed =====
+      totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+      currentPage = Math.min(currentPage, totalPages); // Adjust if needed
+      
+      const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+      const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, filtered.length);
+      const pageItems = filtered.slice(startIndex, endIndex);
+      
       // ===== PERFORMANCE: Use DocumentFragment for batch DOM insertion =====
       const fragment = document.createDocumentFragment();
-      const maxRender = Math.min(filtered.length, 100); // Render max 100 at a time
       
-      for (let i = 0; i < maxRender; i++) {
-        const app = filtered[i];
-        const statusData = getApplicationStatusData(app);
+      // Memoized status data calculation
+      const getStatusDataMemo = memoize(getApplicationStatusData, (app) => `${app.id}-${app.status}-${app.status_history?.length || 0}`);
+      
+      for (let i = 0; i < pageItems.length; i++) {
+        const app = pageItems[i];
+        const statusData = getStatusDataMemo(app);
         
         // Shorten program names
         let programName = app.program || '—';
-        programName = programName.replace('Associate Degree in Nursing (ADN)', 'ADN');
-        programName = programName.replace('Bachelor of Science in Nursing (BSN)', 'BSN');
-        programName = programName.replace('Associate Degree in Nursing', 'ADN');
-        programName = programName.replace('Bachelor of Science in Nursing', 'BSN');
+        if (programName.length > 50) {
+          programName = programName.replace('Associate Degree in Nursing (ADN)', 'ADN');
+          programName = programName.replace('Bachelor of Science in Nursing (BSN)', 'BSN');
+          programName = programName.replace('Associate Degree in Nursing', 'ADN');
+          programName = programName.replace('Bachelor of Science in Nursing', 'BSN');
+        }
         
         // Clean up start term - remove date ranges
         let startTerm = app.start_term || '—';
-        startTerm = startTerm.replace(/\s*\(Late August – Early September\)/g, '');
-        startTerm = startTerm.replace(/\s*\([^)]+\)/g, ''); // Remove any parenthetical content
+        if (startTerm.length > 20) {
+          startTerm = startTerm.replace(/\s*\(Late August – Early September\)/g, '');
+          startTerm = startTerm.replace(/\s*\([^)]+\)/g, ''); // Remove any parenthetical content
+        }
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
@@ -3178,16 +3290,33 @@
         fragment.appendChild(tr);
       }
       
-      // Clear and append all at once
-      tbody.innerHTML = '';
-      tbody.appendChild(fragment);
-      
-      // Show "load more" message if there are more items
-      if (filtered.length > maxRender) {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `<td colspan="7" style="text-align:center;padding:20px;color:#94a3b8;font-style:italic;">Showing first ${maxRender} of ${filtered.length} applications. Use filters to narrow results.</td>`;
-        tbody.appendChild(tr);
-      }
+      // ===== PERFORMANCE: Use RAF for smooth DOM update =====
+      rafUpdate(() => {
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
+        
+        // Add pagination info if needed
+        if (totalPages > 1) {
+          const paginationRow = document.createElement('tr');
+          paginationRow.innerHTML = `
+            <td colspan="7" style="text-align:center;padding:20px;background:rgba(45,212,191,0.05);border-top:1px solid rgba(45,212,191,0.2);">
+              <div style="display:flex;align-items:center;justify-content:center;gap:16px;">
+                <button onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''} style="padding:8px 16px;background:rgba(45,212,191,0.12);color:#2dd4bf;border:1px solid rgba(45,212,191,0.2);border-radius:8px;cursor:pointer;font-weight:600;${currentPage === 1 ? 'opacity:0.5;cursor:not-allowed;' : ''}">← Previous</button>
+                <span style="color:#94a3b8;">Page <strong style="color:#2dd4bf;">${currentPage}</strong> of <strong style="color:#2dd4bf;">${totalPages}</strong> (${filtered.length} total)</span>
+                <button onclick="goToPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''} style="padding:8px 16px;background:rgba(45,212,191,0.12);color:#2dd4bf;border:1px solid rgba(45,212,191,0.2);border-radius:8px;cursor:pointer;font-weight:600;${currentPage === totalPages ? 'opacity:0.5;cursor:not-allowed;' : ''}">Next →</button>
+              </div>
+            </td>
+          `;
+          tbody.appendChild(paginationRow);
+        }
+      });
+    }
+    
+    function goToPage(page) {
+      if (page < 1 || page > totalPages) return;
+      currentPage = page;
+      renderApplications(); // Will use the current filter state
+    }
       
       // Render inline barcodes (removed - no longer needed in table)
       /*
@@ -3219,6 +3348,7 @@
     }
 
     function filterApplications() {
+      currentPage = 1; // Reset to first page on filter change
       const search = document.getElementById('searchApplications').value.toLowerCase();
       const program = document.getElementById('programFilter').value;
       
@@ -4007,12 +4137,17 @@
         loadingEl.style.display = 'flex';
       }
       
-      // Update current index
-      currentApplicationIndex = applicationsData.findIndex(a => a.id === id);
-      
-      const app = applicationsData.find(a => a.id === id);
-      if (!app) {
+      // ===== PERFORMANCE: Use index map for O(1) lookup instead of O(n) find =====
+      currentApplicationIndex = applicationIndexMap.get(id);
+      if (currentApplicationIndex === undefined) {
         console.warn('Application not found:', id);
+        if (loadingEl) loadingEl.style.display = 'none';
+        return;
+      }
+      
+      const app = applicationsData[currentApplicationIndex];
+      if (!app) {
+        console.warn('Application data missing:', id);
         if (loadingEl) loadingEl.style.display = 'none';
         return;
       }
@@ -6916,6 +7051,11 @@ The table needs to be created before registrations can be stored.`;
       console.log(`✅ Loaded ${data?.length || 0} registrations:`, data);
       
       registrationsData = data || [];
+      
+      // ===== PERFORMANCE: Build index map for O(1) lookups =====
+      buildRegistrationIndex();
+      clearMemoCache(); // Clear cache when new data loads
+      
       tabsLoaded.registrations = true; // ✅ Mark as loaded
       document.getElementById('registrationsCount').textContent = registrationsData.length;
       renderRegistrations();
@@ -6956,12 +7096,15 @@ The table needs to be created before registrations can be stored.`;
         return new Date(b.registration_date) - new Date(a.registration_date);
       });
       
-      tbody.innerHTML = sorted.map(reg => {
+      // ===== PERFORMANCE: Use DocumentFragment for batch DOM insertion =====
+      const fragment = document.createDocumentFragment();
+      
+      sorted.forEach(reg => {
         const isDue = isReminderDue(reg.reminder_date);
-        const rowClass = isDue ? 'class="reminder-due"' : '';
+        const tr = document.createElement('tr');
+        if (isDue) tr.className = 'reminder-due';
         
-        return `
-        <tr ${rowClass}>
+        tr.innerHTML = `
           <td><strong>${reg.full_name || '—'}</strong></td>
           <td>${reg.email || '—'}</td>
           <td>${formatPhone(reg.phone)}</td>
@@ -6970,9 +7113,15 @@ The table needs to be created before registrations can be stored.`;
           <td>${formatDate(reg.registration_date)}</td>
           <td><span class="pill ${reg.status}">${reg.status || 'pending'}</span></td>
           <td><button class="btn-view" onclick="openRegistrationDrawer('${reg.id}')">View</button></td>
-        </tr>
-      `;
-      }).join('');
+        `;
+        fragment.appendChild(tr);
+      });
+      
+      // ===== PERFORMANCE: Use RAF for smooth DOM update =====
+      rafUpdate(() => {
+        tbody.innerHTML = '';
+        tbody.appendChild(fragment);
+      });
     }
 
     function filterRegistrations() {
