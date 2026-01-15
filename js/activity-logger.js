@@ -72,7 +72,8 @@ async function logActivity(actionType, actionCategory, description, options = {}
     }
 
     const logEntry = {
-      user_id: userInfo.userId || null,
+      // Don't set user_id - it has a foreign key constraint to admin_users
+      // We only use email-based auth, not the admin_users table
       user_email: userInfo.userEmail,
       user_name: userInfo.userName || userInfo.userEmail,
       action_type: actionType,

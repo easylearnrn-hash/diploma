@@ -2873,9 +2873,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       if (selectedEmail.status === 'received') {
         // If there's html_body, display it in an iframe for proper rendering
         if (htmlBody && htmlBody.trim()) {
-          // CRITICAL: For iframe srcdoc, only escape double quotes
-          // Do NOT escape < > & or it will show HTML as text instead of rendering
-          const escapedHtml = htmlBody.replace(/"/g, '&quot;');
+          // Escape for srcdoc
+          const escapedHtml = htmlBody
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
           
           bodyHtml = `<iframe srcdoc="${escapedHtml}" style="width: 100%; min-height: 600px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
         } else if (plainBody && plainBody.trim()) {
@@ -2911,9 +2915,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             htmlContent = tempDiv.textContent || tempDiv.innerText || htmlContent;
           }
           
-          // CRITICAL: For iframe srcdoc, only escape double quotes
-          // Do NOT escape < > & or it will show HTML as text instead of rendering
-          const escapedHtml = htmlContent.replace(/"/g, '&quot;');
+          // Properly escape for srcdoc attribute
+          const escapedHtml = htmlContent
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
           
           bodyHtml = `<iframe srcdoc="${escapedHtml}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
         } else {
@@ -2959,10 +2967,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           const contentType = attachment.content_type ? attachment.content_type.toUpperCase() : 'FILE';
           const resolvedUrl = resolveAttachmentUrl(attachment);
           const safeDownloadUrl = resolvedUrl ? encodeURI(resolvedUrl) : null;
-          // Remove 'download' attribute for cross-origin URLs to prevent browser warning
-          // Files will open in new tab instead of forcing download
           const downloadMarkup = safeDownloadUrl
-            ? `<a class="detail-attachment-download" href="${safeDownloadUrl}" target="_blank" rel="noopener noreferrer">View/Download</a>`
+            ? `<a class="detail-attachment-download" href="${safeDownloadUrl}" target="_blank" rel="noopener noreferrer" download>Download</a>`
             : '<span class="detail-attachment-download disabled" title="Attachment stored without public link">No link</span>';
           return `
             <div class="detail-attachment-card">
