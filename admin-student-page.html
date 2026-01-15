@@ -2417,6 +2417,71 @@
         loadingToast.textContent = '📧 Resending email...';
         document.body.appendChild(loadingToast);
 
+        // Build email payload
+        const emailPayload = {
+          to: email.recipient,
+          subject: `[RESENT] ${email.subject}`,
+          html: email.html_body || email.body,
+          from: email.sender || 'admissions@acnhs.am'
+        };
+
+        // CRITICAL: Fetch and convert attachments from storage if they exist
+        if (email.attachments && Array.isArray(email.attachments) && email.attachments.length > 0) {
+          console.log(`📎 Processing ${email.attachments.length} attachment(s) for resend...`);
+          
+          const resendAttachments = [];
+          for (const attachment of email.attachments) {
+            try {
+              // Fetch the file from storage using the public URL or storage path
+              const fileUrl = attachment.public_url || attachment.storage_path;
+              if (!fileUrl) {
+                console.warn('⚠️ Attachment missing URL:', attachment);
+                continue;
+              }
+
+              // Download the file content
+              const fileResponse = await fetch(fileUrl);
+              if (!fileResponse.ok) {
+                console.error(`❌ Failed to fetch attachment: ${fileUrl}`);
+                continue;
+              }
+
+              // Convert to base64
+              const blob = await fileResponse.blob();
+              const base64Content = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  const base64 = reader.result.split(',')[1]; // Remove data:*/*;base64, prefix
+                  resolve(base64);
+                };
+                reader.readAsDataURL(blob);
+              });
+
+              resendAttachments.push({
+                filename: attachment.filename,
+                content: base64Content,
+                type: attachment.content_type || 'application/octet-stream'
+              });
+
+              console.log(`✅ Converted attachment: ${attachment.filename}`);
+            } catch (attachError) {
+              console.error('❌ Error processing attachment:', attachment.filename, attachError);
+            }
+          }
+
+          if (resendAttachments.length > 0) {
+            emailPayload.attachments = resendAttachments;
+            console.log(`✅ ${resendAttachments.length} attachments ready for resend`);
+          }
+        }
+
+        console.log('📧 Resending email with payload:', {
+          to: emailPayload.to,
+          from: emailPayload.from,
+          subject: emailPayload.subject,
+          attachmentCount: emailPayload.attachments?.length || 0
+        });
+
         // Send via edge function (will automatically fix attachments)
         const response = await fetch('https://zlvnxvrzotamhpezqedr.supabase.co/functions/v1/send-email', {
           method: 'POST',
@@ -2424,12 +2489,7 @@
             'Content-Type': 'application/json',
             'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUyMTE3NjksImV4cCI6MjA1MDc4Nzc2OX0.w_JulQw0KHZ_s3fAuGCpYCnq8j5HoJCTxXyJIHmBDQs'
           },
-          body: JSON.stringify({
-            to: email.recipient,
-            subject: `[RESENT] ${email.subject}`,
-            html: email.html_body || email.body,
-            from: email.sender || 'admissions@acnhs.am'
-          })
+          body: JSON.stringify(emailPayload)
         });
 
         loadingToast.remove();
