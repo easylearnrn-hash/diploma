@@ -2978,6 +2978,9 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     // ========================================
     
     let forwardingRulesData = []; // Store rules temporarily
+    let forwardingDataCache = null; // Cache forwarding data
+    let forwardingCacheTime = 0; // Cache timestamp
+    const CACHE_DURATION = 30000; // Cache for 30 seconds
     
     window.openAddEmailModal = function() {
       document.getElementById('addEmailModal').classList.add('active');
@@ -3087,13 +3090,39 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     
     async function openForwardingSettingsModal() {
       try {
-        // Get current user's email permissions (their ACNHS addresses)
+        // ⚡ INSTANT RESPONSE: Show modal immediately
+        currentForwardingTab = 'staff';
+        const modal = document.getElementById('forwardingSettingsModal');
+        modal.classList.add('active');
+        
         const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
         
         if (!userEmail) {
           showNotification('User email not found. Please log in again.', 'error');
+          modal.classList.remove('active');
           return;
         }
+
+        // Check cache first
+        const now = Date.now();
+        const cacheValid = forwardingDataCache && (now - forwardingCacheTime < CACHE_DURATION);
+        
+        if (cacheValid) {
+          console.log('⚡ Using cached forwarding data');
+          forwardingRulesData = forwardingDataCache.staffRules;
+          renderForwardingRulesList();
+          
+          // Student rules already loaded, just render
+          if (forwardingDataCache.studentRules) {
+            studentForwardingRulesData = forwardingDataCache.studentRules;
+            renderStudentForwardingRulesList();
+          }
+          return;
+        }
+        
+        // Show loading state in both tabs
+        document.getElementById('staffForwardingRulesList').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">⏳ Loading staff emails...</div>';
+        document.getElementById('studentForwardingRulesList').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">⏳ Loading student emails...</div>';
 
         console.log('🔍 Loading forwarding settings for:', userEmail);
 
@@ -3189,15 +3218,22 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           };
         });
 
-        // Render the rules list
+        // Render the staff rules list
         renderForwardingRulesList();
 
-        // Load student emails
-        await loadStudentEmails();
-
-        // Show modal (default to staff tab)
-        currentForwardingTab = 'staff';
-        document.getElementById('forwardingSettingsModal').classList.add('active');
+        // Load student emails in parallel (non-blocking)
+        loadStudentEmails().then(() => {
+          // Update cache after all data loaded
+          forwardingDataCache = {
+            staffRules: [...forwardingRulesData],
+            studentRules: [...studentForwardingRulesData]
+          };
+          forwardingCacheTime = Date.now();
+          console.log('💾 Forwarding data cached');
+        }).catch(err => {
+          console.error('Error loading student emails:', err);
+          document.getElementById('studentForwardingRulesList').innerHTML = '<div style="padding: 40px; text-align: center; color: var(--danger);">❌ Error loading student emails</div>';
+        });
       } catch (error) {
         console.error('Error opening forwarding settings:', error);
         showNotification('⚠️ Error loading forwarding settings. You may need to run ADD-EMAIL-FORWARDING-TABLE.sql', 'error');
@@ -3533,6 +3569,10 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const enabledStaffCount = forwardingRulesData.filter(r => r.enabled).length;
         const enabledStudentCount = studentForwardingRulesData.filter(r => r.enabled).length;
         const totalEnabled = enabledStaffCount + enabledStudentCount;
+        
+        // Invalidate cache so next open will reload
+        forwardingDataCache = null;
+        console.log('🗑️ Cache invalidated after save');
         
         showNotification(
           totalEnabled > 0
