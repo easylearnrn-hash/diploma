@@ -16,7 +16,35 @@ WHERE username = 'h.vardan'
    OR id = '82997e34-e5ec-4786-af36-31e31d289bc4'::uuid
    OR applicant_name ILIKE '%gevorgyan%';
 
--- If application exists but status is not ENROLLED, manually restore the student:
+-- Step 1: Create the application if it doesn't exist
+INSERT INTO applications (
+    id,
+    reference_number,
+    barcode,
+    applicant_name,
+    email,
+    username,
+    password_hash,
+    program,
+    status,
+    submission_date
+)
+VALUES (
+    '82997e34-e5ec-4786-af36-31e31d289bc4'::uuid,
+    'ACNHS-ADM-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || FLOOR(RANDOM() * 1000)::TEXT,
+    'ACN' || TO_CHAR(NOW(), 'YYYY') || LPAD(FLOOR(RANDOM() * 1000000)::TEXT, 6, '0') || 'VERIFY',
+    'Mariam Gevorgyan',
+    'mariamgevorgyan@gmail.com',
+    'h.vardan',
+    '$2a$10$dummy.hash.for.testing',
+    'Nursing',
+    'ENROLLED',
+    NOW()
+)
+ON CONFLICT (id) DO UPDATE SET
+    status = 'ENROLLED';
+
+-- Step 2: Now restore the student with the correct application_id
 INSERT INTO acnhs_students (
     id,
     student_id,
@@ -31,16 +59,17 @@ INSERT INTO acnhs_students (
     created_at
 )
 VALUES (
-    'b1614ffb-67a3-4373-aa8d-17b678da8319'::uuid,  -- Original ID from session
-    'ACNHS-6504659',  -- Original student ID
-    '82997e34-e5ec-4786-af36-31e31d289bc4'::uuid,  -- Application ID
+    'b1614ffb-67a3-4373-aa8d-17b678da8319'::uuid,
+    'ACNHS-6504659',
+    '82997e34-e5ec-4786-af36-31e31d289bc4'::uuid,
     'Mariam Gevorgyan',
-    'mariamgevorgyan@example.com',  -- Replace with actual email if known
+    'mariamgevorgyan@gmail.com',
     NULL,
-    'Nursing',  -- Replace with actual program if known
+    'Nursing',
     'active',
     jsonb_build_object(
         'institutional_email', 'h.vardan@acnhs.am',
+        'personal_email', 'mariamgevorgyan@gmail.com',
         'portal', jsonb_build_object(
             'institutional_email', 'h.vardan@acnhs.am',
             'username', 'h.vardan',
