@@ -6,11 +6,11 @@
 -- ========================================
 
 -- First, let's see what applications exist that don't have corresponding students
+-- Run this FIRST to check the data structure:
 SELECT 
     a.id as application_id,
     a.applicant_name,
     a.email,
-    a.institutional_email,
     a.program,
     a.status,
     a.submission_date
@@ -27,6 +27,10 @@ ORDER BY a.submission_date DESC;
 -- (Supabase may have point-in-time recovery available)
 
 -- To manually restore a student (example for h.vardan@acnhs.am):
+-- First check what columns exist in applications table:
+-- SELECT column_name FROM information_schema.columns WHERE table_name = 'applications';
+
+-- Manual restore example (adjust email field as needed):
 /*
 INSERT INTO acnhs_students (
     student_id,
@@ -43,21 +47,22 @@ SELECT
     'ACNHS-' || LPAD(FLOOR(RANDOM() * 10000000)::TEXT, 7, '0'),
     a.id,
     a.applicant_name,
-    a.institutional_email,
+    a.email,  -- Using regular email field
     a.phone,
     a.program,
     'active',
-    NOW(),
-    NOW()
+    a.submission_date,
+    a.submission_date
 FROM applications a
 WHERE a.status = 'ENROLLED'
-  AND a.institutional_email = 'h.vardan@acnhs.am'
+  AND a.email = 'h.vardan@acnhs.am'  -- or whatever the student email is
   AND NOT EXISTS (
     SELECT 1 FROM acnhs_students WHERE application_id = a.id
   );
 */
 
 -- Better approach: Restore ALL enrolled students that are missing
+-- Using only the email column (not institutional_email)
 INSERT INTO acnhs_students (
     student_id,
     application_id,
@@ -73,12 +78,12 @@ SELECT
     'ACNHS-' || LPAD(FLOOR(RANDOM() * 10000000)::TEXT, 7, '0'),
     a.id,
     a.applicant_name,
-    COALESCE(a.institutional_email, a.email),
+    a.email,
     a.phone,
     a.program,
     'active',
-    NOW(),
-    NOW()
+    a.submission_date,
+    a.submission_date
 FROM applications a
 WHERE a.status = 'ENROLLED'
   AND NOT EXISTS (
