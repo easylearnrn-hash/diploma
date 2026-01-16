@@ -8,12 +8,10 @@
 -- First, let's see what test data exists
 -- Uncomment these to check before deleting:
 /*
-SELECT student_id, first_name, last_name, email, created_at 
+SELECT student_id, full_name, email, created_at 
 FROM acnhs_students 
-WHERE first_name ILIKE '%hrach%' 
-   OR first_name ILIKE '%vardan%'
-   OR last_name ILIKE '%hrach%'
-   OR last_name ILIKE '%vardan%'
+WHERE full_name ILIKE '%hrach%' 
+   OR full_name ILIKE '%vardan%'
    OR email ILIKE '%test%'
    OR email ILIKE '%hrach%'
    OR email ILIKE '%vardan%'
@@ -23,10 +21,8 @@ ORDER BY created_at DESC;
 -- Delete test students from acnhs_students table
 -- This includes Hrach Vardan and any other test entries
 DELETE FROM acnhs_students 
-WHERE first_name ILIKE '%hrach%' 
-   OR first_name ILIKE '%vardan%'
-   OR last_name ILIKE '%hrach%'
-   OR last_name ILIKE '%vardan%'
+WHERE full_name ILIKE '%hrach%' 
+   OR full_name ILIKE '%vardan%'
    OR email ILIKE '%test%'
    OR email ILIKE '%hrach.vardan%'
    OR student_id LIKE 'ACNHS-test%';
@@ -68,12 +64,12 @@ WHERE phone_number LIKE '%test%';
 -- Verify deletion - this should return 0 rows
 SELECT COUNT(*) as remaining_test_students
 FROM acnhs_students 
-WHERE first_name ILIKE '%hrach%' 
-   OR first_name ILIKE '%vardan%'
+WHERE full_name ILIKE '%hrach%' 
+   OR full_name ILIKE '%vardan%'
    OR email ILIKE '%test%';
 
 -- Show remaining students (should be production data only)
-SELECT student_id, first_name, last_name, email, status, created_at 
+SELECT student_id, full_name, email, enrollment_status, created_at 
 FROM acnhs_students 
 ORDER BY created_at DESC 
 LIMIT 10;
