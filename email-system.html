@@ -1024,6 +1024,9 @@
         <span class="header-badge" id="totalEmailsBadge">0 Emails</span>
       </div>
       <div class="header-actions">
+        <button class="btn btn-secondary" id="forwardingSettingsBtn" title="Email Forwarding Settings">
+          ⤴️ Forwarding
+        </button>
         <button class="btn btn-secondary" id="refreshBtn">
           🔄 Refresh
         </button>
@@ -1254,6 +1257,133 @@
         <button class="btn-modal-cancel" id="cancelDeleteBtn">Cancel</button>
         <button class="btn-modal-delete" id="confirmDeleteBtn">
           Delete
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Email Forwarding Settings Modal -->
+  <div class="modal" id="forwardingSettingsModal">
+    <div class="modal-content" style="max-width: 700px;">
+      <div class="modal-header">
+        <h2 class="modal-title">⤴️ Email Forwarding Settings</h2>
+        <button class="modal-close" id="closeForwardingModalBtn">×</button>
+      </div>
+      <div class="modal-body" style="display: block; padding: 32px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <p style="color: #94a3b8; font-size: 14px; margin: 0;">
+            Configure individual forwarding rules for ACNHS email addresses.
+          </p>
+          <button 
+            onclick="openAddEmailModal()" 
+            style="padding: 8px 16px; background: rgba(45, 212, 191, 0.15); color: #2dd4bf; border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 8px; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap; transition: all 0.2s;"
+            onmouseover="this.style.background='rgba(45, 212, 191, 0.25)'" 
+            onmouseout="this.style.background='rgba(45, 212, 191, 0.15)'">
+            ➕ Add Staff Email
+          </button>
+        </div>
+
+        <!-- Tabs for Staff vs Students -->
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; border-bottom: 2px solid rgba(45, 212, 191, 0.2);">
+          <button 
+            id="staffEmailsTab"
+            onclick="switchForwardingTab('staff')" 
+            class="forwarding-tab active"
+            style="padding: 12px 24px; background: transparent; border: none; border-bottom: 3px solid #2dd4bf; color: #2dd4bf; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s;">
+            👔 Staff Emails
+          </button>
+          <button 
+            id="studentEmailsTab"
+            onclick="switchForwardingTab('students')" 
+            class="forwarding-tab"
+            style="padding: 12px 24px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #94a3b8; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s;">
+            🎓 Student Emails
+          </button>
+        </div>
+
+        <!-- Search box -->
+        <div style="margin-bottom: 16px;">
+          <input 
+            type="text" 
+            id="forwardingSearchInput"
+            placeholder="🔍 Search emails..."
+            oninput="filterForwardingRules(this.value)"
+            style="width: 100%; padding: 12px 16px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 8px; color: #f8fafc; font-size: 14px; outline: none; transition: all 0.2s;"
+            onfocus="this.style.borderColor='rgba(45, 212, 191, 0.6)'; this.style.background='rgba(15, 23, 42, 0.8)'"
+            onblur="this.style.borderColor='rgba(45, 212, 191, 0.3)'; this.style.background='rgba(15, 23, 42, 0.6)'">
+          <div id="forwardingSearchCount" style="color: #94a3b8; font-size: 13px; margin-top: 8px; display: none;">
+            <!-- Search result count will appear here -->
+          </div>
+        </div>
+        
+        <!-- Staff forwarding rules list -->
+        <div id="forwardingRulesList" style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Staff rules will be dynamically populated here -->
+        </div>
+
+        <!-- Student forwarding rules list -->
+        <div id="studentForwardingRulesList" style="display: none; flex-direction: column; gap: 16px;">
+          <!-- Student rules will be dynamically populated here -->
+        </div>
+
+        <div style="margin-top: 24px; padding: 16px; background: rgba(45, 212, 191, 0.1); border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 8px;">
+          <div style="font-weight: 600; color: #2dd4bf; margin-bottom: 8px;">ℹ️ How it works:</div>
+          <ul style="color: #94a3b8; font-size: 14px; margin: 0; padding-left: 20px;">
+            <li>Enable forwarding for specific ACNHS emails</li>
+            <li>Each email can forward to a different personal address</li>
+            <li>Student emails are auto-added when enrollment status changes</li>
+            <li>Toggle on/off anytime without losing settings</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="cancelForwardingBtn">Cancel</button>
+        <button class="btn btn-primary" id="saveForwardingBtn">
+          💾 Save All Rules
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add New Email Modal -->
+  <div class="modal" id="addEmailModal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2 class="modal-title">➕ Add New ACNHS Email</h2>
+        <button class="modal-close" onclick="closeAddEmailModal()">×</button>
+      </div>
+      <div class="modal-body" style="display: block; padding: 32px;">
+        <div class="form-group">
+          <label class="form-label" style="display: block; margin-bottom: 8px; color: #f8fafc; font-weight: 600;">Email Address</label>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <input 
+              type="text" 
+              class="form-input" 
+              id="newEmailPrefix" 
+              placeholder="example"
+              style="flex: 1; padding: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 6px; color: #f8fafc; font-size: 14px;">
+            <span style="color: #94a3b8; font-weight: 600;">@acnhs.am</span>
+          </div>
+          <p style="color: #94a3b8; font-size: 13px; margin-top: 8px;">
+            Enter the prefix for your new email address (e.g., "info", "support", "sales")
+          </p>
+        </div>
+
+        <div style="margin-top: 20px; padding: 12px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 8px;">
+          <div style="color: #60a5fa; font-size: 13px;">
+            <strong>💡 Tip:</strong> Common email formats:
+            <ul style="margin: 8px 0 0 20px; padding: 0;">
+              <li>Department: info@, support@, sales@</li>
+              <li>Personal: firstname@, f.lastname@</li>
+              <li>Function: admissions@, registrar@</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeAddEmailModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="addNewEmail()">
+          ➕ Add Email
         </button>
       </div>
     </div>
@@ -2046,6 +2176,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       document.getElementById('cancelDeleteBtn').addEventListener('click', cancelDelete);
       document.getElementById('confirmDeleteBtn').addEventListener('click', confirmDelete);
 
+      // Forwarding settings modal
+      document.getElementById('forwardingSettingsBtn').addEventListener('click', openForwardingSettingsModal);
+      document.getElementById('closeForwardingModalBtn').addEventListener('click', closeForwardingSettingsModal);
+      document.getElementById('cancelForwardingBtn').addEventListener('click', closeForwardingSettingsModal);
+      document.getElementById('saveForwardingBtn').addEventListener('click', saveForwardingSettings);
+
       // Refresh
       document.getElementById('refreshBtn').addEventListener('click', loadEmailHistory);
 
@@ -2836,6 +2972,587 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       emailToDelete = null;
       document.getElementById('deleteModal').classList.remove('active');
     }
+
+    // ========================================
+    // Email Forwarding Settings Functions
+    // ========================================
+    
+    let forwardingRulesData = []; // Store rules temporarily
+    
+    window.openAddEmailModal = function() {
+      document.getElementById('addEmailModal').classList.add('active');
+      document.getElementById('newEmailPrefix').value = '';
+      document.getElementById('newEmailPrefix').focus();
+    };
+
+    window.closeAddEmailModal = function() {
+      document.getElementById('addEmailModal').classList.remove('active');
+    };
+
+    window.addNewEmail = async function() {
+      const prefix = document.getElementById('newEmailPrefix').value.trim().toLowerCase();
+      
+      if (!prefix) {
+        showNotification('Please enter an email prefix', 'error');
+        return;
+      }
+
+      // Validate prefix (only alphanumeric, dots, hyphens, underscores)
+      if (!/^[a-z0-9._-]+$/.test(prefix)) {
+        showNotification('Email prefix can only contain letters, numbers, dots, hyphens, and underscores', 'error');
+        return;
+      }
+
+      const newEmail = `${prefix}@acnhs.am`;
+
+      // Check if email already exists in the current list
+      if (forwardingRulesData.some(rule => rule.acnhs_email === newEmail)) {
+        showNotification('This email already exists in your list', 'error');
+        return;
+      }
+
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+
+      try {
+        showLoading(true);
+
+        // Check if email already exists in database
+        const { data: existing } = await db
+          .from('email_forwarding_rules')
+          .select('acnhs_email')
+          .eq('acnhs_email', newEmail)
+          .maybeSingle();
+
+        if (existing) {
+          showNotification(`${newEmail} already exists. Configure it from the list below.`, 'info');
+          closeAddEmailModal();
+          return;
+        }
+
+        // Add to database
+        const { error } = await db
+          .from('email_forwarding_rules')
+          .insert([{
+            acnhs_email: newEmail,
+            forward_to_email: null,
+            enabled: false,
+            created_by: userEmail
+          }]);
+
+        if (error) {
+          // Handle duplicate key error specifically
+          if (error.code === '23505') {
+            showNotification(`${newEmail} already exists in the system`, 'info');
+            closeAddEmailModal();
+            return;
+          }
+          throw error;
+        }
+
+        // Update user's email_permissions to include this new email
+        const allEmails = [...forwardingRulesData.map(r => r.acnhs_email), newEmail];
+        const { error: permError } = await db
+          .from('admin_users')
+          .update({
+            email_permissions: allEmails
+          })
+          .eq('email', userEmail);
+
+        if (permError) {
+          console.warn('Could not update email_permissions:', permError);
+        }
+
+        // Add to forwardingRulesData
+        forwardingRulesData.push({
+          acnhs_email: newEmail,
+          forward_to_email: '',
+          enabled: false,
+          id: null
+        });
+
+        // Re-render the list
+        renderForwardingRulesList();
+
+        // Close the add email modal
+        closeAddEmailModal();
+
+        showNotification(`✅ Added ${newEmail}! You can now configure forwarding for it.`, 'success');
+      } catch (error) {
+        console.error('Error adding email:', error);
+        showNotification('Error adding email: ' + error.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    };
+    
+    async function openForwardingSettingsModal() {
+      try {
+        // Get current user's email permissions (their ACNHS addresses)
+        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+        
+        if (!userEmail) {
+          showNotification('User email not found. Please log in again.', 'error');
+          return;
+        }
+
+        console.log('🔍 Loading forwarding settings for:', userEmail);
+
+        // Get user's ACNHS email addresses
+        const { data: userData, error: userError } = await db
+          .from('admin_users')
+          .select('email_permissions, email')
+          .eq('email', userEmail)
+          .maybeSingle();
+
+        if (userError) {
+          console.error('Error fetching user data:', userError);
+          showNotification('Error loading user data', 'error');
+          return;
+        }
+
+        // Get all ACNHS email addresses for this user
+        let acnhsEmails = userData?.email_permissions || [];
+        
+        // If no email_permissions, check if user's email is @acnhs.am
+        if (acnhsEmails.length === 0) {
+          if (userData?.email) {
+            acnhsEmails = [userData.email];
+          } else if (userEmail) {
+            acnhsEmails = [userEmail];
+          }
+        }
+        
+        // Also get the list of emails user can send from (from email system)
+        const allowedEmails = getUserAllowedEmails();
+        if (allowedEmails && allowedEmails.length > 0) {
+          acnhsEmails = [...new Set([...acnhsEmails, ...allowedEmails])];
+        }
+        
+        console.log('📧 All user emails:', acnhsEmails);
+        
+        const acnhsEmailsFiltered = acnhsEmails.filter(email => email && email.includes('@acnhs.am'));
+
+        console.log('📧 Filtered ACNHS emails:', acnhsEmailsFiltered);
+
+        // Admin users (Hrachfilm@gmail.com or hrachfilm@gmail.com) can see ALL forwarding rules
+        const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+        const isAdmin = ADMIN_EMAILS.includes(userEmail);
+
+        let allUserRules;
+        if (isAdmin) {
+          // Admin sees ALL forwarding rules from all users
+          console.log('🔐 Admin access: Loading ALL forwarding rules');
+          const { data: allRules, error: rulesError } = await db
+            .from('email_forwarding_rules')
+            .select('*');
+
+          if (rulesError && !rulesError.message?.includes('does not exist')) {
+            console.error('Error fetching forwarding rules:', rulesError);
+          }
+          allUserRules = allRules;
+        } else {
+          // Regular users only see their own rules
+          const { data: userRules, error: rulesError } = await db
+            .from('email_forwarding_rules')
+            .select('*')
+            .eq('created_by', userEmail);
+
+          if (rulesError && !rulesError.message?.includes('does not exist')) {
+            console.error('Error fetching forwarding rules:', rulesError);
+          }
+          allUserRules = userRules;
+        }
+
+        // Combine permission emails with emails created in forwarding rules
+        const allEmailsSet = new Set([
+          ...acnhsEmailsFiltered,
+          ...(allUserRules || []).map(rule => rule.acnhs_email)
+        ]);
+
+        const allEmails = Array.from(allEmailsSet).sort();
+
+        console.log('📧 All emails (permissions + created):', allEmails);
+
+        if (allEmails.length === 0) {
+          showNotification('No ACNHS email addresses found. You need at least one @acnhs.am email address to set up forwarding.', 'error');
+          return;
+        }
+
+        // Create rules data structure
+        forwardingRulesData = allEmails.map(acnhsEmail => {
+          const existingRule = (allUserRules || []).find(r => r.acnhs_email === acnhsEmail);
+          return {
+            acnhs_email: acnhsEmail,
+            forward_to_email: existingRule?.forward_to_email || '',
+            enabled: existingRule?.enabled || false,
+            id: existingRule?.id || null
+          };
+        });
+
+        // Render the rules list
+        renderForwardingRulesList();
+
+        // Load student emails
+        await loadStudentEmails();
+
+        // Show modal (default to staff tab)
+        currentForwardingTab = 'staff';
+        document.getElementById('forwardingSettingsModal').classList.add('active');
+      } catch (error) {
+        console.error('Error opening forwarding settings:', error);
+        showNotification('⚠️ Error loading forwarding settings. You may need to run ADD-EMAIL-FORWARDING-TABLE.sql', 'error');
+      }
+    }
+
+    // Track current tab
+    let currentForwardingTab = 'staff';
+    let studentForwardingRulesData = [];
+
+    // Load student emails from acnhs_students table
+    async function loadStudentEmails() {
+      try {
+        console.log('📚 Loading student institutional emails...');
+
+        // Fetch all student emails from acnhs_students table (only @acnhs.am emails)
+        const { data: students, error: studentsError } = await db
+          .from('acnhs_students')
+          .select('id, student_id, full_name, email, enrollment_status')
+          .not('email', 'is', null)
+          .ilike('email', '%@acnhs.am')
+          .order('full_name', { ascending: true });
+
+        if (studentsError) {
+          console.error('Error fetching students:', studentsError);
+          throw studentsError;
+        }
+
+        console.log(`📚 Found ${students?.length || 0} students with @acnhs.am emails`);
+
+        // Get all student email addresses (filter to ensure they're @acnhs.am)
+        const studentEmails = (students || [])
+          .filter(s => s.email && s.email.toLowerCase().endsWith('@acnhs.am'))
+          .map(s => s.email.toLowerCase().trim());
+
+        // Fetch existing forwarding rules for student emails
+        let studentRules = [];
+        if (studentEmails.length > 0) {
+          const { data: rules, error: rulesError } = await db
+            .from('email_forwarding_rules')
+            .select('*')
+            .in('acnhs_email', studentEmails);
+
+          if (!rulesError) {
+            studentRules = rules || [];
+          }
+        }
+
+        // Create student forwarding rules data structure (only @acnhs.am emails)
+        studentForwardingRulesData = (students || [])
+          .filter(s => s.email && s.email.toLowerCase().endsWith('@acnhs.am'))
+          .map(student => {
+            const existingRule = studentRules.find(r => r.acnhs_email === student.email.toLowerCase().trim());
+            return {
+              acnhs_email: student.email.toLowerCase().trim(),
+              forward_to_email: existingRule?.forward_to_email || '',
+              enabled: existingRule?.enabled || false,
+              id: existingRule?.id || null,
+              student_name: student.full_name || 'Unknown',
+              student_id: student.student_id || 'N/A',
+              enrollment_status: student.enrollment_status || 'unknown'
+            };
+          });
+
+        // Render student rules
+        renderStudentForwardingRulesList();
+
+        console.log(`✅ Loaded ${studentForwardingRulesData.length} student email forwarding rules`);
+      } catch (error) {
+        console.error('Error loading student emails:', error);
+        // Don't show error to user - student emails are optional
+      }
+    }
+
+    // Switch between staff and student tabs
+    window.switchForwardingTab = function(tab) {
+      currentForwardingTab = tab;
+      
+      // Update tab styles
+      const staffTab = document.getElementById('staffEmailsTab');
+      const studentTab = document.getElementById('studentEmailsTab');
+      const staffList = document.getElementById('forwardingRulesList');
+      const studentList = document.getElementById('studentForwardingRulesList');
+      const searchInput = document.getElementById('forwardingSearchInput');
+
+      if (tab === 'staff') {
+        staffTab.style.borderBottom = '3px solid #2dd4bf';
+        staffTab.style.color = '#2dd4bf';
+        studentTab.style.borderBottom = '3px solid transparent';
+        studentTab.style.color = '#94a3b8';
+        staffList.style.display = 'flex';
+        studentList.style.display = 'none';
+        searchInput.placeholder = '🔍 Search staff emails...';
+      } else {
+        staffTab.style.borderBottom = '3px solid transparent';
+        staffTab.style.color = '#94a3b8';
+        studentTab.style.borderBottom = '3px solid #2dd4bf';
+        studentTab.style.color = '#2dd4bf';
+        staffList.style.display = 'none';
+        studentList.style.display = 'flex';
+        searchInput.placeholder = '🔍 Search student emails...';
+      }
+
+      // Clear search
+      searchInput.value = '';
+      filterForwardingRules('');
+    };
+
+    function renderStudentForwardingRulesList() {
+      const container = document.getElementById('studentForwardingRulesList');
+      
+      if (studentForwardingRulesData.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 32px; text-align: center; color: #94a3b8;">
+            <div style="font-size: 48px; margin-bottom: 16px;">🎓</div>
+            <div style="font-weight: 600; margin-bottom: 8px;">No Student Institutional Emails Yet</div>
+            <div style="font-size: 14px; line-height: 1.6;">
+              Student @acnhs.am emails will appear here automatically when students are enrolled.<br>
+              <span style="color: #64748b; font-size: 13px;">Example: j.doe@acnhs.am (created from student name)</span>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = studentForwardingRulesData.map((rule, index) => `
+        <div class="forwarding-rule-item student-rule" data-email="${rule.acnhs_email.toLowerCase()}" style="padding: 16px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 8px;">
+          <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
+            <input 
+              type="checkbox" 
+              id="student-rule-enabled-${index}" 
+              ${rule.enabled ? 'checked' : ''}
+              onchange="toggleStudentForwardingRule(${index}, this.checked)"
+              style="width: 20px; height: 20px; cursor: pointer; margin-top: 4px;">
+            <div style="flex: 1;">
+              <label for="student-rule-enabled-${index}" style="font-weight: 600; font-size: 15px; color: #a78bfa; cursor: pointer; display: block;">
+                ${rule.acnhs_email}
+              </label>
+              <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">
+                👤 ${rule.student_name} • 🆔 ${rule.student_id} • 📊 ${rule.enrollment_status}
+              </div>
+            </div>
+          </div>
+          <div style="display: ${rule.enabled ? 'block' : 'none'};" id="student-rule-input-${index}">
+            <input 
+              type="email" 
+              class="form-input" 
+              id="student-rule-forward-to-${index}"
+              value="${rule.forward_to_email}"
+              placeholder="personal@gmail.com"
+              onchange="updateStudentForwardingRuleEmail(${index}, this.value)"
+              style="width: 100%; padding: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(139, 92, 246, 0.3); border-radius: 6px; color: #f8fafc; font-size: 14px;">
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 6px;">
+              Forward this student's emails to their personal address
+            </p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    window.toggleStudentForwardingRule = function(index, enabled) {
+      studentForwardingRulesData[index].enabled = enabled;
+      document.getElementById(`student-rule-input-${index}`).style.display = enabled ? 'block' : 'none';
+    };
+
+    window.updateStudentForwardingRuleEmail = function(index, email) {
+      studentForwardingRulesData[index].forward_to_email = email.trim();
+    };
+
+    function renderForwardingRulesList() {
+      const container = document.getElementById('forwardingRulesList');
+      
+      container.innerHTML = forwardingRulesData.map((rule, index) => `
+        <div class="forwarding-rule-item" data-email="${rule.acnhs_email.toLowerCase()}" style="padding: 16px; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(45, 212, 191, 0.2); border-radius: 8px;">
+          <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+            <input 
+              type="checkbox" 
+              id="rule-enabled-${index}" 
+              ${rule.enabled ? 'checked' : ''}
+              onchange="toggleForwardingRule(${index}, this.checked)"
+              style="width: 20px; height: 20px; cursor: pointer;">
+            <label for="rule-enabled-${index}" style="font-weight: 600; font-size: 15px; color: #2dd4bf; cursor: pointer; flex: 1;">
+              ${rule.acnhs_email}
+            </label>
+          </div>
+          <div style="display: ${rule.enabled ? 'block' : 'none'};" id="rule-input-${index}">
+            <input 
+              type="email" 
+              class="form-input" 
+              id="rule-forward-to-${index}"
+              value="${rule.forward_to_email}"
+              placeholder="personal@gmail.com"
+              onchange="updateForwardingRuleEmail(${index}, this.value)"
+              style="width: 100%; padding: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(45, 212, 191, 0.3); border-radius: 6px; color: #f8fafc; font-size: 14px;">
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 6px;">
+              Forward incoming emails to this address
+            </p>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Filter forwarding rules by search query
+    window.filterForwardingRules = function(searchQuery) {
+      const query = searchQuery.toLowerCase().trim();
+      const ruleItems = document.querySelectorAll('.forwarding-rule-item');
+      const countEl = document.getElementById('forwardingSearchCount');
+      
+      let visibleCount = 0;
+      let totalCount = ruleItems.length;
+
+      ruleItems.forEach(item => {
+        const email = item.getAttribute('data-email') || '';
+        const matches = email.includes(query);
+        
+        if (matches || query === '') {
+          item.style.display = 'block';
+          visibleCount++;
+        } else {
+          item.style.display = 'none';
+        }
+      });
+
+      // Show/update count
+      if (query === '') {
+        countEl.style.display = 'none';
+      } else {
+        countEl.style.display = 'block';
+        if (visibleCount === 0) {
+          countEl.innerHTML = `<span style="color: #ef4444;">❌ No emails found matching "${searchQuery}"</span>`;
+        } else if (visibleCount === totalCount) {
+          countEl.innerHTML = `<span style="color: #2dd4bf;">✓ Showing all ${totalCount} emails</span>`;
+        } else {
+          countEl.innerHTML = `<span style="color: #2dd4bf;">✓ Found ${visibleCount} of ${totalCount} emails</span>`;
+        }
+      }
+    };
+
+    window.toggleForwardingRule = function(index, enabled) {
+      forwardingRulesData[index].enabled = enabled;
+      document.getElementById(`rule-input-${index}`).style.display = enabled ? 'block' : 'none';
+    };
+
+    window.updateForwardingRuleEmail = function(index, email) {
+      forwardingRulesData[index].forward_to_email = email.trim();
+    };
+
+    function closeForwardingSettingsModal() {
+      document.getElementById('forwardingSettingsModal').classList.remove('active');
+      forwardingRulesData = [];
+      studentForwardingRulesData = [];
+      currentForwardingTab = 'staff';
+      
+      // Clear search
+      const searchInput = document.getElementById('forwardingSearchInput');
+      if (searchInput) {
+        searchInput.value = '';
+      }
+      const countEl = document.getElementById('forwardingSearchCount');
+      if (countEl) {
+        countEl.style.display = 'none';
+      }
+    }
+
+    async function saveForwardingSettings() {
+      try {
+        // Validate all enabled staff rules have forward_to_email
+        const invalidStaffRules = forwardingRulesData.filter(rule => 
+          rule.enabled && (!rule.forward_to_email || !validateEmail(rule.forward_to_email))
+        );
+
+        // Validate all enabled student rules have forward_to_email
+        const invalidStudentRules = studentForwardingRulesData.filter(rule => 
+          rule.enabled && (!rule.forward_to_email || !validateEmail(rule.forward_to_email))
+        );
+
+        if (invalidStaffRules.length > 0 || invalidStudentRules.length > 0) {
+          const totalInvalid = invalidStaffRules.length + invalidStudentRules.length;
+          showNotification(`Please enter valid email addresses for all ${totalInvalid} enabled forwarding rules`, 'error');
+          return;
+        }
+
+        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+        
+        // Show loading
+        showLoading(true);
+
+        // Combine staff and student rules
+        const allRulesToSave = [
+          ...forwardingRulesData.map(rule => ({
+            acnhs_email: rule.acnhs_email,
+            forward_to_email: rule.enabled ? rule.forward_to_email : null,
+            enabled: rule.enabled,
+            created_by: userEmail
+          })),
+          ...studentForwardingRulesData.map(rule => ({
+            acnhs_email: rule.acnhs_email,
+            forward_to_email: rule.enabled ? rule.forward_to_email : null,
+            enabled: rule.enabled,
+            created_by: userEmail
+          }))
+        ];
+
+        // Get all ACNHS email addresses from staff rules only (for admin_users.email_permissions)
+        const allStaffAcnhsEmails = forwardingRulesData.map(rule => rule.acnhs_email);
+
+        // Update user's email_permissions to include all staff emails
+        const { error: permError } = await db
+          .from('admin_users')
+          .update({
+            email_permissions: allStaffAcnhsEmails
+          })
+          .eq('email', userEmail);
+
+        if (permError) {
+          console.warn('Could not update email_permissions:', permError);
+          // Continue anyway - not critical
+        }
+
+        // Upsert all rules (staff + student)
+        const { error } = await db
+          .from('email_forwarding_rules')
+          .upsert(allRulesToSave, { 
+            onConflict: 'acnhs_email',
+            ignoreDuplicates: false 
+          });
+
+        if (error) {
+          throw error;
+        }
+
+        // Success
+        const enabledStaffCount = forwardingRulesData.filter(r => r.enabled).length;
+        const enabledStudentCount = studentForwardingRulesData.filter(r => r.enabled).length;
+        const totalEnabled = enabledStaffCount + enabledStudentCount;
+        
+        showNotification(
+          totalEnabled > 0
+            ? `✅ Saved ${totalEnabled} forwarding rule${totalEnabled > 1 ? 's' : ''} (${enabledStaffCount} staff, ${enabledStudentCount} student)!`
+            : '✅ All forwarding rules disabled',
+          'success'
+        );
+        
+        closeForwardingSettingsModal();
+      } catch (error) {
+        console.error('Error saving forwarding settings:', error);
+        showNotification('Error saving forwarding settings: ' + error.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // ========================================
+    // End Email Forwarding Settings Functions
+    // ========================================
 
     function showEmailDetail() {
       if (!selectedEmail) {

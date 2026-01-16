@@ -156,7 +156,8 @@ header{
   padding:8px 0;
 }
 .help-dropdown.active .help-dropdown-content{display:block}
-.help-dropdown-content a{
+.help-dropdown-content a,
+.help-dropdown-content button{
   display:block;
   padding:14px 20px;
   color:#0f172a;
@@ -165,9 +166,17 @@ header{
   font-size:14px;
   transition:all 0.3s;
   border-bottom:1px solid #f1f5f9;
+  background:none;
+  border:none;
+  width:100%;
+  text-align:left;
+  cursor:pointer;
 }
-.help-dropdown-content a:last-child{border-bottom:none}
-.help-dropdown-content a:hover{
+.help-dropdown-content a:last-child,
+.help-dropdown-content button:last-child{border-bottom:none}
+.help-dropdown-content a:hover,
+.help-dropdown-content button:hover,
+.help-dropdown-content button:focus{
   background:rgba(45,212,191,0.1);
   color:var(--accent);
   padding-left:24px;
@@ -336,7 +345,7 @@ footer{
       <span class="line-2">&amp; Health Sciences</span>
     </a>
     <div class="nav-right">
-      <a href="studies-portal.html" style="color:white;text-decoration:none;margin-right:20px;font-weight:600;transition:color 0.3s" onmouseover="this.style.color='#2dd4bf'" onmouseout="this.style.color='white'">Studies</a>
+  <a href="studies-portal.html" style="color:white;text-decoration:none;margin-right:20px;font-weight:600;transition:color 0.3s" onmouseover="this.style.color='#2dd4bf'" onmouseout="this.style.color='white'" onfocus="this.style.color='#2dd4bf'" onblur="this.style.color='white'">Studies</a>
       
       <div class="help-dropdown" id="helpDropdown">
         <button class="help-btn" onclick="toggleHelpDropdown()">
@@ -347,9 +356,9 @@ footer{
           <a href="help-handbook.html">Student Handbook</a>
           <a href="help-grading.html">Grading</a>
           <a href="help-appeals.html">Appeals & Remediation</a>
-          <a href="#" onclick="showComingSoon(event, 'Attendance')">Attendance</a>
-          <a href="#" onclick="showComingSoon(event, 'Clinical')">Clinical</a>
-          <a href="#" onclick="showComingSoon(event, 'Support')">Support</a>
+          <button type="button" onclick="showComingSoon(event, 'Attendance')">Attendance</button>
+          <button type="button" onclick="showComingSoon(event, 'Clinical')">Clinical</button>
+          <button type="button" onclick="showComingSoon(event, 'Support')">Support</button>
         </div>
       </div>
       
@@ -397,6 +406,16 @@ function handleLogout() {
   localStorage.removeItem('userId');
   sessionStorage.removeItem('isAdmin');
   localStorage.removeItem('isAdmin');
+  sessionStorage.removeItem('studentPersonalEmail');
+  localStorage.removeItem('studentPersonalEmail');
+  sessionStorage.removeItem('studentInstitutionalEmail');
+  localStorage.removeItem('studentInstitutionalEmail');
+  sessionStorage.removeItem('studentRecordId');
+  localStorage.removeItem('studentRecordId');
+  sessionStorage.removeItem('studentApplicationId');
+  localStorage.removeItem('studentApplicationId');
+  sessionStorage.removeItem('studentPortalStatus');
+  localStorage.removeItem('studentPortalStatus');
   
   // Redirect to login page
   window.location.href = 'login.html';
@@ -411,6 +430,7 @@ function handleLogout() {
 <div class="student-card">
   <h1 id="studentWelcomeHeading">Welcome, <span data-field="student-name">Mariam Gevorgyan</span></h1>
   <p class="student-card-subtext">Student ID: <span data-field="student-id">ACNHS-000000000</span></p>
+  <p class="student-card-subtext">Campus Email: <span data-field="student-email">student@acnhs.am</span></p>
   <p class="student-card-subtext" id="studentProfileStatusMessage">Status: <span data-field="student-status">Active</span></p>
   <p class="student-card-subtext" id="studentProfileAlert" style="display:none;color:#ef4444"></p>
   <div class="pills">
@@ -438,12 +458,12 @@ function handleLogout() {
 <!-- TABS -->
 <!-- ===================================================== -->
 <div class="tabs">
-  <div class="tab active" onclick="showTab('overview')">Overview</div>
-  <div class="tab" onclick="showTab('assessments')">Assessments</div>
-  <div class="tab" onclick="showTab('tests')">Tests</div>
-  <div class="tab" onclick="showTab('grades')">Grades</div>
-  <div class="tab" onclick="showTab('gpa')">GPA</div>
-  <div class="tab" onclick="showTab('transcript')">Transcript</div>
+  <button type="button" class="tab active" data-tab="overview" onclick="showTab(event, 'overview')">Overview</button>
+  <button type="button" class="tab" data-tab="assessments" onclick="showTab(event, 'assessments')">Assessments</button>
+  <button type="button" class="tab" data-tab="tests" onclick="showTab(event, 'tests')">Tests</button>
+  <button type="button" class="tab" data-tab="grades" onclick="showTab(event, 'grades')">Grades</button>
+  <button type="button" class="tab" data-tab="gpa" onclick="showTab(event, 'gpa')">GPA</button>
+  <button type="button" class="tab" data-tab="transcript" onclick="showTab(event, 'transcript')">Transcript</button>
 </div>
 
 <!-- ===================================================== -->
@@ -1145,7 +1165,40 @@ function generateQRCode(text, imageId, size = 100) {
 }
 
 function getStoredStudentEmail() {
-  return sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+  return sessionStorage.getItem('studentInstitutionalEmail') ||
+    sessionStorage.getItem('userEmail') ||
+    localStorage.getItem('studentInstitutionalEmail') ||
+    localStorage.getItem('userEmail') || '';
+}
+
+function getStoredStudentId() {
+  return sessionStorage.getItem('userId') || localStorage.getItem('userId') || '';
+}
+
+function resolveProfileInstitutionalEmail(profile = {}) {
+  return profile.email ||
+    profile.metadata?.portal?.institutional_email ||
+    profile.metadata?.institutional_email ||
+    sessionStorage.getItem('studentInstitutionalEmail') ||
+    localStorage.getItem('studentInstitutionalEmail') ||
+    null;
+}
+
+function resolveProfilePersonalEmail(profile = {}) {
+  return profile.metadata?.personal_email ||
+    profile.metadata?.contact?.email ||
+    profile.metadata?.reference_email ||
+    sessionStorage.getItem('studentPersonalEmail') ||
+    localStorage.getItem('studentPersonalEmail') ||
+    null;
+}
+
+function buildStudentProfileFilters(email = '') {
+  const trimmed = (email || '').trim();
+  if (!trimmed) return '';
+  const normalized = trimmed.toLowerCase();
+  const filters = new Set([`email.eq.${trimmed}`, `email.eq.${normalized}`, `metadata->>personal_email.eq.${trimmed}`, `metadata->>personal_email.eq.${normalized}`, `metadata->portal->>institutional_email.eq.${trimmed}`, `metadata->portal->>institutional_email.eq.${normalized}`]);
+  return Array.from(filters).join(',');
 }
 
 function updateDataField(field, value, fallback = '—') {
@@ -1172,6 +1225,7 @@ function showProfileError(message) {
   console.warn('Student profile warning:', message);
   updateDataField('student-status', 'Profile Pending');
   updateDataField('student-id', 'Pending Assignment');
+  updateDataField('student-email', 'Pending Assignment');
   const alertEl = document.getElementById('studentProfileAlert');
   if (alertEl) {
     alertEl.textContent = message;
@@ -1181,8 +1235,11 @@ function showProfileError(message) {
 
 async function fetchStudentProfile() {
   const email = getStoredStudentEmail();
-  if (!email) {
-    throw new Error('Missing student email. Please log in again.');
+  const studentId = getStoredStudentId();
+  const studentRecordId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId');
+
+  if (!email && !studentId && !studentRecordId) {
+    throw new Error('Missing student account information. Please log in again.');
   }
 
   const supabase = initSupabase();
@@ -1190,21 +1247,104 @@ async function fetchStudentProfile() {
     throw new Error('Supabase is not configured.');
   }
 
-  const { data, error } = await supabase
-    .from('students')
-    .select('id, student_id, full_name, email, phone, date_of_birth, program, start_term, status, metadata')
-    .eq('email', email)
-    .order('created_at', { ascending: false })
-    .limit(1);
+  // PRIORITY 1: Look up by studentRecordId (acnhs_students.id - most reliable)
+  if (studentRecordId) {
+    const { data: byId, error: idError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .eq('id', studentRecordId)
+      .maybeSingle();
 
-  if (error) {
-    throw error;
+    if (!idError && byId) {
+      console.log('✅ Student found by record ID:', studentRecordId);
+      return byId;
+    }
   }
 
-  if (Array.isArray(data) && data.length > 0) {
-    return data[0];
+  // PRIORITY 2: Look up by student_id (ACNHS-xxxxxxx format)
+  if (studentId && studentId.startsWith('ACNHS-')) {
+    const { data: byStudentId, error: studentIdError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .eq('student_id', studentId)
+      .maybeSingle();
+
+    if (!studentIdError && byStudentId) {
+      console.log('✅ Student found by student_id:', studentId);
+      // Store the record ID for future lookups
+      sessionStorage.setItem('studentRecordId', byStudentId.id);
+      localStorage.setItem('studentRecordId', byStudentId.id);
+      return byStudentId;
+    }
   }
 
+  // PRIORITY 3: Look up by email (acnhs_students.email column)
+  if (email) {
+    const normalizedEmail = email.toLowerCase().trim();
+    const { data: byEmail, error: emailError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .eq('email', normalizedEmail)
+      .maybeSingle();
+
+    if (!emailError && byEmail) {
+      console.log('✅ Student found by email:', normalizedEmail);
+      // Store the record ID for future lookups
+      sessionStorage.setItem('studentRecordId', byEmail.id);
+      localStorage.setItem('studentRecordId', byEmail.id);
+      return byEmail;
+    }
+
+    // PRIORITY 4: Check metadata->portal->institutional_email
+    const { data: byMetadataEmail, error: metadataError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .filter('metadata->>institutional_email', 'eq', normalizedEmail)
+      .maybeSingle();
+
+    if (!metadataError && byMetadataEmail) {
+      console.log('✅ Student found by metadata institutional_email:', normalizedEmail);
+      // Store the record ID for future lookups
+      sessionStorage.setItem('studentRecordId', byMetadataEmail.id);
+      localStorage.setItem('studentRecordId', byMetadataEmail.id);
+      return byMetadataEmail;
+    }
+
+    // PRIORITY 5: Check metadata->portal->institutional_email (nested)
+    const { data: byNestedEmail, error: nestedError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .filter('metadata->portal->>institutional_email', 'eq', normalizedEmail)
+      .maybeSingle();
+
+    if (!nestedError && byNestedEmail) {
+      console.log('✅ Student found by metadata.portal.institutional_email:', normalizedEmail);
+      // Store the record ID for future lookups
+      sessionStorage.setItem('studentRecordId', byNestedEmail.id);
+      localStorage.setItem('studentRecordId', byNestedEmail.id);
+      return byNestedEmail;
+    }
+  }
+
+  // PRIORITY 6: Lookup by application_id (if we have it stored)
+  const applicationId = sessionStorage.getItem('studentApplicationId') || localStorage.getItem('studentApplicationId');
+  if (applicationId) {
+    const { data: byAppId, error: appIdError } = await supabase
+      .from('acnhs_students')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, enrollment_status, current_gpa, total_credits_earned, academic_standing, expected_graduation, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata')
+      .eq('application_id', applicationId)
+      .maybeSingle();
+
+    if (!appIdError && byAppId) {
+      console.log('✅ Student found by application_id:', applicationId);
+      // Store the record ID for future lookups
+      sessionStorage.setItem('studentRecordId', byAppId.id);
+      localStorage.setItem('studentRecordId', byAppId.id);
+      return byAppId;
+    }
+  }
+
+  console.error('❌ Student not found. Tried:', { studentRecordId, studentId, email, applicationId });
   return null;
 }
 
@@ -1214,16 +1354,31 @@ function populateStudentProfile(profile) {
   const studentId = profile.student_id || 'Pending Assignment';
   const program = profile.program || 'Program Pending';
   const startTerm = profile.start_term || 'Start Term TBD';
-  const status = formatStatus(profile.status);
+  const status = formatStatus(profile.enrollment_status || profile.metadata?.status || 'Active');
+  const campusEmail = resolveProfileInstitutionalEmail(profile) || profile.email || 'Pending Assignment';
+  const personalEmail = resolveProfilePersonalEmail(profile);
+
+  sessionStorage.setItem('userId', studentId);
+  localStorage.setItem('userId', studentId);
+  sessionStorage.setItem('userEmail', campusEmail);
+  localStorage.setItem('userEmail', campusEmail);
+  if (personalEmail) {
+    sessionStorage.setItem('studentPersonalEmail', personalEmail);
+    localStorage.setItem('studentPersonalEmail', personalEmail);
+  }
+  sessionStorage.setItem('studentInstitutionalEmail', campusEmail);
+  localStorage.setItem('studentInstitutionalEmail', campusEmail);
 
   updateDataField('student-name', displayName);
   updateDataField('student-id', studentId);
+  updateDataField('student-email', campusEmail || 'Pending Assignment');
   updateDataField('student-program', program);
   updateDataField('student-start-term', startTerm);
   updateDataField('student-status', status);
 
-  setElementText('academicStandingValue', profile.metadata?.standing || 'Good Standing');
-  const gpaValue = profile.metadata?.cumulative_gpa;
+  const standing = profile.academic_standing || profile.metadata?.standing || 'Good Standing';
+  setElementText('academicStandingValue', formatStatus(standing));
+  const gpaValue = profile.current_gpa ?? profile.metadata?.cumulative_gpa;
   setElementText('cumulativeGpaValue', gpaValue ? Number(gpaValue).toFixed(2) : '3.55');
 
   const alertEl = document.getElementById('studentProfileAlert');
@@ -1235,16 +1390,20 @@ function populateStudentProfile(profile) {
 
 function buildStudentData(profile = {}) {
   const metadata = profile.metadata || {};
+  const campusEmail = resolveProfileInstitutionalEmail(profile);
+  const personalEmail = resolveProfilePersonalEmail(profile);
   return {
     student_id: profile.student_id || metadata.student_id || 'ACNHS-PENDING',
-    student_name: profile.full_name || profile.email || 'Student',
+    student_name: profile.full_name || campusEmail || personalEmail || 'Student',
     date_of_birth: profile.date_of_birth || metadata.date_of_birth || '2000-01-01',
-    program: profile.program || 'Associate Degree in Nursing (ADN)',
-    cumulative_gpa: metadata.cumulative_gpa || 3.55,
-    total_credits: metadata.total_credits || 0,
+    program: profile.program || metadata.program || 'Associate Degree in Nursing (ADN)',
+    cumulative_gpa: profile.current_gpa ?? metadata.cumulative_gpa ?? 3.55,
+    total_credits: profile.total_credits_earned ?? metadata.total_credits ?? 0,
     metadata: {
-      term: metadata.term || profile.start_term || 'Upcoming Term',
-      dean: metadata.dean || 'Registrar'
+      term: profile.start_term || metadata.term || 'Upcoming Term',
+      dean: metadata.dean || 'Registrar',
+      institutional_email: campusEmail || '',
+      personal_email: personalEmail || ''
     }
   };
 }
@@ -1328,27 +1487,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // Tab switching function
-function showTab(tabName) {
-  // Hide all tab contents
+function showTab(eventOrName, maybeTabName) {
+  const tabName = typeof eventOrName === 'string' && !maybeTabName ? eventOrName : maybeTabName;
+  const triggerEvent = eventOrName instanceof Event ? eventOrName : null;
+  const resolvedTab = tabName || 'overview';
+
   const tabContents = document.querySelectorAll('.tab-content');
   tabContents.forEach(content => {
     content.style.display = 'none';
   });
   
-  // Remove active class from all tabs
   const tabs = document.querySelectorAll('.tab');
   tabs.forEach(tab => {
     tab.classList.remove('active');
   });
   
-  // Show selected tab content
-  const selectedContent = document.getElementById(tabName);
+  const selectedContent = document.getElementById(resolvedTab);
   if (selectedContent) {
     selectedContent.style.display = 'block';
   }
   
-  // Add active class to clicked tab
-  event.target.classList.add('active');
+  if (triggerEvent) {
+    const trigger = triggerEvent.currentTarget || triggerEvent.target;
+    if (trigger && trigger.classList) {
+      trigger.classList.add('active');
+    }
+  } else {
+    const defaultTab = document.querySelector(`.tab[data-tab="${resolvedTab}"]`);
+    if (defaultTab) {
+      defaultTab.classList.add('active');
+    }
+  }
 }
 
 // Download transcript function

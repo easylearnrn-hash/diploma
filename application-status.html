@@ -25,7 +25,16 @@
   --status-rfe-prep:#8b5cf6;
   --status-rfe-sent:#ec4899;
   --status-approved:#10b981;
+  --status-confirmed:#14b8a6;
+  --status-acceptance:#22d3ee;
+  --status-active-review:#f97316;
+  --status-additional:#d946ef;
+  --status-documents-received:#06b6d4;
+  --status-final-review:#a855f7;
+  --status-on-hold:#facc15;
+  --status-withdrawn:#94a3b8;
   --status-denied:#ef4444;
+  --status-enrolled:#0ea5e9;
 }
 
 *{
@@ -33,6 +42,7 @@
   margin:0;
   padding:0;
   font-family:'Inter',sans-serif;
+
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
   text-rendering:optimizeLegibility;
@@ -197,6 +207,11 @@ body{
   color:white;
 }
 
+.status-badge.actively-reviewing{
+  background:linear-gradient(135deg, var(--status-active-review), #ea580c);
+  color:white;
+}
+
 .status-badge.rfe-preparing{
   background:linear-gradient(135deg, var(--status-rfe-prep), #7c3aed);
   color:white;
@@ -207,13 +222,33 @@ body{
   color:white;
 }
 
+.status-badge.additional-documents{
+  background:linear-gradient(135deg, var(--status-additional), #a21caf);
+  color:white;
+}
+
+.status-badge.documents-received{
+  background:linear-gradient(135deg, var(--status-documents-received), #0e7490);
+  color:white;
+}
+
 .status-badge.approved{
   background:linear-gradient(135deg, var(--status-approved), #059669);
   color:white;
 }
 
+.status-badge.confirmed{
+  background:linear-gradient(135deg, var(--status-confirmed), #0f766e);
+  color:white;
+}
+
+.status-badge.enrolled{
+  background:linear-gradient(135deg, var(--status-enrolled), #0369a1);
+  color:white;
+}
+
 .status-badge.acceptance-letter-sent{
-  background:linear-gradient(135deg, #10b981, #047857);
+  background:linear-gradient(135deg, var(--status-acceptance), #0891b2);
   color:white;
   cursor:pointer;
   transition:all 0.3s ease;
@@ -248,6 +283,21 @@ body{
 .status-badge.denied{
   background:linear-gradient(135deg, var(--status-denied), #dc2626);
   color:white;
+}
+
+.status-badge.on-hold{
+  background:linear-gradient(135deg, var(--status-on-hold), #ca8a04);
+  color:#1f2937;
+}
+
+.status-badge.final-review{
+  background:linear-gradient(135deg, var(--status-final-review), #7c3aed);
+  color:white;
+}
+
+.status-badge.withdrawn{
+  background:linear-gradient(135deg, var(--status-withdrawn), #475569);
+  color:#e2e8f0;
 }
 
 .status-icon{
@@ -541,7 +591,7 @@ body{
     <div class="user-info">
       Welcome, <strong id="applicantName">Loading...</strong>
     </div>
-    <button class="refresh-btn" onclick="refreshStatus()" title="Refresh application status">
+  <button id="statusRefreshBtn" class="refresh-btn" onclick="refreshStatus()" title="Refresh application status">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
       </svg>
@@ -643,7 +693,62 @@ body{
         <p style="color:rgba(255,255,255,0.8);margin-bottom:20px;line-height:1.6;">
           Please submit the following documents to complete your application. You can upload them through your portal or send them to <strong style="color:var(--accent);">documents@acnhs.am</strong>
         </p>
+        <div style="background:rgba(4,12,24,0.55);border:1px solid rgba(45,212,191,0.25);border-radius:10px;padding:18px 20px;margin-bottom:20px;line-height:1.6;">
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
+            <span style="font-size:20px;">🚀</span>
+            <strong style="color:white;font-size:15px;">How to upload requested documents</strong>
+          </div>
+          <ol style="margin:0 0 16px 18px;color:rgba(255,255,255,0.8);font-size:14px;padding-left:10px;display:flex;flex-direction:column;gap:6px;">
+            <li>Go to <a href="login.html" style="color:var(--accent);text-decoration:underline;">login.html</a> and click <em>Upload Requested Documents</em>.</li>
+            <li>Enter your Control Number (found in your acceptance email) and briefly describe what you are uploading.</li>
+            <li>Select the files, then press <strong>Upload Documents</strong>. Each file can be PDF, JPG, or PNG up to 10&nbsp;MB.</li>
+          </ol>
+          <div style="display:flex;flex-wrap:wrap;gap:12px;">
+            <a href="login.html" target="_blank" style="display:inline-flex;align-items:center;gap:8px;padding:10px 18px;background:var(--accent);color:#022c22;border-radius:10px;font-weight:600;text-decoration:none;">Open Upload Portal ↗</a>
+            <div style="color:rgba(255,255,255,0.7);font-size:13px;">Need help? Email <strong style="color:var(--accent);">documents@acnhs.am</strong> or reply to your admissions advisor.</div>
+          </div>
+        </div>
         <div class="doc-list"></div>
+
+        <div id="directUploadPanel" style="display:none;margin-top:24px;background:rgba(4,12,24,0.7);border:1px solid rgba(45,212,191,0.25);border-radius:12px;padding:20px;">
+          <div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;">
+            <div style="font-size:24px;">⚡</div>
+            <div>
+              <div style="color:white;font-weight:700;font-size:16px;">Upload Without Leaving This Page</div>
+              <div style="color:var(--text-light);font-size:13px;">Use this mini upload director to send documents directly from your status portal.</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:16px;">
+            <div>
+              <label for="directUploadControlNumber" style="display:block;color:var(--text-light);font-size:12px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;">Control Number</label>
+              <input type="text" id="directUploadControlNumber" readonly style="width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);color:white;font-size:14px;">
+            </div>
+            <div>
+              <label for="directUploadReferenceNumber" style="display:block;color:var(--text-light);font-size:12px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;">Reference Number</label>
+              <input type="text" id="directUploadReferenceNumber" readonly style="width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);color:white;font-size:14px;">
+            </div>
+          </div>
+
+          <div style="margin-bottom:16px;">
+            <label for="directUploadNotes" style="display:block;color:var(--text-light);font-size:12px;margin-bottom:6px;letter-spacing:0.5px;text-transform:uppercase;">What are you uploading? <span style="font-weight:400;color:rgba(148,163,184,0.8);text-transform:none;">(optional)</span></label>
+            <textarea id="directUploadNotes" rows="3" style="width:100%;padding:12px;border-radius:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.15);color:white;font-size:14px;resize:vertical;"></textarea>
+          </div>
+
+          <div>
+            <button type="button" id="directUploadFileTrigger" style="width:100%;border:2px dashed rgba(148,163,184,0.4);border-radius:12px;padding:18px;background:rgba(10,37,64,0.4);color:white;font-weight:600;font-size:14px;display:flex;flex-direction:column;gap:6px;align-items:center;cursor:pointer;">
+              <span>📁 Choose files to upload</span>
+              <span style="color:var(--text-light);font-weight:400;font-size:12px;">PDF, JPG, or PNG up to 10&nbsp;MB each</span>
+            </button>
+            <input type="file" id="directUploadFileInput" accept=".pdf,.jpg,.jpeg,.png" multiple style="display:none;">
+            <div id="directSelectedFilesList" style="margin-top:12px;background:rgba(10,37,64,0.35);border-radius:10px;padding:12px;color:var(--text-light);font-size:13px;">No files selected yet.</div>
+          </div>
+
+          <div style="margin-top:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;">
+            <div style="color:rgba(148,163,184,0.8);font-size:12px;">Uploads will be saved exactly the same as the main upload portal.</div>
+            <button type="button" id="directUploadSubmit" class="refresh-btn" style="padding:10px 18px;min-width:200px;justify-content:center;">Upload Documents</button>
+          </div>
+        </div>
       </div>
       
       <!-- Status History Section -->
@@ -772,7 +877,7 @@ const STATUS_INFO = {
   },
   'ACTIVELY REVIEWING': {
     icon: '🔍',
-    className: 'under-review',
+    className: 'actively-reviewing',
     description: 'Your application is currently being actively reviewed by our admissions committee. We are carefully evaluating all aspects of your submission.'
   },
   'RFE PREPARING': {
@@ -787,23 +892,33 @@ const STATUS_INFO = {
   },
   'ADDITIONAL DOCUMENTS REQUESTED': {
     icon: '📎',
-    className: 'rfe-sent',
+    className: 'additional-documents',
     description: 'Additional documents have been requested to complete your application review. Please check the list below and submit the required materials.'
   },
   'DOCUMENTS RECEIVED': {
     icon: '📥',
-    className: 'under-review',
+    className: 'documents-received',
     description: 'Thank you for submitting the requested documents. We are now reviewing the additional materials you provided.'
   },
   'FINAL REVIEW': {
     icon: '⚖️',
-    className: 'under-review',
+    className: 'final-review',
     description: 'Your application is in final review. An admissions decision will be communicated to you soon.'
   },
   'APPROVED': {
     icon: '✅',
     className: 'approved',
     description: 'Congratulations! Your application has been approved. You will receive your official acceptance letter and enrollment instructions via email within 24-48 hours.'
+  },
+  'CONFIRMED': {
+    icon: '✅',
+    className: 'confirmed',
+    description: 'Your acceptance has been confirmed and your seat is reserved. Watch your email for onboarding instructions and portal access details.'
+  },
+  'ENROLLED': {
+    icon: '🎓',
+    className: 'enrolled',
+    description: 'Welcome to ACNHS! Your student record is active and enrollment is complete. Visit your student portal for orientation, billing, and course registration details.'
   },
   'ACCEPTANCE LETTER SENT': {
     icon: '📜',
@@ -818,19 +933,22 @@ const STATUS_INFO = {
   },
   'ON HOLD': {
     icon: '⏸️',
-    className: 'rfe-preparing',
+    className: 'on-hold',
     description: 'Your application has been placed on hold. This may be due to pending documentation or additional review requirements. Please check for any messages from our admissions office.'
   },
   'WITHDRAWN': {
     icon: '🚫',
-    className: 'denied',
+    className: 'withdrawn',
     description: 'This application has been withdrawn. If you have questions, please contact our admissions office.'
   }
 };
 
 // Storage bucket and application context
 const STORAGE_BUCKET = 'application-documents';
+const MAX_DOCUMENT_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 let currentApplication = null; // will hold the loaded application object
+let hasRedirectedToStudentPortal = false;
+let directUploadPanelInitialized = false;
 
 // Document explanations for students
 const DOCUMENT_EXPLANATIONS = {
@@ -871,6 +989,59 @@ const DOB_CANDIDATE_PATHS = [
   'students.date_of_birth',
   'students.dob'
 ];
+
+function deriveStudentEmail(application = {}) {
+  return application.email ||
+    application.payload?.email ||
+    application.payload?.contactInfo?.email ||
+    application.payload?.personalInfo?.email ||
+    application.payload?.student?.email ||
+    null;
+}
+
+function deriveStudentId(application = {}) {
+  return application.student_id ||
+    application.payload?.studentId ||
+    application.payload?.student_id ||
+    application.payload?.studentRecord?.student_id ||
+    null;
+}
+
+function persistStudentPortalSession(application = {}) {
+  sessionStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('isAdmin', 'false');
+  localStorage.setItem('isAdmin', 'false');
+
+  const email = deriveStudentEmail(application);
+  if (email) {
+    sessionStorage.setItem('userEmail', email);
+    localStorage.setItem('userEmail', email);
+  }
+
+  const studentId = deriveStudentId(application);
+  if (studentId) {
+    sessionStorage.setItem('userId', studentId);
+    localStorage.setItem('userId', studentId);
+  }
+}
+
+function redirectToStudentPortal(application = {}) {
+  if (hasRedirectedToStudentPortal) return;
+  hasRedirectedToStudentPortal = true;
+  persistStudentPortalSession(application);
+
+  showRefreshNotification('Enrollment complete! Redirecting to the student portal...', 'success');
+
+  if (statusPollInterval) {
+    clearInterval(statusPollInterval);
+    statusPollInterval = null;
+  }
+
+  setTimeout(() => {
+    window.location.href = 'Student-page.html';
+  }, 1200);
+}
 
 const DOB_KEY_PATTERNS = ['dob', 'dateofbirth', 'date_of_birth', 'birthdate', 'birth_date', 'birthday', 'rawdob'];
 
@@ -1287,6 +1458,10 @@ function displayApplicationStatus(application) {
   console.log('📍 About to call updateTimeline with status:', status);
   updateTimeline(status);
   console.log('✅ updateTimeline call completed');
+
+  if (status === 'ENROLLED') {
+    redirectToStudentPortal(application);
+  }
 }
 
 // Display status history timeline
@@ -1372,8 +1547,8 @@ function displayRequestedDocuments(documents) {
   });
 
   // Determine whether uploads should be enabled based on current status
-  const statusText = document.getElementById('statusText')?.textContent || '';
-  const uploadsEnabled = ['RFE SENT', 'ADDITIONAL DOCUMENTS REQUESTED', 'RFE PREPARING'].includes(statusText);
+  const statusText = (document.getElementById('statusText')?.textContent || '').toUpperCase();
+  const uploadsEnabled = docs.length > 0 || ['RFE SENT', 'ADDITIONAL DOCUMENTS REQUESTED', 'RFE PREPARING', 'DOCUMENTS RECEIVED', 'FINAL REVIEW'].includes(statusText);
 
   // Get already uploaded documents from application (if any)
   const uploaded = (currentApplication && currentApplication.uploaded_documents) ? currentApplication.uploaded_documents : [];
@@ -1382,7 +1557,9 @@ function displayRequestedDocuments(documents) {
 
   const docHTML = docs.map(doc => {
     // try find uploaded item
-    const found = uploaded.find(u => u.doc_name === doc.name || u.key === doc.key);
+    const found = Array.isArray(uploaded)
+      ? [...uploaded].reverse().find(u => u.doc_name === doc.name || u.key === doc.key)
+      : null;
     const uploadedLabel = found ? `<div style="margin-top:8px;color:var(--text-light);font-size:13px;"><strong>Uploaded:</strong> <a href="${found.public_url || '#'}" target="_blank" style="color:var(--accent)">View</a></div>` : '';
 
     const explanationHTML = doc.explanation ? `<div style="color:var(--text-light);font-size:13px;margin-top:8px;">${doc.explanation}</div>` : '';
@@ -1413,6 +1590,7 @@ function displayRequestedDocuments(documents) {
   }).join('');
 
   docList.innerHTML = docHTML;
+  initializeDirectUploadPanel(uploadsEnabled);
 
   // Wire up file inputs and upload buttons
   docs.forEach(doc => {
@@ -1433,6 +1611,11 @@ function displayRequestedDocuments(documents) {
         const f = fileInput.files && fileInput.files[0];
         if (!f) {
           showCustomAlert('⚠️ Please choose a file first.', 'info');
+          return;
+        }
+
+        if (f.size > MAX_DOCUMENT_FILE_SIZE) {
+          showCustomAlert(`${f.name} is larger than 10MB. Please upload a smaller file.`, 'error');
           return;
         }
 
@@ -1458,7 +1641,15 @@ function displayRequestedDocuments(documents) {
           const publicUrl = urlData?.publicUrl || '';
 
           // Save metadata to application record
-          await saveUploadedDocumentToApplication({ docKey: doc.key, docName: doc.name, filename: f.name, path, public_url: publicUrl });
+          await saveUploadedDocumentToApplication({
+            docKey: doc.key,
+            docName: doc.name,
+            filename: f.name,
+            path,
+            public_url: publicUrl,
+            size: f.size,
+            source: 'application_status_requested_doc'
+          });
 
           // Refresh UI
           await refreshStatus();
@@ -1476,40 +1667,240 @@ function displayRequestedDocuments(documents) {
 }
 
 // Save uploaded document metadata to the application record
-async function saveUploadedDocumentToApplication({ docKey, docName, filename, path, public_url }) {
+async function saveUploadedDocumentToApplication({ docKey, docName, filename, path, public_url, size, source }) {
   try {
-    const supabase = initSupabase();
-    if (!supabase) throw new Error('Supabase not configured');
     if (!currentApplication) throw new Error('Application not loaded');
-
-    const existing = currentApplication.uploaded_documents || [];
-    // Append new entry
+    const entryKey = docKey || `application_status_${Date.now()}`;
     const newEntry = {
-      key: docKey,
-      doc_name: docName,
-      filename: filename,
-      path: path,
-      public_url: public_url,
-      uploaded_at: new Date().toISOString()
+      key: entryKey,
+      doc_name: docName || filename,
+      filename,
+      path,
+      public_url,
+      uploaded_at: new Date().toISOString(),
+      uploaded_via: source || 'application_status',
+      control_number: currentApplication?.control_number || null,
+      size: typeof size === 'number' ? size : null
     };
 
-    const updated = [...existing.filter(e => e.doc_name !== docName && e.key !== docKey), newEntry];
-
-    const { data, error } = await supabase
-      .from('applications')
-      .update({ uploaded_documents: updated })
-      .eq('id', currentApplication.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Update local copy
-    currentApplication = data;
-    return data;
+    await appendUploadedDocuments([newEntry]);
+    return currentApplication;
   } catch (err) {
     console.error('Error saving uploaded document metadata', err);
     throw err;
+  }
+}
+
+async function appendUploadedDocuments(entries = []) {
+  if (!entries.length) return currentApplication;
+
+  const supabase = initSupabase();
+  if (!supabase) throw new Error('Supabase not configured');
+  if (!currentApplication) throw new Error('Application not loaded');
+
+  const existing = Array.isArray(currentApplication.uploaded_documents)
+    ? currentApplication.uploaded_documents
+    : [];
+
+  const filteredExisting = existing.filter(existingEntry => {
+    return !entries.some(newEntry => newEntry.key && existingEntry.key === newEntry.key);
+  });
+
+  const updated = [...filteredExisting, ...entries];
+
+  const { data, error } = await supabase
+    .from('applications')
+    .update({ uploaded_documents: updated })
+    .eq('id', currentApplication.id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  currentApplication = data;
+  return data;
+}
+
+function getDirectUploadElements() {
+  return {
+    panel: document.getElementById('directUploadPanel'),
+    controlNumberInput: document.getElementById('directUploadControlNumber'),
+    referenceInput: document.getElementById('directUploadReferenceNumber'),
+    notesInput: document.getElementById('directUploadNotes'),
+    fileInput: document.getElementById('directUploadFileInput'),
+    fileTrigger: document.getElementById('directUploadFileTrigger'),
+    fileList: document.getElementById('directSelectedFilesList'),
+    submitBtn: document.getElementById('directUploadSubmit')
+  };
+}
+
+function initializeDirectUploadPanel(uploadsEnabled) {
+  const { panel, controlNumberInput, referenceInput, fileTrigger, fileInput, submitBtn } = getDirectUploadElements();
+  if (!panel) return;
+
+  if (!uploadsEnabled || !currentApplication) {
+    panel.style.display = 'none';
+    return;
+  }
+
+  panel.style.display = 'block';
+
+  if (controlNumberInput) {
+    controlNumberInput.value = currentApplication?.control_number || 'Pending assignment';
+  }
+
+  if (referenceInput) {
+    referenceInput.value = currentApplication?.reference_number || 'Not assigned';
+  }
+
+  if (!directUploadPanelInitialized) {
+    fileTrigger?.addEventListener('click', () => fileInput?.click());
+    fileTrigger?.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        fileInput?.click();
+      }
+    });
+    fileInput?.addEventListener('change', updateDirectSelectedFilesList);
+    submitBtn?.addEventListener('click', handleDirectDocumentUpload);
+    directUploadPanelInitialized = true;
+  }
+}
+
+function updateDirectSelectedFilesList() {
+  const { fileInput, fileList } = getDirectUploadElements();
+  if (!fileList) return;
+
+  const files = Array.from(fileInput?.files || []);
+  if (!files.length) {
+    fileList.textContent = 'No files selected yet.';
+    return;
+  }
+
+  const items = files.map((file, index) => `
+    <li style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.05);gap:12px;">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <span style="color:white;font-size:13px;">${file.name}</span>
+        <span style="color:var(--text-light);font-size:12px;">${formatDirectUploadFileSize(file.size)}</span>
+      </div>
+      <button type="button" style="background:transparent;border:1px solid rgba(148,163,184,0.4);color:rgba(226,232,240,0.9);border-radius:6px;width:26px;height:26px;font-size:16px;cursor:pointer;" onclick="removeDirectSelectedFile(${index})">×</button>
+    </li>
+  `).join('');
+
+  fileList.innerHTML = `<ul style="list-style:none;margin:0;padding:0;">${items}</ul>`;
+}
+
+function removeDirectSelectedFile(index) {
+  const { fileInput } = getDirectUploadElements();
+  if (!fileInput || !fileInput.files) return;
+
+  const dt = new DataTransfer();
+  Array.from(fileInput.files).forEach((file, idx) => {
+    if (idx !== index) {
+      dt.items.add(file);
+    }
+  });
+  fileInput.files = dt.files;
+  updateDirectSelectedFilesList();
+}
+
+function formatDirectUploadFileSize(bytes) {
+  if (typeof bytes !== 'number' || Number.isNaN(bytes)) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex++;
+  }
+  const precision = size >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function resetDirectUploadForm() {
+  const { notesInput, fileInput, fileList } = getDirectUploadElements();
+  if (notesInput) notesInput.value = '';
+  if (fileInput) fileInput.value = '';
+  if (fileList) fileList.textContent = 'No files selected yet.';
+}
+
+async function handleDirectDocumentUpload() {
+  if (!currentApplication) {
+    showRefreshNotification('Application not loaded yet. Please refresh and try again.', 'error');
+    return;
+  }
+
+  const { fileInput, notesInput, submitBtn } = getDirectUploadElements();
+  const files = Array.from(fileInput?.files || []);
+
+  if (!files.length) {
+    showCustomAlert('⚠️ Please choose at least one file to upload.', 'info');
+    return;
+  }
+
+  const oversized = files.find(file => file.size > MAX_DOCUMENT_FILE_SIZE);
+  if (oversized) {
+    showCustomAlert(`${oversized.name} is larger than 10MB. Please upload a smaller file.`, 'error');
+    return;
+  }
+
+  const supabase = initSupabase();
+  if (!supabase) {
+    showRefreshNotification('Supabase not configured.', 'error');
+    return;
+  }
+
+  const referenceKey = currentApplication.reference_number || currentApplication.control_number || currentApplication.id;
+  const description = notesInput?.value.trim();
+  const supabaseStorage = supabase.storage.from(STORAGE_BUCKET);
+  const newEntries = [];
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Uploading...';
+  }
+
+  try {
+    for (const file of files) {
+      const timestamp = Date.now();
+      const randomSuffix = Math.floor(Math.random() * 10000);
+      const sanitized = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `applications/${referenceKey}/${timestamp}_${randomSuffix}_${sanitized}`;
+
+      const { error: uploadError } = await supabaseStorage.upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || 'application/octet-stream'
+      });
+      if (uploadError) throw uploadError;
+
+      const { data: urlData, error: urlError } = await supabaseStorage.getPublicUrl(path);
+      if (urlError) throw urlError;
+
+      newEntries.push({
+        key: `status_direct_${timestamp}_${randomSuffix}`,
+        doc_name: description || `Requested Document - ${file.name}`,
+        filename: file.name,
+        path,
+        public_url: urlData?.publicUrl || '',
+        uploaded_at: new Date().toISOString(),
+        uploaded_via: 'application_status_direct_upload',
+        control_number: currentApplication?.control_number || null,
+        size: file.size
+      });
+    }
+
+    await appendUploadedDocuments(newEntries);
+    showRefreshNotification(`Uploaded ${newEntries.length} document${newEntries.length > 1 ? 's' : ''} successfully!`, 'success');
+    resetDirectUploadForm();
+    await refreshStatus();
+  } catch (error) {
+    console.error('Direct upload error:', error);
+    showRefreshNotification('Upload failed: ' + (error.message || 'Unknown error'), 'error');
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Upload Documents';
+    }
   }
 }
 
@@ -1553,7 +1944,9 @@ function updateTimeline(status) {
     'APPROVED',
     'CONFIRMED',
     'ACCEPTANCE LETTER SENT',
-    'DENIED'
+    'ENROLLED',
+    'DENIED',
+    'WITHDRAWN'
   ];
   
   if (reviewStatuses.includes(status)) {
@@ -1562,7 +1955,7 @@ function updateTimeline(status) {
   }
   
   // Only final decisions activate the decision dot
-  if (['APPROVED', 'CONFIRMED', 'ACCEPTANCE LETTER SENT', 'DENIED'].includes(status)) {
+  if (['APPROVED', 'CONFIRMED', 'ACCEPTANCE LETTER SENT', 'ENROLLED', 'DENIED', 'WITHDRAWN'].includes(status)) {
     dotDecision.classList.remove('inactive');
     console.log('✅ Activated Decision dot (status is APPROVED/CONFIRMED/ACCEPTANCE LETTER SENT/DENIED)');
   }
@@ -1591,9 +1984,11 @@ function logout() {
 
 // Refresh status function
 async function refreshStatus() {
-  const refreshBtn = document.querySelector('.refresh-btn');
-  refreshBtn.classList.add('spinning');
-  refreshBtn.disabled = true;
+  const refreshBtn = document.getElementById('statusRefreshBtn');
+  if (refreshBtn) {
+    refreshBtn.classList.add('spinning');
+    refreshBtn.disabled = true;
+  }
   
   try {
     const supabase = initSupabase();
@@ -1634,10 +2029,12 @@ async function refreshStatus() {
     console.error('Error refreshing status:', error);
     showRefreshNotification('Failed to refresh: ' + (error.message || 'Unknown error'), 'error');
   } finally {
-    setTimeout(() => {
-      refreshBtn.classList.remove('spinning');
-      refreshBtn.disabled = false;
-    }, 600);
+    if (refreshBtn) {
+      setTimeout(() => {
+        refreshBtn.classList.remove('spinning');
+        refreshBtn.disabled = false;
+      }, 600);
+    }
   }
 }
 

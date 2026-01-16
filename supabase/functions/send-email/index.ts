@@ -282,6 +282,78 @@ serve(async (req: Request) => {
       )
     }
 
+    console.log('✅ Email sent successfully via Resend:', resendData.id)
+
+    // ========================================
+    // AUTO-FORWARDING LOGIC
+    // ========================================
+    try {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+      const normalizedRecipient = normalizeEmailAddress(to)
+      
+      // Check if this is an incoming email to an ACNHS address
+      if (normalizedRecipient?.endsWith('@acnhs.am')) {
+        console.log('📧 Checking auto-forwarding rules for recipient:', normalizedRecipient)
+        
+        // Look up forwarding rule for this specific ACNHS email
+        const { data: forwardingRule, error: ruleError } = await supabase
+          .from('email_forwarding_rules')
+          .select('forward_to_email, enabled, acnhs_email')
+          .eq('acnhs_email', normalizedRecipient)
+          .eq('enabled', true)
+          .maybeSingle()
+
+        if (!ruleError && forwardingRule && forwardingRule.forward_to_email) {
+          console.log(`⤴️ Auto-forwarding enabled for ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
+          
+          // Forward the email
+          const forwardPayload = {
+            from: senderEmail || 'do-not-reply@acnhs.am',
+            to: forwardingRule.forward_to_email,
+            subject: `Fwd: ${subject}`,
+            html: `
+              <div style="padding: 20px; background: #f8f9fa; border-left: 4px solid #2dd4bf; margin-bottom: 20px;">
+                <div style="font-weight: 600; color: #0a2540; margin-bottom: 8px;">📧 Forwarded Email</div>
+                <div style="font-size: 14px; color: #64748b;">
+                  <strong>From:</strong> ${replyTo || senderEmail}<br>
+                  <strong>To:</strong> ${to}<br>
+                  <strong>Date:</strong> ${new Date().toLocaleString()}<br>
+                  <strong>Subject:</strong> ${subject}
+                </div>
+              </div>
+              ${html}
+            `,
+            reply_to: replyTo || senderEmail
+          }
+
+          const forwardResponse = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${RESEND_API_KEY}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(forwardPayload),
+          })
+
+          const forwardData = await forwardResponse.json()
+
+          if (forwardResponse.ok) {
+            console.log(`✅ Email auto-forwarded successfully to ${forwardingRule.forward_to_email}:`, forwardData.id)
+          } else {
+            console.error('❌ Auto-forward failed:', forwardData)
+          }
+        } else {
+          console.log('⏭️ No auto-forwarding rule configured for this recipient')
+        }
+      }
+    } catch (forwardError) {
+      console.error('⚠️ Error in auto-forwarding logic (non-fatal):', forwardError)
+      // Don't fail the main request if forwarding fails
+    }
+    // ========================================
+    // END AUTO-FORWARDING LOGIC
+    // ========================================
+
     // Save to email_history database
     try {
       const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)

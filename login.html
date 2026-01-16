@@ -818,8 +818,15 @@ body{
 <script src="js/main.js"></script>
 <script>
 const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
+const INSTITUTIONAL_EMAIL_DOMAINS = ['@acnhs.am', '@student.acnhs.am', '@acnhs.edu', '@acnhs.edu.am'];
 const STORAGE_BUCKET = 'application-documents';
 const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+
+function isInstitutionalEmail(email = '') {
+  const normalized = (email || '').trim().toLowerCase();
+  if (!normalized) return false;
+  return INSTITUTIONAL_EMAIL_DOMAINS.some(domain => normalized.endsWith(domain));
+}
 
 // Switch between Student Login and Application Status Login
 function switchLoginType(type) {
@@ -964,61 +971,30 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
       }
     }
 
-    // If admin_users check failed, try Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password
-    });
-
-    if (error) {
-      throw error;
-    }
-
-    // Authentication successful
-    const user = data.user;
-    
-    // Store session info
-    sessionStorage.setItem('isLoggedIn', 'true');
-    localStorage.setItem('isLoggedIn', 'true');
-    sessionStorage.setItem('userEmail', user.email);
-    localStorage.setItem('userEmail', user.email);
-    sessionStorage.setItem('userId', user.id);
-    localStorage.setItem('userId', user.id);
-
-    // Check if user is admin
-    const isAdmin = ADMIN_EMAILS.some(adminEmail => adminEmail.toLowerCase() === user.email.toLowerCase());
-    
-    console.log('Login - User email:', user.email);
-    console.log('Login - Admin emails:', ADMIN_EMAILS);
-    console.log('Login - Is admin?', isAdmin);
-    
-    if (isAdmin) {
-      sessionStorage.setItem('isAdmin', 'true');
-      localStorage.setItem('isAdmin', 'true');
-      console.log('Login - Set isAdmin to true in storage');
-      console.log('Login - sessionStorage isAdmin:', sessionStorage.getItem('isAdmin'));
-      console.log('Login - localStorage isAdmin:', localStorage.getItem('isAdmin'));
-      submitBtn.textContent = 'Redirecting to dashboard...';
-      window.location.href = 'admin-home.html';
-    } else {
-      sessionStorage.setItem('isAdmin', 'false');
-      localStorage.setItem('isAdmin', 'false');
-      console.log('Login - Set isAdmin to false in storage');
-      alert('Login successful! Welcome back.');
-      window.location.href = 'Student-page.html';
-    }
+    // Attempt student portal authentication using application credentials
+    await authenticateStudentPortalLogin(supabase, email, password, submitBtn);
 
   } catch (error) {
     console.error('Login error:', error);
     submitBtn.disabled = false;
     submitBtn.textContent = 'Sign In';
+
+    if (error.code === 'STUDENT_NOT_ENROLLED') {
+      showLoginAlert(error.message || 'Your application is still being processed. Please use the Application Status tab.', 'warning');
+      return;
+    }
+
+    if (error.code && error.code.startsWith('STUDENT_')) {
+      showLoginAlert(error.message || 'Student login failed. Please try again or contact admissions.', 'error');
+      return;
+    }
     
-    if (error.message.includes('Invalid login credentials')) {
-      alert('Invalid email or password. Please try again.');
-    } else if (error.message.includes('Email not confirmed')) {
-      alert('Please confirm your email address before logging in.');
+    if (error.message?.includes('Invalid login credentials')) {
+      showLoginAlert('Invalid email or password. Please try again.', 'error');
+    } else if (error.message?.includes('Email not confirmed')) {
+      showLoginAlert('Please confirm your email address before logging in.', 'warning');
     } else {
-      alert('Login failed: ' + (error.message || 'Unknown error'));
+      showLoginAlert('Login failed: ' + (error.message || 'Unknown error'), 'error');
     }
   }
 });
@@ -1027,7 +1003,9 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
 document.getElementById('applicationLoginForm').addEventListener('submit', async function(e) {
   e.preventDefault();
   
-  const username = document.getElementById('appUsername').value.trim();
+  const rawUsername = document.getElementById('appUsername').value || '';
+  const username = rawUsername.trim();
+  const normalizedUsername = username.toLowerCase();
   const password = document.getElementById('appPassword').value;
   const submitBtn = e.target.querySelector('.signin-btn');
   
@@ -1052,49 +1030,76 @@ document.getElementById('applicationLoginForm').addEventListener('submit', async
     
     console.log('🔍 DEBUG: Login attempt:', {
       username: username,
+      normalizedUsername,
       passwordLength: password.length,
       hashLength: passwordHash.length,
       hashPreview: passwordHash.substring(0, 16) + '...'
     });
 
-    // Query applications table for matching username and password_hash
-    const { data: applications, error } = await supabase
-      .from('applications')
-      .select('reference_number, applicant_name, status, username, password_hash')
-      .eq('username', username)
-      .limit(1);
+    const application = await fetchApplicationForStatusLogin(supabase, username);
+    const storedPasswordHash = extractApplicationPasswordHash(application);
 
-    if (error) {
-      throw error;
-    }
-    
-    console.log('🔍 DEBUG: User found in database:', {
-      found: applications && applications.length > 0,
-      dbHashLength: applications?.[0]?.password_hash?.length || 0,
-      hashMatch: applications?.[0]?.password_hash === passwordHash
+    console.log('🔍 DEBUG: User lookup result:', {
+      found: Boolean(application),
+      dbHashLength: storedPasswordHash?.length || 0,
+      hashMatch: storedPasswordHash === passwordHash
     });
 
-    if (!applications || applications.length === 0) {
+    if (!application) {
       throw new Error('Invalid username or password');
     }
     
+    if (!storedPasswordHash) {
+      throw new Error('This application does not have login credentials yet. Please contact admissions so we can regenerate them.');
+    }
+
     // Verify password hash matches
-    if (applications[0].password_hash !== passwordHash) {
+    if (storedPasswordHash !== passwordHash) {
       console.error('❌ Password hash mismatch:', {
         provided: passwordHash,
-        stored: applications[0].password_hash
+        stored: storedPasswordHash
       });
       throw new Error('Invalid username or password');
     }
 
     // Authentication successful
-    const application = applications[0];
+    const resolvedUsername = application.username || application.payload?.username || normalizedUsername;
+    const resolvedReference = extractApplicationReference(application);
+    const resolvedApplicantName = application.applicant_name || application.payload?.applicantName || 'Applicant';
+    if (!resolvedReference) {
+      throw new Error('We could not locate the reference number for this application. Please contact admissions.');
+    }
     
     // Store session info for application tracking
     sessionStorage.setItem('isApplicationLogin', 'true');
-    sessionStorage.setItem('applicationUsername', username);
-    sessionStorage.setItem('applicationReference', application.reference_number);
-    sessionStorage.setItem('applicantName', application.applicant_name);
+    sessionStorage.setItem('applicationUsername', resolvedUsername);
+    sessionStorage.setItem('applicationReference', resolvedReference);
+    sessionStorage.setItem('applicantName', resolvedApplicantName);
+
+    if (isEnrollmentLockedStatus(application.status)) {
+      let studentRecord = null;
+      try {
+        studentRecord = await fetchLinkedStudentRecord(supabase, application);
+      } catch (studentLookupError) {
+        console.warn('⚠️ Failed to load linked student record for enrolled applicant:', studentLookupError);
+      }
+
+      const campusEmail = deriveInstitutionalEmail(application, studentRecord) ||
+        deriveCampusEmailFromNames(application, studentRecord) ||
+        deriveCampusEmailFromUsername(resolvedUsername) ||
+        derivePersonalEmail(application, studentRecord) ||
+        application.email ||
+        normalizedUsername;
+
+      const emailMessage = campusEmail ? `Use the Student Login tab with <strong>${campusEmail}</strong>` : 'Use the Student Login tab with your @acnhs.am campus email';
+      showLoginAlert(
+        `You're already enrolled! ${emailMessage} and the same password you just entered to access the student portal. Application status is locked after enrollment for security.`,
+        'warning'
+      );
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'View Application Status';
+      return;
+    }
 
     showLoginAlert('Login successful! Viewing your application status...', 'success');
     setTimeout(() => {
@@ -1105,9 +1110,23 @@ document.getElementById('applicationLoginForm').addEventListener('submit', async
     console.error('Application login error:', error);
     submitBtn.disabled = false;
     submitBtn.textContent = 'View Application Status';
+
+    const timeoutDetected = error?.code === '57014' || (error?.message || '').toLowerCase().includes('statement timeout');
+    if (timeoutDetected) {
+      const campusEmail = deriveCampusEmailFromUsername(username) || deriveCampusEmailFromUsername(normalizedUsername) || null;
+      const instructions = campusEmail
+        ? `If you have already enrolled, use the Student Login tab with <strong>${campusEmail}</strong> and this same password to reach your portal.`
+        : 'If you have already enrolled, please use the Student Login tab with your @acnhs.am campus email and this same password.';
+      showLoginAlert(`We could not reach your application record fast enough. ${instructions}`, 'warning');
+      return;
+    }
     
     if (error.message.includes('Invalid username or password')) {
       showLoginAlert('Invalid username or password. Please check your credentials and try again.', 'error');
+    } else if (error.message.includes('login credentials yet')) {
+      showLoginAlert('This application does not have login credentials yet. Please contact admissions so we can regenerate them for you.', 'error');
+    } else if (error.message.includes('reference number')) {
+      showLoginAlert('We could not locate the reference number tied to this application. Please contact admissions for assistance.', 'error');
     } else {
       showLoginAlert('Login failed: ' + (error.message || 'Unknown error'), 'error');
     }
@@ -1124,6 +1143,376 @@ async function hashPassword(password) {
   return hashHex;
 }
 
+function buildStudentEmailLookupFilters(email = '') {
+  const trimmed = (email || '').trim();
+  if (!trimmed) return '';
+
+  const normalized = trimmed.toLowerCase();
+  const candidates = new Set([trimmed, normalized]);
+  const filters = new Set();
+
+  const addFilter = (value, path) => {
+    if (!value) return;
+    filters.add(`${path}.eq.${value}`);
+  };
+
+  candidates.forEach(value => {
+    addFilter(value, 'email');
+    addFilter(value, 'payload->>email');
+    addFilter(value, 'payload->>personalEmail');
+    addFilter(value, 'payload->contactInfo->>email');
+    addFilter(value, 'payload->personalInfo->>email');
+    addFilter(value, 'payload->studentPortal->>institutionalEmail');
+    addFilter(value, 'payload->studentPortal->>email');
+  });
+
+  return Array.from(filters).filter(Boolean).join(',');
+}
+
+function isStudentPortalEligibleStatus(status = '') {
+  const normalized = (status || '').toString().trim().toLowerCase();
+  if (!normalized) return false;
+  return ['enroll', 'student', 'active', 'confirmed', 'registered'].some(keyword => normalized.includes(keyword));
+}
+
+function createStudentLoginError(message, code = 'STUDENT_LOGIN_ERROR') {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+async function authenticateStudentPortalLogin(supabase, email, password, submitBtn = null) {
+  const normalizedEmail = (email || '').trim().toLowerCase();
+  if (!normalizedEmail) {
+    throw createStudentLoginError('Please enter your campus or personal email address.', 'STUDENT_NOT_FOUND');
+  }
+
+  const passwordHash = await hashPassword(password);
+  const application = await fetchApplicationByEmailOrPortalFields(supabase, normalizedEmail);
+
+  if (!application) {
+    if (isInstitutionalEmail(normalizedEmail)) {
+      throw createStudentLoginError('Your campus login has not been provisioned yet. Please wait for the enrollment team to issue your student portal access.', 'STUDENT_NOT_FOUND');
+    }
+    throw createStudentLoginError('We could not find a student account with that email. Double-check the spelling or use the Application Status tab.', 'STUDENT_NOT_FOUND');
+  }
+
+  if (!isStudentPortalEligibleStatus(application.status)) {
+    throw Object.assign(
+      createStudentLoginError('Your enrollment is still in progress. Please continue through the Application Status tab until you receive your campus login.', 'STUDENT_NOT_ENROLLED'),
+      { status: application.status }
+    );
+  }
+
+  const storedPasswordHash = extractApplicationPasswordHash(application);
+  if (!storedPasswordHash) {
+    throw createStudentLoginError('Your student portal password has not been provisioned yet. Please contact admissions to regenerate your credentials.', 'STUDENT_PASSWORD_MISSING');
+  }
+
+  if (storedPasswordHash !== passwordHash) {
+    throw createStudentLoginError('Incorrect password. Please try again or request a reset from admissions.', 'STUDENT_INVALID_PASSWORD');
+  }
+
+  if (submitBtn) {
+    submitBtn.textContent = 'Opening student portal...';
+  }
+
+  // Fetch linked student record for complete profile data
+  const studentRecord = await fetchLinkedStudentRecord(supabase, application);
+
+  persistStudentPortalSession(application, { 
+    loginEmail: normalizedEmail,
+    studentRecord: studentRecord 
+  });
+
+  showLoginAlert('Welcome to ACNHS! Redirecting you to the student portal...', 'success');
+  setTimeout(() => {
+    window.location.href = 'Student-page.html';
+  }, 900);
+
+  return true;
+}
+
+async function fetchApplicationByEmailOrPortalFields(supabase, email) {
+  if (!supabase || !email) return null;
+  const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+  const orFilters = buildStudentEmailLookupFilters(email);
+
+  const query = supabase
+    .from('applications')
+    .select(selectFields)
+    .limit(1);
+
+  const { data, error } = orFilters
+    ? await query.or(orFilters)
+    : await query.eq('email', email);
+
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  return data[0];
+}
+
+function isEnrollmentLockedStatus(status = '') {
+  const normalized = (status || '').toString().trim().toLowerCase();
+  if (!normalized) return false;
+  return ['enroll', 'student', 'active', 'registered', 'confirmed'].some(fragment => normalized.includes(fragment));
+}
+
+function deriveCampusEmailFromUsername(username = '') {
+  const trimmed = (username || '').trim();
+  if (!trimmed) return null;
+  if (trimmed.includes('@')) {
+    return trimmed.toLowerCase();
+  }
+  const slug = trimmed.replace(/\s+/g, '').toLowerCase();
+  if (!slug) return null;
+  return `${slug}@acnhs.am`;
+}
+
+function normalizeNamePart(value = '') {
+  if (!value) return '';
+  return value
+    .normalize('NFD')
+    .replace(/[^a-zA-Z]/g, '')
+    .toLowerCase();
+}
+
+function deriveCampusEmailFromNames(application = {}, studentRecord = null) {
+  const payload = application?.payload || {};
+  const rawName = studentRecord?.full_name ||
+    payload.fullName ||
+    payload.applicantName ||
+    application.applicant_name ||
+    payload?.contactInfo?.fullName ||
+    ''; 
+
+  if (!rawName.trim()) return null;
+
+  const parts = rawName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const firstPart = parts[0];
+  const lastPart = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+  const firstInitial = normalizeNamePart(firstPart).charAt(0);
+  const lastSlug = normalizeNamePart(lastPart);
+
+  if (!firstInitial || !lastSlug) return null;
+  return `${firstInitial}.${lastSlug}@acnhs.am`;
+}
+
+async function fetchLinkedStudentRecord(supabase, application) {
+  if (!supabase || !application) return null;
+  const payload = application.payload || {};
+  const studentId = payload.studentId || payload.student_id || payload?.studentPortal?.studentId || null;
+  const applicationId = application.id || null;
+
+  if (!studentId && !applicationId) {
+    return null;
+  }
+
+  let query = supabase
+    .from('acnhs_students')
+    .select('id, student_id, application_id, email, metadata')
+    .limit(1);
+
+  if (studentId && applicationId) {
+    query = query.or(`student_id.eq.${studentId},application_id.eq.${applicationId}`);
+  } else if (studentId) {
+    query = query.eq('student_id', studentId);
+  } else {
+    query = query.eq('application_id', applicationId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    if (error.message?.includes('acnhs_students')) {
+      console.warn('ACNHS students table lookup failed:', error.message);
+      return null;
+    }
+    throw error;
+  }
+
+  if (!data) return null;
+  if (Array.isArray(data)) {
+    return data[0] || null;
+  }
+  return data;
+}
+
+function extractApplicationPasswordHash(application = {}) {
+  if (!application) return null;
+  const payload = application.payload || {};
+  return application.password_hash ||
+    payload.passwordHash ||
+    payload.password_hash ||
+    payload?.studentPortal?.passwordHash ||
+    payload?.studentPortal?.credentials?.passwordHash ||
+    payload?.studentCredentials?.passwordHash ||
+    payload?.portalCredentials?.passwordHash ||
+    payload?.credentials?.passwordHash ||
+    payload?.applicationCredentials?.passwordHash ||
+    null;
+}
+
+function extractApplicationReference(application = {}) {
+  const payload = application?.payload || {};
+  return application.reference_number ||
+    payload.referenceNumber ||
+    payload.reference_number ||
+    null;
+}
+
+function deriveInstitutionalEmail(application = {}, studentRecord = null) {
+  const payload = application?.payload || {};
+  const candidates = [
+    studentRecord?.metadata?.portal?.institutional_email,
+    studentRecord?.metadata?.institutional_email,
+    studentRecord?.metadata?.portal?.email,
+    studentRecord?.email,
+    application.institutional_email,
+    payload.institutionalEmail,
+    payload.studentEmail,
+    payload?.studentPortal?.institutionalEmail,
+    payload?.studentPortal?.email,
+    payload?.studentPortal?.studentEmail,
+    payload?.studentPortal?.credentials?.institutionalEmail
+  ].filter(Boolean);
+
+  const match = candidates.find(value => isInstitutionalEmail(value));
+  return match ? match.trim().toLowerCase() : null;
+}
+
+function derivePersonalEmail(application = {}, studentRecord = null) {
+  const payload = application?.payload || {};
+  const candidates = [
+    studentRecord?.metadata?.personal_email,
+    payload.personalEmail,
+    payload.email,
+    payload?.contactInfo?.email,
+    payload?.personalInfo?.email,
+    application.email,
+    studentRecord?.email
+  ].filter(Boolean);
+
+  const match = candidates.find(value => !isInstitutionalEmail(value));
+  return match ? match.trim() : null;
+}
+
+function deriveStudentEmail(application = {}, studentRecord = null) {
+  return deriveInstitutionalEmail(application, studentRecord) || derivePersonalEmail(application, studentRecord);
+}
+
+function deriveStudentId(application = {}, studentRecord = null) {
+  if (studentRecord?.student_id) {
+    return studentRecord.student_id;
+  }
+  return application.student_id ||
+    application.payload?.studentId ||
+    application.payload?.student_id ||
+    application.payload?.studentPortal?.studentId ||
+    application.payload?.studentRecord?.student_id ||
+    null;
+}
+
+function persistStudentPortalSession(application = {}, context = {}) {
+  sessionStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('isAdmin', 'false');
+  localStorage.setItem('isAdmin', 'false');
+  sessionStorage.setItem('isApplicationLogin', 'false');
+  localStorage.setItem('isApplicationLogin', 'false');
+
+  const studentRecord = context?.studentRecord || null;
+  const loginEmail = context?.loginEmail || null;
+  const institutionalEmail = deriveInstitutionalEmail(application, studentRecord);
+  const personalEmail = derivePersonalEmail(application, studentRecord);
+  const emailForStorage = institutionalEmail || loginEmail || deriveStudentEmail(application, studentRecord) || personalEmail || application.username || null;
+
+  if (emailForStorage) {
+    sessionStorage.setItem('userEmail', emailForStorage);
+    localStorage.setItem('userEmail', emailForStorage);
+  }
+
+  if (institutionalEmail) {
+    sessionStorage.setItem('studentInstitutionalEmail', institutionalEmail);
+    localStorage.setItem('studentInstitutionalEmail', institutionalEmail);
+  }
+
+  if (personalEmail) {
+    sessionStorage.setItem('studentPersonalEmail', personalEmail);
+    localStorage.setItem('studentPersonalEmail', personalEmail);
+  }
+
+  const studentId = deriveStudentId(application, studentRecord);
+  if (studentId) {
+    sessionStorage.setItem('userId', studentId);
+    localStorage.setItem('userId', studentId);
+  }
+
+  if (studentRecord?.id) {
+    sessionStorage.setItem('studentRecordId', studentRecord.id);
+    localStorage.setItem('studentRecordId', studentRecord.id);
+  }
+
+  const applicationId = application?.id || studentRecord?.application_id;
+  if (applicationId) {
+    sessionStorage.setItem('studentApplicationId', applicationId);
+    localStorage.setItem('studentApplicationId', applicationId);
+  }
+
+  if (application?.status) {
+    sessionStorage.setItem('studentPortalStatus', application.status);
+    localStorage.setItem('studentPortalStatus', application.status);
+  }
+}
+
+const APPLICATION_LOGIN_SELECT = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+
+async function fetchApplicationForStatusLogin(supabase, username = '') {
+  if (!supabase) return null;
+  const trimmed = (username || '').trim();
+  if (!trimmed) return null;
+
+  const normalized = trimmed.toLowerCase();
+  const upper = trimmed.toUpperCase();
+
+  const buildBaseQuery = () =>
+    supabase
+      .from('applications')
+      .select(APPLICATION_LOGIN_SELECT)
+      .maybeSingle();
+
+  const steps = [
+    { label: 'username-normalized', build: query => query.eq('username', normalized) },
+    { label: 'username-trimmed', build: query => query.eq('username', trimmed) },
+    { label: 'reference-upper', build: query => query.eq('reference_number', upper) },
+    { label: 'reference-trimmed', build: query => query.eq('reference_number', trimmed) },
+    { label: 'control-upper', build: query => query.eq('control_number', upper) },
+    { label: 'control-trimmed', build: query => query.eq('control_number', trimmed) },
+    { label: 'payload-username-normalized', build: query => query.filter('payload->>username', 'eq', normalized) },
+    { label: 'payload-username-trimmed', build: query => query.filter('payload->>username', 'eq', trimmed) }
+  ];
+
+  for (const step of steps) {
+    try {
+      const query = step.build(buildBaseQuery());
+      const { data, error } = await query;
+      if (error) {
+        console.warn('Application lookup step failed:', step.label, error.message || error);
+        continue;
+      }
+      if (data) {
+        console.log('✅ Application found via', step.label);
+        return data;
+      }
+    } catch (lookupError) {
+      console.warn('Application lookup exception:', step.label, lookupError);
+    }
+  }
+
+  return null;
+}
+
 // Show custom styled alert matching design system
 function showLoginAlert(message, type = 'info') {
   const existingAlert = document.getElementById('loginAlert');
@@ -1131,10 +1520,34 @@ function showLoginAlert(message, type = 'info') {
     existingAlert.remove();
   }
 
-  const backgroundColor = type === 'success' ? '#d4edda' : type === 'error' ? '#f8d7da' : '#d1ecf1';
-  const borderColor = type === 'success' ? '#c3e6cb' : type === 'error' ? '#f5c6cb' : '#bee5eb';
-  const textColor = type === 'success' ? '#155724' : type === 'error' ? '#721c24' : '#0c5460';
-  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'ℹ';
+  const backgroundColor = type === 'success'
+    ? '#d4edda'
+    : type === 'error'
+      ? '#f8d7da'
+      : type === 'warning'
+        ? '#fff4e5'
+        : '#d1ecf1';
+  const borderColor = type === 'success'
+    ? '#c3e6cb'
+    : type === 'error'
+      ? '#f5c6cb'
+      : type === 'warning'
+        ? '#ffe5c0'
+        : '#bee5eb';
+  const textColor = type === 'success'
+    ? '#155724'
+    : type === 'error'
+      ? '#721c24'
+      : type === 'warning'
+        ? '#8a4a0a'
+        : '#0c5460';
+  const icon = type === 'success'
+    ? '✓'
+    : type === 'error'
+      ? '✕'
+      : type === 'warning'
+        ? '⚠'
+        : 'ℹ';
 
   const alertHTML = `
     <div id="loginAlert" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; min-width: 320px; max-width: 500px; background: ${backgroundColor}; border: 1px solid ${borderColor}; border-radius: 4px; padding: 1rem 1.25rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); animation: slideDown 0.3s ease;">
