@@ -30,19 +30,16 @@ WHERE full_name ILIKE '%hrach%'
 -- Delete corresponding applications if they exist
 -- (This assumes test students were created from test applications)
 DELETE FROM applications 
-WHERE first_name ILIKE '%hrach%' 
-   OR first_name ILIKE '%vardan%'
-   OR last_name ILIKE '%hrach%'
-   OR last_name ILIKE '%vardan%'
+WHERE applicant_name ILIKE '%hrach%' 
+   OR applicant_name ILIKE '%vardan%'
    OR email ILIKE '%test%'
-   OR email ILIKE '%hrach.vardan%';
+   OR email ILIKE '%hrach.vardan%'
+   OR email ILIKE '%hrach%';
 
 -- Delete test registrations (waiting list entries)
 DELETE FROM registrations 
-WHERE first_name ILIKE '%hrach%' 
-   OR first_name ILIKE '%vardan%'
-   OR last_name ILIKE '%hrach%'
-   OR last_name ILIKE '%vardan%'
+WHERE full_name ILIKE '%hrach%' 
+   OR full_name ILIKE '%vardan%'
    OR email ILIKE '%test%'
    OR email ILIKE '%hrach%';
 
