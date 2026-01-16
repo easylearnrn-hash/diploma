@@ -88,8 +88,7 @@ FROM applications a
 WHERE a.status = 'ENROLLED'
   AND NOT EXISTS (
     SELECT 1 FROM acnhs_students WHERE application_id = a.id
-  )
-ON CONFLICT (application_id) DO NOTHING;
+  );
 
 -- Verify restoration
 SELECT 
