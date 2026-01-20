@@ -878,18 +878,34 @@ body.preview-fullscreen {
       </div>
 
       <div class="form-group">
-        <label>What is your US immigration status?</label>
-        <input type="text" name="usImmigrationStatus" placeholder="e.g., US Citizen, Green Card Holder, Visa Type, N/A">
+        <label class="required">What is your US immigration status?</label>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="usImmigrationStatus" value="US Citizen" required style="width:auto;margin:0;">
+            <span style="color:white;">US Citizen</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="usImmigrationStatus" value="LPR (Green Card)" required style="width:auto;margin:0;">
+            <span style="color:white;">LPR (Green Card)</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="usImmigrationStatus" value="Other" required style="width:auto;margin:0;" id="usStatusOther">
+            <span style="color:white;">Other</span>
+          </label>
+        </div>
+        <div id="usStatusOtherField" style="display:none;margin-top:12px;">
+          <input type="text" name="usImmigrationStatusOther" placeholder="Please specify (e.g., F-1 Student Visa, H-1B, Tourist Visa, N/A)" style="width:100%;">
+        </div>
       </div>
 
       <div class="form-group">
-        <label>When was the last time you have been in Armenia?</label>
-        <input type="text" name="lastTimeInArmenia" placeholder="e.g., December 2024, Never visited">
+        <label class="required">When was the last time you have been in Armenia?</label>
+        <input type="date" name="lastTimeInArmenia" required>
       </div>
 
       <div class="form-group">
-        <label>When did you move out from Armenia? (Exact date you left Armenia)</label>
-        <input type="date" name="armeniaExitDate">
+        <label class="required">When did you move out from Armenia? (Exact date you left Armenia)</label>
+        <input type="date" name="armeniaExitDate" required>
       </div>
     </div>
 
@@ -2309,6 +2325,28 @@ if (disciplinarySelect) {
   });
 }
 
+// US Immigration Status - Show "Other" text field when "Other" is selected
+const usStatusRadios = document.querySelectorAll('input[name="usImmigrationStatus"]');
+const usStatusOtherField = document.getElementById('usStatusOtherField');
+const usStatusOtherInput = document.querySelector('input[name="usImmigrationStatusOther"]');
+
+usStatusRadios.forEach(radio => {
+  radio.addEventListener('change', function() {
+    if (this.value === 'Other') {
+      usStatusOtherField.style.display = 'block';
+      if (usStatusOtherInput) {
+        usStatusOtherInput.required = true;
+      }
+    } else {
+      usStatusOtherField.style.display = 'none';
+      if (usStatusOtherInput) {
+        usStatusOtherInput.required = false;
+        usStatusOtherInput.value = '';
+      }
+    }
+  });
+});
+
 // Progress bar
 form.addEventListener('input', function() {
   const inputs = form.querySelectorAll('input[required], select[required], textarea[required]');
@@ -3214,6 +3252,13 @@ function gatherAdmissionData() {
     recommendation: documentStatus('recommendationUpload', true)
   };
 
+  // Handle US Immigration Status - combine radio selection with "Other" text field
+  let usImmigrationStatusValue = getValue('usImmigrationStatus') || '—';
+  if (usImmigrationStatusValue === 'Other') {
+    const otherValue = getValue('usImmigrationStatusOther');
+    usImmigrationStatusValue = otherValue ? `Other: ${otherValue}` : 'Other (not specified)';
+  }
+
   return {
     applicantName,
   dob: formatDateValue(dobInputValue),
@@ -3224,9 +3269,9 @@ function gatherAdmissionData() {
     birthLocation,
     // Armenian citizenship and immigration status
     armenianCitizen: getValue('armenianCitizen') || '—',
-    usImmigrationStatus: getValue('usImmigrationStatus') || 'Not provided',
-    lastTimeInArmenia: getValue('lastTimeInArmenia') || 'Not provided',
-    armeniaExitDate: getValue('armeniaExitDate') || 'Not provided',
+    usImmigrationStatus: usImmigrationStatusValue,
+    lastTimeInArmenia: formatDateValue(getValue('lastTimeInArmenia')) || '—',
+    armeniaExitDate: formatDateValue(getValue('armeniaExitDate')) || '—',
     email: getValue('email') || '—',
     phone: getValue('phone') || '—',
     altPhone: getValue('altPhone') || 'Not provided',
