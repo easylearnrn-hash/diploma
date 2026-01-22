@@ -2,11 +2,11 @@
 // This file contains the public configuration for client-side Supabase access
 
 const SUPABASE_CONFIG = {
-  // Your Supabase project URL
-  url: 'https://zlvnxvrzotamhpezqedr.supabase.co',
+  // Your Supabase project URL - MIGRATED TO NEW PROJECT
+  url: 'https://eyhksbiceueoiamwnqpr.supabase.co',
   
   // Your Supabase anonymous (public) key - safe for client-side use
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI4MTEzMTcsImV4cCI6MjA3ODM4NzMxN30.-IoSqKhDrA9NuG4j3GufIbfmodWqCoppEklE1nTmw38',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8',
   
   // Optional: Additional configuration
   options: {

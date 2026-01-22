@@ -747,7 +747,7 @@ body{
         <label for="startDate">When do you want to start?</label>
         <select id="startDate" name="startDate" required style="width:100%;padding:18px 20px;background:rgba(10, 37, 64, 0.5);border:2px solid rgba(255,255,255,0.1);border-radius:16px;color:white;font-size:15px;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;-webkit-appearance:none;appearance:none;">
           <option value="" disabled selected>Select start date</option>
-          <option value="fall2026">Fall Semester 2026 (Late August – Early September)</option>
+          <option value="fall2026">Fall Semester 2026</option>
           <option value="spring2027">Spring Semester 2027 (Early – Mid January)</option>
         </select>
         
@@ -821,6 +821,42 @@ const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
 const INSTITUTIONAL_EMAIL_DOMAINS = ['@acnhs.am', '@student.acnhs.am', '@acnhs.edu', '@acnhs.edu.am'];
 const STORAGE_BUCKET = 'application-documents';
 const MAX_UPLOAD_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const STUDENT_VIEWER_TEST_ACCOUNT = {
+  email: 'test@acnhs.am',
+  password: 'Demirchyan36!'
+};
+const STUDENT_VIEWER_SELECTION_PAGE = 'student-viewer.html';
+
+function isStudentViewerSession() {
+  return sessionStorage.getItem('isStudentViewer') === 'true' || localStorage.getItem('isStudentViewer') === 'true';
+}
+
+function activateStudentViewerSession() {
+  sessionStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('isLoggedIn', 'true');
+  sessionStorage.setItem('isAdmin', 'false');
+  localStorage.setItem('isAdmin', 'false');
+  sessionStorage.setItem('isApplicationLogin', 'false');
+  localStorage.setItem('isApplicationLogin', 'false');
+  sessionStorage.setItem('isStudentViewer', 'true');
+  localStorage.setItem('isStudentViewer', 'true');
+  sessionStorage.setItem('viewerAccountEmail', STUDENT_VIEWER_TEST_ACCOUNT.email);
+  localStorage.setItem('viewerAccountEmail', STUDENT_VIEWER_TEST_ACCOUNT.email);
+  sessionStorage.setItem('userEmail', STUDENT_VIEWER_TEST_ACCOUNT.email);
+  localStorage.setItem('userEmail', STUDENT_VIEWER_TEST_ACCOUNT.email);
+  sessionStorage.removeItem('studentRecordId');
+  localStorage.removeItem('studentRecordId');
+  sessionStorage.removeItem('studentApplicationId');
+  localStorage.removeItem('studentApplicationId');
+  sessionStorage.removeItem('userId');
+  localStorage.removeItem('userId');
+  sessionStorage.removeItem('studentInstitutionalEmail');
+  localStorage.removeItem('studentInstitutionalEmail');
+  sessionStorage.removeItem('studentPersonalEmail');
+  localStorage.removeItem('studentPersonalEmail');
+  sessionStorage.setItem('viewerActiveStudentId', '');
+  localStorage.setItem('viewerActiveStudentId', '');
+}
 
 function isInstitutionalEmail(email = '') {
   const normalized = (email || '').trim().toLowerCase();
@@ -852,10 +888,13 @@ window.addEventListener('DOMContentLoaded', function() {
   const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
   const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
   const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
+  const isViewer = isStudentViewerSession();
   
   if (isLoggedIn && userEmail) {
     // Already logged in - redirect based on role
-    if (isAdmin) {
+    if (isViewer) {
+      window.location.href = STUDENT_VIEWER_SELECTION_PAGE;
+    } else if (isAdmin) {
       window.location.href = 'admin-home.html';
     } else {
       window.location.href = 'Student-page.html';
@@ -879,6 +918,17 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   // Disable button during authentication
   submitBtn.disabled = true;
   submitBtn.textContent = 'Signing in...';
+  const normalizedEmail = email.toLowerCase();
+
+  if (normalizedEmail === STUDENT_VIEWER_TEST_ACCOUNT.email && password === STUDENT_VIEWER_TEST_ACCOUNT.password) {
+    activateStudentViewerSession();
+    showLoginAlert('Test admin access granted. Select a student to view their real portal.', 'success');
+    submitBtn.textContent = 'Redirecting...';
+    setTimeout(() => {
+      window.location.href = STUDENT_VIEWER_SELECTION_PAGE;
+    }, 600);
+    return;
+  }
   
   try {
     // Initialize Supabase client
@@ -893,7 +943,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     const { data: adminUsers, error: adminError } = await supabase
       .from('admin_users')
       .select('id, name, email, username, password_hash, role, permissions, email_permissions, signature, title, phone_ext, status')
-      .or(`email.eq.${email},username.eq.${email}`)
+  .or(`email.eq.${email},username.eq.${email}`)
       .eq('status', 'active')
       .limit(1);
 
@@ -1311,7 +1361,7 @@ async function fetchLinkedStudentRecord(supabase, application) {
   }
 
   let query = supabase
-    .from('acnhs_students')
+    .from('students')
     .select('id, student_id, application_id, email, metadata')
     .limit(1);
 
@@ -1325,8 +1375,8 @@ async function fetchLinkedStudentRecord(supabase, application) {
 
   const { data, error } = await query;
   if (error) {
-    if (error.message?.includes('acnhs_students')) {
-      console.warn('ACNHS students table lookup failed:', error.message);
+    if (error.message?.includes('acnhs_students') || error.message?.includes('students')) {
+      console.warn('Students table lookup failed:', error.message);
       return null;
     }
     throw error;

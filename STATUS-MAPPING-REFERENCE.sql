@@ -1,0 +1,35 @@
+-- ==========================================
+-- STATUS MAPPING REFERENCE
+-- ==========================================
+
+-- APPLICATION STATUSES (in admin-applications.html):
+-- These are the statuses used for applications table
+-- =============================================
+-- SUBMITTED
+-- UNDER REVIEW
+-- ACTIVELY REVIEWING
+-- RFE PREPARING
+-- RFE SENT
+-- ADDITIONAL DOCUMENTS REQUESTED
+-- DOCUMENTS RECEIVED
+-- FINAL REVIEW
+-- APPROVED ← triggers student creation
+-- ACCEPTANCE LETTER SENT ← triggers student creation
+-- ENROLLED ← triggers student creation
+-- DENIED
+-- ON HOLD
+-- WITHDRAWN
+
+-- STUDENT STATUSES (in students table):
+-- These are the statuses for the students table
+-- =============================================
+-- active (default when created from approved application)
+-- inactive
+-- withdrawn
+-- graduated
+-- suspended
+-- enrolled
+-- pending
+
+-- The CREATE-OR-UPDATE-STUDENTS-TABLE.sql includes all these statuses in the constraint:
+-- CHECK (status IN ('active', 'inactive', 'withdrawn', 'graduated', 'suspended', 'enrolled', 'pending'))

@@ -4,7 +4,7 @@
 -- Step 1: Create the student_grades table
 CREATE TABLE IF NOT EXISTS public.student_grades (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  student_id UUID NOT NULL REFERENCES public.acnhs_students(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
   course_code VARCHAR(20) NOT NULL,
   course_name VARCHAR(255) NOT NULL,
   credits INTEGER NOT NULL CHECK (credits > 0),
@@ -77,7 +77,7 @@ CREATE TRIGGER update_student_grades_updated_at
 --   'A',
 --   4.0,
 --   'Fall 2026'
--- FROM public.acnhs_students
+-- FROM public.students
 -- LIMIT 1;
 
 -- Verify the table was created

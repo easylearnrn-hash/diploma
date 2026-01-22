@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Student Viewer – Armenian College of Nursing & Health Sciences</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/images/Seal.png">
+<link rel="shortcut icon" href="assets/images/favicon-32.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/watermark.css">
+<style>
+:root{
+  --bg-dark:#020617;
+  --bg-light:#f8fafc;
+  --accent:#22d3ee;
+  --accent-dark:#0ea5e9;
+  --border:#e2e8f0;
+  --text:#0f172a;
+  --muted:#475569;
+}
+*{box-sizing:border-box;font-family:'Inter',sans-serif;margin:0;padding:0}
+body{background:linear-gradient(135deg,#020617,#0f172a);color:var(--text);min-height:100vh;padding:40px}
+.viewer-shell{max-width:1200px;margin:0 auto;background:rgba(255,255,255,0.95);border-radius:24px;box-shadow:0 25px 60px rgba(2,6,23,0.25);overflow:hidden;border:1px solid rgba(15,23,42,0.08)}
+.viewer-header{display:flex;justify-content:space-between;align-items:center;padding:24px 32px;background:#020617;color:#f8fafc}
+.viewer-header h1{font-size:20px;font-weight:700;margin-bottom:4px}
+.viewer-header p{margin:0;font-size:14px;color:rgba(248,250,252,0.7)}
+.viewer-session{display:flex;align-items:center;gap:16px}
+.viewer-session span{font-size:14px;color:rgba(248,250,252,0.85)}
+.viewer-session button{padding:10px 16px;border-radius:999px;border:1px solid rgba(248,250,252,0.4);background:transparent;color:#f8fafc;font-weight:600;cursor:pointer}
+.viewer-session button:hover{background:rgba(248,250,252,0.1)}
+.viewer-body{padding:32px}
+.viewer-title{margin-bottom:18px}
+.viewer-title h2{font-size:28px;margin-bottom:8px;color:var(--text)}
+.viewer-title p{color:var(--muted);font-size:16px}
+.viewer-controls{display:flex;flex-wrap:wrap;gap:16px;margin-bottom:24px}
+.viewer-search{flex:1;min-width:260px;position:relative}
+.viewer-search input{width:100%;padding:14px 16px;border:1px solid var(--border);border-radius:14px;font-size:15px;box-shadow:0 8px 16px rgba(15,23,42,0.06)}
+.viewer-stats{display:flex;align-items:center;gap:6px;background:#f1f5f9;padding:12px 16px;border-radius:14px;font-weight:600;color:var(--muted)}
+.table-wrap{background:white;border-radius:20px;border:1px solid var(--border);box-shadow:0 15px 25px rgba(15,23,42,0.08);overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:15px}
+th,td{padding:16px 18px;text-align:left;border-bottom:1px solid var(--border)}
+th{background:#f8fafc;font-size:13px;letter-spacing:0.05em;text-transform:uppercase;color:#475569}
+tr:hover td{background:#fefce8}
+.view-btn{padding:10px 16px;border-radius:10px;border:1px solid var(--accent);color:var(--text);font-weight:600;background:transparent;cursor:pointer;transition:.2s}
+.view-btn:hover{background:var(--accent);color:#022c22}
+.empty-state{padding:40px;text-align:center;color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border-radius:999px;font-weight:600}
+.badge.active{background:#dcfce7;color:#15803d}
+.badge.probation{background:#fef3c7;color:#92400e}
+.badge.inactive{background:#fee2e2;color:#b91c1c}
+.loader{padding:40px;text-align:center;color:var(--muted);font-weight:600}
+@media(max-width:768px){body{padding:20px}th,td{padding:12px 10px}.viewer-session{flex-direction:column;align-items:flex-end}}
+</style>
+</head>
+<body class="acnhs-watermarked">
+<div class="viewer-shell">
+  <header class="viewer-header">
+    <div>
+      <h1>ACNHS Student Viewer</h1>
+      <p>Quality assurance + accreditation mode</p>
+    </div>
+    <div class="viewer-session">
+      <span id="viewerIdentity">test@acnhs.am</span>
+      <button id="viewerLogoutBtn" type="button">Logout</button>
+    </div>
+  </header>
+  <section class="viewer-body">
+    <header class="viewer-title">
+      <h2>Select a Student to View</h2>
+      <p>Choose any active record to open their live student portal in the current tab.</p>
+    </header>
+    <div class="viewer-controls">
+      <div class="viewer-search">
+        <input type="search" id="studentSearchInput" placeholder="Search by name, Student ID, or program" autocomplete="off">
+      </div>
+      <div class="viewer-stats" id="viewerStats">Loading students…</div>
+      <button type="button" class="view-btn" id="refreshStudentList" style="border-color:#cbd5f5">Refresh List</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Full Name</th>
+            <th>Student ID</th>
+            <th>Program</th>
+            <th>Status</th>
+            <th style="width:160px">Action</th>
+          </tr>
+        </thead>
+        <tbody id="studentListBody">
+          <tr><td colspan="5" class="loader">Connecting to registrar records…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-config.js"></script>
+<script src="js/activity-logger.js"></script>
+<script>
+const viewerAccountEmail = sessionStorage.getItem('viewerAccountEmail') || localStorage.getItem('viewerAccountEmail') || 'test@acnhs.am';
+const viewerEmail = viewerAccountEmail;
+const viewerStats = document.getElementById('viewerStats');
+const studentListBody = document.getElementById('studentListBody');
+const searchInput = document.getElementById('studentSearchInput');
+const refreshBtn = document.getElementById('refreshStudentList');
+const viewerLogoutBtn = document.getElementById('viewerLogoutBtn');
+const viewerIdentity = document.getElementById('viewerIdentity');
+let studentCache = [];
+let filteredStudents = [];
+
+function ensureViewerSession() {
+  const isViewer = sessionStorage.getItem('isStudentViewer') === 'true' || localStorage.getItem('isStudentViewer') === 'true';
+  if (!isViewer) {
+    window.location.href = 'login.html';
+    return false;
+  }
+  return true;
+}
+
+function describeStatus(status='') {
+  const normalized = (status || '').toLowerCase();
+  if (normalized.includes('probation')) return { label: status || 'Probation', className: 'badge probation' };
+  if (normalized.includes('inactive') || normalized.includes('withdrawn')) return { label: status || 'Inactive', className: 'badge inactive' };
+  return { label: status || 'Active', className: 'badge active' };
+}
+
+function formatProgram(program) {
+  if (!program) return 'Program Pending';
+  return program.replace(/_/g,' ').toUpperCase();
+}
+
+function getCampusEmail(record={}) {
+  return record.email || record.metadata?.portal?.institutional_email || record.metadata?.institutional_email || record.metadata?.contact?.institutional_email || null;
+}
+
+function getPersonalEmail(record={}) {
+  return record.metadata?.personal_email || record.metadata?.contact?.email || record.metadata?.guardian?.email || null;
+}
+
+function persistViewerStudent(record) {
+  if (!record) return;
+  const campusEmail = getCampusEmail(record);
+  const personalEmail = getPersonalEmail(record);
+  const fallbackEmail = campusEmail || personalEmail || `${record.student_id || 'student'}@acnhs.am`;
+  sessionStorage.setItem('studentRecordId', record.id);
+  localStorage.setItem('studentRecordId', record.id);
+  sessionStorage.setItem('viewerActiveStudentId', record.student_id || record.id);
+  localStorage.setItem('viewerActiveStudentId', record.student_id || record.id);
+  sessionStorage.setItem('userId', record.student_id || record.id);
+  localStorage.setItem('userId', record.student_id || record.id);
+  sessionStorage.setItem('userEmail', fallbackEmail);
+  localStorage.setItem('userEmail', fallbackEmail);
+  sessionStorage.setItem('studentInstitutionalEmail', campusEmail || fallbackEmail);
+  localStorage.setItem('studentInstitutionalEmail', campusEmail || fallbackEmail);
+  if (personalEmail) {
+    sessionStorage.setItem('studentPersonalEmail', personalEmail);
+    localStorage.setItem('studentPersonalEmail', personalEmail);
+  } else {
+    sessionStorage.removeItem('studentPersonalEmail');
+    localStorage.removeItem('studentPersonalEmail');
+  }
+  if (record.application_id) {
+    sessionStorage.setItem('studentApplicationId', record.application_id);
+    localStorage.setItem('studentApplicationId', record.application_id);
+  }
+  sessionStorage.setItem('isLoggedIn', 'true');
+  localStorage.setItem('isLoggedIn', 'true');
+}
+
+function logViewerSelection(record) {
+  if (typeof logActivity === 'function') {
+    logActivity('view', 'student', `Admin viewer opened ${record.full_name || 'student record'}`, {
+      viewer_email: viewerEmail,
+      student_id: record.student_id,
+      student_record_id: record.id,
+      program: record.program,
+      status: record.status
+    });
+  }
+}
+
+function renderStudents(list) {
+  if (!list || list.length === 0) {
+    studentListBody.innerHTML = '<tr><td colspan="5" class="empty-state">No students match your search.</td></tr>';
+    viewerStats.textContent = '0 records';
+    return;
+  }
+  viewerStats.textContent = `${list.length} record${list.length === 1 ? '' : 's'}`;
+  studentListBody.innerHTML = list.map(student => {
+    const statusBadge = describeStatus(student.status);
+    return `
+      <tr>
+        <td>${student.full_name || '—'}</td>
+        <td style="font-family:monospace">${student.student_id || 'Pending'}</td>
+        <td>${formatProgram(student.program)}</td>
+        <td><span class="${statusBadge.className}">${statusBadge.label}</span></td>
+        <td><button type="button" class="view-btn" data-record-id="${student.id}">View Student</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function applySearchFilter(term='') {
+  const normalized = term.trim().toLowerCase();
+  if (!normalized) {
+    filteredStudents = [...studentCache];
+  } else {
+    filteredStudents = studentCache.filter(student => {
+      return [student.full_name, student.student_id, student.program, student.status]
+        .some(field => (field || '').toString().toLowerCase().includes(normalized));
+    });
+  }
+  renderStudents(filteredStudents);
+}
+
+async function loadStudents() {
+  if (!ensureViewerSession()) return;
+  viewerStats.textContent = 'Loading…';
+  studentListBody.innerHTML = '<tr><td colspan="5" class="loader">Loading student roster…</td></tr>';
+  try {
+    const supabase = initSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
+    const { data, error } = await supabase
+      .from('students')
+      .select('id, student_id, full_name, program, status, email, metadata, application_id')
+      .order('full_name', { ascending: true });
+    if (error) throw error;
+    studentCache = data || [];
+    filteredStudents = [...studentCache];
+    renderStudents(filteredStudents);
+  } catch (error) {
+    console.error('Failed to load students:', error);
+    studentListBody.innerHTML = `<tr><td colspan="5" class="empty-state">Unable to load student roster. ${error.message || ''}</td></tr>`;
+    viewerStats.textContent = 'Error';
+  }
+}
+
+function handleRowClick(event) {
+  const target = event.target.closest('.view-btn');
+  if (!target) return;
+  const recordId = target.dataset.recordId;
+  const record = studentCache.find(student => String(student.id) === String(recordId));
+  if (!record) return;
+  persistViewerStudent(record);
+  logViewerSelection(record);
+  window.location.href = 'Student-page.html';
+}
+
+function handleLogout() {
+  ['isStudentViewer','studentRecordId','viewerActiveStudentId','studentApplicationId','userId','userEmail','studentInstitutionalEmail','studentPersonalEmail','viewerAccountEmail','isLoggedIn']
+    .forEach(key => {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
+    });
+  window.location.href = 'login.html';
+}
+
+if (!ensureViewerSession()) {
+  // redirected already
+} else {
+  viewerIdentity.textContent = viewerEmail;
+  loadStudents();
+}
+
+document.addEventListener('click', handleRowClick);
+searchInput.addEventListener('input', e => applySearchFilter(e.target.value));
+refreshBtn.addEventListener('click', loadStudents);
+viewerLogoutBtn.addEventListener('click', handleLogout);
+</script>
+</body>
+</html>

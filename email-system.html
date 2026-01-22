@@ -2428,6 +2428,31 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       updatePreview();
     }
 
+    async function fetchApplicationIdentifiersByEmail(email) {
+      if (!email || !validateEmail(email)) return null;
+
+      try {
+        const { data, error } = await db
+          .from('applications')
+          .select('reference_number, control_number, document_id, verification_hash')
+          .eq('email', email)
+          .order('submission_date', { ascending: false, nullsFirst: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) throw error;
+        return data || null;
+      } catch (err) {
+        // 406 errors occur when multiple rows match a .single() query. We log and continue with no identifiers.
+        if (err?.code === 'PGRST116' || err?.message?.includes('Results contain more than one row')) {
+          console.warn('Multiple applications matched for email; returning latest row from query result.', email);
+        } else {
+          console.warn('Failed to fetch application identifiers:', err);
+        }
+        return null;
+      }
+    }
+
     async function updatePreview() {
       const subject = document.getElementById('emailSubject').value || 'Email Subject';
       const body = document.getElementById('emailBody').value || 'Your email content will appear here...';
@@ -2447,26 +2472,17 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // Fetch student data if email is provided
       let studentInfo = '';
       if (recipientEmail && validateEmail(recipientEmail)) {
-        try {
-          const { data: studentData, error: studentError } = await db
-            .from('applications')
-            .select('reference_number, control_number, document_id, verification_hash')
-            .eq('email', recipientEmail)
-            .single();
+        const studentData = await fetchApplicationIdentifiersByEmail(recipientEmail);
+        if (studentData) {
+          const infoItems = [];
+          if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+          if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+          if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+          if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
           
-          if (!studentError && studentData) {
-            const infoItems = [];
-            if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
-            if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
-            if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
-            if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
-            
-            if (infoItems.length > 0) {
-              studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
-            }
+          if (infoItems.length > 0) {
+            studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
           }
-        } catch (e) {
-          console.log('Could not fetch student data for preview:', e);
         }
       }
       
@@ -3259,25 +3275,48 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     let currentForwardingTab = 'staff';
     let studentForwardingRulesData = [];
 
-    // Load student emails from acnhs_students table
+    // Load student emails from students table (fallback to acnhs_students if legacy)
     async function loadStudentEmails() {
       try {
         console.log('📚 Loading student institutional emails...');
 
-        // Fetch all student emails from acnhs_students table (only @acnhs.am emails)
-        const { data: students, error: studentsError } = await db
-          .from('acnhs_students')
-          .select('id, student_id, full_name, email, enrollment_status')
-          .not('email', 'is', null)
-          .ilike('email', '%@acnhs.am')
-          .order('full_name', { ascending: true });
+        const studentSources = ['students', 'acnhs_students'];
+        let students = [];
+        let sourceTable = null;
+        let lastError = null;
 
-        if (studentsError) {
-          console.error('Error fetching students:', studentsError);
-          throw studentsError;
+        for (const table of studentSources) {
+          const { data, error } = await db
+            .from(table)
+            .select('*')
+            .not('email', 'is', null)
+            .ilike('email', '%@acnhs.am')
+            .order('full_name', { ascending: true });
+
+          if (!error) {
+            students = data || [];
+            sourceTable = table;
+            break;
+          }
+
+          lastError = error;
+          if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+            console.warn(`Table '${table}' not found. Trying fallback...`);
+            continue;
+          }
+          throw error;
         }
 
-        console.log(`📚 Found ${students?.length || 0} students with @acnhs.am emails`);
+        if (!sourceTable) {
+          console.error('Unable to load student emails. No student table available.');
+          throw lastError || new Error('Student email source unavailable');
+        }
+
+        if (sourceTable !== 'students') {
+          console.warn(`Fallback in effect: using legacy '${sourceTable}' table for institutional email list.`);
+        }
+
+        console.log(`📚 Found ${students.length} students with @acnhs.am emails via ${sourceTable}`);
 
         // Get all student email addresses (filter to ensure they're @acnhs.am)
         const studentEmails = (students || [])
@@ -3301,15 +3340,20 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         studentForwardingRulesData = (students || [])
           .filter(s => s.email && s.email.toLowerCase().endsWith('@acnhs.am'))
           .map(student => {
-            const existingRule = studentRules.find(r => r.acnhs_email === student.email.toLowerCase().trim());
+            const emailKey = student.email.toLowerCase().trim();
+            const existingRule = studentRules.find(r => r.acnhs_email === emailKey);
+            const metadata = typeof student.metadata === 'object' && student.metadata !== null
+              ? student.metadata
+              : {};
+            const derivedStatus = student.status || student.enrollment_status || metadata.status || metadata.enrollment_status || 'unknown';
             return {
-              acnhs_email: student.email.toLowerCase().trim(),
+              acnhs_email: emailKey,
               forward_to_email: existingRule?.forward_to_email || '',
               enabled: existingRule?.enabled || false,
               id: existingRule?.id || null,
               student_name: student.full_name || 'Unknown',
               student_id: student.student_id || 'N/A',
-              enrollment_status: student.enrollment_status || 'unknown'
+              enrollment_status: derivedStatus
             };
           });
 
@@ -4048,26 +4092,17 @@ ${email.body}`;
           
           // Fetch student data from applications table
           let studentInfo = '';
-          try {
-            const { data: studentData, error: studentError } = await db
-              .from('applications')
-              .select('reference_number, control_number, document_id, verification_hash')
-              .eq('email', recipient.email)
-              .single();
+          const studentData = await fetchApplicationIdentifiersByEmail(recipient.email);
+          if (studentData) {
+            const infoItems = [];
+            if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+            if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+            if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+            if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
             
-            if (!studentError && studentData) {
-              const infoItems = [];
-              if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
-              if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
-              if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
-              if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
-              
-              if (infoItems.length > 0) {
-                studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
-              }
+            if (infoItems.length > 0) {
+              studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
             }
-          } catch (e) {
-            console.log('Could not fetch student data:', e);
           }
           
           let emailHtml = EMAIL_HTML_TEMPLATE

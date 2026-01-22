@@ -623,6 +623,23 @@
       let sbClient;
       let allStudents = [];
       let currentStudent = null;
+      const STUDENT_TABLE_CANDIDATES = ['students', 'acnhs_students'];
+      let studentTableName = STUDENT_TABLE_CANDIDATES[0];
+
+      function parseMetadata(value) {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+        try {
+          return JSON.parse(value);
+        } catch {
+          return {};
+        }
+      }
+
+      function deriveStatus(student) {
+        const metadata = parseMetadata(student?.metadata);
+        return (student?.status || student?.enrollment_status || metadata?.status || metadata?.enrollment_status || 'active').toLowerCase();
+      }
 
       // Load students on page load
       document.addEventListener('DOMContentLoaded', function() {
@@ -643,15 +660,40 @@
 
       async function loadStudents() {
         try {
-          // Fetch all students from acnhs_students table
-          const { data, error } = await sbClient
-            .from('acnhs_students')
-            .select('*')
-            .order('created_at', { ascending: false });
+          let students = [];
+          let sourceTable = null;
+          let lastError = null;
 
-          if (error) throw error;
+          for (const table of STUDENT_TABLE_CANDIDATES) {
+            const { data, error } = await sbClient
+              .from(table)
+              .select('*')
+              .order('created_at', { ascending: false });
 
-          allStudents = data || [];
+            if (!error) {
+              students = data || [];
+              sourceTable = table;
+              break;
+            }
+
+            lastError = error;
+            if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+              console.warn(`Student table '${table}' not found. Trying fallback...`);
+              continue;
+            }
+            throw error;
+          }
+
+          if (!sourceTable) {
+            throw lastError || new Error('No student table available');
+          }
+
+          studentTableName = sourceTable;
+          if (sourceTable !== STUDENT_TABLE_CANDIDATES[0]) {
+            console.warn(`Using fallback student table '${sourceTable}'. Some features may be limited.`);
+          }
+
+          allStudents = students;
           updateStats();
           renderStudents(allStudents);
         } catch (error) {
@@ -662,9 +704,9 @@
 
       function updateStats() {
         const total = allStudents.length;
-        const active = allStudents.filter(s => s.enrollment_status === 'active').length;
-        const inactive = allStudents.filter(s => s.enrollment_status === 'inactive').length;
-        const withdrawn = allStudents.filter(s => s.enrollment_status === 'withdrawn').length;
+        const active = allStudents.filter(s => deriveStatus(s) === 'active').length;
+        const inactive = allStudents.filter(s => deriveStatus(s) === 'inactive').length;
+        const withdrawn = allStudents.filter(s => deriveStatus(s) === 'withdrawn').length;
 
         document.getElementById('totalStudents').textContent = total;
         document.getElementById('activeStudents').textContent = active;
@@ -673,69 +715,73 @@
       }
 
       function renderStudents(students) {
-      const tbody = document.getElementById('studentsTableBody');
+        const tbody = document.getElementById('studentsTableBody');
 
-      if (students.length === 0) {
-        tbody.innerHTML = `
-          <tr>
-            <td colspan="8">
-              <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <p>No students found</p>
-              </div>
-            </td>
-          </tr>
-        `;
-        return;
+        if (students.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="8">
+                <div class="empty-state">
+                  <div class="empty-icon">📭</div>
+                  <p>No students found</p>
+                </div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = students.map(student => {
+          const statusValue = deriveStatus(student);
+          return `
+            <tr onclick="viewStudent('${student.id}')">
+              <td><span class="student-id">${escapeHtml(student.student_id || 'N/A')}</span></td>
+              <td>${escapeHtml(student.full_name || 'N/A')}</td>
+              <td>${escapeHtml(student.email || 'N/A')}</td>
+              <td>${escapeHtml(student.phone || 'N/A')}</td>
+              <td>${escapeHtml(student.program || 'N/A')}</td>
+              <td>${escapeHtml(student.start_term || 'N/A')}</td>
+              <td><span class="status-badge status-${statusValue}">${statusValue.toUpperCase()}</span></td>
+              <td onclick="event.stopPropagation()">
+                <div class="actions">
+                  <button class="action-btn" onclick="viewStudent('${student.id}')" title="View Details">👁️</button>
+                  <button class="action-btn" onclick="viewApplication('${student.application_id}')" title="View Application" ${!student.application_id ? 'disabled' : ''}>📄</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        }).join('');
       }
 
-        tbody.innerHTML = students.map(student => `
-          <tr onclick="viewStudent('${student.id}')">
-            <td><span class="student-id">${escapeHtml(student.student_id || 'N/A')}</span></td>
-            <td>${escapeHtml(student.full_name || 'N/A')}</td>
-            <td>${escapeHtml(student.email || 'N/A')}</td>
-            <td>${escapeHtml(student.phone || 'N/A')}</td>
-            <td>${escapeHtml(student.program || 'N/A')}</td>
-            <td>${escapeHtml(student.start_term || 'N/A')}</td>
-            <td><span class="status-badge status-${student.enrollment_status || 'active'}">${(student.enrollment_status || 'active').toUpperCase()}</span></td>
-            <td onclick="event.stopPropagation()">
-              <div class="actions">
-                <button class="action-btn" onclick="viewStudent('${student.id}')" title="View Details">👁️</button>
-                <button class="action-btn" onclick="viewApplication('${student.application_id}')" title="View Application" ${!student.application_id ? 'disabled' : ''}>📄</button>
-              </div>
-            </td>
-          </tr>
-        `).join('');
-      }    function filterStudents() {
-      const search = document.getElementById('searchInput').value.toLowerCase();
-      const statusFilter = document.getElementById('statusFilter').value;
-      const programFilter = document.getElementById('programFilter').value;
+      function filterStudents() {
+        const search = document.getElementById('searchInput').value.toLowerCase();
+        const statusFilter = document.getElementById('statusFilter').value;
+        const programFilter = document.getElementById('programFilter').value;
 
-      let filtered = allStudents;
+        let filtered = allStudents;
 
-      // Apply search filter
-      if (search) {
-        filtered = filtered.filter(student => {
-          const searchStr = [
-            student.student_id,
-            student.full_name,
-            student.email,
-            student.phone
-          ].join(' ').toLowerCase();
-          return searchStr.includes(search);
-        });
-      }
+        if (search) {
+          filtered = filtered.filter(student => {
+            const searchStr = [
+              student.student_id,
+              student.full_name,
+              student.email,
+              student.phone
+            ].join(' ').toLowerCase();
+            return searchStr.includes(search);
+          });
+        }
 
-        // Apply status filter
         if (statusFilter) {
-          filtered = filtered.filter(s => s.enrollment_status === statusFilter);
-        }      // Apply program filter
-      if (programFilter) {
-        filtered = filtered.filter(s => s.program === programFilter);
-      }
+          filtered = filtered.filter(s => deriveStatus(s) === statusFilter);
+        }
 
-      renderStudents(filtered);
-    }
+        if (programFilter) {
+          filtered = filtered.filter(s => s.program === programFilter);
+        }
+
+        renderStudents(filtered);
+      }
 
     function viewStudent(studentId) {
       // Open the student detail page in modal
@@ -765,7 +811,7 @@
         if (student) {
           currentStudent = student;
           document.getElementById('modalStudentId').value = student.student_id || '';
-          document.getElementById('modalStatus').value = student.enrollment_status || 'active';
+          document.getElementById('modalStatus').value = deriveStatus(student) || 'active';
           document.getElementById('modalFullName').value = student.full_name || '';
           document.getElementById('modalEmail').value = student.email || '';
           document.getElementById('modalPhone').value = student.phone || '';
@@ -791,6 +837,7 @@
         if (!currentStudent) return;
 
         try {
+          const statusValue = document.getElementById('modalStatus').value;
           const updates = {
             full_name: document.getElementById('modalFullName').value,
             email: document.getElementById('modalEmail').value,
@@ -798,14 +845,25 @@
             date_of_birth: document.getElementById('modalDOB').value,
             program: document.getElementById('modalProgram').value,
             start_term: document.getElementById('modalStartTerm').value,
-            enrollment_status: document.getElementById('modalStatus').value,
             updated_at: new Date().toISOString()
           };
 
+          if (studentTableName === 'acnhs_students') {
+            updates.enrollment_status = statusValue;
+          } else {
+            updates.status = statusValue;
+            const metadata = parseMetadata(currentStudent.metadata);
+            updates.metadata = {
+              ...metadata,
+              status: statusValue
+            };
+          }
+
           const { error } = await sbClient
-            .from('acnhs_students')
+            .from(studentTableName)
             .update(updates)
-            .eq('id', currentStudent.id);        if (error) throw error;
+            .eq('id', currentStudent.id);
+          if (error) throw error;
 
         showSuccess('Student record updated successfully');
         closeModal();

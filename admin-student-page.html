@@ -851,9 +851,154 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script>
-    let currentStudent = null;
-    let sbClient = null;
-    let currentStudentId = null; // Global variable to store current student ID
+  let currentStudent = null;
+  let currentApplication = null;
+  let sbClient = null;
+  let currentStudentId = null; // Global variable to store current student ID
+  const STUDENT_TABLE_CANDIDATES = ['students', 'acnhs_students'];
+  let studentTableName = STUDENT_TABLE_CANDIDATES[0];
+  let usedInlineTemplate = false;
+  const FEMALE_GENDER_MARKERS = ['female', 'f', 'woman', 'lady', 'girl', 'feminine'];
+  const MALE_GENDER_MARKERS = ['male', 'm', 'man', 'gentleman', 'boy', 'masculine'];
+    const GRADE_TABLE_CANDIDATES = ['student_grades', 'acnhs_student_grades'];
+    let gradeTableName = GRADE_TABLE_CANDIDATES[0];
+    const missingGradeTables = new Set();
+    let gradeLoadError = '';
+    let gradeDataSource = 'table';
+    const GRADE_SETUP_DOC = 'CREATE-STUDENT-GRADES-TABLE.sql';
+    const LETTER_GRADE_POINTS = {
+      'A+': 4.0,
+      'A': 4.0,
+      'A-': 3.7,
+      'B+': 3.3,
+      'B': 3.0,
+      'B-': 2.7,
+      'C+': 2.3,
+      'C': 2.0,
+      'C-': 1.7,
+      'D+': 1.3,
+      'D': 1.0,
+      'D-': 0.7,
+      'F': 0.0,
+      'WF': 0.0,
+      'P': 0.0,
+      'PASS': 0.0
+    };
+
+    function parseMetadata(value) {
+      if (!value) return {};
+      if (typeof value === 'object') return value;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+
+    function deriveStatus(student) {
+      const metadata = parseMetadata(student?.metadata);
+      return (student?.status || student?.enrollment_status || metadata?.status || metadata?.enrollment_status || 'active').toLowerCase();
+    }
+
+    function deriveSalutation(genderValue, explicitSalutation) {
+      if (explicitSalutation && explicitSalutation.trim()) {
+        return explicitSalutation.trim();
+      }
+
+      const normalizedGender = (genderValue || '').toString().trim().toLowerCase();
+
+      if (!normalizedGender) {
+        return 'Mx.';
+      }
+
+      if (FEMALE_GENDER_MARKERS.includes(normalizedGender)) {
+        return 'Mrs.';
+      }
+
+      if (MALE_GENDER_MARKERS.includes(normalizedGender)) {
+        return 'Mr.';
+      }
+
+      if (normalizedGender.includes('non') || normalizedGender.includes('nb')) {
+        return 'Mx.';
+      }
+
+      return 'Mx.';
+    }
+
+    function letterToPoints(grade) {
+      if (!grade) return null;
+      const normalized = grade.toString().trim().toUpperCase();
+      if (normalized in LETTER_GRADE_POINTS) {
+        return LETTER_GRADE_POINTS[normalized];
+      }
+      return null;
+    }
+
+    function normalizeGradeEntry(entry) {
+      if (!entry || typeof entry !== 'object') return null;
+
+      const courseCode = entry.course_code || entry.courseCode || entry.code || entry.course || entry.subject || '';
+      const courseName = entry.course_name || entry.courseName || entry.name || entry.title || courseCode || 'Course';
+      const creditsRaw = entry.credits ?? entry.credit_hours ?? entry.creditHours ?? entry.units ?? entry.credit ?? 0;
+      const gradeValue = (entry.grade || entry.letter_grade || entry.letterGrade || entry.score || '').toString().trim().toUpperCase();
+      const gradePointsRaw = entry.grade_points ?? entry.gradePoints ?? entry.points ?? null;
+      const normalizedPoints = Number(gradePointsRaw);
+      const computedPoints = Number.isFinite(normalizedPoints) ? normalizedPoints : (letterToPoints(gradeValue) ?? 0);
+      const term = entry.term || entry.semester || entry.session || entry.academic_term || entry.year || '';
+
+      if (!courseCode && !courseName) return null;
+      if (!gradeValue) return null;
+
+      return {
+        course_code: courseCode || courseName || 'Course',
+        course_name: courseName || courseCode || 'Course',
+        credits: Number(creditsRaw) || 0,
+        grade: gradeValue,
+        grade_points: computedPoints,
+        term: term || 'N/A'
+      };
+    }
+
+    function unwrapGradeCollection(source) {
+      if (!source) return [];
+      if (Array.isArray(source)) return source;
+      if (typeof source === 'object') {
+        if (Array.isArray(source.records)) return source.records;
+        if (Array.isArray(source.items)) return source.items;
+        return Object.values(source);
+      }
+      return [];
+    }
+
+    function getEmbeddedGrades(student) {
+      if (!student) return [];
+      const metadata = parseMetadata(student?.metadata);
+      const academicRecords = parseMetadata(student?.academic_records);
+      const candidateSources = [
+        student?.grade_history,
+        student?.gradeHistory,
+        student?.grades,
+        academicRecords?.grades,
+        metadata?.grade_history,
+        metadata?.gradeHistory,
+        metadata?.grades,
+        metadata?.academic?.grades,
+        metadata?.academic_records?.grades,
+        metadata?.gradebook,
+        metadata?.gpa_history
+      ];
+
+      for (const source of candidateSources) {
+        const normalized = unwrapGradeCollection(source)
+          .map(normalizeGradeEntry)
+          .filter(Boolean);
+        if (normalized.length) {
+          return normalized;
+        }
+      }
+      return [];
+    }
 
     // Initialize when page loads
     window.addEventListener('DOMContentLoaded', function() {
@@ -888,15 +1033,37 @@
     // Load all student data
     async function loadStudentData(studentId) {
       try {
-        // Load student profile
-        const { data: student, error } = await sbClient
-          .from('acnhs_students')
-          .select('*')
-          .eq('id', studentId)
-          .single();
+        let student = null;
+        let lastError = null;
 
-        if (error) throw error;
-        if (!student) throw new Error('Student not found');
+        // Try each table candidate
+        for (const table of STUDENT_TABLE_CANDIDATES) {
+          const { data, error } = await sbClient
+            .from(table)
+            .select('*')
+            .eq('id', studentId)
+            .maybeSingle();
+
+          if (!error && data) {
+            student = data;
+            studentTableName = table;
+            if (table !== STUDENT_TABLE_CANDIDATES[0]) {
+              console.warn(`Using legacy student table '${table}'.`);
+            }
+            break;
+          }
+
+          lastError = error;
+          if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+            console.warn(`Student table '${table}' not found. Trying fallback...`);
+            continue;
+          }
+          throw error;
+        }
+
+        if (!student) {
+          throw lastError || new Error('Student not found');
+        }
 
         currentStudent = student;
         populateStudentProfile(student);
@@ -918,38 +1085,70 @@
       // Header
       document.getElementById('studentName').textContent = student.full_name || 'Unknown Student';
       document.getElementById('studentId').textContent = student.student_id || 'N/A';
-      document.getElementById('statusText').textContent = (student.enrollment_status || 'active').toUpperCase();
+      document.getElementById('statusText').textContent = deriveStatus(student).toUpperCase();
       document.getElementById('programText').textContent = student.program || 'N/A';
       
       // Initials for avatar
       const initials = (student.full_name || 'U S').split(' ').map(n => n[0]).join('').toUpperCase();
       document.getElementById('studentInitials').textContent = initials;
 
-      // Overview tab
-      document.getElementById('fullName').textContent = student.full_name || '-';
-      document.getElementById('dob').textContent = student.date_of_birth || '-';
-      document.getElementById('gender').textContent = student.gender || '-';
-      document.getElementById('nationality').textContent = student.nationality || '-';
-      
-      // Try to get citizenship info from application payload if available
-      // These fields are in the payload, not directly in the student record
-      document.getElementById('armenianCitizen').textContent = '-';
-      document.getElementById('usImmigrationStatus').textContent = '-';
-      document.getElementById('lastTimeInArmenia').textContent = '-';
-      document.getElementById('armeniaExitDate').textContent = '-';
-      
-      document.getElementById('email').textContent = student.email || '-';
-      document.getElementById('phone').textContent = student.phone || '-';
-      document.getElementById('program').textContent = student.program || '-';
-      document.getElementById('startTerm').textContent = student.start_term || '-';
-      document.getElementById('expectedGrad').textContent = student.expected_graduation || '-';
-      document.getElementById('credits').textContent = student.total_credits_earned || '0';
-      document.getElementById('emergencyName').textContent = student.emergency_contact_name || '-';
-      document.getElementById('emergencyRelation').textContent = student.emergency_contact_relation || '-';
-      document.getElementById('emergencyPhone').textContent = student.emergency_contact_phone || '-';
+      hydrateOverviewDetails({ student });
 
       // GPA
       document.getElementById('gpaValue').textContent = (student.current_gpa || 0).toFixed(2);
+    }
+
+    function setOverviewValue(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (value === null || value === undefined) {
+        el.textContent = '—';
+        return;
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        el.textContent = trimmed && trimmed !== 'Not provided' ? trimmed : '—';
+        return;
+      }
+      el.textContent = value;
+    }
+
+    function formatYesNo(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+      const str = value.toString().trim().toLowerCase();
+      if (!str) return '—';
+      if (['yes', 'y', 'true', '1'].includes(str)) return 'Yes';
+      if (['no', 'n', 'false', '0'].includes(str)) return 'No';
+      return value;
+    }
+
+    function hydrateOverviewDetails({ student = currentStudent, application = currentApplication } = {}) {
+      if (!student && !application) return;
+      const payload = application?.payload || {};
+      const metadata = parseMetadata(student?.metadata);
+
+      const dobInfo = getDobFromApplication({ ...student, ...application, payload });
+      const startTerm = student?.start_term || application?.start_term || payload.startTerm;
+      const program = student?.program || application?.program || payload.programChoice;
+
+      setOverviewValue('fullName', student?.full_name || payload.applicantName || '—');
+      setOverviewValue('dob', dobInfo.display && dobInfo.display !== 'N/A' ? dobInfo.display : (student?.date_of_birth || payload.dob || '—'));
+      setOverviewValue('gender', student?.gender || payload.gender || metadata?.gender || '—');
+      setOverviewValue('nationality', student?.nationality || payload.nationality || metadata?.nationality || '—');
+      setOverviewValue('armenianCitizen', formatYesNo(payload.armenianCitizen ?? student?.armenian_citizen ?? metadata?.armenianCitizen));
+      setOverviewValue('usImmigrationStatus', payload.usImmigrationStatus || student?.us_immigration_status || metadata?.usImmigrationStatus || '—');
+      setOverviewValue('lastTimeInArmenia', payload.lastTimeInArmenia || student?.last_time_in_armenia || metadata?.lastTimeInArmenia || '—');
+      setOverviewValue('armeniaExitDate', payload.armeniaExitDate || student?.armenia_exit_date || metadata?.armeniaExitDate || '—');
+      setOverviewValue('email', student?.email || application?.email || payload.email || metadata?.contactEmail || '—');
+      setOverviewValue('phone', student?.phone || application?.phone || payload.phone || metadata?.contactPhone || '—');
+      setOverviewValue('program', program || '—');
+      setOverviewValue('startTerm', startTerm || '—');
+      setOverviewValue('expectedGrad', student?.expected_graduation || payload.expectedGraduation || '—');
+      setOverviewValue('credits', student?.total_credits_earned ?? payload.creditsEarned ?? '0');
+      setOverviewValue('emergencyName', student?.emergency_contact_name || payload.emergencyName || '—');
+      setOverviewValue('emergencyRelation', student?.emergency_contact_relation || payload.emergencyRelation || '—');
+      setOverviewValue('emergencyPhone', student?.emergency_contact_phone || payload.emergencyPhone || '—');
     }
 
     async function loadDocuments(student) {
@@ -1245,35 +1444,87 @@
     }
 
     async function loadGrades(student) {
-      try {
-        const { data: grades, error } = await sbClient
-          .from('student_grades')
-          .select('*')
-          .eq('student_id', student.id)
-          .order('term', { ascending: false });
+      gradeLoadError = '';
+      gradeDataSource = 'table';
 
-        if (error) throw error;
-
-        renderGrades(grades || []);
-        calculateGPA(grades || []);
-      } catch (error) {
-        console.error('Error loading grades:', error);
-        // Show empty state on error
+      if (!student?.id) {
+        gradeLoadError = 'Missing student identifier; cannot load grades.';
+        gradeDataSource = 'none';
         renderGrades([]);
         calculateGPA([]);
+        return;
       }
+
+      for (const table of GRADE_TABLE_CANDIDATES) {
+        if (missingGradeTables.has(table)) continue;
+        try {
+          const { data, error } = await sbClient
+            .from(table)
+            .select('*')
+            .eq('student_id', student.id)
+            .order('term', { ascending: false });
+
+          if (error) {
+            if (error.code === 'PGRST205' || error.message?.includes(`public.${table}`)) {
+              console.warn(`Grade table '${table}' not found; skipping.`, error);
+              missingGradeTables.add(table);
+              continue;
+            }
+            throw error;
+          }
+
+          gradeTableName = table;
+          const normalizedGrades = (data || [])
+            .map(normalizeGradeEntry)
+            .filter(Boolean);
+
+          gradeLoadError = '';
+          renderGrades(normalizedGrades.length ? normalizedGrades : (data || []));
+          calculateGPA(normalizedGrades.length ? normalizedGrades : (data || []));
+          return;
+        } catch (error) {
+          if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+            console.warn(`Grade table '${table}' not found; skipping.`, error);
+            missingGradeTables.add(table);
+            continue;
+          }
+          console.error('Error loading grades:', error);
+          gradeLoadError = 'Unable to load grades right now.';
+          gradeDataSource = 'none';
+          renderGrades([]);
+          calculateGPA([]);
+          return;
+        }
+      }
+
+      const embeddedGrades = getEmbeddedGrades(student);
+      if (embeddedGrades.length) {
+        gradeDataSource = 'metadata';
+        gradeLoadError = 'Showing embedded grade history because the shared grades table is unavailable.';
+        renderGrades(embeddedGrades);
+        calculateGPA(embeddedGrades);
+        return;
+      }
+
+      gradeDataSource = 'none';
+      gradeLoadError = `Grades table not found. Run ${GRADE_SETUP_DOC} in Supabase to enable this section.`;
+      renderGrades([]);
+      calculateGPA([]);
     }
 
     function renderGrades(grades) {
       const tbody = document.getElementById('gradesTableBody');
-      
-      if (grades.length === 0) {
+      const list = Array.isArray(grades) ? grades : [];
+
+      if (list.length === 0) {
+        const message = gradeLoadError || 'No grades recorded yet';
+        const icon = gradeLoadError ? '⚠️' : '📚';
         tbody.innerHTML = `
           <tr>
             <td colspan="6">
               <div class="empty-state">
-                <div class="empty-icon">📚</div>
-                <p>No grades recorded yet</p>
+                <div class="empty-icon">${icon}</div>
+                <p>${escapeHtml(message)}</p>
               </div>
             </td>
           </tr>
@@ -1281,23 +1532,35 @@
         return;
       }
 
-      tbody.innerHTML = grades.map(grade => {
-        const gradeClass = grade.grade.charAt(0).toLowerCase();
+      tbody.innerHTML = list.map(grade => {
+        const courseCode = escapeHtml(grade.course_code || grade.course_name || 'Course');
+        const courseName = escapeHtml(grade.course_name || grade.course_code || '-');
+        const credits = Number(grade.credits ?? grade.credit_hours ?? grade.units) || 0;
+        const gradeValue = (grade.grade || '').toString().trim().toUpperCase();
+        const gradeClassSuffix = gradeValue ? gradeValue.charAt(0).toLowerCase() : '';
+        const gradePointsValue = Number(grade.grade_points);
+        const gradePoints = Number.isFinite(gradePointsValue) ? gradePointsValue : (letterToPoints(gradeValue) ?? 0);
+        const term = escapeHtml(grade.term || 'N/A');
+        const gradeCell = gradeValue
+          ? `<span class="grade-badge grade-${gradeClassSuffix}">${escapeHtml(gradeValue)}</span>`
+          : '-';
+
         return `
           <tr>
-            <td><strong>${grade.course_code}</strong></td>
-            <td>${grade.course_name}</td>
-            <td>${grade.credits}</td>
-            <td><span class="grade-badge grade-${gradeClass}">${grade.grade}</span></td>
-            <td>${grade.grade_points.toFixed(2)}</td>
-            <td>${grade.term}</td>
+            <td><strong>${courseCode}</strong></td>
+            <td>${courseName}</td>
+            <td>${credits}</td>
+            <td>${gradeCell}</td>
+            <td>${gradePoints.toFixed(2)}</td>
+            <td>${term}</td>
           </tr>
         `;
       }).join('');
     }
 
     function calculateGPA(grades) {
-      if (grades.length === 0) {
+      const list = Array.isArray(grades) ? grades : [];
+      if (list.length === 0) {
         document.getElementById('gpaValue').textContent = '0.00';
         return;
       }
@@ -1305,21 +1568,29 @@
       let totalPoints = 0;
       let totalCredits = 0;
 
-      grades.forEach(grade => {
-        totalPoints += grade.grade_points * grade.credits;
-        totalCredits += grade.credits;
+      list.forEach(grade => {
+        const creditsRaw = Number(grade.credits ?? grade.credit_hours ?? grade.units);
+        const normalizedCredits = Number.isFinite(creditsRaw) ? creditsRaw : 0;
+        const pointsRaw = Number(grade.grade_points);
+        const normalizedPoints = Number.isFinite(pointsRaw) ? pointsRaw : (letterToPoints(grade.grade) ?? 0);
+
+        if (normalizedCredits > 0) {
+          totalPoints += normalizedPoints * normalizedCredits;
+          totalCredits += normalizedCredits;
+        }
       });
 
       const gpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
       document.getElementById('gpaValue').textContent = gpa.toFixed(2);
       
       // Also update the student's GPA in the database
-      if (currentStudent && gpa > 0) {
+      if (currentStudent && gpa > 0 && gradeDataSource === 'table') {
         sbClient
-          .from('acnhs_students')
+          .from(studentTableName)
           .update({ current_gpa: gpa, total_credits_earned: totalCredits })
           .eq('id', currentStudent.id)
-          .then(() => console.log('GPA updated successfully'));
+          .then(() => console.log('GPA updated successfully'))
+          .catch(err => console.warn('Failed to update GPA:', err));
       }
     }
 
@@ -1372,6 +1643,8 @@
 
     async function loadApplication(applicationId) {
       if (!applicationId) {
+        currentApplication = null;
+        hydrateOverviewDetails({ student: currentStudent });
         document.getElementById('applicationDetails').innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">📋</div>
@@ -1390,9 +1663,13 @@
 
         if (error) throw error;
 
+        currentApplication = app;
+        hydrateOverviewDetails({ student: currentStudent, application: currentApplication });
         renderApplication(app);
       } catch (error) {
         console.error('Error loading application:', error);
+        currentApplication = null;
+        hydrateOverviewDetails({ student: currentStudent });
         document.getElementById('applicationDetails').innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">⚠️</div>
@@ -1686,9 +1963,10 @@
         const applicantName = payload.applicantName || applicationData.applicant_name || currentStudent.full_name || 'Student Name';
         const dobInfo = getDobFromApplication({ ...applicationData, ...currentStudent, payload });
         const dob = dobInfo.display;
-        const gender = payload.gender || currentStudent.gender || '';
+  const gender = payload.gender || currentStudent.gender || '';
         const program = payload.programChoice || applicationData.program || currentStudent.program || 'Bachelor of Science in Nursing';
         const startTerm = payload.startTerm || applicationData.start_term || currentStudent.start_term || 'TBD';
+  const salutation = deriveSalutation(gender, payload.salutation);
 
         console.log('[loadAcceptanceLetter] Extracted values:', {
           applicantName,
@@ -1707,7 +1985,7 @@
           academicYear: `${today.getFullYear()} - ${today.getFullYear() + 1}`,
           fullName: applicantName,
           lastName: applicantName.split(' ').pop() || 'Student',
-          salutation: gender === 'female' ? 'Ms.' : 'Mr.',
+          salutation,
           dob: dob,
           dobIso: dobInfo.iso,
           applicationId: applicationData.reference_number || currentStudent.application_id || 'N/A',
@@ -1787,17 +2065,18 @@
           return;
         }
 
-        // Inject the data as a script if we have the template
-        if (template && !template.includes('ACCEPTANCE_LETTER_DATA')) {
+        // Inject the data as a script every time to ensure the iframe has fresh values
+        if (template) {
           const dataScript = `
             <script>
               window.ACCEPTANCE_LETTER_DATA = ${JSON.stringify(letterData)};
             <\/script>
           `;
-          
-          // Insert data script before the closing head tag
+
           if (template.includes('</head>')) {
             template = template.replace('</head>', dataScript + '</head>');
+          } else {
+            template = dataScript + template;
           }
         }
 
@@ -1907,9 +2186,10 @@
         const applicantName = payload.applicantName || applicationData.applicant_name || currentStudent.full_name || 'Student Name';
         const dobInfo = getDobFromApplication({ ...applicationData, ...currentStudent, payload });
         const dob = dobInfo.display;
-        const gender = payload.gender || currentStudent.gender || '';
+  const gender = payload.gender || currentStudent.gender || '';
         const program = payload.programChoice || applicationData.program || currentStudent.program || 'Bachelor of Science in Nursing';
         const startTerm = payload.startTerm || applicationData.start_term || currentStudent.start_term || 'TBD';
+  const salutation = deriveSalutation(gender, payload.salutation);
 
         console.log('[generateAcceptanceLetter] Extracted values:', {
           applicantName,
@@ -1928,7 +2208,7 @@
           academicYear: `${today.getFullYear()} - ${today.getFullYear() + 1}`,
           fullName: applicantName,
           lastName: applicantName.split(' ').pop() || 'Student',
-          salutation: gender === 'female' ? 'Ms.' : 'Mr.',
+          salutation,
           dob: dob,
           dobIso: dobInfo.iso,
           applicationId: applicationData.reference_number || currentStudent.application_id || 'N/A',
@@ -2074,38 +2354,49 @@
       if (!source) return { display: 'N/A', iso: null, raw: null };
       
       const candidates = [
-        source.date_of_birth,
-        source.dob,
-        source.rawDob,
-        source.dobIso,
-        source.payload?.dob,
-        source.payload?.rawDob,
+        // Payload = single source of truth (always prefer these)
         source.payload?.dobIso,
+        source.payload?.rawDob,
+        source.payload?.dob,
         source.payload?.dateOfBirth,
         source.payload?.date_of_birth,
+        // Metadata copies
         source.metadata?.dob,
         source.metadata?.date_of_birth,
-        source.student?.date_of_birth,
-        source.student?.dob
+        // Application-level snapshots
+        source.dobIso,
+        source.rawDob,
+        source.dob,
+        source.date_of_birth,
+        // Linked student record (may lag behind payload)
+        source.student?.dob,
+        source.student?.date_of_birth
       ];
       
+      const parseIsoLike = (input) => {
+        if (typeof input !== 'string') return null;
+        const trimmed = input.trim();
+        if (!trimmed) return null;
+        const match = trimmed.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (!match) return null;
+        const [year, month, day] = match[1].split('-').map(Number);
+        if ([year, month, day].some(num => Number.isNaN(num))) return null;
+        const parsedDate = new Date(year, month - 1, day);
+        if (Number.isNaN(parsedDate.getTime())) return null;
+        return {
+          raw: trimmed,
+          iso: match[1],
+          display: parsedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        };
+      };
+
       for (const candidate of candidates) {
         if (candidate && candidate !== '—' && candidate !== '-' && candidate.toUpperCase && candidate.toUpperCase() !== 'N/A') {
           const normalized = candidate.trim();
           if (!normalized) continue;
           
-          // Check if it's ISO format YYYY-MM-DD
-          if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
-            const [year, month, day] = normalized.split('-').map(Number);
-            const parsed = new Date(year, month - 1, day);
-            if (!isNaN(parsed.getTime())) {
-              return {
-                raw: normalized,
-                iso: normalized,
-                display: parsed.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
-              };
-            }
-          }
+          const isoLike = parseIsoLike(normalized);
+          if (isoLike) return isoLike;
           
           // Try parsing as date (FALLBACK - avoid if possible)
           // CRITICAL: This fallback has timezone issues
@@ -2366,10 +2657,20 @@
 
     function withdrawStudent() {
       if (confirm(`Are you sure you want to withdraw ${currentStudent.full_name}?`)) {
+        const updates = { updated_at: new Date().toISOString() };
+        
+        if (studentTableName === 'acnhs_students') {
+          updates.enrollment_status = 'withdrawn';
+        } else {
+          updates.status = 'withdrawn';
+          const metadata = parseMetadata(currentStudent.metadata);
+          updates.metadata = { ...metadata, status: 'withdrawn' };
+        }
+        
         // Update enrollment status
         sbClient
-          .from('acnhs_students')
-          .update({ enrollment_status: 'withdrawn' })
+          .from(studentTableName)
+          .update(updates)
           .eq('id', currentStudent.id)
           .then(() => {
             alert('Student withdrawn successfully');

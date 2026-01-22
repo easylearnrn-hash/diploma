@@ -605,3 +605,77 @@ END$$;
 
 GRANT ALL ON public.students TO service_role;
 GRANT INSERT, SELECT, UPDATE, DELETE ON public.students TO anon;
+
+-- ==========================================
+-- USER ACTIVITY LOG
+-- ==========================================
+
+CREATE TABLE IF NOT EXISTS public.user_activity_log (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.admin_users(id) ON DELETE CASCADE,
+    user_email TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    action_category TEXT NOT NULL,
+    action_description TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    target_name TEXT,
+    old_value JSONB,
+    new_value JSONB,
+    ip_address TEXT,
+    user_agent TEXT,
+    session_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    metadata JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_user_id ON public.user_activity_log(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_user_email ON public.user_activity_log(user_email);
+CREATE INDEX IF NOT EXISTS idx_activity_created_at ON public.user_activity_log(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_activity_action_type ON public.user_activity_log(action_type);
+CREATE INDEX IF NOT EXISTS idx_activity_action_category ON public.user_activity_log(action_category);
+CREATE INDEX IF NOT EXISTS idx_activity_target_id ON public.user_activity_log(target_id);
+
+ALTER TABLE public.user_activity_log ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'user_activity_log'
+          AND policyname = 'Anon can insert activity logs'
+    ) THEN
+        CREATE POLICY "Anon can insert activity logs"
+            ON public.user_activity_log
+            FOR INSERT
+            TO anon
+            WITH CHECK (true);
+    END IF;
+END$$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'public'
+          AND tablename = 'user_activity_log'
+          AND policyname = 'Anon can read activity logs'
+    ) THEN
+        CREATE POLICY "Anon can read activity logs"
+            ON public.user_activity_log
+            FOR SELECT
+            TO anon
+            USING (true);
+    END IF;
+END$$;
+
+GRANT ALL ON public.user_activity_log TO service_role;
+GRANT INSERT, SELECT ON public.user_activity_log TO anon;
+
+COMMENT ON TABLE public.user_activity_log IS 'Comprehensive activity log for all user actions in the admin system';
+COMMENT ON COLUMN public.user_activity_log.action_type IS 'Type of action: create, update, delete, view, send, export, login, logout';
+COMMENT ON COLUMN public.user_activity_log.action_category IS 'Category: application, student, email, user, document, system';
+COMMENT ON COLUMN public.user_activity_log.old_value IS 'JSON snapshot of data before change (for updates/deletes)';
+COMMENT ON COLUMN public.user_activity_log.new_value IS 'JSON snapshot of data after change (for creates/updates)';

@@ -17,8 +17,8 @@ CREATE TABLE IF NOT EXISTS user_activity_log (
   ip_address TEXT,
   user_agent TEXT,
   session_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  metadata JSONB -- Additional context data
+  created_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+  metadata JSONB DEFAULT '{}'::jsonb -- Additional context data
 );
 
 -- Add indexes for better query performance
