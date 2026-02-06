@@ -693,7 +693,33 @@
             console.warn(`Using fallback student table '${sourceTable}'. Some features may be limited.`);
           }
 
-          allStudents = students;
+          // Filter out students whose linked application is not ENROLLED
+          const filteredStudents = [];
+          for (const student of students) {
+            if (student.application_id) {
+              // Check the application status
+              const { data: app, error: appError } = await sbClient
+                .from('applications')
+                .select('status')
+                .eq('id', student.application_id)
+                .maybeSingle();
+              
+              // Only include if application status is ENROLLED
+              if (!appError && app && app.status === 'ENROLLED') {
+                filteredStudents.push(student);
+              } else if (appError) {
+                console.warn('Error checking application status:', appError);
+                // If we can't check, include the student (safer default)
+                filteredStudents.push(student);
+              }
+              // If status is not ENROLLED, skip this student
+            } else {
+              // No application_id, include the student
+              filteredStudents.push(student);
+            }
+          }
+
+          allStudents = filteredStudents;
           updateStats();
           renderStudents(allStudents);
         } catch (error) {
@@ -733,6 +759,7 @@
 
         tbody.innerHTML = students.map(student => {
           const statusValue = deriveStatus(student);
+          const hasInvoice = student.invoice_url ? true : false;
           return `
             <tr onclick="viewStudent('${student.id}')">
               <td><span class="student-id">${escapeHtml(student.student_id || 'N/A')}</span></td>
@@ -746,6 +773,7 @@
                 <div class="actions">
                   <button class="action-btn" onclick="viewStudent('${student.id}')" title="View Details">👁️</button>
                   <button class="action-btn" onclick="viewApplication('${student.application_id}')" title="View Application" ${!student.application_id ? 'disabled' : ''}>📄</button>
+                  ${hasInvoice ? `<button class="action-btn" onclick="window.open('${student.invoice_url}', '_blank')" title="View Invoice">💰</button>` : ''}
                 </div>
               </td>
             </tr>

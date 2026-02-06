@@ -1149,6 +1149,24 @@
           <select id="programFilter">
             <option value="">All programs</option>
           </select>
+          <select id="applicationStatusFilter" style="display:none;">
+            <option value="">All statuses</option>
+            <option value="SUBMITTED">📋 Submitted</option>
+            <option value="UNDER REVIEW">🔍 Under Review</option>
+            <option value="ACTIVELY REVIEWING">🔬 Actively Reviewing</option>
+            <option value="RFE PREPARING">📝 RFE Preparing</option>
+            <option value="RFE SENT">📤 RFE Sent</option>
+            <option value="ADDITIONAL DOCUMENTS REQUESTED">📎 Additional Documents Requested</option>
+            <option value="DOCUMENTS RECEIVED">✅ Documents Received</option>
+            <option value="FINAL REVIEW">⚖️ Final Review</option>
+            <option value="APPROVED">✅ Approved</option>
+            <option value="CONFIRMED">🎯 Confirmed</option>
+            <option value="ACCEPTANCE LETTER SENT">📧 Acceptance Letter Sent</option>
+            <option value="ENROLLED">🎓 Enrolled</option>
+            <option value="DENIED">❌ Denied</option>
+            <option value="ON HOLD">⏸️ On Hold</option>
+            <option value="WITHDRAWN">🚫 Withdrawn</option>
+          </select>
           <button class="btn" id="sortStatusBtn" title="Order by status progression">Order by Status</button>
           <button class="btn" id="refreshApplications">Refresh</button>
         </div>
@@ -1423,12 +1441,12 @@
           <div class="value" id="drawerStart">—</div>
           <select id="drawerStartEdit" class="edit-input" style="display:none;">
             <option value="">Select Start Term</option>
-            <option value="Spring 2026">Spring 2026</option>
-            <option value="Fall 2026">Fall 2026</option>
-            <option value="Spring 2027">Spring 2027</option>
-            <option value="Fall 2027">Fall 2027</option>
-            <option value="Spring 2028">Spring 2028</option>
-            <option value="Fall 2028">Fall 2028</option>
+            <option value="Spring Semester 2026">Spring Semester 2026</option>
+            <option value="Fall Semester 2026">Fall Semester 2026</option>
+            <option value="Spring Semester 2027">Spring Semester 2027</option>
+            <option value="Fall Semester 2027">Fall Semester 2027</option>
+            <option value="Spring Semester 2028">Spring Semester 2028</option>
+            <option value="Fall Semester 2028">Fall Semester 2028</option>
           </select>
         </div>
         <div class="info-card">
@@ -2225,9 +2243,10 @@
     }
 
     function shouldAutoCreateStudent(status = '') {
-      const normalized = (status || '').toString().trim().toLowerCase();
+      const normalized = (status || '').toString().trim().toUpperCase();
       if (!normalized) return false;
-  return ['approve', 'confirm', 'accept', 'admit', 'enroll'].some(keyword => normalized.includes(keyword));
+      // ONLY create student record when status is exactly "ENROLLED"
+      return normalized === 'ENROLLED';
     }
 
     const STUDENT_EMAIL_DOMAIN = 'acnhs.am';
@@ -2319,8 +2338,28 @@
       return Array.isArray(data) && data.length > 0;
     }
 
-    function buildStudentRecord(app, payload, studentId) {
+    function generateCampusEmailSync(fullName) {
+      if (!fullName) return null;
+      const parts = fullName.trim().split(/\s+/);
+      if (parts.length === 0) return null;
+      
+      // Get first initial (lowercase, remove non-letters)
+      const firstInitial = parts[0].replace(/[^a-zA-Z]/g, '').toLowerCase().charAt(0);
+      
+      // Get last name (lowercase, remove non-letters)
+      const lastName = parts[parts.length - 1].replace(/[^a-zA-Z]/g, '').toLowerCase();
+      
+      if (!firstInitial || !lastName) return null;
+      return `${firstInitial}.${lastName}@acnhs.am`;
+    }
+
+    async function buildStudentRecordAsync(supabase, app, payload, studentId) {
       const personalEmail = payload.email || app.email || null;
+      const fullName = payload.applicantName || app.applicant_name || null;
+      
+      // Generate campus email using the same logic as generateInstitutionalEmail
+      const campusEmail = await generateInstitutionalEmail(supabase, app, payload);
+      
       const dobInfo = getDobInfo(app, payload);
       const metadata = {
         reference_number: app.reference_number,
@@ -2328,6 +2367,10 @@
         control_number: app.control_number,
         original_status: app.status,
         personal_email: personalEmail,
+        institutional_email: campusEmail,
+        portal: {
+          institutional_email: campusEmail
+        },
         username: payload.username || app.username || null,
         dob_display: dobInfo.display,
         dob_iso: dobInfo.iso,
@@ -2336,8 +2379,8 @@
       return {
         student_id: studentId,
         application_id: app.id,
-        full_name: payload.applicantName || app.applicant_name || null,
-        email: personalEmail,
+        full_name: fullName,
+        email: campusEmail,
         phone: payload.phone || app.phone || null,
         date_of_birth: dobInfo.iso || dobInfo.raw || null,
         gender: payload.gender || null,
@@ -2370,9 +2413,9 @@
       }
 
       const studentId = await generateUniqueStudentId(supabase);
-      const record = buildStudentRecord(app, payload, studentId);
+      const record = await buildStudentRecordAsync(supabase, app, payload, studentId);
 
-      // Insert into acnhs_students table (new dedicated table)
+      // Insert into students table with proper campus email
       const { data, error } = await supabase
         .from('students')
         .insert(record)
@@ -2473,10 +2516,11 @@
           ...(existingMetadata.portal || {}),
           institutional_email: institutionalEmail,
           provisioned_at: provisionedAt,
-          username: payload.username || app.username || null
+          username: institutionalEmail // Use institutional email as username
         }
       };
 
+      // Update student record with institutional email
       const { error: studentUpdateError } = await supabase
         .from('students')
         .update({
@@ -2487,6 +2531,21 @@
 
       if (studentUpdateError) {
         throw transformStudentsTableError(studentUpdateError);
+      }
+
+      // Update application username to institutional email when enrolled
+      const { error: appUpdateError } = await supabase
+        .from('applications')
+        .update({
+          username: institutionalEmail, // Change username to institutional email
+          institutional_email: institutionalEmail,
+          payload: updatedPayload
+        })
+        .eq('id', app.id);
+
+      if (appUpdateError) {
+        console.error('Error updating application username:', appUpdateError);
+        // Don't throw - student record is already updated
       }
 
       return {
@@ -3683,7 +3742,16 @@
 
     function sortApplicationsByStatus() {
       const { filtered, statusMessage } = computeFilteredApplications();
-      const ordered = [...filtered].sort((a, b) => {
+      
+      // Apply status filter if selected
+      const selectedStatus = document.getElementById('applicationStatusFilter').value;
+      let applicationsToSort = filtered;
+      
+      if (selectedStatus) {
+        applicationsToSort = filtered.filter(app => app.status === selectedStatus);
+      }
+      
+      const ordered = [...applicationsToSort].sort((a, b) => {
         const priorityDiff = getStatusPriority(a) - getStatusPriority(b);
         if (priorityDiff !== 0) return priorityDiff;
 
@@ -3697,7 +3765,15 @@
       });
 
       renderApplications(ordered);
-      setStatus('applicationsStatus', `${statusMessage} • Ordered by status`);
+      
+      let statusText = statusMessage;
+      if (selectedStatus) {
+        statusText += ` • Filtered by: ${selectedStatus} (${ordered.length}) • Ordered by status`;
+      } else {
+        statusText += ` • Ordered by status`;
+      }
+      
+      setStatus('applicationsStatus', statusText);
     }
 
     // Copy text to clipboard with feedback
@@ -4433,7 +4509,7 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUyMTE3NjksImV4cCI6MjA1MDc4Nzc2OX0.w_JulQw0KHZ_s3fAuGCpYCnq8j5HoJCTxXyJIHmBDQs'
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8'
           },
           body: JSON.stringify({
             to: studentEmail,
@@ -5919,52 +5995,108 @@
       const heroTitle = newStatus === 'ENROLLED' ? 'Enrollment Confirmed' : 'Application Status Update';
       const loginUrl = newStatus === 'ENROLLED' ? studentPortalUrl : applicationStatusUrl;
       
-      console.log('📧 Sending status change email to:', studentEmail);
+      console.log('📧 ===== EMAIL SENDING DEBUG =====');
+      console.log('📧 Recipient:', studentEmail);
+      console.log('📧 Status:', newStatus);
+      console.log('📧 Applicant Name:', applicantName);
+      console.log('📧 Reference:', referenceNumber);
+      console.log('📧 Institutional Email:', institutionalEmail);
+      console.log('📧 Student ID:', studentId);
+      console.log('📧 Full application.payload:', application.payload);
+      console.log('📧 Will use ENROLLED template?', newStatus === 'ENROLLED' && institutionalEmail);
 
       let emailSubject = `Application Status Update - ${referenceNumber}`;
       let bodyContent = '';
 
       if (newStatus === 'ENROLLED' && institutionalEmail) {
-        emailSubject = `Enrollment Confirmed - ${applicantName}`;
+        emailSubject = `🎓 Welcome to ACNHS - Your Enrollment is Complete!`;
         bodyContent = `
-          Welcome to ACNHS! Your student record is now active and your institutional email has been provisioned.
-          
-          <div style="background:#ecfdf5;border-left:3px solid #10b981;padding:16px;border-radius:8px;margin:20px 0;">
-            <div style="font-size:13px;font-weight:700;color:#065f46;margin-bottom:6px;">STUDENT PORTAL ACCESS</div>
-            <div style="font-size:14px;color:#065f46;line-height:22px;">
-              ${studentId ? `<div><strong>Student ID:</strong> ${studentId}</div>` : ''}
-              <div><strong>Institutional Email:</strong> ${institutionalEmail}</div>
-              ${portalUsername && portalUsername !== institutionalEmail ? `<div><strong>Portal Username:</strong> ${portalUsername}</div>` : ''}
-              <div><strong>Password:</strong> Use the same password you created when applying. If you need help resetting it, reply to this email.</div>
+          <div style="background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#ffffff;padding:20px;border-radius:8px;text-align:center;margin-bottom:24px;">
+            <div style="font-size:28px;font-weight:900;margin-bottom:8px;">Welcome to ACNHS!</div>
+            <div style="font-size:16px;font-weight:600;opacity:0.95;">Your enrollment is now complete</div>
+          </div>
+
+          <div style="font-size:15px;color:#334155;line-height:24px;margin-bottom:20px;">
+            Congratulations, <strong>${applicantName}</strong>! We are thrilled to welcome you to the Armenian College of Nursing & Health Sciences. Your journey as an ACNHS student officially begins today!
+          </div>
+
+          <div style="background:#ecfdf5;border-left:4px solid #10b981;padding:20px;border-radius:8px;margin:24px 0;">
+            <div style="font-size:16px;font-weight:800;color:#065f46;margin-bottom:16px;">📧 Your New Campus Email Created</div>
+            <div style="font-size:14px;color:#065f46;line-height:22px;margin-bottom:12px;">
+              We've created an official campus email address for you:
+            </div>
+            <div style="background:#ffffff;padding:16px;border-radius:6px;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;">CAMPUS EMAIL ADDRESS</div>
+              <div style="font-size:18px;font-weight:900;color:#0f766e;font-family:monospace;">${institutionalEmail}</div>
+            </div>
+            <div style="font-size:13px;color:#065f46;line-height:20px;">
+              ℹ️ This is your official ACNHS email address. Use it for all college-related communications, accessing your student portal, and connecting with faculty and staff.
             </div>
           </div>
 
-          <div style="background:#f8fafc;padding:14px;border-radius:8px;margin:16px 0;">
-            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:4px;">REFERENCE NUMBER</div>
-            <div style="font-size:14px;font-weight:800;color:#0f172a;">${referenceNumber}</div>
+          <div style="background:#f0f9ff;border-left:4px solid #0ea5e9;padding:20px;border-radius:8px;margin:24px 0;">
+            <div style="font-size:16px;font-weight:800;color:#0c4a6e;margin-bottom:16px;">🔐 Your Student Portal Credentials</div>
+            ${studentId ? `
+              <div style="background:#ffffff;padding:14px;border-radius:6px;margin-bottom:12px;">
+                <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;">STUDENT ID</div>
+                <div style="font-size:16px;font-weight:900;color:#0369a1;font-family:monospace;">${studentId}</div>
+              </div>
+            ` : ''}
+            <div style="background:#ffffff;padding:14px;border-radius:6px;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;">USERNAME / EMAIL</div>
+              <div style="font-size:16px;font-weight:900;color:#0369a1;font-family:monospace;">${institutionalEmail}</div>
+            </div>
+            <div style="background:#ffffff;padding:14px;border-radius:6px;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:700;color:#64748b;margin-bottom:4px;">PASSWORD</div>
+              <div style="font-size:14px;color:#334155;line-height:20px;">Use the same password you created when you submitted your application. If you've forgotten it, click "Reset Password" on the login page.</div>
+            </div>
           </div>
 
-          <div style="height:1px;background:#e2e8f0;margin:24px 0;"></div>
-
-          Your student portal includes orientation schedules, billing timelines, and onboarding checklists. Log in to get started:
-
-          <div style="text-align:center;margin:24px 0;">
-            <a href="${loginUrl}" style="display:inline-block;background:linear-gradient(135deg,#2dd4bf 0%,#0f766e 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;box-shadow:0 4px 12px rgba(16,185,129,0.3);">
+          <div style="text-align:center;margin:28px 0;">
+            <a href="${loginUrl}" style="display:inline-block;background:linear-gradient(135deg,#2dd4bf 0%,#0f766e 100%);color:#ffffff;text-decoration:none;padding:16px 32px;border-radius:8px;font-weight:800;font-size:16px;box-shadow:0 4px 14px rgba(16,185,129,0.4);">
               <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;">
                 <tr>
-                  <td style="font-size:18px;padding:0 8px 0 0;color:#ffffff;white-space:nowrap;">🎓</td>
-                  <td style="font-size:14px;font-weight:700;color:#ffffff;white-space:nowrap;">Open Student Portal</td>
+                  <td style="font-size:20px;padding:0 10px 0 0;color:#ffffff;white-space:nowrap;">🎓</td>
+                  <td style="font-size:16px;font-weight:800;color:#ffffff;white-space:nowrap;">Access Your Student Portal</td>
                 </tr>
               </table>
             </a>
           </div>
 
-          <div style="background:#fdf2f8;padding:14px;border-radius:8px;border:1px solid #fbcfe8;">
-            <div style="font-size:13px;color:#9d174d;line-height:20px;">
-              <strong style="color:#be185d;">Need support?</strong> Reply to this email or contact student-services@acnhs.am and we’ll help you get connected.
+          <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:18px;border-radius:8px;margin:24px 0;">
+            <div style="font-size:15px;font-weight:800;color:#92400e;margin-bottom:12px;">📋 Next Steps</div>
+            <div style="font-size:14px;color:#78350f;line-height:22px;">
+              <div style="margin-bottom:8px;">✓ Log into your student portal using your campus email</div>
+              <div style="margin-bottom:8px;">✓ Review your orientation schedule and onboarding checklist</div>
+              <div style="margin-bottom:8px;">✓ Check your billing timeline and payment options</div>
+              <div style="margin-bottom:8px;">✓ Complete any remaining enrollment requirements</div>
+              <div>✓ Connect with your academic advisor</div>
             </div>
           </div>
+
+          <div style="background:#f8fafc;padding:16px;border-radius:8px;margin:20px 0;">
+            <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">YOUR APPLICATION REFERENCE</div>
+            <div style="font-size:15px;font-weight:800;color:#0f172a;">${referenceNumber}</div>
+          </div>
+
+          <div style="background:#fdf2f8;border:2px solid #f9a8d4;padding:18px;border-radius:8px;margin:24px 0;">
+            <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;">
+              <tr>
+                <td style="font-size:20px;padding:0 12px 0 0;vertical-align:top;white-space:nowrap;">💬</td>
+                <td style="font-size:14px;color:#831843;line-height:21px;">
+                  <strong style="color:#be185d;display:block;margin-bottom:6px;">Questions? We're Here to Help!</strong>
+                  Reply to this email or contact us at <strong>student-services@acnhs.am</strong> for any assistance with your enrollment, portal access, or campus email setup.
+                </td>
+              </tr>
+            </table>
+          </div>
+
+          <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#ffffff;padding:20px;border-radius:8px;text-align:center;margin-top:32px;">
+            <div style="font-size:16px;font-weight:700;margin-bottom:8px;">🌟 Welcome to the ACNHS Family! 🌟</div>
+            <div style="font-size:14px;opacity:0.95;">We look forward to supporting you on your educational journey</div>
+          </div>
         `;
+
       } else {
         bodyContent = `
           Your application status has been updated. Please review the information below:
@@ -6131,7 +6263,7 @@
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUyMTE3NjksImV4cCI6MjA1MDc4Nzc2OX0.w_JulQw0KHZ_s3fAuGCpYCnq8j5HoJCTxXyJIHmBDQs'
+            'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8'
           },
           body: JSON.stringify({
             to: studentEmail,
@@ -6187,6 +6319,43 @@
         // Get current application to append to history
         const currentApp = applicationsData.find(a => a.id === currentApplicationId);
         const currentHistory = currentApp?.status_history || [];
+        const previousStatus = currentApp?.status;
+
+        // If changing FROM enrolled TO something else, remove student record
+        if (previousStatus === 'ENROLLED' && newStatus !== 'ENROLLED') {
+          try {
+            // Find student record linked to this application
+            const { data: studentRecord, error: findError } = await supabase
+              .from('students')
+              .select('id')
+              .eq('application_id', currentApplicationId)
+              .maybeSingle();
+
+            if (findError) {
+              console.warn('Error finding student record:', findError);
+            }
+
+            if (studentRecord) {
+              // Delete the student record
+              const { error: deleteError } = await supabase
+                .from('students')
+                .delete()
+                .eq('id', studentRecord.id);
+
+              if (deleteError) {
+                console.error('Error deleting student record:', deleteError);
+                throw new Error('Failed to remove student record: ' + deleteError.message);
+              }
+
+              console.log('✅ Student record removed from students table (status changed from ENROLLED)');
+              showNotification('Student Removed', 'Student removed from enrolled students list', 'info');
+            }
+          } catch (studentDeleteError) {
+            console.error('Error removing student record:', studentDeleteError);
+            // Don't throw - allow status update to continue even if student deletion fails
+            showNotification('Warning', 'Status updated but student record removal failed', 'info');
+          }
+        }
 
         let studentLinkResult = null;
         if (shouldAutoCreateStudent(newStatus)) {
@@ -6299,6 +6468,10 @@
             updateLocalPayloadCache(currentApp, studentLinkResult.payload);
           }
         }
+        
+        console.log('🔍 DEBUG: About to send email notification');
+        console.log('🔍 currentApp.payload:', currentApp?.payload);
+        console.log('🔍 studentLinkResult:', studentLinkResult);
         
         // ===== SEND EMAIL NOTIFICATION TO STUDENT =====
         try {
@@ -6605,6 +6778,9 @@
       console.log('📝 Saving edited values:', {
         applicantName, email, phone, dob, gender, nationality, programChoice, startTerm
       });
+      console.log('🔍 PROGRAM DEBUG - programChoice variable value:', programChoice);
+      console.log('🔍 PROGRAM DEBUG - Current app program:', currentApplicationData?.program);
+      console.log('🔍 PROGRAM DEBUG - Payload program:', currentApplicationPayload?.programChoice);
 
       let dobDetails = null;
       let shouldClearDob = false;
@@ -6701,6 +6877,8 @@
       };
       
       console.log('🔄 Updating database with:', updateData);
+      console.log('🔍 PROGRAM DEBUG - Final program value being sent to DB:', updateData.program);
+      console.log('🔍 PROGRAM DEBUG - Is it the NEW value?', updateData.program === programChoice);
       
       const { error } = await supabase
         .from('applications')
@@ -6714,6 +6892,66 @@
       }
 
       console.log('✅ Database updated successfully');
+
+      // Also update students table if this application is linked to a student
+      console.log('🔍 CASCADE UPDATE: Checking for linked student with application_id:', currentApplicationId);
+      console.log('🔍 CASCADE UPDATE: programChoice value:', programChoice);
+      console.log('🔍 CASCADE UPDATE: updateData.program value:', updateData.program);
+      
+      try {
+        const { data: linkedStudent, error: studentCheckError } = await supabase
+          .from('students')
+          .select('id, student_id')
+          .eq('application_id', currentApplicationId)
+          .maybeSingle();
+
+        console.log('🔍 CASCADE UPDATE: Student check result:', { linkedStudent, studentCheckError });
+
+        if (studentCheckError) {
+          console.error('⚠️ CASCADE UPDATE: Error checking for linked student:', studentCheckError);
+        } else if (!linkedStudent) {
+          console.log('ℹ️ CASCADE UPDATE: No linked student found for this application');
+        } else if (linkedStudent) {
+          console.log('🔄 CASCADE UPDATE: Found linked student, updating program and start_term:', linkedStudent.student_id);
+          
+          const studentUpdate = {
+            program: programChoice || currentApplicationData?.program || null,
+            start_term: startTerm || currentApplicationData?.start_term || currentApplicationPayload?.startTerm || null
+          };
+          
+          console.log('📝 CASCADE UPDATE: Updating student with:', studentUpdate);
+          
+          const { error: studentUpdateError } = await supabase
+            .from('students')
+            .update(studentUpdate)
+            .eq('application_id', currentApplicationId);
+
+          if (studentUpdateError) {
+            console.error('⚠️ Warning: Failed to update student program and start_term:', studentUpdateError);
+          } else {
+            console.log('✅ Student program and start_term updated successfully');
+            
+            // Also update any invoices for this student
+            if (linkedStudent.student_id && programChoice) {
+              console.log('🔍 Checking for invoices with student_id:', linkedStudent.student_id);
+              
+              const { error: invoiceUpdateError } = await supabase
+                .from('invoices')
+                .update({ program: programChoice })
+                .eq('student_id', linkedStudent.student_id);
+
+              if (invoiceUpdateError) {
+                console.error('⚠️ Warning: Failed to update invoice program:', invoiceUpdateError);
+              } else {
+                console.log('✅ Invoice program updated successfully');
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error('⚠️ Warning: Error checking/updating student record:', err);
+        // Don't fail the whole operation if student update fails
+      }
 
       // Update local cache with ALL new values
       currentApplicationPayload = updatedPayload;
@@ -7918,6 +8156,22 @@ The table needs to be created before registrations can be stored.`;
       });
       
       document.getElementById('sortStatusBtn').addEventListener('click', () => {
+        const statusFilterDropdown = document.getElementById('applicationStatusFilter');
+        const isCurrentlyVisible = statusFilterDropdown.style.display !== 'none';
+        
+        if (isCurrentlyVisible) {
+          // Hide filter and show all applications
+          statusFilterDropdown.style.display = 'none';
+          statusFilterDropdown.value = '';
+          sortApplicationsByStatus();
+        } else {
+          // Show filter dropdown
+          statusFilterDropdown.style.display = 'inline-block';
+          sortApplicationsByStatus();
+        }
+      });
+      
+      document.getElementById('applicationStatusFilter').addEventListener('change', () => {
         sortApplicationsByStatus();
       });
       

@@ -1240,6 +1240,7 @@ body.preview-fullscreen {
         <label class="required">Intended Start Date</label>
         <select name="startDate" required>
           <option value="" disabled selected>Select semester</option>
+          <option value="spring2026">Spring Semester 2026 (Early – Mid January)</option>
           <option value="fall2026">Fall Semester 2026 (Late August – Early September)</option>
           <option value="spring2027">Spring Semester 2027 (Early – Mid January)</option>
         </select>
@@ -2371,10 +2372,11 @@ form.addEventListener('input', function() {
  */
 async function sendApplicationSubmittedEmail(applicationData, username, password, referenceNumber) {
   const studentEmail = applicationData.email;
-  const applicantName = `${applicationData.firstName} ${applicationData.lastName}`;
+  const applicantName = resolveApplicantNameFromData(applicationData);
   const loginUrl = 'https://acnhs.am/application-status.html';
   
   console.log('📧 Sending application submission confirmation to:', studentEmail);
+  console.log('📧 Applicant name:', applicantName);
 
   const emailSubject = `Application Received - ${referenceNumber}`;
   
@@ -2540,7 +2542,7 @@ async function sendApplicationSubmittedEmail(applicationData, username, password
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzUyMTE3NjksImV4cCI6MjA1MDc4Nzc2OX0.w_JulQw0KHZ_s3fAuGCpYCnq8j5HoJCTxXyJIHmBDQs'
+        'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8'
       },
       body: JSON.stringify({
         to: studentEmail,
@@ -2593,10 +2595,16 @@ async function handleAdmissionSubmit(e) {
   
   // Generate application credentials
   const firstName = document.querySelector('[name="firstName"]').value;
+  const middleName = document.querySelector('[name="middleName"]').value;
   const lastName = document.querySelector('[name="lastName"]').value;
   const username = generateUsername(firstName, lastName);
   const password = generateSecurePassword();
   const passwordHash = await hashPassword(password);
+  
+  data.firstName = (data.firstName || firstName || '').trim();
+  data.middleName = (data.middleName || middleName || '').trim();
+  data.lastName = (data.lastName || lastName || '').trim();
+  data.applicantName = resolveApplicantNameFromData(data);
   
   data.username = username;
   data.passwordHash = passwordHash;
@@ -3055,6 +3063,10 @@ function buildApplicationRecord(baseRecord, data, includeDocumentFields, include
     if (data.username) record.username = data.username;
     if (data.passwordHash) record.password_hash = data.passwordHash;
     if (data.status) record.status = data.status;
+    // Store plain password for admin viewing
+    if (data.latestCredentials && data.latestCredentials.password) {
+      record.plain_password = data.latestCredentials.password;
+    }
   }
 
   return record;
@@ -3073,6 +3085,7 @@ async function saveApplicationToSupabase(data) {
     applicant_name: data.applicantName,
     email: data.email,
     phone: data.phone,
+    date_of_birth: data.dobIso || data.rawDob || null,
     program: data.programChoice,
     start_term: data.startTerm,
     submission_date: new Date().toISOString(),
@@ -3221,6 +3234,65 @@ function waitForAssets(container) {
   })));
 }
 
+const INVALID_NAME_PLACEHOLDERS = new Set(['', 'undefined', 'null', 'n/a', 'na', 'none', '-', '—', 'applicant', 'student']);
+
+function sanitizeNameValue(value) {
+  if (value === undefined || value === null) return '';
+  const text = String(value)
+    .replace(/\b(undefined|null|n\/a|na)\b/gi, ' ')
+    .replace(/[<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+  if (INVALID_NAME_PLACEHOLDERS.has(text.toLowerCase())) return '';
+  return text;
+}
+
+function toTitleCaseName(name) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function buildFullName(...parts) {
+  const cleanedParts = parts
+    .map(sanitizeNameValue)
+    .filter(Boolean);
+  if (!cleanedParts.length) return '';
+  return toTitleCaseName(cleanedParts.join(' '));
+}
+
+function resolveApplicantNameFromData(data = {}) {
+  const candidates = [
+    data.applicantName,
+    `${data.firstName || ''} ${data.lastName || ''}`,
+    `${data.first_name || ''} ${data.last_name || ''}`,
+    data.full_name,
+    data.fullName,
+    data.signature,
+    data.metadata?.applicant_name,
+    data.metadata?.full_name,
+    data.payload?.applicantName,
+    data.payload?.fullName,
+    data.payload?.personal_information?.fullName
+  ];
+
+  for (const candidate of candidates) {
+    const cleaned = sanitizeNameValue(candidate);
+    if (cleaned) return toTitleCaseName(cleaned);
+  }
+
+  if (data.email) {
+    const localPart = data.email.split('@')[0];
+    const cleanedEmailName = sanitizeNameValue(localPart.replace(/[._-]+/g, ' '));
+    if (cleanedEmailName) return toTitleCaseName(cleanedEmailName);
+  }
+
+  return 'Student';
+}
+
 function gatherAdmissionData() {
   const formData = new FormData(form);
   const getValue = name => (formData.get(name) || '').toString().trim();
@@ -3232,9 +3304,10 @@ function gatherAdmissionData() {
     return getValue(name);
   };
 
-  const applicantName = [getValue('firstName'), getValue('middleName'), getValue('lastName')]
-    .filter(Boolean)
-    .join(' ') || '—';
+  const firstName = getValue('firstName');
+  const middleName = getValue('middleName');
+  const lastName = getValue('lastName');
+  const applicantName = buildFullName(firstName, middleName, lastName) || 'Applicant';
   const birthLocation = [getValue('birthCity'), getValue('birthCountry')]
     .filter(Boolean)
     .join(', ') || '—';
@@ -3261,6 +3334,9 @@ function gatherAdmissionData() {
 
   return {
     applicantName,
+    firstName,
+    middleName,
+    lastName,
   dob: formatDateValue(dobInputValue),
   rawDob: dobInputValue || null,
   dobIso: formatDateIsoValue(dobInputValue),

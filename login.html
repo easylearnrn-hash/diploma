@@ -920,6 +920,95 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
   submitBtn.textContent = 'Signing in...';
   const normalizedEmail = email.toLowerCase();
 
+  // Check for primary admin (hrachfilm@gmail.com) - use database check
+  if (normalizedEmail === 'hrachfilm@gmail.com') {
+    try {
+      const supabase = initSupabase();
+      if (!supabase) {
+        throw new Error('Supabase not configured');
+      }
+
+      const passwordHash = await hashPassword(password);
+      
+      const { data: adminUsers, error: adminError } = await supabase
+        .from('admin_users')
+        .select('id, name, email, username, password_hash, role, permissions, email_permissions, signature, title, phone_ext, status')
+        .eq('email', normalizedEmail)
+        .eq('status', 'active')
+        .limit(1);
+
+      if (!adminError && adminUsers && adminUsers.length > 0) {
+        const adminUser = adminUsers[0];
+        
+        // Verify password hash
+        if (adminUser.password_hash === passwordHash) {
+          // Primary admin authenticated
+          sessionStorage.setItem('isLoggedIn', 'true');
+          localStorage.setItem('isLoggedIn', 'true');
+          sessionStorage.setItem('userEmail', adminUser.email);
+          localStorage.setItem('userEmail', adminUser.email);
+          sessionStorage.setItem('userName', adminUser.name);
+          localStorage.setItem('userName', adminUser.name);
+          sessionStorage.setItem('isAdmin', 'true');
+          localStorage.setItem('isAdmin', 'true');
+          sessionStorage.setItem('userId', adminUser.id);
+          localStorage.setItem('userId', adminUser.id);
+          sessionStorage.setItem('userRole', adminUser.role);
+          localStorage.setItem('userRole', adminUser.role);
+          
+          // Store signature and title for email sending
+          if (adminUser.signature) {
+            sessionStorage.setItem('userSignature', adminUser.signature);
+            localStorage.setItem('userSignature', adminUser.signature);
+          }
+          if (adminUser.title) {
+            sessionStorage.setItem('userTitle', adminUser.title);
+            localStorage.setItem('userTitle', adminUser.title);
+          }
+          if (adminUser.phone_ext) {
+            sessionStorage.setItem('userPhoneExt', adminUser.phone_ext);
+            localStorage.setItem('userPhoneExt', adminUser.phone_ext);
+          }
+          
+          // Store email permissions
+          if (adminUser.email_permissions) {
+            const fullEmailAddresses = adminUser.email_permissions.map(emailId => {
+              if (emailId.includes('@')) {
+                return emailId;
+              }
+              return `${emailId}@acnhs.am`;
+            });
+            sessionStorage.setItem('userEmailPermissions', JSON.stringify(fullEmailAddresses));
+            localStorage.setItem('userEmailPermissions', JSON.stringify(fullEmailAddresses));
+          }
+          
+          submitBtn.textContent = 'Redirecting to dashboard...';
+          showLoginAlert('Welcome back, ' + adminUser.name + '!', 'success');
+          setTimeout(() => {
+            window.location.href = 'admin-home.html';
+          }, 1000);
+          return;
+        } else {
+          showLoginAlert('Incorrect password', 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In';
+          return;
+        }
+      } else {
+        showLoginAlert('Admin account not found', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In';
+        return;
+      }
+    } catch (error) {
+      console.error('Admin login error:', error);
+      showLoginAlert('Login failed: ' + error.message, 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+      return;
+    }
+  }
+
   if (normalizedEmail === STUDENT_VIEWER_TEST_ACCOUNT.email && password === STUDENT_VIEWER_TEST_ACCOUNT.password) {
     activateStudentViewerSession();
     showLoginAlert('Test admin access granted. Select a student to view their real portal.', 'success');
@@ -1286,20 +1375,39 @@ async function authenticateStudentPortalLogin(supabase, email, password, submitB
 async function fetchApplicationByEmailOrPortalFields(supabase, email) {
   if (!supabase || !email) return null;
   const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
-  const orFilters = buildStudentEmailLookupFilters(email);
+  const normalizedEmail = email.toLowerCase().trim();
 
-  const query = supabase
+  // Try simple email match first (most common case)
+  let { data, error } = await supabase
     .from('applications')
     .select(selectFields)
+    .eq('email', normalizedEmail)
     .limit(1);
 
-  const { data, error } = orFilters
-    ? await query.or(orFilters)
-    : await query.eq('email', email);
+  if (error) throw error;
+  if (data && data.length > 0) return data[0];
+
+  // If not found, try username match (for institutional emails)
+  ({ data, error } = await supabase
+    .from('applications')
+    .select(selectFields)
+    .eq('username', normalizedEmail)
+    .limit(1));
 
   if (error) throw error;
-  if (!data || data.length === 0) return null;
-  return data[0];
+  if (data && data.length > 0) return data[0];
+
+  // If still not found, try institutional email in payload
+  ({ data, error } = await supabase
+    .from('applications')
+    .select(selectFields)
+    .eq('payload->>institutionalEmail', normalizedEmail)
+    .limit(1));
+
+  if (error) throw error;
+  if (data && data.length > 0) return data[0];
+
+  return null;
 }
 
 function isEnrollmentLockedStatus(status = '') {

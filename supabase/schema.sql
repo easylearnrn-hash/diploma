@@ -231,6 +231,7 @@ CREATE TABLE IF NOT EXISTS public.applications (
     applicant_name TEXT NOT NULL,
     email TEXT,
     phone TEXT,
+    date_of_birth TEXT,
     institutional_email TEXT,
     program TEXT,
     start_term TEXT,
@@ -274,6 +275,9 @@ CREATE INDEX IF NOT EXISTS idx_applications_status ON public.applications(status
 CREATE INDEX IF NOT EXISTS idx_applications_verification_hash ON public.applications(verification_hash);
 CREATE INDEX IF NOT EXISTS idx_applications_status_message ON public.applications(status_message);
 CREATE INDEX IF NOT EXISTS idx_applications_uploaded_documents ON public.applications USING GIN (uploaded_documents);
+
+ALTER TABLE public.applications ADD COLUMN IF NOT EXISTS date_of_birth TEXT;
+COMMENT ON COLUMN public.applications.date_of_birth IS 'Applicant date of birth captured during submission (ISO string or raw text).';
 
 -- Enable Row Level Security
 ALTER TABLE public.applications ENABLE ROW LEVEL SECURITY;
