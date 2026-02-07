@@ -154,47 +154,16 @@ serve(async (req: Request) => {
     // CRITICAL: Send both html and text versions for better email client compatibility
     const strippedHtml = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
     
-    // CRITICAL FIX: Extract base64 images from HTML and convert to attachments
-    const base64ImageRegex = /<img[^>]+src=["']data:image\/(png|jpg|jpeg|gif|webp);base64,([^"']+)["'][^>]*>/gi
+    // NOTE: Keep base64 images inline instead of converting to CID attachments
+    // This ensures better compatibility with email signature logos
+    const processedHtml = html
     const extractedImages: Array<{filename: string, content: string, type: string, cid: string}> = []
-    let processedHtml = html
-    let imageIndex = 0
-    
-    // Find all base64 images
-    let match
-    while ((match = base64ImageRegex.exec(html)) !== null) {
-      const fullMatch = match[0]
-      const imageType = match[1]
-      const base64Data = match[2]
-      
-      // Create unique CID for this image (without @ symbol for Resend compatibility)
-      const cid = `image${imageIndex}`
-      const filename = `image${imageIndex}.${imageType === 'jpg' ? 'jpeg' : imageType}`
-      
-      // Add to attachments array
-      extractedImages.push({
-        filename: filename,
-        content: base64Data,
-        type: `image/${imageType}`,
-        cid: cid
-      })
-      
-      // Replace base64 src with cid reference
-      const cidImg = fullMatch.replace(/src=["']data:image\/[^;]+;base64,[^"']+["']/, `src="cid:${cid}"`)
-      processedHtml = processedHtml.replace(fullMatch, cidImg)
-      
-      imageIndex++
-    }
-    
-    if (extractedImages.length > 0) {
-      console.log(`✅ Extracted ${extractedImages.length} base64 images and converted to attachments`)
-    }
     
     const emailPayload: any = {
       from: `${senderName} <${senderEmail}>`,
       to: [to],
       subject: subject,
-      html: processedHtml, // Use processed HTML with CID references
+      html: processedHtml, // Use original HTML with base64 images
       text: (text?.trim() || strippedHtml)
     }
 
@@ -373,9 +342,86 @@ serve(async (req: Request) => {
         replyToIsExternal: replyTo ? !replyTo?.toLowerCase().includes('acnhs.am') : false
       })
       
-      // Skip logging for internal routing (contact form submissions that loop back)
+      // Check if this is student-to-student email (both @acnhs.am)
+      const senderIsAcnhs = emailSender?.toLowerCase().endsWith('@acnhs.am')
+      const recipientIsAcnhs = normalizedRecipient?.toLowerCase().endsWith('@acnhs.am')
+      const isStudentToStudent = senderIsAcnhs && recipientIsAcnhs
+      
+      console.log('🔍 Email type:', {
+        isStudentToStudent,
+        senderIsAcnhs,
+        recipientIsAcnhs
+      })
+      
+      // For student-to-student emails, create TWO records:
+      // 1. One for the sender (status: 'sent')
+      // 2. One for the recipient (status: 'received')
+      if (isStudentToStudent) {
+        console.log('📧 Student-to-student email detected - creating dual records')
+        
+        const textPreview = (text?.trim() || strippedHtml).substring(0, 500)
+        const storedAttachments = await storeAttachmentsInBucket(
+          supabase,
+          attachments || [],
+          'outgoing'
+        )
+        
+        // Record 1: For the SENDER (shows in their "Sent" folder)
+        const { data: senderRecord, error: senderError } = await supabase
+          .from('email_history')
+          .insert([{
+            recipient: normalizedRecipient,
+            sender: emailSender,
+            subject: subject,
+            body: textPreview,
+            html_body: html.substring(0, 50000),
+            status: 'sent',
+            sent_at: new Date().toISOString(),
+            resend_id: resendData.id,
+            attachments: storedAttachments.length ? storedAttachments : null
+          }])
+          .select()
+        
+        if (senderError) {
+          console.error('❌ Error creating sender record:', senderError)
+        } else {
+          console.log('✅ Sender record created:', senderRecord)
+        }
+        
+        // Record 2: For the RECIPIENT (shows in their "Inbox")
+        const { data: recipientRecord, error: recipientError } = await supabase
+          .from('email_history')
+          .insert([{
+            recipient: normalizedRecipient,
+            sender: emailSender,
+            subject: subject,
+            body: textPreview,
+            html_body: html.substring(0, 50000),
+            status: 'received',
+            sent_at: new Date().toISOString(),
+            resend_id: resendData.id,
+            attachments: storedAttachments.length ? storedAttachments : null
+          }])
+          .select()
+        
+        if (recipientError) {
+          console.error('❌ Error creating recipient record:', recipientError)
+        } else {
+          console.log('✅ Recipient record created:', recipientRecord)
+        }
+        
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            message: 'Email sent successfully',
+            id: resendData.id 
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+      
+      // Skip logging for external contact form submissions that route through ACNHS
       // These have: from=acnhs.am, to=acnhs.am, replyTo=student@external.com
-      // They will be logged by receive-email webhook instead
       const isInternalRouting = 
         senderEmail?.toLowerCase().includes('acnhs.am') &&
         to?.toLowerCase().includes('acnhs.am') &&

@@ -5,7 +5,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from "../_shared/cors.ts"
+import { corsHeaders } from "./cors.ts"
 
 declare const Deno: {
   env: {
@@ -15,7 +15,8 @@ declare const Deno: {
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA')!
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA') || Deno.env.get('RESEND_API_KEY') || ''
+const RESEND_WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET') // Optional: for signature verification
 const ATTACHMENTS_BUCKET = 'email-attachments'
 
 function normalizeEmailAddress(value?: string | null) {
@@ -381,9 +382,15 @@ function extractOriginalHtml(html: string): string {
   return ''
 }
 
-async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; text?: string } | null> {
+async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; text?: string; error?: string } | null> {
   try {
     console.log('Fetching email content for ID:', emailId)
+
+    if (!RESEND_API_KEY) {
+      const errorMessage = 'Missing RESEND_API_KEY_DIPLOMA/RESEND_API_KEY in function secrets'
+      console.error(errorMessage)
+      return { error: errorMessage }
+    }
     
     const response = await fetch('https://api.resend.com/emails/receiving/' + emailId, {
       headers: {
@@ -393,22 +400,28 @@ async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; t
 
     if (!response.ok) {
       const errorText = await response.text()
-      console.error('Resend API error:', response.status, response.statusText, errorText)
-      return null
+      const errorMessage = `Resend API error ${response.status} ${response.statusText}: ${errorText}`
+      console.error(errorMessage)
+      return { error: errorMessage }
     }
 
     const emailData = await response.json()
     console.log('Successfully fetched email from Resend')
     console.log('Has HTML:', !!emailData.html)
     console.log('Has text:', !!emailData.text)
+    console.log('HTML length:', emailData.html?.length || 0)
+    console.log('Text length:', emailData.text?.length || 0)
+    console.log('Text preview:', emailData.text?.substring(0, 100) || 'No text')
+    console.log('HTML preview:', emailData.html?.substring(0, 100) || 'No HTML')
     
     return {
       html: emailData.html,
       text: emailData.text
     }
   } catch (error) {
-    console.error('Error fetching email from Resend:', error)
-    return null
+    const errorMessage = `Error fetching email from Resend: ${(error as Error).message || String(error)}`
+    console.error(errorMessage)
+    return { error: errorMessage }
   }
 }
 
@@ -418,10 +431,76 @@ serve(async (req: Request) => {
   }
 
   console.log('Webhook request received')
+  console.log('Headers:', Object.fromEntries(req.headers.entries()))
+  console.log('Method:', req.method)
 
   try {
-    const payload = await req.json()
+    // Get raw body for signature verification if needed
+    const rawBody = await req.text()
+    console.log('Raw body length:', rawBody.length)
+    
+    let payload
+    try {
+      payload = JSON.parse(rawBody)
+    } catch (parseError) {
+      console.error('Failed to parse JSON:', parseError)
+      return new Response(
+        JSON.stringify({ success: false, error: 'Invalid JSON' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     console.log('Webhook type:', payload.type)
+    console.log('Payload:', JSON.stringify(payload, null, 2))
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    if (payload.type === 'fetch-body') {
+      const fetchData = payload.data || payload
+      const recordId = fetchData?.record_id
+      const resendId = fetchData?.email_id
+
+      if (!recordId || !resendId) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Missing record_id or email_id' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const emailContent = await fetchEmailFromResend(resendId)
+      if (!emailContent || emailContent.error) {
+        return new Response(
+          JSON.stringify({ success: false, error: emailContent?.error || 'Failed to fetch email content from Resend' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      const rawHtml = emailContent.html || ''
+      const extractedHtml = extractOriginalHtml(rawHtml)
+      const fullHtml = extractedHtml || rawHtml
+      const emailBody = (emailContent.text || stripHtml(rawHtml) || '').trim()
+
+      const { error: updateError } = await supabase
+        .from('email_history')
+        .update({
+          body: emailBody || '(No body text available)',
+          html_body: fullHtml ? fullHtml.substring(0, 50000) : null,
+          error: null
+        })
+        .eq('id', recordId)
+
+      if (updateError) {
+        return new Response(
+          JSON.stringify({ success: false, error: updateError.message || 'Failed to update email body' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, body: emailBody, html_body: fullHtml || null }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
     
     if (payload.type !== 'email.received') {
       return new Response(
@@ -438,13 +517,18 @@ serve(async (req: Request) => {
     console.log('To:', emailData.to)
     console.log('Subject:', emailData.subject)
 
-    const emailContent = await fetchEmailFromResend(emailId)
+  const emailContent = await fetchEmailFromResend(emailId)
+  const fetchError = emailContent?.error || null
     
     let emailBody = ''
     let fullHtml = ''
     
-    if (emailContent) {
+    if (emailContent && !emailContent.error) {
       const rawHtml = emailContent.html || ''
+      const rawText = emailContent.text || ''
+      
+      console.log('Raw text length:', rawText.length)
+      console.log('Raw HTML length:', rawHtml.length)
       
       // Try to extract only the original email HTML (remove reply text at the top if present)
       const extractedHtml = extractOriginalHtml(rawHtml)
@@ -453,11 +537,17 @@ serve(async (req: Request) => {
       // Otherwise, use the full HTML (this is a new/original email, not a reply)
       fullHtml = extractedHtml || rawHtml
       
-      // For body text, use the text version or strip HTML
-      emailBody = emailContent.text || (emailContent.html ? stripHtml(emailContent.html) : '')
+      // For body text, prefer the text version, but fall back to stripped HTML
+      if (rawText && rawText.trim()) {
+        emailBody = rawText.trim()
+      } else if (rawHtml) {
+        const stripped = stripHtml(rawHtml)
+        emailBody = stripped.trim()
+      }
     }
 
-    if (!emailBody) {
+    // Only use fallback if we truly have no content
+    if (!emailBody || emailBody.trim() === '') {
       emailBody = '(No body text available)'
     }
 
@@ -504,7 +594,6 @@ serve(async (req: Request) => {
 
     console.log('Final - Sender:', actualSender, 'Recipient:', recipientEmail, 'Reply-To:', replyToField || 'none')
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const normalizedSender = normalizeEmailAddress(actualSender) || actualSender
     const normalizedRecipient = normalizeEmailAddress(recipientEmail) || recipientEmail
     const storedAttachments = await processInboundAttachments({
@@ -526,7 +615,9 @@ serve(async (req: Request) => {
         html_body: fullHtml ? fullHtml.substring(0, 50000) : null,
         status: 'received',
         sent_at: new Date().toISOString(),
-        attachments: storedAttachments.length ? storedAttachments : null
+        attachments: storedAttachments.length ? storedAttachments : null,
+        resend_id: emailId,
+        error: fetchError
       }])
       .select()
 
