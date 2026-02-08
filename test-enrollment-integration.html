@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Enrollment Questionnaire Integration</title>
+    <script src="js/supabase-config.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0a2540 0%, #020617 100%);
+            color: #e2e8f0;
+            padding: 2rem;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(26, 41, 66, 0.92);
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+        }
+        h1 {
+            color: #2dd4bf;
+            margin-bottom: 2rem;
+        }
+        .test-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 12px;
+            border: 1px solid rgba(45, 212, 191, 0.3);
+        }
+        .test-section h2 {
+            color: #2dd4bf;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+        }
+        button {
+            background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+            color: #0a2540;
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-right: 1rem;
+            margin-bottom: 0.5rem;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(45, 212, 191, 0.4);
+        }
+        .result {
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(15, 23, 42, 0.8);
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .success {
+            color: #2dd4bf;
+        }
+        .error {
+            color: #ef4444;
+        }
+        .warning {
+            color: #eab308;
+        }
+        input {
+            background: rgba(15, 23, 42, 0.8);
+            border: 2px solid rgba(45, 212, 191, 0.3);
+            border-radius: 8px;
+            padding: 0.75rem;
+            color: #e2e8f0;
+            font-size: 1rem;
+            width: 300px;
+            margin-right: 1rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: #2dd4bf;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Enrollment Questionnaire Integration Test</h1>
+
+        <!-- Test 1: Check Table Exists -->
+        <div class="test-section">
+            <h2>1. Check if enrollment_questionnaires table exists</h2>
+            <button onclick="checkTableExists()">Run Test</button>
+            <div id="result1" class="result"></div>
+        </div>
+
+        <!-- Test 2: Check Applications Schema -->
+        <div class="test-section">
+            <h2>2. Verify applications table has required columns</h2>
+            <button onclick="checkApplicationsSchema()">Run Test</button>
+            <div id="result2" class="result"></div>
+        </div>
+
+        <!-- Test 3: List Available Students -->
+        <div class="test-section">
+            <h2>3. List students with control numbers</h2>
+            <button onclick="listStudents()">Run Test</button>
+            <div id="result3" class="result"></div>
+        </div>
+
+        <!-- Test 4: Test Student Lookup -->
+        <div class="test-section">
+            <h2>4. Test student lookup by control number</h2>
+            <input type="text" id="testControlNumber" placeholder="ACN-2026-677250" />
+            <button onclick="testStudentLookup()">Lookup Student</button>
+            <div id="result4" class="result"></div>
+        </div>
+
+        <!-- Test 5: Test Form Submission -->
+        <div class="test-section">
+            <h2>5. Test questionnaire submission (with sample data)</h2>
+            <input type="text" id="submitControlNumber" placeholder="ACN-2026-677250" />
+            <button onclick="testSubmission()">Submit Test Data</button>
+            <div id="result5" class="result"></div>
+        </div>
+
+        <!-- Test 6: View Submitted Questionnaires -->
+        <div class="test-section">
+            <h2>6. View submitted questionnaires</h2>
+            <button onclick="viewQuestionnaires()">View All</button>
+            <div id="result6" class="result"></div>
+        </div>
+
+        <!-- Run All Tests -->
+        <div class="test-section" style="text-align: center;">
+            <button onclick="runAllTests()" style="background: linear-gradient(135deg, #eab308 0%, #d97706 100%); font-size: 1.1rem;">
+                ▶️ Run All Tests
+            </button>
+        </div>
+    </div>
+
+    <script>
+        const supabase = initSupabase();
+
+        function displayResult(resultId, message, type = 'success') {
+            const resultDiv = document.getElementById(resultId);
+            resultDiv.className = `result ${type}`;
+            resultDiv.textContent = message;
+        }
+
+        async function checkTableExists() {
+            try {
+                displayResult('result1', '⏳ Checking...', 'warning');
+                
+                const { data, error } = await supabase
+                    .from('enrollment_questionnaires')
+                    .select('id')
+                    .limit(1);
+
+                if (error) {
+                    if (error.message.includes('does not exist')) {
+                        displayResult('result1', 
+                            `❌ Table does not exist!\n\n` +
+                            `Next step: Run CREATE-ENROLLMENT-QUESTIONNAIRES-TABLE.sql in Supabase SQL Editor\n` +
+                            `URL: https://supabase.com/dashboard/project/eyhksbiceueoiamwnqpr/editor`,
+                            'error'
+                        );
+                    } else {
+                        displayResult('result1', `❌ Error: ${error.message}`, 'error');
+                    }
+                } else {
+                    displayResult('result1', 
+                        `✅ Table exists!\n\n` +
+                        `Rows found: ${data.length}\n` +
+                        `Status: Ready for submissions`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                displayResult('result1', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function checkApplicationsSchema() {
+            try {
+                displayResult('result2', '⏳ Checking schema...', 'warning');
+                
+                const { data, error } = await supabase
+                    .from('applications')
+                    .select('id, control_number, document_id, uploaded_documents')
+                    .limit(1);
+
+                if (error) {
+                    displayResult('result2', `❌ Error: ${error.message}`, 'error');
+                } else {
+                    const sample = data[0] || {};
+                    const hasControlNumber = 'control_number' in sample;
+                    const hasDocumentId = 'document_id' in sample;
+                    const hasUploadedDocs = 'uploaded_documents' in sample;
+
+                    displayResult('result2', 
+                        `✅ Applications table schema:\n\n` +
+                        `• id: ${sample.id ? '✓' : '✗'}\n` +
+                        `• control_number: ${hasControlNumber ? '✓' : '✗'}\n` +
+                        `• document_id: ${hasDocumentId ? '✓' : '✗'}\n` +
+                        `• uploaded_documents: ${hasUploadedDocs ? '✓' : '✗'}\n\n` +
+                        `Status: ${hasControlNumber && hasDocumentId ? 'Ready' : 'Missing columns'}`,
+                        hasControlNumber && hasDocumentId ? 'success' : 'warning'
+                    );
+                }
+            } catch (err) {
+                displayResult('result2', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function listStudents() {
+            try {
+                displayResult('result3', '⏳ Loading students...', 'warning');
+                
+                const { data, error } = await supabase
+                    .from('applications')
+                    .select('control_number, first_name, last_name, document_id')
+                    .not('control_number', 'is', null)
+                    .order('control_number', { ascending: false })
+                    .limit(10);
+
+                if (error) {
+                    displayResult('result3', `❌ Error: ${error.message}`, 'error');
+                } else if (data.length === 0) {
+                    displayResult('result3', 
+                        `⚠️ No students found with control numbers!\n\n` +
+                        `You can create a test student by running:\n` +
+                        `INSERT INTO applications (control_number, first_name, last_name, document_id)\n` +
+                        `VALUES ('ACN-2026-677250', 'Test', 'Student', 'DOC-' || gen_random_uuid()::text);`,
+                        'warning'
+                    );
+                } else {
+                    const studentList = data.map(s => 
+                        `${s.control_number} - ${s.first_name} ${s.last_name} (${s.document_id || 'no doc_id'})`
+                    ).join('\n');
+                    
+                    displayResult('result3', 
+                        `✅ Found ${data.length} students:\n\n${studentList}\n\n` +
+                        `Use any control number above for testing.`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                displayResult('result3', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function testStudentLookup() {
+            try {
+                const controlNumber = document.getElementById('testControlNumber').value.trim();
+                if (!controlNumber) {
+                    displayResult('result4', '⚠️ Please enter a control number', 'warning');
+                    return;
+                }
+
+                displayResult('result4', '⏳ Looking up student...', 'warning');
+                
+                const { data: student, error } = await supabase
+                    .from('applications')
+                    .select('id, control_number, document_id, first_name, last_name')
+                    .eq('control_number', controlNumber)
+                    .single();
+
+                if (error || !student) {
+                    displayResult('result4', 
+                        `❌ Student not found!\n\n` +
+                        `Control Number: ${controlNumber}\n` +
+                        `Error: ${error?.message || 'No matching record'}\n\n` +
+                        `Tip: Run Test 3 to see available control numbers.`,
+                        'error'
+                    );
+                } else {
+                    displayResult('result4', 
+                        `✅ Student found!\n\n` +
+                        `Control Number: ${student.control_number}\n` +
+                        `Name: ${student.first_name} ${student.last_name}\n` +
+                        `Application ID: ${student.id}\n` +
+                        `Document ID: ${student.document_id || 'Not set'}\n\n` +
+                        `Status: Ready for questionnaire submission`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                displayResult('result4', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function testSubmission() {
+            try {
+                const controlNumber = document.getElementById('submitControlNumber').value.trim();
+                if (!controlNumber) {
+                    displayResult('result5', '⚠️ Please enter a control number', 'warning');
+                    return;
+                }
+
+                displayResult('result5', '⏳ Submitting test questionnaire...', 'warning');
+                
+                // Step 1: Verify student exists
+                const { data: student, error: studentError } = await supabase
+                    .from('applications')
+                    .select('id, control_number, document_id')
+                    .eq('control_number', controlNumber)
+                    .single();
+
+                if (studentError || !student) {
+                    displayResult('result5', 
+                        `❌ Student not found: ${controlNumber}\n\n` +
+                        `Error: ${studentError?.message || 'No matching record'}`,
+                        'error'
+                    );
+                    return;
+                }
+
+                // Step 2: Create sample questionnaire data
+                const questionnaireData = {
+                    control_number: controlNumber,
+                    personal_info: {
+                        full_name: "Test Student",
+                        date_of_birth: "2000-01-01"
+                    },
+                    education_history: {
+                        hs_grad_date: "2018-06-15",
+                        armenian_edu: "yes",
+                        armenian_institution: "Test University",
+                        armenian_program: "Test Program",
+                        application_date: "2020-09-01",
+                        graduation_date: "2024-06-15"
+                    },
+                    residency_travel: {
+                        permanent_departure_date: "2024-07-01",
+                        travel_history: [
+                            {
+                                arrival: "2024-12-20",
+                                departure: "2025-01-05",
+                                duration: "16",
+                                purpose: "Test travel"
+                            }
+                        ]
+                    },
+                    emergency_contact: {
+                        name: "Emergency Contact",
+                        relationship: "Parent",
+                        phone: "+374 XX XXX XXX",
+                        email: "test@example.com",
+                        address: "Test Address"
+                    },
+                    attestation: {
+                        signature: "Test Student",
+                        date: new Date().toISOString().split('T')[0]
+                    },
+                    submitted_at: new Date().toISOString()
+                };
+
+                // Step 3: Insert questionnaire
+                const { data: savedData, error: saveError } = await supabase
+                    .from('enrollment_questionnaires')
+                    .insert([{
+                        application_id: student.id,
+                        control_number: controlNumber,
+                        document_id: student.document_id,
+                        questionnaire_data: questionnaireData
+                    }])
+                    .select();
+
+                if (saveError) {
+                    displayResult('result5', 
+                        `❌ Failed to save questionnaire!\n\n` +
+                        `Error: ${saveError.message}\n\n` +
+                        `Possible causes:\n` +
+                        `- Table doesn't exist (run Test 1)\n` +
+                        `- RLS policies not set\n` +
+                        `- Schema mismatch`,
+                        'error'
+                    );
+                    return;
+                }
+
+                // Step 4: Update application documents
+                const { error: updateError } = await supabase
+                    .from('applications')
+                    .update({
+                        uploaded_documents: {
+                            enrollment_questionnaire: {
+                                submitted: true,
+                                submitted_at: new Date().toISOString(),
+                                questionnaire_id: savedData[0].id
+                            }
+                        }
+                    })
+                    .eq('control_number', controlNumber);
+
+                if (updateError) {
+                    displayResult('result5', 
+                        `⚠️ Questionnaire saved but document update failed!\n\n` +
+                        `Questionnaire ID: ${savedData[0].id}\n` +
+                        `Update Error: ${updateError.message}`,
+                        'warning'
+                    );
+                } else {
+                    displayResult('result5', 
+                        `✅ Test submission successful!\n\n` +
+                        `Questionnaire ID: ${savedData[0].id}\n` +
+                        `Application ID: ${student.id}\n` +
+                        `Control Number: ${controlNumber}\n` +
+                        `Submitted At: ${questionnaireData.submitted_at}\n\n` +
+                        `Status: Form integration working correctly!`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                displayResult('result5', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function viewQuestionnaires() {
+            try {
+                displayResult('result6', '⏳ Loading questionnaires...', 'warning');
+                
+                const { data, error } = await supabase
+                    .from('enrollment_questionnaires')
+                    .select('id, control_number, created_at, questionnaire_data')
+                    .order('created_at', { ascending: false })
+                    .limit(5);
+
+                if (error) {
+                    displayResult('result6', `❌ Error: ${error.message}`, 'error');
+                } else if (data.length === 0) {
+                    displayResult('result6', 
+                        `📭 No questionnaires submitted yet\n\n` +
+                        `Submit a test questionnaire using Test 5.`,
+                        'warning'
+                    );
+                } else {
+                    const list = data.map(q => {
+                        const name = q.questionnaire_data?.personal_info?.full_name || 'Unknown';
+                        const date = new Date(q.created_at).toLocaleString();
+                        return `${q.control_number} - ${name}\nSubmitted: ${date}\nID: ${q.id}`;
+                    }).join('\n\n');
+                    
+                    displayResult('result6', 
+                        `✅ Found ${data.length} questionnaires:\n\n${list}`,
+                        'success'
+                    );
+                }
+            } catch (err) {
+                displayResult('result6', `❌ Exception: ${err.message}`, 'error');
+            }
+        }
+
+        async function runAllTests() {
+            console.log('🧪 Running all tests...');
+            
+            await checkTableExists();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await checkApplicationsSchema();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            await listStudents();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('✅ All tests completed!');
+            alert('All automated tests completed! Check results above.\n\nManual tests (4 & 5) require input.');
+        }
+    </script>
+</body>
+</html>

@@ -1172,6 +1172,20 @@
         .replace(/'/g, '&#039;');
     }
 
+    function formatDateDDMonYYYY(dateString) {
+      if (!dateString || dateString.trim() === '') return 'N/A';
+      
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'N/A';
+      
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = months[date.getMonth()];
+      const year = date.getFullYear();
+      
+      return `${day} ${month} ${year}`;
+    }
+
     function buildQuestionnaireEmailHtml(payload, controlNumber, fullName, dateOfBirth, questionnaireId) {
       const tableStyle = 'width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;';
       const thStyle = 'background:#2dd4bf;color:#ffffff;padding:12px;text-align:left;font-weight:600;border:1px solid #2dd4bf;';
@@ -1179,28 +1193,50 @@
       const tdLabelStyle = 'padding:10px 12px;border:1px solid #e2e8f0;color:#0a2540;background:#f8fafc;font-weight:600;width:35%;';
       const headerStyle = 'color:#0a2540;font-size:18px;margin:24px 0 12px;font-weight:600;border-bottom:2px solid #2dd4bf;padding-bottom:8px;';
 
-      // Personal Information Table
+      // Personal Information Table - Updated order and date format
       const personal = payload.personal_info || {};
+      const education = payload.education_history || {};
+      const residency = payload.residency_travel || {};
+      
       const personalTable = `
         <table style="${tableStyle}">
           <tr>
-            <td style="${tdLabelStyle}">Full Legal Name</td>
+            <td style="${tdLabelStyle}">Name / Last Name</td>
             <td style="${tdStyle}">${escapeHtml(personal.full_name || 'N/A')}</td>
           </tr>
           <tr>
-            <td style="${tdLabelStyle}">Date of Birth</td>
-            <td style="${tdStyle}">${escapeHtml(personal.date_of_birth || 'N/A')}</td>
+            <td style="${tdLabelStyle}">Date of Birth (DOB)</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(personal.date_of_birth)}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">High School Graduation Date</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(education.hs_grad_date)}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">University Apply Date</td>
+            <td style="${tdStyle}">${education.armenian_edu === 'yes' ? formatDateDDMonYYYY(education.application_date) : 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">University Graduation Date</td>
+            <td style="${tdStyle}">${education.armenian_edu === 'yes' ? formatDateDDMonYYYY(education.graduation_date) : 'N/A'}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Date Left Armenia</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(residency.permanent_departure_date)}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Date Visited Armenia</td>
+            <td style="${tdStyle}">${residency.travel_history && residency.travel_history.length > 0 ? formatDateDDMonYYYY(residency.travel_history[residency.travel_history.length - 1]?.arrival) : 'N/A'}</td>
           </tr>
         </table>
       `;
 
-      // Education History Table
-      const education = payload.education_history || {};
+      // Education History Table - kept for additional details if needed
       const educationTable = `
         <table style="${tableStyle}">
           <tr>
             <td style="${tdLabelStyle}">High School Graduation Date</td>
-            <td style="${tdStyle}">${escapeHtml(education.hs_grad_date || 'N/A')}</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(education.hs_grad_date)}</td>
           </tr>
           <tr>
             <td style="${tdLabelStyle}">Applied to Armenian Institution</td>
@@ -1213,11 +1249,11 @@
           </tr>
           <tr>
             <td style="${tdLabelStyle}">Application Date</td>
-            <td style="${tdStyle}">${escapeHtml(education.application_date || 'N/A')}</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(education.application_date)}</td>
           </tr>
           <tr>
             <td style="${tdLabelStyle}">Graduation Date</td>
-            <td style="${tdStyle}">${escapeHtml(education.graduation_date || 'Not graduated/Still enrolled')}</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(education.graduation_date)}</td>
           </tr>
           ` : ''}
         </table>
@@ -1247,12 +1283,11 @@
       `;
 
       // Residency & Travel Table
-      const residency = payload.residency_travel || {};
       const residencyTable = `
         <table style="${tableStyle}">
           <tr>
             <td style="${tdLabelStyle}">Permanent Departure from Armenia</td>
-            <td style="${tdStyle}">${escapeHtml(residency.permanent_departure_date || 'N/A')}</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(residency.permanent_departure_date)}</td>
           </tr>
         </table>
       `;
@@ -1272,8 +1307,8 @@
           <tbody>
             ${travelHistory.map(row => `
               <tr>
-                <td style="${tdStyle}">${escapeHtml(row.arrival || 'N/A')}</td>
-                <td style="${tdStyle}">${escapeHtml(row.departure || 'N/A')}</td>
+                <td style="${tdStyle}">${formatDateDDMonYYYY(row.arrival)}</td>
+                <td style="${tdStyle}">${formatDateDDMonYYYY(row.departure)}</td>
                 <td style="${tdStyle}">${escapeHtml(row.duration || 'N/A')}</td>
                 <td style="${tdStyle}">${escapeHtml(row.purpose || 'N/A')}</td>
               </tr>
@@ -1292,7 +1327,7 @@
           </tr>
           <tr>
             <td style="${tdLabelStyle}">Date Signed</td>
-            <td style="${tdStyle}">${escapeHtml(attestation.date || 'N/A')}</td>
+            <td style="${tdStyle}">${formatDateDDMonYYYY(attestation.date)}</td>
           </tr>
         </table>
       `;
@@ -1315,11 +1350,11 @@
             <div style="background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);padding:20px;border-radius:8px;margin-bottom:32px;color:#ffffff;">
               <p style="margin:0 0 8px;font-size:15px;"><strong>Control Number:</strong> ${escapeHtml(controlNumber || 'N/A')}</p>
               <p style="margin:0 0 8px;font-size:15px;"><strong>Student Name:</strong> ${escapeHtml(fullName || 'N/A')}</p>
-              <p style="margin:0 0 8px;font-size:15px;"><strong>Date of Birth:</strong> ${escapeHtml(dateOfBirth || 'N/A')}</p>
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Date of Birth:</strong> ${formatDateDDMonYYYY(dateOfBirth)}</p>
               <p style="margin:0;font-size:15px;"><strong>Questionnaire ID:</strong> ${escapeHtml(questionnaireId || 'N/A')}</p>
             </div>
 
-            <h2 style="${headerStyle}">� Personal Information</h2>
+            <h2 style="${headerStyle}">👤 Personal Information</h2>
             ${personalTable}
 
             <h2 style="${headerStyle}">🎓 Education History</h2>
@@ -1353,10 +1388,21 @@
     }
 
     function buildQuestionnairePdfHtml(payload) {
+      const formatDateForPdf = (dateString) => {
+        if (!dateString || dateString.trim() === '') return 'N/A';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'N/A';
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = months[date.getMonth()];
+        const year = date.getFullYear();
+        return `${day} ${month} ${year}`;
+      };
+      
       const travelRows = (payload.residency_travel?.travel_history || []).map((row, index) => `
         <tr>
-          <td>${escapeHtml(row.arrival || '')}</td>
-          <td>${escapeHtml(row.departure || '')}</td>
+          <td>${formatDateForPdf(row.arrival)}</td>
+          <td>${formatDateForPdf(row.departure)}</td>
           <td>${escapeHtml(row.duration || '')}</td>
           <td>${escapeHtml(row.purpose || '')}</td>
         </tr>
@@ -1390,7 +1436,7 @@
             </tr>
             <tr>
               <td style="padding:6px 0;"><strong>Date of Birth:</strong></td>
-              <td style="padding:6px 0;">${escapeHtml(payload.personal_info?.date_of_birth || '')}</td>
+              <td style="padding:6px 0;">${formatDateForPdf(payload.personal_info?.date_of_birth)}</td>
             </tr>
           </table>
 
@@ -1398,7 +1444,7 @@
           <table style="width:100%;border-collapse:collapse;font-size:13px;">
             <tr>
               <td style="padding:6px 0;"><strong>High School Graduation:</strong></td>
-              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.hs_grad_date || '')}</td>
+              <td style="padding:6px 0;">${formatDateForPdf(payload.education_history?.hs_grad_date)}</td>
             </tr>
             <tr>
               <td style="padding:6px 0;"><strong>Applied in Armenia:</strong></td>
@@ -1410,16 +1456,16 @@
             </tr>
             <tr>
               <td style="padding:6px 0;"><strong>Application Date:</strong></td>
-              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.application_date || '')}</td>
+              <td style="padding:6px 0;">${formatDateForPdf(payload.education_history?.application_date)}</td>
             </tr>
             <tr>
               <td style="padding:6px 0;"><strong>Graduation Date:</strong></td>
-              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.graduation_date || '')}</td>
+              <td style="padding:6px 0;">${formatDateForPdf(payload.education_history?.graduation_date)}</td>
             </tr>
           </table>
 
           <h2 style="font-size:18px;margin:18px 0 8px;">Residency &amp; Travel</h2>
-          <div style="font-size:13px;margin-bottom:8px;"><strong>Permanent Departure Date:</strong> ${escapeHtml(payload.residency_travel?.permanent_departure_date || '')}</div>
+          <div style="font-size:13px;margin-bottom:8px;"><strong>Permanent Departure Date:</strong> ${formatDateForPdf(payload.residency_travel?.permanent_departure_date)}</div>
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
               <tr style="background:#e2e8f0;">
@@ -1462,7 +1508,7 @@
             </tr>
             <tr>
               <td style="padding:6px 0;"><strong>Date of Execution:</strong></td>
-              <td style="padding:6px 0;">${escapeHtml(payload.attestation?.date || '')}</td>
+              <td style="padding:6px 0;">${formatDateForPdf(payload.attestation?.date)}</td>
             </tr>
           </table>
         </div>

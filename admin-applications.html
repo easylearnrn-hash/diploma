@@ -39,7 +39,17 @@
       --status-denied:#ef4444;
     }
     
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    html {
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
     
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
@@ -48,6 +58,7 @@
                   var(--bg-dark);
       color: var(--text);
       min-height: 100vh;
+      overflow-x: hidden;
     }
 
     .container {
@@ -718,6 +729,23 @@
       .info-grid {
         grid-template-columns: 1fr;
       }
+      
+      .container {
+        padding: 20px 12px;
+      }
+      
+      header h1 {
+        font-size: 24px;
+      }
+      
+      .app-card {
+        padding: 16px;
+      }
+      
+      button, .btn {
+        min-height: 44px;
+        padding: 12px 16px;
+      }
     }
 
     /* EDIT INPUT STYLES */
@@ -1135,9 +1163,14 @@
             </h2>
             <p style="margin:0;color:#94a3b8;font-size:14px;" id="questionnaireModalSubtitle">Loading...</p>
           </div>
-          <button onclick="closeQuestionnaireModal()" style="background:rgba(239,68,68,0.2);border:none;color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
-            ✕
-          </button>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <button onclick="printQuestionnaire()" style="background:rgba(56, 189, 248, 0.1);border:1px solid rgba(56, 189, 248, 0.3);color:#38bdf8;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:14px;display:flex;align-items:center;gap:6px;transition:all 0.2s;" onmouseover="this.style.background='rgba(56, 189, 248, 0.2)'" onmouseout="this.style.background='rgba(56, 189, 248, 0.1)'">
+              <span>🖨️</span> Print
+            </button>
+            <button onclick="closeQuestionnaireModal()" style="background:rgba(239,68,68,0.2);border:none;color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:20px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.3)'" onmouseout="this.style.background='rgba(239,68,68,0.2)'">
+              ✕
+            </button>
+          </div>
         </div>
         
         <!-- Content -->
@@ -3139,7 +3172,42 @@
       modalCurrentAppId = null; // Clear the app ID
     }
 
+    // ===== REFERENCE NUMBER CLICK HANDLER =====
+    async function handleReferenceClick(applicationId) {
+      try {
+        const supabase = getSupabaseClient();
+        
+        // Check if there's a questionnaire for this application
+        // Order by created_at desc to get the most recent one first
+        const { data: questionnaires, error } = await supabase
+          .from('enrollment_questionnaires')
+          .select('id, created_at')
+          .eq('application_id', applicationId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        
+        if (error) {
+          console.error('Error checking questionnaire:', error);
+          showNotification('Error', 'Could not check questionnaire status', 'error');
+          return;
+        }
+        
+        if (questionnaires && questionnaires.length > 0) {
+          // Open the questionnaire modal with the most recent one
+          await showQuestionnaireModal(applicationId, questionnaires[0].id);
+        } else {
+          // No questionnaire found
+          showNotification('No Questionnaire', 'This applicant has not submitted an enrollment questionnaire yet.', 'info');
+        }
+      } catch (error) {
+        console.error('Error handling reference click:', error);
+        showNotification('Error', 'An error occurred while opening the questionnaire', 'error');
+      }
+    }
+
     // ===== ENROLLMENT QUESTIONNAIRE MODAL =====
+    let currentQuestionnaireData = null;
+
     async function showQuestionnaireModal(applicationId, questionnaireId) {
       const modal = document.getElementById('questionnaireModal');
       const content = document.getElementById('questionnaireModalContent');
@@ -3147,6 +3215,8 @@
       
       modal.style.display = 'block';
       document.body.style.overflow = 'hidden';
+      // Reset current data
+      currentQuestionnaireData = null;
       
       try {
         // Initialize Supabase client
@@ -3163,6 +3233,8 @@
         if (!data) throw new Error('Questionnaire not found');
         
         const questionnaireData = data.questionnaire_data || {};
+        currentQuestionnaireData = questionnaireData; // Save for printing
+        
         const submittedDate = new Date(data.created_at).toLocaleString('en-US', {
           month: 'long',
           day: 'numeric',
@@ -3194,6 +3266,508 @@
       document.body.style.overflow = 'auto';
     }
 
+    async function printQuestionnaire() {
+      if (!currentQuestionnaireData) {
+        showNotification('Print Error', 'No questionnaire data available to print.', 'error');
+        return;
+      }
+
+      // Ask user for language mode
+      const langMode = await showLanguageModeDialog();
+      if (langMode === null) return; // User closed dialog
+
+      const data = currentQuestionnaireData;
+      
+      const personal = data.personal_info || {};
+      const emergency = data.emergency_contact || {};
+      const education = data.education_history || {};
+      const residency = data.residency_travel || {};
+      const attestation = data.attestation || {};
+      const travelHistory = residency.travel_history || [];
+      const controlNumber = data.control_number || 'N/A';
+
+      // Helper to format dates
+       const formatDateDDMonYYYY = (dateString) => {
+        if (!dateString || dateString.trim() === '') return 'N/A';
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'N/A';
+        
+        const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const monthsHy = ['Հնվ', 'Փտվ', 'Մրտ', 'Ապր', 'Մայ', 'Հնս', 'Հլս', 'Օգս', 'Սեպ', 'Հոկ', 'Նմբ', 'Դկտ'];
+        
+        const day = String(date.getDate()).padStart(2, '0');
+        const monthIndex = date.getMonth();
+        const year = date.getFullYear();
+        
+        if (langMode === 'two-col') {
+          // Two-column: separate EN and HY
+          return {
+            en: `${day} ${monthsEn[monthIndex]} ${year}`,
+            hy: `${day} ${monthsHy[monthIndex]} ${year}`
+          };
+        } else if (langMode === 'en-only') {
+          return `${day} ${monthsEn[monthIndex]} ${year}`;
+        } else if (langMode === 'hy-only') {
+          return `${day} ${monthsHy[monthIndex]} ${year}`;
+        } else {
+          // bilingual
+          return `${day} ${monthsEn[monthIndex]} / ${monthsHy[monthIndex]} ${year}`;
+        }
+      };
+
+      const printWindow = window.open('', '_blank');
+      
+      const styles = `
+        <style>
+          :root{
+            --ink:#111;
+            --muted:#555;
+            --line:#b9b9b9;
+            --line2:#d7d7d7;
+            --paper:#fff;
+            --shade:#f6f6f6;
+            --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+            --serif: Georgia, "Times New Roman", Times, serif;
+          }
+
+          *{ box-sizing:border-box; }
+          body{
+            margin:0;
+            background:#efefef;
+            color:var(--ink);
+            font-family:var(--sans);
+            -webkit-font-smoothing:antialiased;
+            -moz-osx-font-smoothing:grayscale;
+          }
+
+          .page{
+            width:210mm;
+            min-height:297mm;
+            margin:18px auto;
+            background:var(--paper);
+            border:1px solid #e1e1e1;
+            box-shadow:0 10px 30px rgba(0,0,0,.08);
+            position:relative;
+            overflow:hidden;
+          }
+
+          .content{
+            padding:18mm 16mm 14mm 16mm;
+            position:relative;
+            z-index:1;
+          }
+
+          .topband{
+            border:1px solid var(--line);
+            padding:10px 12px;
+            margin-bottom:14px;
+          }
+          .org{
+            text-align:center;
+            line-height:1.15;
+            margin:0;
+            font-weight:800;
+            letter-spacing:.6px;
+            text-transform:uppercase;
+            font-size:15px;
+          }
+          .org-hy{
+            text-align:center;
+            margin:6px 0 0 0;
+            font-weight:800;
+            letter-spacing:.4px;
+            text-transform:uppercase;
+            font-size:14px;
+          }
+          .doc-title{
+            text-align:center;
+            margin:10px 0 0 0;
+            font-weight:900;
+            letter-spacing:.8px;
+            text-transform:uppercase;
+            font-size:16px;
+          }
+          .doc-title-hy{
+            text-align:center;
+            margin:6px 0 0 0;
+            font-weight:900;
+            letter-spacing:.4px;
+            text-transform:uppercase;
+            font-size:15px;
+          }
+
+          .section{
+            border:1px solid var(--line);
+            margin:10px 0;
+          }
+          .section-header{
+            background:var(--shade);
+            border-bottom:1px solid var(--line);
+            padding:8px 10px;
+            display:flex;
+            justify-content:space-between;
+            gap:10px;
+            align-items:flex-end;
+          }
+          .section-title, .section-subtitle{
+            margin:0;
+            font-size:12.5px;
+            font-weight:900;
+            letter-spacing:.4px;
+            text-transform:uppercase;
+          }
+          .section-subtitle{ text-align:right; }
+          .section-body{ padding:10px; }
+
+          table{ width:100%; border-collapse:collapse; font-size:12px; }
+          th, td{ border:1px solid var(--line2); padding:8px 9px; vertical-align:top; }
+          th{
+            background:#fafafa;
+            text-align:left;
+            font-weight:800;
+            font-size:11.5px;
+            letter-spacing:.2px;
+          }
+          .value{ min-height:28px; }
+
+          .attest{
+            border:1px solid var(--line2);
+            padding:10px;
+            background:#fcfcfc;
+            line-height:1.45;
+            font-size:12px;
+          }
+          .attest p{ margin:0 0 8px 0; }
+          .siggrid{
+            display:grid;
+            grid-template-columns: 1fr 1fr;
+            gap:10px 14px;
+            margin-top:10px;
+          }
+          .sigline{
+            border:1px solid var(--line2);
+            padding:8px 9px;
+            min-height:44px;
+            display:flex;
+            flex-direction:column;
+            justify-content:space-between;
+            gap:8px;
+          }
+          .siglabel{ font-size:11px; color:#222; font-weight:800; }
+          .line{ border-top:1px solid #9e9e9e; height:1px; }
+
+          .footer{
+            margin-top:12px;
+            border:1px solid var(--line);
+            padding:10px 12px;
+            font-size:10.5px;
+            color:#222;
+            line-height:1.35;
+          }
+          .muted{ color:var(--muted); }
+
+          .pagefoot{
+            margin-top:10px;
+            display:flex;
+            justify-content:space-between;
+            align-items:center;
+            font-size:10.5px;
+            color:var(--muted);
+            border-top:1px solid var(--line2);
+            padding-top:8px;
+          }
+
+          /* Language Mode Switching */
+          .lang{ display:inline; }
+          
+          /* English-only mode */
+          body[data-lang-mode="en-only"] .lang.hy{ display:none; }
+          body[data-lang-mode="en-only"] .org-hy,
+          body[data-lang-mode="en-only"] .doc-title-hy,
+          body[data-lang-mode="en-only"] .section-subtitle{ display:none; }
+          
+          /* Armenian-only mode */
+          body[data-lang-mode="hy-only"] .lang.en{ display:none; }
+          body[data-lang-mode="hy-only"] .org{ display:none; }
+          body[data-lang-mode="hy-only"] .doc-title{ display:none; }
+          body[data-lang-mode="hy-only"] .section-title{ display:none; }
+          body[data-lang-mode="hy-only"] .org-hy{ margin-top:0; }
+          body[data-lang-mode="hy-only"] .doc-title-hy{ margin-top:10px; }
+          body[data-lang-mode="hy-only"] .section-header{
+            justify-content:flex-start;
+          }
+          body[data-lang-mode="hy-only"] .section-subtitle{
+            text-align:left;
+          }
+          
+          /* Two-column mode */
+          .twoColHeader{ display:none; }
+          body[data-lang-mode="two-col"] .section-header{ display:none; }
+          body[data-lang-mode="two-col"] .twoColHeader{
+            display:grid;
+            grid-template-columns:1fr 1fr;
+            gap:12px;
+            background:var(--shade);
+            border-bottom:1px solid var(--line);
+            padding:8px 10px;
+          }
+          body[data-lang-mode="two-col"] .twoColHeader .col{
+            margin:0;
+            font-size:12.5px;
+            font-weight:900;
+            letter-spacing:.4px;
+            text-transform:uppercase;
+          }
+          body[data-lang-mode="two-col"] .twoColHeader .col.en{ text-align:left; }
+          body[data-lang-mode="two-col"] .twoColHeader .col.hy{ text-align:right; }
+
+          @media print{
+            body{ background:#fff; }
+            .page{ margin:0; border:none; box-shadow:none; width:auto; min-height:auto; }
+            .content{ padding:0.5in; }
+          }
+        </style>
+      `;
+
+      const currentDate = new Date().toLocaleDateString('en-US', { 
+        day: '2-digit', month: 'short', year: 'numeric' 
+      });
+
+      let content = `
+        <html>
+        <head>
+          <title>${personal.full_name || 'Applicant'} - Enrollment Questionnaire</title>
+          <meta charset="UTF-8" />
+          ${styles}
+        </head>
+        <body data-lang-mode="${langMode}">
+          <div class="page">
+            <div class="content">
+              
+              <!-- HEADER -->
+              <div class="topband">
+                <p class="org">ARMENIAN COLLEGE OF NURSES</p>
+                <p class="org-hy">ՀԱՅԿԱԿԱՆ ՔՈԼԵՋ ԲՈՒԺՔՈՒՅՐԵՐԻ</p>
+                <p class="doc-title">ENROLLMENT QUESTIONNAIRE</p>
+                <p class="doc-title-hy">ԸՆԴՈՒՆԵԼՈՒԹՅԱՆ ՀԱՐՑԱԹԵՐԹԻԿ</p>
+              </div>
+
+              <!-- SECTION 1 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">1. PERSONAL INFORMATION</p>
+                  <p class="section-subtitle">1. ԱՆՁՆԱԿԱՆ ՏՎՅԱԼՆԵՐ</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">1. PERSONAL INFORMATION</p>
+                  <p class="col hy">1. ԱՆՁՆԱԿԱՆ ՏՎՅԱԼՆԵՐ</p>
+                </div>
+                <div class="section-body">
+                  <table>
+                    <tr>
+                      <th style="width:50%;"><span class="lang en">Full Legal Name</span><span class="lang hy"> / Լիարժեք օրինական անուն, ազգանուն</span></th>
+                      <td class="value">${personal.full_name || ''}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Date of Birth</span><span class="lang hy"> / Ծննդյան ամսաթիվ</span></th>
+                      <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(personal.date_of_birth).en : formatDateDDMonYYYY(personal.date_of_birth)}</td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+
+              <!-- SECTION 2 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">2. EDUCATION HISTORY</p>
+                  <p class="section-subtitle">2. ԿՐԹԱԿԱՆ ՊԱՏՄՈՒԹՅՈՒՆ</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">2. EDUCATION HISTORY</p>
+                  <p class="col hy">2. ԿՐԹԱԿԱՆ ՊԱՏՄՈՒԹՅՈՒՆ</p>
+                </div>
+                <div class="section-body">
+                  <table>
+                    <tr>
+                      <th style="width:50%;"><span class="lang en">High School Graduation Date</span><span class="lang hy"> / Միջնակարգ ընդհանուր կրթության ավարտման ամսաթիվ</span></th>
+                      <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(education.hs_grad_date).en : formatDateDDMonYYYY(education.hs_grad_date)}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Applied to an Armenian Educational Institution?</span><span class="lang hy"> / Դիմում ներկայացրե՞լ եք արդյոք որևէ հայկական կրթական հաստատություն</span></th>
+                      <td class="value">${education.armenian_edu === 'yes' ? `<span class="lang en">Yes</span><span class="lang hy"> / Այո</span>` : `<span class="lang en">No</span><span class="lang hy"> / Ոչ</span>`}</td>
+                    </tr>
+                    ${education.armenian_edu === 'yes' ? `
+                    <tr>
+                      <th><span class="lang en">Armenian Institution Name</span><span class="lang hy"> / Հաստատության Անվանում</span></th>
+                      <td class="value">${education.armenian_institution || ''}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Application Date</span><span class="lang hy"> / Դիմելու Ամսաթիվ</span></th>
+                      <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(education.application_date).en : formatDateDDMonYYYY(education.application_date)}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Graduation Date</span><span class="lang hy"> / Ավարտելու Ամսաթիվ</span></th>
+                      <td class="value">${education.graduation_date ? (langMode === 'two-col' ? formatDateDDMonYYYY(education.graduation_date).en : formatDateDDMonYYYY(education.graduation_date)) : `<span class="lang en">Not graduated/Still enrolled</span><span class="lang hy"> / Չի ավարտել/Դեռ սովորում է</span>`}</td>
+                    </tr>
+                    ` : ''}
+                  </table>
+                </div>
+              </div>
+
+              <!-- SECTION 3 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">3. EMERGENCY CONTACT IN ARMENIA</p>
+                  <p class="section-subtitle">3. ՀԱՅԱՍՏԱՆՈՒՄ ԱՐՏԱԿԱՐԳ ԿԱՊԻ ԱՆՁ</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">3. EMERGENCY CONTACT IN ARMENIA</p>
+                  <p class="col hy">3. ՀԱՅԱՍՏԱՆՈՒՄ ԱՐՏԱԿԱՐԳ ԿԱՊԻ ԱՆՁ</p>
+                </div>
+                <div class="section-body">
+                  <table>
+                    <tr>
+                      <th style="width:50%;"><span class="lang en">Full Name</span><span class="lang hy"> / Անուն, ազգանուն</span></th>
+                      <td class="value">${emergency.name || ''}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Relationship</span><span class="lang hy"> / Հարաբերություն</span></th>
+                      <td class="value">${emergency.relationship || ''}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Phone Number</span><span class="lang hy"> / Հեռախոսահամար</span></th>
+                      <td class="value">${emergency.phone || ''}</td>
+                    </tr>
+                    <tr>
+                      <th><span class="lang en">Full Physical Address</span><span class="lang hy"> / Բնակության ամբողջական հասցե</span></th>
+                      <td class="value" style="height:44px;">${emergency.address || ''}</td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+
+              <!-- SECTION 4 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">4. RESIDENCY INFORMATION</p>
+                  <p class="section-subtitle">4. ԲՆԱԿՈՒԹՅԱՆ ՏՎՅԱԼՆԵՐ</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">4. RESIDENCY INFORMATION</p>
+                  <p class="col hy">4. ԲՆԱԿՈՒԹՅԱՆ ՏՎՅԱԼՆԵՐ</p>
+                </div>
+                <div class="section-body">
+                  <table>
+                    <tr>
+                      <th style="width:50%;"><span class="lang en">Date Permanently Left Armenia</span><span class="lang hy"> / ՀՀ-ից մշտապես հեռանալու ամսաթիվ</span></th>
+                      <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(residency.permanent_departure_date).en : formatDateDDMonYYYY(residency.permanent_departure_date)}</td>
+                    </tr>
+                  </table>
+                </div>
+              </div>
+
+              <!-- SECTION 5 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">5. TRAVEL HISTORY TO ARMENIA (LIFETIME)</p>
+                  <p class="section-subtitle">5. ՃԱՆԱՊԱՐՀՈՒԹՅՈՒՆՆԵՐԻ ՊԱՏՄՈՒԹՅՈՒՆ ԴԵՊԻ ՀԱՅԱՍՏԱՆ (ԿՅԱՆՔԻ ԸՆԹԱՑՔՈՒՄ)</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">5. TRAVEL HISTORY TO ARMENIA (LIFETIME)</p>
+                  <p class="col hy">5. ՃԱՆԱՊԱՐՀՈՒԹՅՈՒՆՆԵՐԻ ՊԱՏՄՈՒԹՅՈՒՆ ԴԵՊԻ ՀԱՅԱՍՏԱՆ (ԿՅԱՆՔԻ ԸՆԹԱՑՔՈՒՄ)</p>
+                </div>
+                <div class="section-body">
+                  ${travelHistory && travelHistory.length > 0 ? (() => {
+                    const sortedTravel = [...travelHistory].sort((a, b) => {
+                      const dateA = a.arrival ? new Date(a.arrival) : new Date(0);
+                      const dateB = b.arrival ? new Date(b.arrival) : new Date(0);
+                      return dateB - dateA;
+                    });
+                    return `<table>
+                      <tr>
+                        <th><span class="lang en">Arrival Date</span><span class="lang hy"> / Մուտքի ամսաթիվ</span></th>
+                        <th><span class="lang en">Departure Date</span><span class="lang hy"> / Ելքի ամսաթիվ</span></th>
+                        <th style="width:16%;"><span class="lang en">Duration (Days)</span><span class="lang hy"> / Օրերով</span></th>
+                        <th><span class="lang en">Purpose of Visit</span><span class="lang hy"> / Այցի նպատակը</span></th>
+                      </tr>
+                      ${sortedTravel.map(trip => `
+                        <tr>
+                          <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(trip.arrival).en : formatDateDDMonYYYY(trip.arrival)}</td>
+                          <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(trip.departure).en : formatDateDDMonYYYY(trip.departure)}</td>
+                          <td class="value">${trip.duration || ''}</td>
+                          <td class="value">${trip.purpose || ''}</td>
+                        </tr>
+                      `).join('')}
+                    </table>`;
+                  })() : `<p style="padding:10px;border:1px solid var(--line2);margin:0;background:#fcfcfc;"><span class="lang en">No travel history recorded.</span><span class="lang hy"> / Ճամփորդական պատմություն չկա։</span></p>`}
+                </div>
+              </div>
+
+              <!-- SECTION 6 -->
+              <div class="section">
+                <div class="section-header">
+                  <p class="section-title">6. OFFICIAL APPLICANT ATTESTATION</p>
+                  <p class="section-subtitle">6. ՀԱՅՏԱՏՈՒԻ ՊԱՇՏՈՆԱԿԱՆ ՀԱՍՏԱՏՈՒՄ</p>
+                </div>
+                <div class="twoColHeader">
+                  <p class="col en">6. OFFICIAL APPLICANT ATTESTATION</p>
+                  <p class="col hy">6. ՀԱՅՏԱՏՈՒԻ ՊԱՇՏՈՆԱԿԱՆ ՀԱՍՏԱՏՈՒՄ</p>
+                </div>
+                <div class="section-body">
+                  <div class="attest">
+                    <p><strong><span class="lang en">EN</span><span class="lang hy"> / HY</span>:</strong> <span class="lang en">I hereby declare that the information provided above is true, complete, and accurate to the best of my knowledge, and I accept full responsibility for its correctness.</span><span class="lang hy"> / Սույնով հաստատում եմ, որ վերոնշյալ բոլոր տվյալները ճշմարիտ, ամբողջական և ճիշտ են՝ իմ գիտելիքների սահմաններում, և ընդունում եմ դրանց ճշգրտության համար ամբողջական պատասխանատվություն։</span></p>
+
+                    <div class="siggrid">
+                      <div class="sigline">
+                        <div class="siglabel"><span class="lang en">Applicant's Full Legal Name</span><span class="lang hy"> / Հայտատուի լիարժեք օրինական անուն, ազգանուն</span></div>
+                        <div style="font-weight:700;font-size:13px;color:#111;">${attestation.signature || ''}</div>
+                      </div>
+                      <div class="sigline">
+                        <div class="siglabel"><span class="lang en">Date of Execution</span><span class="lang hy"> / Կազմման ամսաթիվ</span></div>
+                        <div style="font-weight:700;font-size:13px;color:#111;">${langMode === 'two-col' ? formatDateDDMonYYYY(attestation.date).en : formatDateDDMonYYYY(attestation.date)}</div>
+                      </div>
+                      <div class="sigline">
+                        <div class="siglabel"><span class="lang en">Applicant's Legal Signature</span><span class="lang hy"> / Հայտատուի ստորագրություն</span></div>
+                        <div class="line"></div>
+                      </div>
+                      <div class="sigline">
+                        <div class="siglabel"><span class="lang en">Control Number</span><span class="lang hy"> / Կոնտրոլ համար</span></div>
+                        <div style="font-weight:700;font-size:13px;color:#111;font-family:var(--mono);">${controlNumber}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- FOOTER -->
+              <div class="footer">
+                <div><strong><span class="lang en">EN</span><span class="lang hy"> / HY</span>:</strong> <span class="lang en">This document is an official academic record of the Armenian College of Nurses. Unauthorized modification, falsification, or misrepresentation is prohibited.</span><span class="lang hy"> / Սույն փաստաթուղթը հանդիսանում է Հայկական Քոլեջ Բուժքույրերի պաշտոնական կրթական փաստաթուղթ։ Ցանկացած չարտոնված փոփոխություն, կեղծում կամ ապատեղեկատվություն արգելվում է։</span></div>
+                <div class="muted" style="margin-top:6px;">Verification (optional): QR / Hash • Contact: admin@acnhs.am</div>
+              </div>
+
+              <div class="pagefoot">
+                <div style="font-family:var(--mono);">${controlNumber}</div>
+                <div style="font-family:var(--mono);">Generated: ${currentDate}</div>
+              </div>
+
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+
+      printWindow.document.write(content);
+      printWindow.document.close();
+      
+      printWindow.focus();
+      setTimeout(() => {
+        printWindow.print();
+        // Don't auto-close - let user close manually or print closes it
+      }, 500);
+    }
+
     function buildQuestionnaireHTML(data) {
       const sectionStyle = 'background:#0f172a;border:1px solid #1e293b;border-radius:8px;padding:20px;margin-bottom:20px;';
       const titleStyle = 'color:#2dd4bf;font-size:18px;font-weight:600;margin:0 0 16px;display:flex;align-items:center;gap:8px;';
@@ -3205,6 +3779,20 @@
       const escapeHtml = (str) => {
         if (!str) return '—';
         return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      };
+      
+      const formatDateDDMonYYYY = (dateString) => {
+        if (!dateString || dateString.trim() === '') return 'N/A';
+        
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return 'N/A';
+        
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = months[date.getMonth()];
+        const year = date.getFullYear();
+        
+        return `${day} ${month} ${year}`;
       };
       
       const buildTable = (rows) => {
@@ -3221,12 +3809,10 @@
       };
       
       const personal = data.personal_info || {};
-      const contact = data.contact_info || {};
       const emergency = data.emergency_contact || {};
-      const education = data.educational_background || {};
-      const work = data.work_experience || {};
+      const education = data.education_history || {};
       const residency = data.residency_travel || {};
-      const health = data.health_info || {};
+      const attestation = data.attestation || {};
       const travelHistory = residency.travel_history || [];
       
       let html = '';
@@ -3236,104 +3822,77 @@
         <div style="${sectionStyle}">
           <h3 style="${titleStyle}">👤 Personal Information</h3>
           ${buildTable([
-            ['Full Name', personal.full_name],
-            ['Date of Birth', personal.date_of_birth],
-            ['Place of Birth', personal.place_of_birth],
-            ['Gender', personal.gender],
-            ['Marital Status', personal.marital_status],
-            ['Citizenship', personal.citizenship],
-            ['Passport Number', personal.passport_number],
-            ['Passport Expiry', personal.passport_expiry]
+            ['Full Legal Name', personal.full_name],
+            ['Date of Birth', formatDateDDMonYYYY(personal.date_of_birth)]
           ])}
         </div>
       `;
       
-      // Contact Information
+      // Education History
       html += `
         <div style="${sectionStyle}">
-          <h3 style="${titleStyle}">📞 Contact Information</h3>
+          <h3 style="${titleStyle}">🎓 Education History</h3>
           ${buildTable([
-            ['Email', contact.email],
-            ['Phone', contact.phone],
-            ['Address', contact.address],
-            ['City', contact.city],
-            ['Country', contact.country],
-            ['Postal Code', contact.postal_code]
+            ['High School Graduation Date', formatDateDDMonYYYY(education.hs_grad_date)],
+            ['Applied to Armenian Institution', education.armenian_edu === 'yes' ? 'Yes' : 'No'],
+            ...(education.armenian_edu === 'yes' ? [
+              ['Armenian Institution Name', education.armenian_institution],
+              ['Application Date', formatDateDDMonYYYY(education.application_date)],
+              ['Graduation Date', education.graduation_date ? formatDateDDMonYYYY(education.graduation_date) : 'Not graduated/Still enrolled']
+            ] : [])
           ])}
         </div>
       `;
       
-      // Emergency Contact
+      // Emergency Contact in Armenia
       html += `
         <div style="${sectionStyle}">
-          <h3 style="${titleStyle}">🚨 Emergency Contact</h3>
+          <h3 style="${titleStyle}">� Emergency Contact in Armenia</h3>
           ${buildTable([
             ['Name', emergency.name],
             ['Relationship', emergency.relationship],
             ['Phone', emergency.phone],
-            ['Email', emergency.email]
+            ['Full Physical Address', emergency.address]
           ])}
         </div>
       `;
       
-      // Educational Background
-      html += `
-        <div style="${sectionStyle}">
-          <h3 style="${titleStyle}">🎓 Educational Background</h3>
-          ${buildTable([
-            ['Highest Degree', education.highest_degree],
-            ['Institution', education.institution],
-            ['Country', education.country],
-            ['Graduation Year', education.graduation_year],
-            ['Field of Study', education.field_of_study]
-          ])}
-        </div>
-      `;
-      
-      // Work Experience
-      html += `
-        <div style="${sectionStyle}">
-          <h3 style="${titleStyle}">💼 Work Experience</h3>
-          ${buildTable([
-            ['Current Employer', work.current_employer],
-            ['Position', work.position],
-            ['Years of Experience', work.years_of_experience],
-            ['Employment Status', work.employment_status]
-          ])}
-        </div>
-      `;
-      
-      // Residency Information
+      // Residency & Travel
       html += `
         <div style="${sectionStyle}">
           <h3 style="${titleStyle}">🌍 Residency Information</h3>
           ${buildTable([
-            ['Current Residence Country', residency.current_residence_country],
-            ['Residence Duration', residency.residence_duration],
-            ['Previous Countries (5 Years)', residency.previous_countries]
+            ['Date Permanently Left Armenia', formatDateDDMonYYYY(residency.permanent_departure_date)]
           ])}
         </div>
       `;
       
-      // Travel History
+      // Travel History to Armenia - Sort by most recent first
       if (travelHistory.length > 0) {
+        // Sort travel history by arrival date descending (most recent first)
+        const sortedTravel = [...travelHistory].sort((a, b) => {
+          const dateA = new Date(a.arrival);
+          const dateB = new Date(b.arrival);
+          return dateB - dateA; // Descending order (newest first)
+        });
+        
         html += `
           <div style="${sectionStyle}">
-            <h3 style="${titleStyle}">✈️ Travel History (Past 5 Years)</h3>
+            <h3 style="${titleStyle}">✈️ Travel History to Armenia (Lifetime)</h3>
             <table style="${tableStyle}">
               <thead>
                 <tr style="background:#1e293b;">
                   <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Arrival Date</th>
                   <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Departure Date</th>
-                  <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Duration</th>
-                  <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Purpose</th>
+                  <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Duration (Days)</th>
+                  <th style="color:#2dd4bf;padding:10px 12px;text-align:left;border-bottom:2px solid #334155;">Purpose of Visit</th>
                 </tr>
               </thead>
               <tbody>
-                ${travelHistory.map(row => `
+                ${sortedTravel.map(row => `
                   <tr style="${rowStyle}">
-                    <td style="${valueStyle}">${escapeHtml(row.arrival)}</td>
-                    <td style="${valueStyle}">${escapeHtml(row.departure)}</td>
+                    <td style="${valueStyle}">${formatDateDDMonYYYY(row.arrival)}</td>
+                    <td style="${valueStyle}">${formatDateDDMonYYYY(row.departure)}</td>
                     <td style="${valueStyle}">${escapeHtml(row.duration)}</td>
                     <td style="${valueStyle}">${escapeHtml(row.purpose)}</td>
                   </tr>
@@ -3344,15 +3903,13 @@
         `;
       }
       
-      // Health Information
+      // Attestation
       html += `
         <div style="${sectionStyle}">
-          <h3 style="${titleStyle}">🏥 Health Information</h3>
+          <h3 style="${titleStyle}">✍️ Official Applicant Attestation</h3>
           ${buildTable([
-            ['Blood Type', health.blood_type],
-            ['Allergies', health.allergies],
-            ['Chronic Conditions', health.chronic_conditions],
-            ['Current Medications', health.current_medications]
+            ['Applicant\'s Legal Signature', attestation.signature],
+            ['Date of Execution', formatDateDDMonYYYY(attestation.date)]
           ])}
         </div>
       `;
@@ -3406,6 +3963,311 @@
             callback: () => resolve(true)
           }
         ]);
+      });
+    }
+
+    // Language mode selection dialog (3 modes)
+    function showLanguageModeDialog() {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.85);
+          backdrop-filter: blur(5px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10002;
+          animation: fadeIn 0.2s ease;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+          background: #0a2540;
+          border: 1px solid #1e293b;
+          border-radius: 12px;
+          padding: 28px 32px;
+          max-width: 520px;
+          width: 90%;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+          animation: slideUp 0.3s ease;
+        `;
+        
+        content.innerHTML = `
+          <div style="margin-bottom: 24px;">
+            <div style="font-size: 28px; margin-bottom: 12px;">🖨️ Select Print Layout</div>
+            <div style="color: #94a3b8; font-size: 14px; line-height: 1.5;">Choose how you want to display the document</div>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <button class="lang-mode-btn" data-mode="bilingual" style="
+              background: rgba(45, 212, 191, 0.1);
+              border: 2px solid rgba(45, 212, 191, 0.3);
+              color: #fff;
+              padding: 16px 20px;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              text-align: left;
+              transition: all 0.2s;
+            ">
+              <div style="font-weight: 600; margin-bottom: 4px;">📋 Bilingual (Inline)</div>
+              <div style="font-size: 12px; color: #94a3b8;">English / Armenian labels in same line</div>
+            </button>
+            <button class="lang-mode-btn" data-mode="two-col" style="
+              background: rgba(45, 212, 191, 0.1);
+              border: 2px solid rgba(45, 212, 191, 0.3);
+              color: #fff;
+              padding: 16px 20px;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              text-align: left;
+              transition: all 0.2s;
+            ">
+              <div style="font-weight: 600; margin-bottom: 4px;">◫ Two-Column (Left EN / Right ARM)</div>
+              <div style="font-size: 12px; color: #94a3b8;">Separate columns for each language</div>
+            </button>
+            <button class="lang-mode-btn" data-mode="en-only" style="
+              background: rgba(45, 212, 191, 0.1);
+              border: 2px solid rgba(45, 212, 191, 0.3);
+              color: #fff;
+              padding: 16px 20px;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              text-align: left;
+              transition: all 0.2s;
+            ">
+              <div style="font-weight: 600; margin-bottom: 4px;">🇺🇸 English Only</div>
+              <div style="font-size: 12px; color: #94a3b8;">Show only English text</div>
+            </button>
+            <button class="lang-mode-btn" data-mode="hy-only" style="
+              background: rgba(45, 212, 191, 0.1);
+              border: 2px solid rgba(45, 212, 191, 0.3);
+              color: #fff;
+              padding: 16px 20px;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              text-align: left;
+              transition: all 0.2s;
+            ">
+              <div style="font-weight: 600; margin-bottom: 4px;">🇦🇲 Armenian Only</div>
+              <div style="font-size: 12px; color: #94a3b8;">Show only Armenian text</div>
+            </button>
+          </div>
+          <button id="langModeCancel" style="
+            width: 100%;
+            margin-top: 16px;
+            background: rgba(100, 116, 139, 0.15);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            color: #cbd5e1;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+          ">Cancel</button>
+        `;
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        // Add hover effects
+        const buttons = content.querySelectorAll('.lang-mode-btn');
+        buttons.forEach(btn => {
+          btn.addEventListener('mouseover', () => {
+            btn.style.background = 'rgba(45, 212, 191, 0.2)';
+            btn.style.borderColor = 'rgba(45, 212, 191, 0.5)';
+            btn.style.transform = 'translateX(4px)';
+          });
+          btn.addEventListener('mouseout', () => {
+            btn.style.background = 'rgba(45, 212, 191, 0.1)';
+            btn.style.borderColor = 'rgba(45, 212, 191, 0.3)';
+            btn.style.transform = 'translateX(0)';
+          });
+          btn.addEventListener('click', () => {
+            const mode = btn.getAttribute('data-mode');
+            modal.style.animation = 'fadeOut 0.2s ease';
+            setTimeout(() => {
+              modal.remove();
+              resolve(mode);
+            }, 200);
+          });
+        });
+        
+        document.getElementById('langModeCancel').onclick = () => {
+          modal.remove();
+          resolve(null);
+        };
+        
+        // Close on escape
+        const escHandler = (e) => {
+          if (e.key === 'Escape') {
+            modal.remove();
+            resolve(null);
+            document.removeEventListener('keydown', escHandler);
+          }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+            resolve(null);
+          }
+        });
+        
+        // Add animations if not already present
+        if (!document.getElementById('langModeAnimations')) {
+          const style = document.createElement('style');
+          style.id = 'langModeAnimations';
+          style.textContent = `
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes fadeOut {
+              from { opacity: 1; }
+              to { opacity: 0; }
+            }
+            @keyframes slideUp {
+              from { transform: translateY(20px); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+          `;
+          document.head.appendChild(style);
+        }
+      });
+    }
+
+    // Custom styled confirmation dialog with Yes/No buttons
+    function showCustomConfirm(title, message, yesText = 'Yes', noText = 'No') {
+      return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.85);
+          backdrop-filter: blur(5px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10002;
+          animation: fadeIn 0.2s ease;
+        `;
+        
+        const content = document.createElement('div');
+        content.style.cssText = `
+          background: #0a2540;
+          border: 1px solid #1e293b;
+          border-radius: 12px;
+          padding: 28px 32px;
+          max-width: 460px;
+          width: 90%;
+          box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+          animation: slideUp 0.3s ease;
+        `;
+        
+        content.innerHTML = `
+          <div style="margin-bottom: 24px;">
+            <div style="font-size: 28px; margin-bottom: 12px;">${title}</div>
+            <div style="color: #94a3b8; font-size: 15px; line-height: 1.5;">${message}</div>
+          </div>
+          <div style="display: flex; gap: 12px; justify-content: flex-end;">
+            <button id="customConfirmNo" style="
+              background: rgba(100, 116, 139, 0.15);
+              border: 1px solid rgba(100, 116, 139, 0.3);
+              color: #cbd5e1;
+              padding: 10px 24px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: 500;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='rgba(100, 116, 139, 0.25)'" onmouseout="this.style.background='rgba(100, 116, 139, 0.15)'">${noText}</button>
+            <button id="customConfirmYes" style="
+              background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+              border: none;
+              color: #ffffff;
+              padding: 10px 24px;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: 600;
+              transition: all 0.2s;
+              box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+            " onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 16px rgba(45, 212, 191, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(45, 212, 191, 0.3)'">${yesText}</button>
+          </div>
+        `;
+        
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+        
+        const yesBtn = document.getElementById('customConfirmYes');
+        const noBtn = document.getElementById('customConfirmNo');
+        
+        yesBtn.onclick = () => {
+          modal.style.animation = 'fadeOut 0.2s ease';
+          setTimeout(() => {
+            modal.remove();
+            resolve(true);
+          }, 200);
+        };
+        
+        noBtn.onclick = () => {
+          modal.style.animation = 'fadeOut 0.2s ease';
+          setTimeout(() => {
+            modal.remove();
+            resolve(false);
+          }, 200);
+        };
+        
+        // Close on escape
+        const escHandler = (e) => {
+          if (e.key === 'Escape') {
+            modal.remove();
+            resolve(null);
+            document.removeEventListener('keydown', escHandler);
+          }
+        };
+        document.addEventListener('keydown', escHandler);
+        
+        // Click outside to close
+        modal.addEventListener('click', (e) => {
+          if (e.target === modal) {
+            modal.remove();
+            resolve(null);
+          }
+        });
+        
+        // Add animations if not already present
+        if (!document.getElementById('customConfirmAnimations')) {
+          const style = document.createElement('style');
+          style.id = 'customConfirmAnimations';
+          style.textContent = `
+            @keyframes fadeIn {
+              from { opacity: 0; }
+              to { opacity: 1; }
+            }
+            @keyframes fadeOut {
+              from { opacity: 1; }
+              to { opacity: 0; }
+            }
+            @keyframes slideUp {
+              from { transform: translateY(20px); opacity: 0; }
+              to { transform: translateY(0); opacity: 1; }
+            }
+          `;
+          document.head.appendChild(style);
+        }
       });
     }
 
@@ -3967,7 +4829,7 @@
           const startTerm = indexEntry.cleanStartTerm || app.start_term || '—';
           const tr = document.createElement('tr');
           tr.innerHTML = `
-            <td><span class="pill">${app.reference_number || '—'}</span></td>
+            <td><span class="pill" onclick="handleReferenceClick('${app.id}')" style="cursor:pointer;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" title="Click to view questionnaire">${app.reference_number || '—'}</span></td>
             <td><strong>${app.applicant_name || '—'}</strong></td>
             <td>${programName}</td>
             <td>${startTerm}</td>

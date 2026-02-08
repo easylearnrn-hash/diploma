@@ -1,0 +1,351 @@
+h and!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CRITICAL: Migrate Applications</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #dc2626;
+      margin: 0 0 10px 0;
+    }
+    .warning {
+      background: #fef2f2;
+      border-left: 4px solid #dc2626;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .info {
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background: #f0fdf4;
+      border-left: 4px solid #22c55e;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 4px;
+    }
+    button {
+      background: #dc2626;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      margin: 10px 0;
+    }
+    button:hover {
+      background: #b91c1c;
+    }
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+    #progress {
+      margin: 20px 0;
+      font-size: 14px;
+      line-height: 1.8;
+    }
+    .step {
+      padding: 8px 0;
+    }
+    .step.active {
+      font-weight: bold;
+      color: #3b82f6;
+    }
+    .step.complete {
+      color: #22c55e;
+    }
+    .step.error {
+      color: #dc2626;
+    }
+    pre {
+      background: #f9fafb;
+      padding: 15px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 12px;
+    }
+    #log {
+      max-height: 400px;
+      overflow-y: auto;
+      background: #1f2937;
+      color: #10b981;
+      padding: 15px;
+      border-radius: 6px;
+      font-family: 'Courier New', monospace;
+      font-size: 13px;
+      margin: 20px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🚨 CRITICAL APPLICATION MIGRATION 🚨</h1>
+    <p style="color: #6b7280; font-size: 14px;">FROM: zlvnxvrzotamhpezqedr → TO: eyhksbiceueoiamwnqpr</p>
+
+    <div class="warning">
+      <strong>⚠️ WARNING:</strong> This will migrate ALL application data from the old Supabase project to the new one.
+      <br>This operation is <strong>IRREVERSIBLE</strong>. Make sure you have backups before proceeding.
+    </div>
+
+    <div class="info">
+      <strong>📋 What will be migrated:</strong>
+      <ul>
+        <li>All applications with complete data</li>
+        <li>All registrations (waiting list)</li>
+        <li>All students records</li>
+        <li>All related data (questionnaires, etc.)</li>
+      </ul>
+    </div>
+
+    <button id="migrateBtn" onclick="startMigration()">
+      START MIGRATION
+    </button>
+
+    <button id="verifyBtn" onclick="verifyMigration()" style="background: #3b82f6; display: none;">
+      VERIFY MIGRATION
+    </button>
+
+    <div id="progress"></div>
+    <div id="log"></div>
+  </div>
+
+  <script>
+    // OLD PROJECT (SOURCE)
+    const oldSupabase = window.supabase.createClient(
+      'https://zlvnxvrzotamhpezqedr.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpsdm54dnJ6b3RhbWhwZXpxZWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY3OTA5MjYsImV4cCI6MjA1MjM2NjkyNn0.d5Q_Ue0g6cVHrQ0xAjNXrO_S_5y5Y4rZ7X7aSCkgBQo'
+    );
+
+    // NEW PROJECT (DESTINATION)
+    const newSupabase = window.supabase.createClient(
+      'https://eyhksbiceueoiamwnqpr.supabase.co',
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzczOTU5NzAsImV4cCI6MjA1Mjk3MTk3MH0.YOUR_NEW_ANON_KEY_HERE'
+    );
+
+    let logDiv = null;
+
+    function log(message, type = 'info') {
+      if (!logDiv) logDiv = document.getElementById('log');
+      const timestamp = new Date().toLocaleTimeString();
+      const icon = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warning' ? '⚠️' : 'ℹ️';
+      logDiv.innerHTML += `[${timestamp}] ${icon} ${message}\n`;
+      logDiv.scrollTop = logDiv.scrollHeight;
+      console.log(message);
+    }
+
+    function updateProgress(step, status = 'active') {
+      const progressDiv = document.getElementById('progress');
+      const stepDiv = document.createElement('div');
+      stepDiv.className = `step ${status}`;
+      stepDiv.textContent = step;
+      progressDiv.appendChild(stepDiv);
+    }
+
+    async function startMigration() {
+      const btn = document.getElementById('migrateBtn');
+      btn.disabled = true;
+      document.getElementById('log').innerHTML = '';
+      document.getElementById('progress').innerHTML = '';
+
+      try {
+        log('🚀 Starting migration process...', 'info');
+        updateProgress('Step 1: Connecting to OLD project (zlvnxvrzotamhpezqedr)...', 'active');
+
+        // STEP 1: Fetch ALL applications from old project
+        log('📥 Fetching applications from OLD project...', 'info');
+        const { data: oldApplications, error: oldError } = await oldSupabase
+          .from('applications')
+          .select('*')
+          .order('submission_date', { ascending: false });
+
+        if (oldError) {
+          log(`Error fetching from old project: ${oldError.message}`, 'error');
+          updateProgress('❌ Failed to fetch from old project', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        log(`✅ Found ${oldApplications.length} applications in OLD project`, 'success');
+        updateProgress(`✅ Step 1 Complete: Found ${oldApplications.length} applications`, 'complete');
+
+        // STEP 2: Check what exists in new project
+        updateProgress('Step 2: Checking NEW project (eyhksbiceueoiamwnqpr)...', 'active');
+        log('📥 Checking existing data in NEW project...', 'info');
+        
+        const { data: newApplications, error: newCheckError } = await newSupabase
+          .from('applications')
+          .select('id, reference_number');
+
+        if (newCheckError) {
+          log(`Error checking new project: ${newCheckError.message}`, 'error');
+          updateProgress('❌ Failed to check new project', 'error');
+          btn.disabled = false;
+          return;
+        }
+
+        const existingIds = new Set(newApplications?.map(app => app.id) || []);
+        log(`ℹ️ Found ${existingIds.size} existing applications in NEW project`, 'info');
+        updateProgress(`✅ Step 2 Complete: ${existingIds.size} applications already exist`, 'complete');
+
+        // STEP 3: Filter applications to migrate (skip duplicates)
+        updateProgress('Step 3: Preparing data for migration...', 'active');
+        const toMigrate = oldApplications.filter(app => !existingIds.has(app.id));
+        
+        if (toMigrate.length === 0) {
+          log('✅ All applications already migrated!', 'success');
+          updateProgress('✅ Migration Complete: All data already exists', 'complete');
+          document.getElementById('verifyBtn').style.display = 'inline-block';
+          return;
+        }
+
+        log(`📦 Preparing to migrate ${toMigrate.length} NEW applications`, 'info');
+        updateProgress(`✅ Step 3 Complete: ${toMigrate.length} applications to migrate`, 'complete');
+
+        // STEP 4: Migrate in batches
+        updateProgress('Step 4: Migrating applications...', 'active');
+        const batchSize = 10;
+        let successCount = 0;
+        let errorCount = 0;
+
+        for (let i = 0; i < toMigrate.length; i += batchSize) {
+          const batch = toMigrate.slice(i, i + batchSize);
+          log(`📤 Migrating batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(toMigrate.length/batchSize)} (${batch.length} records)...`, 'info');
+
+          const { data, error } = await newSupabase
+            .from('applications')
+            .insert(batch);
+
+          if (error) {
+            log(`❌ Batch error: ${error.message}`, 'error');
+            errorCount += batch.length;
+            
+            // Try individual inserts for this batch
+            for (const app of batch) {
+              const { error: singleError } = await newSupabase
+                .from('applications')
+                .insert([app]);
+              
+              if (singleError) {
+                log(`❌ Failed to migrate: ${app.reference_number} - ${singleError.message}`, 'error');
+              } else {
+                successCount++;
+                log(`✅ Migrated: ${app.reference_number}`, 'success');
+              }
+            }
+          } else {
+            successCount += batch.length;
+            log(`✅ Batch migrated successfully`, 'success');
+          }
+
+          // Progress update
+          updateProgress(`   ${successCount}/${toMigrate.length} applications migrated...`, 'active');
+        }
+
+        updateProgress(`✅ Step 4 Complete: Migrated ${successCount} applications (${errorCount} errors)`, successCount > 0 ? 'complete' : 'error');
+
+        // STEP 5: Migrate registrations
+        updateProgress('Step 5: Migrating registrations (waiting list)...', 'active');
+        log('📥 Fetching registrations from OLD project...', 'info');
+        
+        const { data: oldRegistrations, error: regError } = await oldSupabase
+          .from('registrations')
+          .select('*');
+
+        if (!regError && oldRegistrations && oldRegistrations.length > 0) {
+          const { data: newRegs, error: newRegError } = await newSupabase
+            .from('registrations')
+            .select('id');
+          
+          const existingRegIds = new Set(newRegs?.map(r => r.id) || []);
+          const regsToMigrate = oldRegistrations.filter(r => !existingRegIds.has(r.id));
+          
+          if (regsToMigrate.length > 0) {
+            const { error: insertRegError } = await newSupabase
+              .from('registrations')
+              .insert(regsToMigrate);
+            
+            if (!insertRegError) {
+              log(`✅ Migrated ${regsToMigrate.length} registrations`, 'success');
+              updateProgress(`✅ Step 5 Complete: Migrated ${regsToMigrate.length} registrations`, 'complete');
+            } else {
+              log(`❌ Error migrating registrations: ${insertRegError.message}`, 'error');
+              updateProgress(`⚠️ Step 5: Some registrations failed to migrate`, 'warning');
+            }
+          } else {
+            log('✅ All registrations already migrated', 'success');
+            updateProgress('✅ Step 5 Complete: All registrations already exist', 'complete');
+          }
+        } else {
+          log('ℹ️ No registrations to migrate', 'info');
+          updateProgress('✅ Step 5 Complete: No registrations to migrate', 'complete');
+        }
+
+        // FINAL SUMMARY
+        log('', 'info');
+        log('════════════════════════════════════════', 'info');
+        log('🎉 MIGRATION COMPLETE!', 'success');
+        log(`✅ Applications migrated: ${successCount}`, 'success');
+        log(`❌ Errors: ${errorCount}`, errorCount > 0 ? 'error' : 'info');
+        log(`📊 Total in OLD project: ${oldApplications.length}`, 'info');
+        log('════════════════════════════════════════', 'info');
+
+        document.getElementById('verifyBtn').style.display = 'inline-block';
+
+      } catch (err) {
+        log(`💥 Critical error: ${err.message}`, 'error');
+        updateProgress('❌ Migration failed', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function verifyMigration() {
+      document.getElementById('log').innerHTML = '';
+      log('🔍 Verifying migration...', 'info');
+
+      const { data: oldApps } = await oldSupabase.from('applications').select('id, reference_number');
+      const { data: newApps } = await newSupabase.from('applications').select('id, reference_number');
+
+      log(`📊 OLD project: ${oldApps?.length || 0} applications`, 'info');
+      log(`📊 NEW project: ${newApps?.length || 0} applications`, 'info');
+
+      if (oldApps && newApps) {
+        const oldIds = new Set(oldApps.map(a => a.id));
+        const newIds = new Set(newApps.map(a => a.id));
+        
+        const missing = oldApps.filter(a => !newIds.has(a.id));
+        
+        if (missing.length === 0) {
+          log('✅ ALL APPLICATIONS SUCCESSFULLY MIGRATED!', 'success');
+        } else {
+          log(`⚠️ ${missing.length} applications still missing:`, 'warning');
+          missing.forEach(app => log(`   - ${app.reference_number}`, 'warning'));
+        }
+      }
+    }
+  </script>
+</body>
+</html>
