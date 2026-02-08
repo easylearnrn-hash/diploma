@@ -5839,9 +5839,11 @@
       const uploadedDocs = app.uploaded_documents || {};
       const questionnaireData = uploadedDocs && typeof uploadedDocs === 'object' ? uploadedDocs.enrollment_questionnaire : null;
       
+      // Always show the section
+      questionnaireSection.style.display = 'block';
+      
       if (questionnaireData && questionnaireData.submitted) {
-        questionnaireSection.style.display = 'block';
-        
+        // ===== CASE 1: Student HAS submitted the questionnaire =====
         const submittedDate = questionnaireData.submitted_at 
           ? new Date(questionnaireData.submitted_at).toLocaleString('en-US', { 
               month: 'short', 
@@ -5852,12 +5854,20 @@
             })
           : 'Unknown';
         
+        document.getElementById('questionnaireStatusBadge').style.display = 'inline-block';
         document.getElementById('questionnaireSubmittedDate').textContent = submittedDate;
+        document.getElementById('questionnaireSubmittedDate').parentElement.parentElement.children[0].style.display = 'block';
+        document.getElementById('questionnaireSubmittedDate').parentElement.parentElement.children[1].style.display = 'block';
         document.getElementById('questionnaireId').textContent = questionnaireData.questionnaire_id || 'N/A';
+        document.getElementById('questionnaireId').parentElement.parentElement.children[2].style.display = 'block';
+        document.getElementById('questionnaireId').parentElement.parentElement.children[3].style.display = 'block';
         document.getElementById('questionnaireControlNumber').textContent = questionnaireData.control_number || app.control_number || 'N/A';
         
         // Set up view button
         const viewBtn = document.getElementById('viewQuestionnaireBtn');
+        viewBtn.innerHTML = '<span style="font-size:16px;">👁️</span> View Full Questionnaire';
+        viewBtn.style.background = 'linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%)';
+        
         viewBtn.onclick = async () => {
           await showQuestionnaireModal(app.id, questionnaireData.questionnaire_id);
         };
@@ -5872,7 +5882,109 @@
           viewBtn.style.boxShadow = 'none';
         });
       } else {
-        questionnaireSection.style.display = 'none';
+        // ===== CASE 2: Student has NOT submitted the questionnaire =====
+        document.getElementById('questionnaireStatusBadge').style.display = 'none';
+        
+        // Hide submission date and IDs
+        const infoGrid = document.getElementById('questionnaireInfo').querySelector('div[style*="display:grid"]');
+        if (infoGrid) {
+          infoGrid.children[0].style.display = 'none'; // "Submitted:" label
+          infoGrid.children[1].style.display = 'none'; // Date value
+          infoGrid.children[2].style.display = 'none'; // "Questionnaire ID:" label
+          infoGrid.children[3].style.display = 'none'; // ID value
+        }
+        
+        document.getElementById('questionnaireControlNumber').textContent = app.control_number || 'N/A';
+        
+        // Set up request button
+        const viewBtn = document.getElementById('viewQuestionnaireBtn');
+        viewBtn.innerHTML = '<span style="font-size:16px;">📧</span> Request Enrollment Questionnaire';
+        viewBtn.style.background = 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
+        
+        viewBtn.onclick = async () => {
+          if (!app.email) {
+            showSnackbar('❌ No email address found for this student', 'error');
+            return;
+          }
+          
+          // Show loading state
+          const originalHTML = viewBtn.innerHTML;
+          viewBtn.innerHTML = '<span style="font-size:16px;">⏳</span> Sending...';
+          viewBtn.disabled = true;
+          
+          try {
+            const response = await fetch('https://eyhksbiceueoiamwnqpr.supabase.co/functions/v1/send-email', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`
+              },
+              body: JSON.stringify({
+                to: app.email,
+                subject: 'Enrollment Questionnaire Required',
+                html: `
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                      <h1 style="color: white; margin: 0; font-size: 24px;">📋 Enrollment Questionnaire Required</h1>
+                    </div>
+                    
+                    <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0;">
+                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">Dear ${app.first_name || 'Student'},</p>
+                      
+                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">
+                        This is a pre-enrollment form that must be completed very carefully and accurately.
+                      </p>
+                      
+                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">
+                        Please make sure to submit this form as soon as possible to avoid any delay in your enrollment process.
+                      </p>
+                      
+                      <div style="text-align: center; margin: 30px 0;">
+                        <a href="https://acnhs.am/final-form.html?control=${app.control_number}" 
+                           style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
+                          Complete Enrollment Questionnaire
+                        </a>
+                      </div>
+                      
+                      <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                        <strong>Your Control Number:</strong> ${app.control_number}<br>
+                        If you have any questions, please contact us at <a href="mailto:student-services@acnhs.am" style="color: #3b82f6;">student-services@acnhs.am</a>
+                      </p>
+                    </div>
+                  </div>
+                `,
+                text: `Enrollment Questionnaire Required\n\nDear ${app.first_name || 'Student'},\n\nThis is a pre-enrollment form that must be completed very carefully and accurately.\n\nPlease make sure to submit this form as soon as possible to avoid any delay in your enrollment process.\n\nComplete the questionnaire here: https://acnhs.am/final-form.html?control=${app.control_number}\n\nYour Control Number: ${app.control_number}\n\nIf you have any questions, please contact us at student-services@acnhs.am`,
+                fromName: 'Armenian College of Nurses'
+              })
+            });
+            
+            if (response.ok) {
+              showSnackbar('✅ Enrollment questionnaire request sent successfully!', 'success');
+              viewBtn.innerHTML = '<span style="font-size:16px;">✅</span> Request Sent';
+              setTimeout(() => {
+                viewBtn.innerHTML = originalHTML;
+                viewBtn.disabled = false;
+              }, 3000);
+            } else {
+              throw new Error('Failed to send email');
+            }
+          } catch (error) {
+            console.error('Error sending questionnaire request:', error);
+            showSnackbar('❌ Failed to send questionnaire request', 'error');
+            viewBtn.innerHTML = originalHTML;
+            viewBtn.disabled = false;
+          }
+        };
+        
+        // Add hover effects
+        viewBtn.addEventListener('mouseover', () => {
+          viewBtn.style.transform = 'translateY(-2px)';
+          viewBtn.style.boxShadow = '0 4px 12px rgba(59,130,246,0.3)';
+        });
+        viewBtn.addEventListener('mouseout', () => {
+          viewBtn.style.transform = 'translateY(0)';
+          viewBtn.style.boxShadow = 'none';
+        });
       }
 
       const statementBox = document.getElementById('drawerStatement');
