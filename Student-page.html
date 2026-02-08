@@ -3823,12 +3823,65 @@ function handleDocumentAction(action = 'view', documentId) {
 
   // Special handling for Admission Letter - open acceptance letter page
   if (documentId === 'doc-admission' || documentId === 'doc-acceptance') {
-    const studentId = portalState.profile?.student_id || portalState.profile?.id;
-    window.open(
-      `acceptance-letter.html?studentId=${encodeURIComponent(studentId || '')}`,
-      '_blank'
-    );
+    // Build acceptance letter data from student profile
+    const profile = portalState.profile || {};
+    const metadata = profile.metadata || {};
+    
+    const acceptanceLetterData = {
+      documentId: `ACNHS-ADM-${(profile.student_id || '00000').replace(/\D/g, '').padStart(5, '0')}`,
+      issueDate: formatDateForLetter(profile.enrollment_date || new Date()),
+      academicYear: '2026 - 2027',
+      fullName: profile.full_name || metadata.fullName || 'Student',
+      lastName: profile.last_name || metadata.lastName || (profile.full_name || '').split(' ').pop() || 'Student',
+      salutation: metadata.gender === 'Female' || metadata.gender === 'female' ? 'Ms.' : 'Mr.',
+      dob: formatDateForLetter(profile.date_of_birth || metadata.dateOfBirth || ''),
+      applicationId: profile.application_id || 'N/A',
+      programName: profile.program || metadata.program || 'Bachelor of Science in Nursing',
+      credential: "Bachelor's Degree",
+      mode: 'On-Campus / Full-Time',
+      startDate: formatDateForLetter(profile.program_start_date || profile.enrollment_date || 'September 09, 2026'),
+      authorizedOfficer: 'Dr. Hrachya A. Vardanyan',
+      officerTitle: 'Dean of Academic Affairs',
+      controlNumber: profile.control_number || profile.document_id || '',
+      qrCodeUrl: profile.control_number ? 
+        `https://api.qrserver.com/v1/create-qr-code/?size=185x185&data=${encodeURIComponent(`https://www.acnhs.am/verify-transcript.html?ctrl=${profile.control_number}`)}` : '',
+      hash: profile.verification_hash || generateSimpleHash(profile.student_id || 'TEMP'),
+      documentType: 'Official Acceptance Letter',
+      studentId: profile.student_id || 'TMP-2026-0001',
+      isVoid: false
+    };
+    
+    // Store in localStorage for acceptance-letter.html to read
+    localStorage.setItem('ACCEPTANCE_LETTER_DATA', JSON.stringify(acceptanceLetterData));
+    
+    // Open acceptance letter page
+    window.open('acceptance-letter.html', '_blank');
     return;
+  }
+  
+  // Helper function to format dates for letter
+  function formatDateForLetter(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      return `${months[date.getMonth()]} ${String(date.getDate()).padStart(2, '0')}, ${date.getFullYear()}`;
+    } catch {
+      return dateStr;
+    }
+  }
+  
+  // Helper function to generate simple hash
+  function generateSimpleHash(str) {
+    if (!str) return '00000000000000000000000000000000';
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(16).toUpperCase().padStart(32, '0');
   }
 
   // Special handling for Transcript - open transcript page
@@ -4116,19 +4169,6 @@ function renderApplicationForm(application) {
   
   const payload = application.payload || {};
   
-  // Helper function to safely get nested values
-  const getValue = (obj, path, fallback = 'N/A') => {
-    const keys = path.split('.');
-    let value = obj;
-    
-    for (const key of keys) {
-      value = value?.[key];
-      if (value === undefined || value === null) return fallback;
-    }
-    
-    return (value !== '' && value !== null && value !== undefined) ? value : fallback;
-  };
-  
   // Helper to format phone number
   const formatPhone = (phone) => {
     if (!phone) return 'N/A';
@@ -4136,272 +4176,422 @@ function renderApplicationForm(application) {
     if (cleaned.length === 10) {
       return `${cleaned.slice(0,3)} ${cleaned.slice(3,6)} ${cleaned.slice(6)}`;
     }
-    return phone; // Return as-is if not 10 digits
+    return phone;
   };
   
   // Helper to format date
   const formatDate = (dateStr) => {
     if (!dateStr) return 'N/A';
     try {
-      return new Date(dateStr).toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
+      const date = new Date(dateStr);
+      return date.toLocaleDateString('en-US', {year: 'numeric', month: 'long', day: 'numeric'});
     } catch {
       return dateStr;
     }
   };
   
-  // Extract all possible data fields
-  const data = {
-    // Personal Information
-    fullName: application.applicant_name || getValue(payload, 'applicantName') || getValue(payload, 'fullName'),
-    firstName: getValue(payload, 'firstName') || getValue(payload, 'legalFirstName'),
-    middleName: getValue(payload, 'middleName') || getValue(payload, 'legalMiddleName'),
-    lastName: getValue(payload, 'lastName') || getValue(payload, 'legalLastName'),
-    preferredName: getValue(payload, 'preferredName'),
-    dateOfBirth: application.date_of_birth || getValue(payload, 'dateOfBirth') || getValue(payload, 'dob'),
-    gender: getValue(payload, 'gender'),
-    nationality: getValue(payload, 'nationality'),
-    citizenship: getValue(payload, 'citizenship') || getValue(payload, 'countryOfCitizenship'),
-    armenianCitizen: getValue(payload, 'isArmenianCitizen'),
-    socialSecurityNumber: getValue(payload, 'socialSecurityNumber') || getValue(payload, 'ssn'),
-    passportNumber: getValue(payload, 'passportNumber'),
+  // Helper to get value safely
+  const get = (path, fallback = 'N/A') => {
+    const keys = path.split('.');
+    let value = path.startsWith('payload.') ? payload : application;
+    if (path.startsWith('payload.')) keys.shift();
     
-    // Contact Information
-    email: application.email || getValue(payload, 'email'),
-    phone: getValue(payload, 'phone') || getValue(payload, 'phoneNumber'),
-    alternatePhone: getValue(payload, 'alternatePhone') || getValue(payload, 'emergencyPhone'),
-    address: getValue(payload, 'address') || getValue(payload, 'streetAddress'),
-    city: getValue(payload, 'city'),
-    state: getValue(payload, 'state') || getValue(payload, 'province'),
-    zipCode: getValue(payload, 'zipCode') || getValue(payload, 'postalCode'),
-    country: getValue(payload, 'country'),
-    
-    // Emergency Contact
-    emergencyName: getValue(payload, 'emergencyContactName'),
-    emergencyRelationship: getValue(payload, 'emergencyContactRelationship'),
-    emergencyPhone: getValue(payload, 'emergencyContactPhone'),
-    emergencyEmail: getValue(payload, 'emergencyContactEmail'),
-    
-    // Academic Background
-    highSchoolName: getValue(payload, 'highSchoolName') || getValue(payload, 'lastSchoolAttended'),
-    highSchoolGradYear: getValue(payload, 'highSchoolGraduationYear') || getValue(payload, 'graduationYear'),
-    gpa: getValue(payload, 'gpa') || getValue(payload, 'cumulativeGPA'),
-    previousCollege: getValue(payload, 'previousCollege') || getValue(payload, 'collegeName'),
-    previousDegree: getValue(payload, 'previousDegree') || getValue(payload, 'degreeEarned'),
-    previousMajor: getValue(payload, 'previousMajor'),
-    
-    // Program Selection
-    program: getValue(payload, 'program') || getValue(payload, 'selectedProgram') || getValue(payload, 'intendedProgram'),
-    startTerm: getValue(payload, 'startTerm') || getValue(payload, 'intendedStartTerm'),
-    enrollmentType: getValue(payload, 'enrollmentType') || getValue(payload, 'attendanceStatus'),
-    
-    // Additional Information
-    languagePreference: getValue(payload, 'languagePreference'),
-    englishProficiency: getValue(payload, 'englishProficiency'),
-    militaryService: getValue(payload, 'militaryService'),
-    disabilities: getValue(payload, 'disabilities'),
-    
-    // Application Metadata
-    status: application.status,
-    referenceNumber: application.reference_number || application.control_number || application.document_id,
-    applicationDate: formatDate(application.created_at),
-    submittedDate: formatDate(getValue(payload, 'submittedAt'))
+    for (const key of keys) {
+      value = value?.[key];
+      if (value === undefined || value === null) return fallback;
+    }
+    return (value !== '' && value !== null && value !== undefined) ? value : fallback;
   };
   
+  // Helper to render a field
+  const field = (label, value, fullWidth = false, mono = false) => {
+    if (value === 'N/A' || !value) return '';
+    return `
+      <div ${fullWidth ? 'style="grid-column:1/-1"' : ''}>
+        <p style="font-size:11px;color:#64748b;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">${label}</p>
+        <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;${mono ? 'font-family:monospace;' : ''}line-height:1.5">${value}</p>
+      </div>
+    `;
+  };
+  
+  // Helper to render section
+  const section = (icon, title, content) => {
+    if (!content.trim()) return '';
+    return `
+      <div style="background:linear-gradient(135deg,#f8fafc,#ffffff);border-radius:16px;padding:28px;margin-bottom:24px;border:1px solid #e2e8f0;box-shadow:0 2px 8px rgba(15,23,42,0.04)">
+        <h3 style="margin:0 0 20px 0;font-size:17px;font-weight:800;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">${icon}</span>
+          <span>${title}</span>
+        </h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+          ${content}
+        </div>
+      </div>
+    `;
+  };
+  
+  // Extract all data
+  const fullName = application.applicant_name || get('applicantName') || get('fullName');
+  const firstName = get('firstName') || get('legalFirstName');
+  const middleName = get('middleName') || get('legalMiddleName');
+  const lastName = get('lastName') || get('legalLastName');
+  const preferredName = get('preferredName');
+  const dateOfBirth = application.date_of_birth || get('dateOfBirth') || get('dob');
+  const gender = get('gender');
+  const nationality = get('nationality');
+  const citizenship = get('citizenship') || get('countryOfCitizenship');
+  const placeOfBirth = get('placeOfBirth') || get('birthCity');
+  const armenianCitizen = get('isArmenianCitizen') || get('armenianCitizen');
+  const socialSecurityNumber = get('socialSecurityNumber') || get('ssn');
+  const passportNumber = get('passportNumber');
+  const idNumber = get('idNumber') || get('nationalIdNumber');
+  const maritalStatus = get('maritalStatus');
+  const ethnicity = get('ethnicity') || get('race');
+  
+  // Contact Information
+  const email = application.email || get('email');
+  const phone = get('phone') || get('phoneNumber') || get('mobilePhone');
+  const alternatePhone = get('alternatePhone') || get('homePhone') || get('secondaryPhone');
+  const address = get('address') || get('streetAddress') || get('mailingAddress');
+  const address2 = get('address2') || get('apartmentNumber') || get('unit');
+  const city = get('city');
+  const state = get('state') || get('province') || get('region');
+  const zipCode = get('zipCode') || get('postalCode');
+  const country = get('country');
+  const permanentAddress = get('permanentAddress');
+  const permanentCity = get('permanentCity');
+  const permanentState = get('permanentState');
+  const permanentZip = get('permanentZip');
+  const permanentCountry = get('permanentCountry');
+  
+  // Emergency Contact
+  const emergencyName = get('emergencyContactName') || get('emergencyName');
+  const emergencyRelationship = get('emergencyContactRelationship') || get('emergencyRelation');
+  const emergencyPhone = get('emergencyContactPhone') || get('emergencyPhone');
+  const emergencyEmail = get('emergencyContactEmail') || get('emergencyEmail');
+  const emergencyAddress = get('emergencyContactAddress') || get('emergencyAddress');
+  const alternateEmergencyName = get('alternateEmergencyName');
+  const alternateEmergencyPhone = get('alternateEmergencyPhone');
+  const alternateEmergencyRelation = get('alternateEmergencyRelation');
+  
+  // Academic Background
+  const highSchoolName = get('highSchoolName') || get('lastSchoolAttended') || get('secondarySchool');
+  const highSchoolCity = get('highSchoolCity');
+  const highSchoolState = get('highSchoolState');
+  const highSchoolCountry = get('highSchoolCountry');
+  const highSchoolGradYear = get('highSchoolGraduationYear') || get('graduationYear');
+  const highSchoolGradDate = get('highSchoolGraduationDate');
+  const gpa = get('gpa') || get('cumulativeGPA') || get('gradePointAverage');
+  const classRank = get('classRank');
+  const classSize = get('classSize');
+  const satScore = get('satScore') || get('sat');
+  const actScore = get('actScore') || get('act');
+  const toeflScore = get('toeflScore') || get('toefl');
+  const ieltsScore = get('ieltsScore') || get('ielts');
+  
+  // College/University Experience
+  const previousCollege = get('previousCollege') || get('collegeName') || get('universityAttended');
+  const collegeCity = get('collegeCity');
+  const collegeState = get('collegeState');
+  const collegeCountry = get('collegeCountry');
+  const collegeAttendanceDates = get('collegeAttendanceDates') || get('datesAttended');
+  const previousDegree = get('previousDegree') || get('degreeEarned') || get('degreeType');
+  const previousMajor = get('previousMajor') || get('major') || get('fieldOfStudy');
+  const collegeGPA = get('collegeGPA') || get('universityGPA');
+  const creditsEarned = get('creditsEarned') || get('totalCredits');
+  const degreeConferred = get('degreeConferred');
+  const expectedGraduation = get('expectedGraduation');
+  
+  // Program Selection & Enrollment
+  const program = get('program') || get('selectedProgram') || get('intendedProgram') || get('intendedMajor');
+  const secondChoiceProgram = get('secondChoiceProgram') || get('alternateProgram');
+  const startTerm = get('startTerm') || get('intendedStartTerm') || get('semester');
+  const enrollmentType = get('enrollmentType') || get('attendanceStatus') || get('fullPartTime');
+  const concentrationArea = get('concentrationArea') || get('specialization');
+  const degreeObjective = get('degreeObjective') || get('degreeGoal');
+  const careerGoals = get('careerGoals') || get('careerObjective');
+  const transferStudent = get('transferStudent') || get('isTransferStudent');
+  const housingNeeded = get('housingNeeded') || get('needsHousing');
+  
+  // Financial Information
+  const financialAidNeeded = get('financialAidNeeded') || get('applyingForAid');
+  const scholarshipInterest = get('scholarshipInterest') || get('interestedInScholarships');
+  const employmentStatus = get('employmentStatus');
+  const employer = get('employer') || get('employerName');
+  const workHoursPerWeek = get('workHoursPerWeek');
+  const sponsor = get('sponsor') || get('financialSponsor');
+  
+  // Additional Information
+  const languagePreference = get('languagePreference') || get('preferredLanguage');
+  const nativeLanguage = get('nativeLanguage') || get('firstLanguage');
+  const englishProficiency = get('englishProficiency');
+  const otherLanguages = get('otherLanguages') || get('additionalLanguages');
+  const militaryService = get('militaryService') || get('veteranStatus');
+  const militaryBranch = get('militaryBranch');
+  const militaryRank = get('militaryRank');
+  const disabilities = get('disabilities') || get('specialNeeds');
+  const accommodations = get('accommodations') || get('requestedAccommodations');
+  const criminalHistory = get('criminalHistory') || get('convictionHistory');
+  const disciplinaryHistory = get('disciplinaryHistory') || get('academicDiscipline');
+  
+  // References
+  const reference1Name = get('reference1Name') || get('recommender1Name');
+  const reference1Title = get('reference1Title') || get('recommender1Title');
+  const reference1Email = get('reference1Email');
+  const reference1Phone = get('reference1Phone');
+  const reference2Name = get('reference2Name') || get('recommender2Name');
+  const reference2Title = get('reference2Title') || get('recommender2Title');
+  const reference2Email = get('reference2Email');
+  const reference2Phone = get('reference2Phone');
+  
+  // Essays & Statements
+  const personalStatement = get('personalStatement') || get('essay');
+  const whyThisProgram = get('whyThisProgram') || get('statementOfPurpose');
+  const specialCircumstances = get('specialCircumstances') || get('additionalInformation');
+  
+  // Document Information
+  const transcriptUploaded = get('transcriptUploaded');
+  const diplomaUploaded = get('diplomaUploaded');
+  const recommendationLetters = get('recommendationLetters');
+  const testScoresUploaded = get('testScoresUploaded');
+  const essayUploaded = get('essayUploaded');
+  
+  // Application Metadata
+  const status = application.status;
+  const referenceNumber = application.reference_number || application.control_number || application.document_id;
+  const applicationDate = formatDate(application.created_at);
+  const submittedDate = formatDate(get('submittedAt') || get('submissionDate'));
+  const lastModified = formatDate(application.updated_at);
+  const applicationFee = get('applicationFee') || get('feePaid');
+  const feeWaiver = get('feeWaiver') || get('feeWaiverApproved');
+  
+  // Build sections
+  const personalInfoSection = section('👤', 'Personal Information', 
+    field('Full Legal Name', fullName, true) +
+    field('First Name', firstName) +
+    field('Middle Name', middleName) +
+    field('Last Name', lastName) +
+    field('Preferred Name', preferredName) +
+    field('Date of Birth', formatDate(dateOfBirth)) +
+    field('Place of Birth', placeOfBirth) +
+    field('Gender', gender) +
+    field('Nationality', nationality) +
+    field('Citizenship', citizenship) +
+    field('Armenian Citizen', armenianCitizen === true || armenianCitizen === 'Yes' ? 'Yes' : armenianCitizen === false || armenianCitizen === 'No' ? 'No' : armenianCitizen) +
+    field('Marital Status', maritalStatus) +
+    field('Ethnicity', ethnicity) +
+    field('Social Security Number', socialSecurityNumber, false, true) +
+    field('Passport Number', passportNumber, false, true) +
+    field('National ID Number', idNumber, false, true)
+  );
+  
+  const contactSection = section('📞', 'Contact Information',
+    field('Email Address', email, true) +
+    field('Primary Phone', formatPhone(phone), false, true) +
+    field('Alternate Phone', formatPhone(alternatePhone), false, true) +
+    field('Current Address', address, true) +
+    (address2 !== 'N/A' ? field('Apartment/Unit', address2, true) : '') +
+    field('City', city) +
+    field('State/Province', state) +
+    field('ZIP/Postal Code', zipCode, false, true) +
+    field('Country', country) +
+    (permanentAddress !== 'N/A' ? `
+      <div style="grid-column:1/-1;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">
+        <p style="font-size:13px;color:#64748b;margin:0 0 12px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Permanent Address (if different)</p>
+      </div>
+      ${field('Permanent Address', permanentAddress, true)}
+      ${field('City', permanentCity)}
+      ${field('State/Province', permanentState)}
+      ${field('ZIP/Postal Code', permanentZip, false, true)}
+      ${field('Country', permanentCountry)}
+    ` : '')
+  );
+  
+  const emergencySection = section('🚨', 'Emergency Contact Information',
+    field('Contact Name', emergencyName) +
+    field('Relationship', emergencyRelationship) +
+    field('Phone Number', formatPhone(emergencyPhone), false, true) +
+    field('Email Address', emergencyEmail) +
+    field('Address', emergencyAddress, true) +
+    (alternateEmergencyName !== 'N/A' ? `
+      <div style="grid-column:1/-1;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">
+        <p style="font-size:13px;color:#64748b;margin:0 0 12px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Alternate Emergency Contact</p>
+      </div>
+      ${field('Contact Name', alternateEmergencyName)}
+      ${field('Relationship', alternateEmergencyRelation)}
+      ${field('Phone Number', formatPhone(alternateEmergencyPhone), false, true)}
+    ` : '')
+  );
+  
+  const academicSection = section('🎓', 'Secondary Education',
+    field('High School Name', highSchoolName, true) +
+    field('City', highSchoolCity) +
+    field('State/Province', highSchoolState) +
+    field('Country', highSchoolCountry) +
+    field('Graduation Year', highSchoolGradYear) +
+    field('Graduation Date', formatDate(highSchoolGradDate)) +
+    field('GPA', gpa) +
+    field('Class Rank', classRank) +
+    field('Class Size', classSize) +
+    field('SAT Score', satScore) +
+    field('ACT Score', actScore) +
+    field('TOEFL Score', toeflScore) +
+    field('IELTS Score', ieltsScore)
+  );
+  
+  const collegeSection = section('🏛️', 'College/University Experience',
+    field('Institution Name', previousCollege, true) +
+    field('City', collegeCity) +
+    field('State/Province', collegeState) +
+    field('Country', collegeCountry) +
+    field('Dates Attended', collegeAttendanceDates, true) +
+    field('Degree Earned', previousDegree) +
+    field('Major/Field of Study', previousMajor) +
+    field('GPA', collegeGPA) +
+    field('Credits Earned', creditsEarned) +
+    field('Degree Conferred', degreeConferred) +
+    field('Expected Graduation', formatDate(expectedGraduation))
+  );
+  
+  const programSection = section('📚', 'Program & Enrollment',
+    field('Selected Program', program, true) +
+    field('Second Choice Program', secondChoiceProgram, true) +
+    field('Intended Start Term', startTerm) +
+    field('Enrollment Type', enrollmentType) +
+    field('Concentration Area', concentrationArea) +
+    field('Degree Objective', degreeObjective) +
+    field('Transfer Student', transferStudent === true || transferStudent === 'Yes' ? 'Yes' : transferStudent === false || transferStudent === 'No' ? 'No' : transferStudent) +
+    field('Housing Needed', housingNeeded === true || housingNeeded === 'Yes' ? 'Yes' : housingNeeded === false || housingNeeded === 'No' ? 'No' : housingNeeded) +
+    (careerGoals !== 'N/A' ? `
+      <div style="grid-column:1/-1">
+        <p style="font-size:11px;color:#64748b;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Career Goals</p>
+        <p style="font-size:15px;color:#0f172a;font-weight:500;margin:0;line-height:1.6;white-space:pre-wrap">${careerGoals}</p>
+      </div>
+    ` : '')
+  );
+  
+  const financialSection = section('💰', 'Financial Information',
+    field('Financial Aid Needed', financialAidNeeded === true || financialAidNeeded === 'Yes' ? 'Yes' : financialAidNeeded === false || financialAidNeeded === 'No' ? 'No' : financialAidNeeded) +
+    field('Scholarship Interest', scholarshipInterest === true || scholarshipInterest === 'Yes' ? 'Yes' : scholarshipInterest === false || scholarshipInterest === 'No' ? 'No' : scholarshipInterest) +
+    field('Employment Status', employmentStatus) +
+    field('Employer', employer) +
+    field('Work Hours Per Week', workHoursPerWeek) +
+    field('Financial Sponsor', sponsor)
+  );
+  
+  const additionalSection = section('ℹ️', 'Additional Information',
+    field('Language Preference', languagePreference) +
+    field('Native Language', nativeLanguage) +
+    field('English Proficiency', englishProficiency) +
+    field('Other Languages', otherLanguages, true) +
+    field('Military Service', militaryService) +
+    field('Military Branch', militaryBranch) +
+    field('Military Rank', militaryRank) +
+    field('Disabilities/Special Needs', disabilities, true) +
+    field('Requested Accommodations', accommodations, true) +
+    field('Criminal History', criminalHistory, true) +
+    field('Disciplinary History', disciplinaryHistory, true)
+  );
+  
+  const referencesSection = section('✉️', 'References',
+    (reference1Name !== 'N/A' ? `
+      <div style="grid-column:1/-1">
+        <p style="font-size:13px;color:#64748b;margin:0 0 12px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Reference 1</p>
+      </div>
+      ${field('Name', reference1Name)}
+      ${field('Title/Position', reference1Title)}
+      ${field('Email', reference1Email)}
+      ${field('Phone', formatPhone(reference1Phone), false, true)}
+    ` : '') +
+    (reference2Name !== 'N/A' ? `
+      <div style="grid-column:1/-1;margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0">
+        <p style="font-size:13px;color:#64748b;margin:0 0 12px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Reference 2</p>
+      </div>
+      ${field('Name', reference2Name)}
+      ${field('Title/Position', reference2Title)}
+      ${field('Email', reference2Email)}
+      ${field('Phone', formatPhone(reference2Phone), false, true)}
+    ` : '')
+  );
+  
+  const essaysSection = section('📝', 'Essays & Statements',
+    (personalStatement !== 'N/A' ? `
+      <div style="grid-column:1/-1">
+        <p style="font-size:11px;color:#64748b;margin:0 0 8px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Personal Statement</p>
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-size:14px;color:#0f172a;line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto">${personalStatement}</div>
+      </div>
+    ` : '') +
+    (whyThisProgram !== 'N/A' ? `
+      <div style="grid-column:1/-1;margin-top:16px">
+        <p style="font-size:11px;color:#64748b;margin:0 0 8px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Why This Program</p>
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-size:14px;color:#0f172a;line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto">${whyThisProgram}</div>
+      </div>
+    ` : '') +
+    (specialCircumstances !== 'N/A' ? `
+      <div style="grid-column:1/-1;margin-top:16px">
+        <p style="font-size:11px;color:#64748b;margin:0 0 8px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Special Circumstances</p>
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;padding:16px;font-size:14px;color:#0f172a;line-height:1.7;white-space:pre-wrap;max-height:300px;overflow-y:auto">${specialCircumstances}</div>
+      </div>
+    ` : '')
+  );
+  
+  const documentsSection = section('📎', 'Uploaded Documents',
+    field('Official Transcript', transcriptUploaded === true || transcriptUploaded === 'Yes' ? '✅ Uploaded' : 'Not uploaded') +
+    field('Diploma/Certificate', diplomaUploaded === true || diplomaUploaded === 'Yes' ? '✅ Uploaded' : 'Not uploaded') +
+    field('Recommendation Letters', recommendationLetters === true || recommendationLetters === 'Yes' ? '✅ Uploaded' : 'Not uploaded') +
+    field('Test Scores', testScoresUploaded === true || testScoresUploaded === 'Yes' ? '✅ Uploaded' : 'Not uploaded') +
+    field('Essay', essayUploaded === true || essayUploaded === 'Yes' ? '✅ Uploaded' : 'Not uploaded')
+  );
+  
+  const statusSection = `
+    <div style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe);border-radius:16px;padding:28px;border:2px solid #3b82f6;box-shadow:0 4px 12px rgba(59,130,246,0.15)">
+      <h3 style="margin:0 0 20px 0;font-size:17px;font-weight:800;color:#0f172a;border-bottom:2px solid #3b82f6;padding-bottom:14px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:20px">📄</span>
+        <span>Application Status</span>
+      </h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px">
+        <div>
+          <p style="font-size:11px;color:#1e40af;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Current Status</p>
+          <p style="font-size:18px;font-weight:800;margin:0;color:${status === 'enrolled' ? '#10b981' : status === 'pending' ? '#f59e0b' : status === 'approved' ? '#3b82f6' : status === 'rejected' ? '#ef4444' : '#6366f1'};text-transform:capitalize">${status || 'N/A'}</p>
+        </div>
+        <div>
+          <p style="font-size:11px;color:#1e40af;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Reference Number</p>
+          <p style="font-size:16px;color:#0f172a;font-weight:700;margin:0;font-family:monospace;background:#ffffff;padding:8px 12px;border-radius:6px;border:1px solid #3b82f6">${referenceNumber || 'N/A'}</p>
+        </div>
+        <div>
+          <p style="font-size:11px;color:#1e40af;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Application Date</p>
+          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${applicationDate}</p>
+        </div>
+        ${submittedDate !== 'N/A' ? `
+        <div>
+          <p style="font-size:11px;color:#1e40af;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Submitted Date</p>
+          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${submittedDate}</p>
+        </div>` : ''}
+        ${lastModified !== 'N/A' ? `
+        <div>
+          <p style="font-size:11px;color:#1e40af;margin:0 0 6px 0;font-weight:700;text-transform:uppercase;letter-spacing:0.8px">Last Modified</p>
+          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${lastModified}</p>
+        </div>` : ''}
+        ${applicationFee !== 'N/A' ? field('Application Fee', applicationFee) : ''}
+        ${feeWaiver !== 'N/A' ? field('Fee Waiver', feeWaiver === true || feeWaiver === 'Yes' ? 'Approved' : 'Not approved') : ''}
+      </div>
+    </div>
+  `;
+  
   return `
-    <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        📋 Personal Information
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div style="grid-column:1/-1">
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Full Legal Name</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.fullName}</p>
-        </div>
-        ${data.firstName !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">First Name</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.firstName}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Last Name</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.lastName}</p>
-        </div>` : ''}
-        ${data.preferredName !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Preferred Name</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.preferredName}</p>
-        </div>` : ''}
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Date of Birth</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${formatDate(data.dateOfBirth)}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Gender</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.gender}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Nationality</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.nationality}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Citizenship</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.citizenship}</p>
-        </div>
-        ${data.armenianCitizen !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Armenian Citizen</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.armenianCitizen === true || data.armenianCitizen === 'Yes' ? 'Yes' : 'No'}</p>
-        </div>` : ''}
-        ${data.socialSecurityNumber !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Social Security Number</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${data.socialSecurityNumber}</p>
-        </div>` : ''}
-        ${data.passportNumber !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Passport Number</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${data.passportNumber}</p>
-        </div>` : ''}
-      </div>
-    </div>
-    
-    <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        📞 Contact Information
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Email Address</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.email}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Phone Number</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${formatPhone(data.phone)}</p>
-        </div>
-        ${data.alternatePhone !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Alternate Phone</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${formatPhone(data.alternatePhone)}</p>
-        </div>` : ''}
-        <div style="grid-column:1/-1">
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Mailing Address</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.address}</p>
-          ${data.city !== 'N/A' || data.state !== 'N/A' || data.zipCode !== 'N/A' ? `
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:4px 0 0 0">${[data.city, data.state, data.zipCode].filter(v => v !== 'N/A').join(', ')}</p>` : ''}
-          ${data.country !== 'N/A' ? `<p style="font-size:15px;color:#0f172a;font-weight:600;margin:4px 0 0 0">${data.country}</p>` : ''}
-        </div>
-      </div>
-    </div>
-    
-    ${data.emergencyName !== 'N/A' ? `
-    <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        🚨 Emergency Contact
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Contact Name</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.emergencyName}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Relationship</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.emergencyRelationship}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Emergency Phone</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${formatPhone(data.emergencyPhone)}</p>
-        </div>
-        ${data.emergencyEmail !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Emergency Email</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.emergencyEmail}</p>
-        </div>` : ''}
-      </div>
-    </div>` : ''}
-    
-    <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        🎓 Academic Background
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        ${data.highSchoolName !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">High School</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.highSchoolName}</p>
-        </div>` : ''}
-        ${data.highSchoolGradYear !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Graduation Year</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.highSchoolGradYear}</p>
-        </div>` : ''}
-        ${data.gpa !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">GPA</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.gpa}</p>
-        </div>` : ''}
-        ${data.previousCollege !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Previous College</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.previousCollege}</p>
-        </div>` : ''}
-        ${data.previousDegree !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Previous Degree</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.previousDegree}</p>
-        </div>` : ''}
-        ${data.previousMajor !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Previous Major</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.previousMajor}</p>
-        </div>` : ''}
-      </div>
-    </div>
-    
-    <div style="background:#f8fafc;border-radius:12px;padding:24px;margin-bottom:20px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        📚 Program Selection
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Selected Program</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.program}</p>
-        </div>
-        ${data.startTerm !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Intended Start Term</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.startTerm}</p>
-        </div>` : ''}
-        ${data.enrollmentType !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Enrollment Type</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.enrollmentType}</p>
-        </div>` : ''}
-      </div>
-    </div>
-    
-    <div style="background:#f8fafc;border-radius:12px;padding:24px">
-      <h3 style="margin:0 0 16px 0;font-size:18px;font-weight:700;color:#0f172a;border-bottom:2px solid #e2e8f0;padding-bottom:12px">
-        📄 Application Status
-      </h3>
-      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px">
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Application Status</p>
-          <p style="font-size:15px;font-weight:700;margin:0;color:${data.status === 'enrolled' ? '#10b981' : data.status === 'pending' ? '#f59e0b' : '#2563eb'};text-transform:capitalize">${data.status}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Reference Number</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0;font-family:monospace">${data.referenceNumber}</p>
-        </div>
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Application Date</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.applicationDate}</p>
-        </div>
-        ${data.submittedDate !== 'N/A' ? `
-        <div>
-          <p style="font-size:12px;color:#64748b;margin:0 0 4px 0;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Submitted Date</p>
-          <p style="font-size:15px;color:#0f172a;font-weight:600;margin:0">${data.submittedDate}</p>
-        </div>` : ''}
-      </div>
+    <div style="max-width:100%;margin:0 auto">
+      ${personalInfoSection}
+      ${contactSection}
+      ${emergencySection}
+      ${academicSection}
+      ${collegeSection}
+      ${programSection}
+      ${financialSection}
+      ${additionalSection}
+      ${referencesSection}
+      ${essaysSection}
+      ${documentsSection}
+      ${statusSection}
     </div>
   `;
 }
