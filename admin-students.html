@@ -693,33 +693,8 @@
             console.warn(`Using fallback student table '${sourceTable}'. Some features may be limited.`);
           }
 
-          // Filter out students whose linked application is not ENROLLED
-          const filteredStudents = [];
-          for (const student of students) {
-            if (student.application_id) {
-              // Check the application status
-              const { data: app, error: appError } = await sbClient
-                .from('applications')
-                .select('status')
-                .eq('id', student.application_id)
-                .maybeSingle();
-              
-              // Only include if application status is ENROLLED
-              if (!appError && app && app.status === 'ENROLLED') {
-                filteredStudents.push(student);
-              } else if (appError) {
-                console.warn('Error checking application status:', appError);
-                // If we can't check, include the student (safer default)
-                filteredStudents.push(student);
-              }
-              // If status is not ENROLLED, skip this student
-            } else {
-              // No application_id, include the student
-              filteredStudents.push(student);
-            }
-          }
-
-          allStudents = filteredStudents;
+          // Show ALL students (removed ENROLLED-only filter)
+          allStudents = students;
           updateStats();
           renderStudents(allStudents);
         } catch (error) {

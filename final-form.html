@@ -1,0 +1,2221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Enrollment Questionnaire - Armenian College of Nursing & Health Sciences</title>
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/images/Seal.png">
+  
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  
+  <script src="js/acnhs-logo-base64.js"></script>
+  <script src="js/supabase-config.js"></script>
+  
+  <style>
+    :root {
+      --bg-dark: #0a2540;
+      --bg-darker: #020617;
+      --bg-light: #f8fafc;
+      --accent: #2dd4bf;
+      --gold: #eab308;
+      --border: #e5e7eb;
+      --text-muted: #64748b;
+      --glass-bg: rgba(26, 41, 66, 0.92);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: linear-gradient(135deg, #0a2540 0%, #020617 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .form-header {
+      max-width: 900px;
+      margin: 0 auto 40px;
+      text-align: center;
+      color: white;
+    }
+
+    .form-header .logo {
+      width: 140px;
+      height: 140px;
+      margin: 0 auto 24px;
+      border-radius: 50%;
+      box-shadow: 0 12px 32px rgba(45, 212, 191, 0.4),
+                  0 0 0 4px rgba(45, 212, 191, 0.2);
+      border: 4px solid rgba(45, 212, 191, 0.6);
+      object-fit: contain;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      padding: 12px;
+      transition: all 0.3s ease;
+      display: block;
+    }
+
+    .form-header .logo:hover {
+      transform: scale(1.05);
+      box-shadow: 0 16px 40px rgba(45, 212, 191, 0.5),
+                  0 0 0 6px rgba(45, 212, 191, 0.3);
+    }
+
+    .form-header h1 {
+      font-size: 36px;
+      font-weight: 800;
+      margin-bottom: 12px;
+      color: white;
+      letter-spacing: -0.5px;
+    }
+
+    .form-header p {
+      color: #94a3b8;
+      font-size: 18px;
+      font-weight: 500;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--glass-bg);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 32px;
+      padding: 48px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+    }
+
+    .alert-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.3s ease, visibility 0.3s ease;
+      z-index: 2000;
+    }
+
+    .alert-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .alert-modal {
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      border-radius: 20px;
+      padding: 28px 28px 24px;
+      max-width: 520px;
+      width: 100%;
+      box-shadow: 0 25px 60px rgba(15, 23, 42, 0.6);
+      position: relative;
+      overflow: hidden;
+      margin: auto;
+    }
+
+    .alert-modal[open] {
+      display: block;
+    }
+
+    .alert-modal::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--accent), var(--gold));
+    }
+
+    .alert-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .alert-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      background: rgba(45, 212, 191, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(45, 212, 191, 0.4);
+    }
+
+    .alert-modal.error .alert-icon {
+      background: rgba(248, 113, 113, 0.15);
+      color: #f87171;
+      border-color: rgba(248, 113, 113, 0.4);
+    }
+
+    .alert-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+
+    .alert-body {
+      color: #cbd5f5;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-line;
+    }
+
+    .alert-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 20px;
+    }
+
+    .alert-btn {
+      background: linear-gradient(135deg, var(--accent) 0%, #14b8a6 100%);
+      color: #0a2540;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 22px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .alert-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 10px 24px rgba(45, 212, 191, 0.35);
+    }
+
+    .regulatory-notice {
+      background: rgba(251, 191, 36, 0.12);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      border-left: 4px solid var(--gold);
+      padding: 24px;
+      margin-bottom: 40px;
+      border-radius: 16px;
+    }
+
+    .regulatory-notice h3 {
+      color: #fbbf24;
+      font-size: 18px;
+      margin-bottom: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .regulatory-notice p {
+      color: #e2e8f0;
+      line-height: 1.7;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+
+    .regulatory-notice ul {
+      color: #e2e8f0;
+      margin-left: 24px;
+      margin-top: 12px;
+      line-height: 1.8;
+    }
+
+    .regulatory-notice ul li {
+      margin-bottom: 10px;
+    }
+
+    .regulatory-notice strong {
+      color: #fbbf24;
+      font-weight: 600;
+    }
+
+    .section {
+      margin-bottom: 48px;
+      padding-bottom: 48px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .section:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .section-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .form-group {
+      margin-bottom: 24px;
+    }
+
+    .form-group label {
+      display: block;
+      margin-bottom: 8px;
+      color: #e2e8f0;
+      font-weight: 500;
+      font-size: 15px;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="date"],
+    .form-group input[type="tel"] {
+      width: 100%;
+      padding: 14px 16px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      font-size: 15px;
+      color: white;
+      transition: all 0.3s ease, background 0.5s ease;
+    }
+
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--accent);
+      background: rgba(15, 23, 42, 0.7);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+    }
+
+    .field-error {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
+      animation: shake 0.4s ease-in-out;
+      background: rgba(239, 68, 68, 0.08) !important;
+    }
+
+    .radio-group.field-error {
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+      border-radius: 12px;
+      padding: 10px 14px;
+      animation: shake 0.4s ease-in-out;
+    }
+
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-10px); }
+      75% { transform: translateX(10px); }
+    }
+
+    .form-group input::placeholder {
+      color: #64748b;
+    }
+
+    /* Control number auto-populate feedback */
+    #controlNumber {
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    #controlNumber.loading {
+      border-color: #eab308 !important;
+      box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.1);
+    }
+
+    #controlNumber.success {
+      border-color: #2dd4bf !important;
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
+    }
+
+    #controlNumber.error {
+      border-color: #ef4444 !important;
+      box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .radio-group {
+      display: flex;
+      gap: 24px;
+      margin-top: 12px;
+    }
+
+    .radio-group label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 500;
+      cursor: pointer;
+      color: #e2e8f0;
+      padding: 12px 20px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      transition: all 0.3s;
+    }
+
+    .radio-group label:hover {
+      background: rgba(15, 23, 42, 0.7);
+      border-color: var(--accent);
+    }
+
+    .radio-group input[type="radio"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+
+    .conditional-section {
+      display: none;
+      margin-top: 24px;
+      padding: 24px;
+      background: rgba(15, 23, 42, 0.3);
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .conditional-section.active {
+      display: block;
+    }
+
+    .travel-table {
+      width: 100%;
+      margin-top: 16px;
+      border-collapse: separate;
+      border-spacing: 0;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .travel-table th {
+      background: rgba(45, 212, 191, 0.1);
+      padding: 14px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--accent);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 14px;
+    }
+
+    .travel-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .travel-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .travel-table input {
+      width: 100%;
+      padding: 10px 12px;
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      font-size: 14px;
+      color: white;
+      transition: all 0.3s;
+    }
+
+    .travel-table input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(45, 212, 191, 0.1);
+    }
+
+    .travel-table input::placeholder {
+      color: #64748b;
+    }
+
+    .travel-table input[readonly] {
+      background: rgba(15, 23, 42, 0.3);
+      cursor: not-allowed;
+      color: #94a3b8;
+    }
+
+    .add-row-btn {
+      margin-top: 12px;
+      padding: 12px 24px;
+      background: linear-gradient(135deg, var(--accent) 0%, #14b8a6 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+    }
+
+    .add-row-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(45, 212, 191, 0.4);
+    }
+
+    .add-row-btn:active {
+      transform: translateY(0);
+    }
+
+    .warning-box {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      border-left: 4px solid #ef4444;
+      padding: 16px;
+      margin-bottom: 16px;
+      border-radius: 12px;
+      display: flex;
+      align-items: start;
+      gap: 12px;
+    }
+
+    .warning-box span {
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .warning-box p {
+      color: #fca5a5;
+      font-size: 14px;
+      line-height: 1.6;
+      font-weight: 500;
+    }
+
+    .warning-box strong {
+      color: #fecaca;
+      font-weight: 700;
+    }
+
+    .attestation {
+      background: rgba(15, 23, 42, 0.6);
+      border: 2px solid rgba(45, 212, 191, 0.4);
+      padding: 40px;
+      border-radius: 16px;
+      margin-top: 40px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .attestation::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 6px;
+      background: linear-gradient(90deg, 
+        var(--accent) 0%, 
+        var(--gold) 50%, 
+        var(--accent) 100%);
+    }
+
+    .attestation::after {
+      content: '';
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      pointer-events: none;
+    }
+
+    .attestation h3 {
+      color: var(--gold);
+      margin-bottom: 24px;
+      font-size: 22px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .attestation-content {
+      background: rgba(0, 0, 0, 0.2);
+      padding: 24px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      margin-bottom: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .attestation p {
+      color: #e2e8f0;
+      line-height: 2;
+      font-size: 15px;
+      text-align: justify;
+      font-weight: 400;
+      position: relative;
+      z-index: 1;
+    }
+
+    .attestation p strong {
+      color: var(--gold);
+      font-weight: 600;
+    }
+
+    .signature-group {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 24px;
+      margin-top: 32px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .signature-box {
+      background: rgba(0, 0, 0, 0.3);
+      border: 2px solid rgba(45, 212, 191, 0.3);
+      padding: 0;
+      border-radius: 12px;
+      position: relative;
+      transition: all 0.3s;
+      overflow: hidden;
+    }
+
+    .signature-box::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, 
+        transparent 0%, 
+        var(--accent) 50%, 
+        transparent 100%);
+    }
+
+    .signature-box:hover {
+      border-color: var(--accent);
+      background: rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 24px rgba(45, 212, 191, 0.2);
+    }
+
+    .signature-box label {
+      display: block;
+      color: #94a3b8;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      padding: 12px 20px 8px;
+      background: rgba(15, 23, 42, 0.5);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .signature-box-content {
+      padding: 24px 20px 20px;
+      position: relative;
+    }
+
+    .signature-box input {
+      width: 100%;
+      border: none;
+      background: transparent;
+      padding: 0;
+      color: white;
+      font-size: 16px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .signature-box input[type="text"] {
+      text-align: left;
+      font-family: 'Brush Script MT', 'Lucida Handwriting', cursive;
+      font-size: 32px;
+      color: var(--accent);
+      padding-bottom: 16px;
+      padding-right: 55px;
+      border-bottom: 2px solid rgba(45, 212, 191, 0.3);
+      font-weight: 400;
+      letter-spacing: 1px;
+    }
+
+    .signature-box input[type="date"] {
+      font-family: 'Inter', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+      text-align: center;
+      padding-bottom: 16px;
+      padding-right: 55px;
+      border-bottom: 2px solid rgba(45, 212, 191, 0.3);
+      letter-spacing: 2px;
+    }
+
+    .signature-box input:focus {
+      outline: none;
+      border-bottom-color: var(--gold);
+    }
+
+    .signature-box input::placeholder {
+      color: #475569;
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      font-style: italic;
+      letter-spacing: 0;
+    }
+
+    .signature-seal {
+      position: absolute;
+      bottom: 18px;
+      right: 12px;
+      width: 40px;
+      height: 40px;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .signature-seal::before {
+      content: '🏛️';
+      font-size: 32px;
+      display: block;
+    }
+
+    .submit-section {
+      margin-top: 48px;
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+
+    .btn {
+      padding: 16px 40px;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, #14b8a6 100%);
+      color: white;
+      box-shadow: 0 8px 24px rgba(45, 212, 191, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 12px 32px rgba(45, 212, 191, 0.4);
+    }
+
+    .btn-primary:active {
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .required {
+      color: #fca5a5;
+      margin-left: 3px;
+      font-weight: 700;
+    }
+
+    .helper-text {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 6px;
+      font-style: italic;
+    }
+
+    @media (max-width: 768px) {
+      body {
+        padding: 20px 10px;
+      }
+
+      .form-header h1 {
+        font-size: 24px;
+      }
+
+      .form-header p {
+        font-size: 14px;
+      }
+
+      .container {
+        padding: 32px 24px;
+        border-radius: 24px;
+      }
+
+      .form-row, .signature-group {
+        grid-template-columns: 1fr;
+      }
+
+      .section-title {
+        font-size: 20px;
+      }
+
+      .regulatory-notice {
+        padding: 20px;
+      }
+
+      .travel-table {
+        font-size: 12px;
+        display: block;
+        overflow-x: auto;
+      }
+
+      .travel-table th,
+      .travel-table td {
+        padding: 10px;
+      }
+
+      .submit-section {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
+        justify-content: center;
+      }
+    }
+
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+      }
+
+      .container {
+        box-shadow: none;
+        border: none;
+        background: white;
+      }
+
+      .form-header {
+        color: #0a2540;
+      }
+
+      .form-header h1,
+      .section-title,
+      .form-group label,
+      .regulatory-notice p,
+      .attestation p {
+        color: #0a2540;
+      }
+
+      .submit-section {
+        display: none;
+      }
+
+      .add-row-btn {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="form-header">
+    <img class="logo" id="acnhsLogo" alt="ACNHS Logo">
+    <h1>Armenian College of Nursing & Health Sciences</h1>
+    <p>Personal & Residency Timeline Questionnaire</p>
+  </div>
+
+  <div class="container">
+    <form id="enrollmentForm" novalidate>
+        <!-- Regulatory Notice -->
+        <div class="regulatory-notice">
+          <h3>📋 Regulatory Compliance Notice</h3>
+          <p>The information requested in this questionnaire is required to establish an accurate and verifiable personal, educational, and residency timeline for each applicant. This data is essential to ensure institutional compliance with academic regulations, accreditation standards, and external regulatory requirements.</p>
+          
+          <p><strong>Specifically, this information is collected to:</strong></p>
+          <ul>
+            <li>Verify educational history and eligibility for enrollment, credit evaluation, and degree conferral</li>
+            <li>Establish an accurate residency and travel timeline for clinical hour validation, regulatory audits, and licensure pathway assessments</li>
+            <li>Ensure compliance with Armenian Ministry of Education and Health standards, as well as international nursing regulatory requirements</li>
+            <li>Support transcript preparation, certification, and official documentation submitted to licensing authorities</li>
+            <li>Maintain accurate records for academic integrity, institutional accountability, and student protection</li>
+          </ul>
+
+          <p style="margin-top: 16px;"><strong>Due to the regulatory nature of nursing education and licensure, even minor discrepancies in dates (including single-day differences) may impact eligibility determinations, clinical verification, or external evaluations. Applicants are therefore required to provide information that is complete, precise, and truthful.</strong></p>
+
+          <p style="margin-top: 12px; font-weight: 600;">All information collected is handled in accordance with institutional privacy policies and is used solely for academic, regulatory, and compliance-related purposes.</p>
+        </div>
+
+        <!-- Personal Information -->
+        <div class="section">
+          <h3 class="section-title">👤 Personal Information</h3>
+          
+          <div class="form-group">
+            <label for="controlNumber">Student Control Number (CNTL)<span class="required">*</span></label>
+            <input type="text" id="controlNumber" name="controlNumber" placeholder="e.g., ACN-2026-677250" required pattern="ACN-\d{4}-\d{6}" title="Format: ACN-YYYY-XXXXXX">
+            <p class="helper-text" id="controlNumberHelper">Your unique student identification number assigned during admission</p>
+          </div>
+
+          <div class="form-group">
+            <label for="fullName">Full Legal Name (First, Middle, Last)<span class="required">*</span></label>
+            <input type="text" id="fullName" name="fullName" required>
+            <p class="helper-text">As it appears on official documents (passport, birth certificate). Auto-populated but editable.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="dateOfBirth">Date of Birth<span class="required">*</span></label>
+            <input type="date" id="dateOfBirth" name="dateOfBirth" required>
+            <p class="helper-text">Auto-populated from your application. Update if needed.</p>
+          </div>
+        </div>
+
+        <!-- Education History -->
+        <div class="section">
+          <h3 class="section-title">🎓 Education History</h3>
+          
+          <div class="form-group">
+            <label for="hsGradDate">Date of High School Graduation<span class="required">*</span></label>
+            <input type="date" id="hsGradDate" name="hsGradDate" required>
+          </div>
+
+          <div class="form-group">
+            <label for="armenianEduGroup">Have you ever applied to an educational institution in Armenia?<span class="required">*</span></label>
+            <div class="radio-group" id="armenianEduGroup" role="group">
+              <label>
+                <input type="radio" name="armenianEdu" value="yes" id="armenianEduYes" required>
+                Yes
+              </label>
+              <label>
+                <input type="radio" name="armenianEdu" value="no" id="armenianEduNo" required>
+                No
+              </label>
+            </div>
+          </div>
+
+          <div id="armenianEduSection" class="conditional-section">
+            <div class="form-group">
+              <label for="armenianInstitution">Name of Armenian Educational Institution<span class="required">*</span></label>
+              <input type="text" id="armenianInstitution" name="armenianInstitution">
+            </div>
+
+            <div class="form-group">
+              <label for="applicationDate">Date of Application<span class="required">*</span></label>
+              <input type="date" id="applicationDate" name="applicationDate">
+            </div>
+
+            <div class="form-group">
+              <label for="graduationDate">Date of Graduation</label>
+              <input type="date" id="graduationDate" name="graduationDate">
+              <p class="helper-text">Leave blank if still enrolled or did not graduate</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Residency & Travel History -->
+        <div class="section">
+          <h3 class="section-title">🌍 Residency & Travel History</h3>
+          <p style="color: #94a3b8; margin-bottom: 24px; line-height: 1.6;">
+            <strong>Critical for Timeline Accuracy:</strong> This information is essential for regulatory compliance and academic record verification.
+          </p>
+
+          <div class="form-group">
+            <label for="departureDate">Date you permanently left Armenia<span class="required">*</span></label>
+            <input type="date" id="departureDate" name="departureDate" required>
+            <p class="helper-text">If you returned after this date, still list all returns in the table below</p>
+          </div>
+
+          <div class="form-group">
+            <h4 style="font-size: 18px; margin-top: 24px; margin-bottom: 16px; color: white; font-weight: 600;">All Travel to Armenia (Lifetime)</h4>
+            
+            <div class="warning-box">
+              <span>⚠️</span>
+              <p><strong>Be extremely specific.</strong> Even a 1-day difference is critical for accurate profile and regulatory timeline verification. List <strong>every visit to Armenia throughout your lifetime</strong>, no matter how brief.</p>
+            </div>
+
+            <table class="travel-table" id="travelTable">
+              <thead>
+                <tr>
+                  <th>Arrival Date (DD/MM/YYYY)<span class="required">*</span></th>
+                  <th>Departure Date (DD/MM/YYYY)<span class="required">*</span></th>
+                  <th>Total Duration (Days)</th>
+                  <th>Purpose of Visit<span class="required">*</span></th>
+                </tr>
+              </thead>
+              <tbody id="travelTableBody">
+                <tr>
+                  <td><input type="date" name="arrivalDate[]" class="arrival-date" required></td>
+                  <td><input type="date" name="departureDate[]" class="departure-date" required></td>
+                  <td><input type="number" name="duration[]" class="duration" readonly></td>
+                  <td><input type="text" name="purpose[]" placeholder="e.g., Family visit, vacation, business" required></td>
+                </tr>
+              </tbody>
+            </table>
+            <button type="button" class="add-row-btn" onclick="addTravelRow()">+ Add Another Visit</button>
+          </div>
+        </div>
+
+        <!-- Emergency Contact -->
+        <div class="section">
+          <h3 class="section-title">🚨 Emergency Contact in Armenia</h3>
+          
+          <div class="form-group">
+            <label for="emergencyName">Full Name<span class="required">*</span></label>
+            <input type="text" id="emergencyName" name="emergencyName" required>
+          </div>
+
+          <div class="form-group">
+            <label for="emergencyRelationship">Relationship<span class="required">*</span></label>
+            <input type="text" id="emergencyRelationship" name="emergencyRelationship" placeholder="e.g., Parent, Sibling, Friend" required>
+          </div>
+
+          <div class="form-group">
+            <label for="emergencyPhone">Phone Number (include country code)<span class="required">*</span></label>
+            <input type="tel" id="emergencyPhone" name="emergencyPhone" placeholder="+374 XX XXX XXX" required>
+          </div>
+
+          <div class="form-group">
+            <label for="emergencyAddress">Full Physical Address (Street, City, Postal Code)<span class="required">*</span></label>
+            <input type="text" id="emergencyAddress" name="emergencyAddress" required>
+          </div>
+        </div>
+
+        <!-- Attestation -->
+        <div class="attestation">
+          <h3>📝 Official Applicant Attestation</h3>
+          
+          <div class="attestation-content">
+            <p>I, the undersigned applicant, <strong>hereby certify under penalty of perjury</strong> that all information provided in this questionnaire is <strong>true, complete, and accurate</strong> to the best of my knowledge and belief.</p>
+            
+            <p>I understand and acknowledge that any <strong>inaccuracies, omissions, or misrepresentations</strong> contained herein may result in:</p>
+            
+            <p style="padding-left: 20px; margin: 16px 0;">
+              • Denial or revocation of admission to the institution<br>
+              • Adverse impact on academic standing, credit evaluation, or degree conferral<br>
+              • Disqualification from clinical placements or regulatory licensure pathways<br>
+              • Disciplinary action up to and including dismissal from the program
+            </p>
+            
+            <p>I further acknowledge that this information may be subject to verification by the Armenian Ministry of Education and Health, international credential evaluation services, and licensing authorities, and that discrepancies—<strong>including single-day date variances</strong>—may affect eligibility determinations.</p>
+            
+            <p style="margin-top: 20px; font-weight: 600; color: var(--gold);">By affixing my signature below, I affirm that I have read, understood, and agree to the above statements.</p>
+          </div>
+
+          <div class="signature-group">
+            <div class="signature-box">
+              <label for="signature">Applicant's Legal Signature<span class="required">*</span></label>
+              <div class="signature-box-content">
+                <input type="text" id="signature" name="signature" placeholder="Sign your full legal name" required>
+                <div class="signature-seal"></div>
+              </div>
+            </div>
+            <div class="signature-box">
+              <label for="attestationDate">Date of Execution<span class="required">*</span></label>
+              <div class="signature-box-content">
+                <input type="date" id="attestationDate" name="attestationDate" required>
+                <div class="signature-seal"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Submit Section -->
+        <div class="submit-section">
+          <button type="submit" class="btn btn-primary">
+            ✓ Submit Questionnaire
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="alert-overlay" id="alertOverlay" aria-hidden="true">
+    <dialog class="alert-modal" id="alertModal" aria-labelledby="alertTitle">
+      <div class="alert-header">
+        <div class="alert-icon" id="alertIcon">✓</div>
+        <div class="alert-title" id="alertTitle">Submission Complete</div>
+      </div>
+      <div class="alert-body" id="alertBody"></div>
+      <div class="alert-actions">
+        <button type="button" class="alert-btn" id="alertCloseBtn">Close</button>
+      </div>
+    </dialog>
+  </div>
+
+  <script>
+    // Initialize Supabase (get from global or config)
+    let supabaseInstance;
+    if (typeof initSupabase === 'function') {
+      supabaseInstance = initSupabase();
+    } else if (typeof supabase !== 'undefined') {
+      supabaseInstance = supabase;
+    } else {
+      console.error('Supabase not initialized');
+    }
+
+    // Load ACNHS logo from base64
+    document.addEventListener('DOMContentLoaded', function() {
+      const logoImg = document.getElementById('acnhsLogo');
+      if (typeof ACNHS_LOGO_BASE64 !== 'undefined') {
+        logoImg.src = 'data:image/png;base64,' + ACNHS_LOGO_BASE64;
+      }
+    });
+
+    function normalizeDateToISO(dateValue) {
+      if (!dateValue) return '';
+      if (dateValue instanceof Date && !isNaN(dateValue)) {
+        return dateValue.toISOString().split('T')[0];
+      }
+      if (typeof dateValue === 'string') {
+        const trimmed = dateValue.trim();
+        if (!trimmed) return '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(trimmed)) {
+          const [part1, part2, year] = trimmed.split('/');
+          const month = part1.padStart(2, '0');
+          const day = part2.padStart(2, '0');
+          return `${year}-${month}-${day}`;
+        }
+        const parsed = new Date(trimmed);
+        if (!isNaN(parsed)) {
+          return parsed.toISOString().split('T')[0];
+        }
+      }
+      return '';
+    }
+
+    function parseMetadata(value) {
+      if (!value) return {};
+      if (typeof value === 'object') return value;
+      try {
+        return JSON.parse(value);
+      } catch {
+        return {};
+      }
+    }
+
+    function loadScript(src) {
+      return new Promise((resolve, reject) => {
+        const existing = document.querySelector(`script[src="${src}"]`);
+        if (existing) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.src = src;
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+      });
+    }
+
+    function escapeHtml(value) {
+      if (value === null || value === undefined) return '';
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function buildQuestionnaireEmailHtml(payload, controlNumber, fullName, dateOfBirth, questionnaireId) {
+      const tableStyle = 'width:100%;border-collapse:collapse;margin:16px 0;font-size:14px;';
+      const thStyle = 'background:#2dd4bf;color:#ffffff;padding:12px;text-align:left;font-weight:600;border:1px solid #2dd4bf;';
+      const tdStyle = 'padding:10px 12px;border:1px solid #e2e8f0;color:#1e293b;background:#ffffff;';
+      const tdLabelStyle = 'padding:10px 12px;border:1px solid #e2e8f0;color:#0a2540;background:#f8fafc;font-weight:600;width:35%;';
+      const headerStyle = 'color:#0a2540;font-size:18px;margin:24px 0 12px;font-weight:600;border-bottom:2px solid #2dd4bf;padding-bottom:8px;';
+
+      // Personal Information Table
+      const personal = payload.personal_info || {};
+      const personalTable = `
+        <table style="${tableStyle}">
+          <tr>
+            <td style="${tdLabelStyle}">Full Legal Name</td>
+            <td style="${tdStyle}">${escapeHtml(personal.full_name || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Date of Birth</td>
+            <td style="${tdStyle}">${escapeHtml(personal.date_of_birth || 'N/A')}</td>
+          </tr>
+        </table>
+      `;
+
+      // Education History Table
+      const education = payload.education_history || {};
+      const educationTable = `
+        <table style="${tableStyle}">
+          <tr>
+            <td style="${tdLabelStyle}">High School Graduation Date</td>
+            <td style="${tdStyle}">${escapeHtml(education.hs_grad_date || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Applied to Armenian Institution</td>
+            <td style="${tdStyle}">${escapeHtml(education.armenian_edu || 'N/A')}</td>
+          </tr>
+          ${education.armenian_edu === 'yes' ? `
+          <tr>
+            <td style="${tdLabelStyle}">Armenian Institution Name</td>
+            <td style="${tdStyle}">${escapeHtml(education.armenian_institution || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Application Date</td>
+            <td style="${tdStyle}">${escapeHtml(education.application_date || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Graduation Date</td>
+            <td style="${tdStyle}">${escapeHtml(education.graduation_date || 'Not graduated/Still enrolled')}</td>
+          </tr>
+          ` : ''}
+        </table>
+      `;
+
+      // Emergency Contact Table
+      const emergency = payload.emergency_contact || {};
+      const emergencyTable = `
+        <table style="${tableStyle}">
+          <tr>
+            <td style="${tdLabelStyle}">Emergency Contact Name</td>
+            <td style="${tdStyle}">${escapeHtml(emergency.name || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Relationship</td>
+            <td style="${tdStyle}">${escapeHtml(emergency.relationship || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Phone Number</td>
+            <td style="${tdStyle}">${escapeHtml(emergency.phone || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Address</td>
+            <td style="${tdStyle}">${escapeHtml(emergency.address || 'N/A')}</td>
+          </tr>
+        </table>
+      `;
+
+      // Residency & Travel Table
+      const residency = payload.residency_travel || {};
+      const residencyTable = `
+        <table style="${tableStyle}">
+          <tr>
+            <td style="${tdLabelStyle}">Permanent Departure from Armenia</td>
+            <td style="${tdStyle}">${escapeHtml(residency.permanent_departure_date || 'N/A')}</td>
+          </tr>
+        </table>
+      `;
+
+      // Travel History Table
+      const travelHistory = residency.travel_history || [];
+      const travelTable = travelHistory.length > 0 ? `
+        <table style="${tableStyle}">
+          <thead>
+            <tr>
+              <th style="${thStyle}">Arrival Date</th>
+              <th style="${thStyle}">Departure Date</th>
+              <th style="${thStyle}">Duration (Days)</th>
+              <th style="${thStyle}">Purpose of Visit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${travelHistory.map(row => `
+              <tr>
+                <td style="${tdStyle}">${escapeHtml(row.arrival || 'N/A')}</td>
+                <td style="${tdStyle}">${escapeHtml(row.departure || 'N/A')}</td>
+                <td style="${tdStyle}">${escapeHtml(row.duration || 'N/A')}</td>
+                <td style="${tdStyle}">${escapeHtml(row.purpose || 'N/A')}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : `<p style="color:#64748b;font-style:italic;margin:12px 0;">No travel history to Armenia reported.</p>`;
+
+      // Attestation Table
+      const attestation = payload.attestation || {};
+      const attestationTable = `
+        <table style="${tableStyle}">
+          <tr>
+            <td style="${tdLabelStyle}">Signature</td>
+            <td style="${tdStyle}">${escapeHtml(attestation.signature || 'N/A')}</td>
+          </tr>
+          <tr>
+            <td style="${tdLabelStyle}">Date Signed</td>
+            <td style="${tdStyle}">${escapeHtml(attestation.date || 'N/A')}</td>
+          </tr>
+        </table>
+      `;
+
+      return `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family:Arial,sans-serif;background:#f1f5f9;padding:20px;margin:0;">
+          <div style="max-width:900px;margin:0 auto;background:#ffffff;padding:40px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+            
+            <div style="text-align:center;margin-bottom:32px;padding-bottom:24px;border-bottom:4px solid #2dd4bf;">
+              <h1 style="color:#0a2540;margin:0 0 12px;font-size:28px;font-weight:700;">🎓 Enrollment Questionnaire Submitted</h1>
+              <p style="color:#64748b;margin:0;font-size:16px;font-weight:500;">Armenian College of Nursing & Health Sciences</p>
+            </div>
+
+            <div style="background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);padding:20px;border-radius:8px;margin-bottom:32px;color:#ffffff;">
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Control Number:</strong> ${escapeHtml(controlNumber || 'N/A')}</p>
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Student Name:</strong> ${escapeHtml(fullName || 'N/A')}</p>
+              <p style="margin:0 0 8px;font-size:15px;"><strong>Date of Birth:</strong> ${escapeHtml(dateOfBirth || 'N/A')}</p>
+              <p style="margin:0;font-size:15px;"><strong>Questionnaire ID:</strong> ${escapeHtml(questionnaireId || 'N/A')}</p>
+            </div>
+
+            <h2 style="${headerStyle}">� Personal Information</h2>
+            ${personalTable}
+
+            <h2 style="${headerStyle}">🎓 Education History</h2>
+            ${educationTable}
+
+            <h2 style="${headerStyle}">🚨 Emergency Contact</h2>
+            ${emergencyTable}
+
+            <h2 style="${headerStyle}">🌍 Residency Information</h2>
+            ${residencyTable}
+
+            <h2 style="${headerStyle}">✈️ Travel History to Armenia (Lifetime)</h2>
+            ${travelTable}
+
+            <h2 style="${headerStyle}">✍️ Attestation</h2>
+            ${attestationTable}
+
+            <div style="margin-top:40px;padding-top:24px;border-top:2px solid #e2e8f0;text-align:center;">
+              <p style="color:#64748b;font-size:13px;margin:0 0 8px;">
+                <strong>This is an automated notification from ACNHS Student Records System</strong>
+              </p>
+              <p style="color:#94a3b8;font-size:12px;margin:0;">
+                Submitted on ${new Date().toLocaleString('en-US', { timeZone: 'Asia/Yerevan' })} (Yerevan Time)
+              </p>
+            </div>
+
+          </div>
+        </body>
+        </html>
+      `;
+    }
+
+    function buildQuestionnairePdfHtml(payload) {
+      const travelRows = (payload.residency_travel?.travel_history || []).map((row, index) => `
+        <tr>
+          <td>${escapeHtml(row.arrival || '')}</td>
+          <td>${escapeHtml(row.departure || '')}</td>
+          <td>${escapeHtml(row.duration || '')}</td>
+          <td>${escapeHtml(row.purpose || '')}</td>
+        </tr>
+      `).join('') || '<tr><td colspan="4">No travel history provided.</td></tr>';
+
+      return `
+        <div style="font-family: Inter, Arial, sans-serif; color: #0f172a; line-height: 1.6;">
+          <div style="text-align:center; margin-bottom: 16px;">
+            <img src="${document.getElementById('acnhsLogo')?.src || ''}" alt="ACNHS Logo" style="width:120px;height:120px;object-fit:contain;" />
+            <h1 style="margin:12px 0 4px;font-size:22px;">Armenian College of Nursing &amp; Health Sciences</h1>
+            <div style="font-size:14px;color:#475569;">Personal &amp; Residency Timeline Questionnaire</div>
+          </div>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Submission Summary</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr>
+              <td style="padding:6px 0;"><strong>Control Number:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.control_number || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Submitted At:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.submitted_at || '')}</td>
+            </tr>
+          </table>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Personal Information</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr>
+              <td style="padding:6px 0;"><strong>Full Name:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.personal_info?.full_name || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Date of Birth:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.personal_info?.date_of_birth || '')}</td>
+            </tr>
+          </table>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Education History</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr>
+              <td style="padding:6px 0;"><strong>High School Graduation:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.hs_grad_date || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Applied in Armenia:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.armenian_edu || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Institution:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.armenian_institution || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Application Date:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.application_date || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Graduation Date:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.education_history?.graduation_date || '')}</td>
+            </tr>
+          </table>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Residency &amp; Travel</h2>
+          <div style="font-size:13px;margin-bottom:8px;"><strong>Permanent Departure Date:</strong> ${escapeHtml(payload.residency_travel?.permanent_departure_date || '')}</div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+              <tr style="background:#e2e8f0;">
+                <th style="text-align:left;padding:8px;">Arrival</th>
+                <th style="text-align:left;padding:8px;">Departure</th>
+                <th style="text-align:left;padding:8px;">Duration (days)</th>
+                <th style="text-align:left;padding:8px;">Purpose</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${travelRows}
+            </tbody>
+          </table>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Emergency Contact</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr>
+              <td style="padding:6px 0;"><strong>Name:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.emergency_contact?.name || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Relationship:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.emergency_contact?.relationship || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Phone:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.emergency_contact?.phone || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Address:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.emergency_contact?.address || '')}</td>
+            </tr>
+          </table>
+
+          <h2 style="font-size:18px;margin:18px 0 8px;">Attestation</h2>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <tr>
+              <td style="padding:6px 0;"><strong>Signature:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.attestation?.signature || '')}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;"><strong>Date of Execution:</strong></td>
+              <td style="padding:6px 0;">${escapeHtml(payload.attestation?.date || '')}</td>
+            </tr>
+          </table>
+        </div>
+      `;
+    }
+
+    async function generateQuestionnairePdfFromPayload(payload, fileName) {
+      // Ensure DOM is ready
+      if (!document.body) {
+        await new Promise(resolve => {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', resolve, { once: true });
+          } else {
+            resolve();
+          }
+        });
+      }
+      
+      await loadScript('js/html2pdf.bundle.min.js');
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '1100px';
+      wrapper.style.background = '#ffffff';
+      wrapper.style.padding = '24px';
+      wrapper.innerHTML = buildQuestionnairePdfHtml(payload);
+      document.body.appendChild(wrapper);
+
+      const options = {
+        margin: 0.3,
+        filename: fileName,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+
+      try {
+        const dataUri = await html2pdf().set(options).from(wrapper).toPdf().output('datauristring');
+        return dataUri.split(',')[1] || '';
+      } finally {
+        wrapper.remove();
+      }
+    }
+
+    function buildPdfContainer() {
+      const wrapper = document.createElement('div');
+      wrapper.style.position = 'fixed';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '1100px';
+      wrapper.style.background = '#0a2540';
+      wrapper.style.padding = '24px';
+      const header = document.querySelector('.form-header');
+      const container = document.querySelector('.container');
+      if (header) wrapper.appendChild(header.cloneNode(true));
+      if (container) {
+        const clonedContainer = container.cloneNode(true);
+
+        const originalFields = container.querySelectorAll('input, select, textarea');
+        const clonedFields = clonedContainer.querySelectorAll('input, select, textarea');
+
+        originalFields.forEach((field, index) => {
+          const clone = clonedFields[index];
+          if (!clone) return;
+          if (field.type === 'checkbox' || field.type === 'radio') {
+            clone.checked = field.checked;
+          } else {
+            clone.value = field.value;
+          }
+        });
+
+        clonedContainer.querySelectorAll('.submit-section, .add-row-btn').forEach((el) => el.remove());
+
+        wrapper.appendChild(clonedContainer);
+      }
+      document.body.appendChild(wrapper);
+      return wrapper;
+    }
+
+    async function generateQuestionnairePdfBase64(fileName) {
+      // Ensure DOM is ready
+      if (!document.body) {
+        await new Promise(resolve => {
+          if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', resolve, { once: true });
+          } else {
+            resolve();
+          }
+        });
+      }
+      
+      await loadScript('js/html2pdf.bundle.min.js');
+      const wrapper = buildPdfContainer();
+      const options = {
+        margin: 0.3,
+        filename: fileName,
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
+      };
+      try {
+        const dataUri = await html2pdf().set(options).from(wrapper).toPdf().output('datauristring');
+        return dataUri.split(',')[1] || '';
+      } finally {
+        wrapper.remove();
+      }
+    }
+
+    async function updateStudentProfile(applicationId, formPayload, questionnaireId) {
+      const tableCandidates = ['students', 'acnhs_students'];
+      for (const table of tableCandidates) {
+        const { data: studentRecord, error } = await supabaseInstance
+          .from(table)
+          .select('id, metadata, full_name, date_of_birth')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+
+        if (error) {
+          if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+            continue;
+          }
+          console.warn('Student lookup failed:', error);
+          return;
+        }
+
+        if (!studentRecord) return;
+
+        const metadata = parseMetadata(studentRecord.metadata);
+        const updatedMetadata = {
+          ...metadata,
+          enrollment_questionnaire: {
+            submitted: true,
+            submitted_at: new Date().toISOString(),
+            questionnaire_id: questionnaireId,
+            control_number: formPayload.control_number
+          }
+        };
+
+        const { error: updateError } = await supabaseInstance
+          .from(table)
+          .update({
+            full_name: formPayload.personal_info.full_name || studentRecord.full_name,
+            date_of_birth: formPayload.personal_info.date_of_birth || studentRecord.date_of_birth,
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', studentRecord.id);
+
+        if (updateError) {
+          console.warn('Student profile update failed:', updateError);
+        }
+        return;
+      }
+    }
+
+    async function updateGlobalStudentInfo(applicationId, formPayload) {
+      const fullName = formPayload.personal_info.full_name || '';
+      const dateOfBirth = formPayload.personal_info.date_of_birth || '';
+
+      try {
+        const { data: applicationRecord } = await supabaseInstance
+          .from('applications')
+          .select('payload')
+          .eq('id', applicationId)
+          .maybeSingle();
+
+        const payload = parseMetadata(applicationRecord?.payload);
+        const updatedPayload = {
+          ...payload,
+          full_name: fullName,
+          date_of_birth: dateOfBirth
+        };
+
+        const { error: applicationUpdateError } = await supabaseInstance
+          .from('applications')
+          .update({
+            applicant_name: fullName || null,
+            date_of_birth: dateOfBirth || null,
+            payload: updatedPayload
+          })
+          .eq('id', applicationId);
+
+        if (applicationUpdateError) {
+          console.warn('Application update failed:', applicationUpdateError);
+        }
+      } catch (error) {
+        console.warn('Application update error:', error);
+      }
+
+      const tableCandidates = ['students', 'acnhs_students'];
+      for (const table of tableCandidates) {
+        const { data: studentRecord, error } = await supabaseInstance
+          .from(table)
+          .select('id, metadata, full_name, date_of_birth')
+          .eq('application_id', applicationId)
+          .maybeSingle();
+
+        if (error) {
+          if (error?.code === 'PGRST205' || error?.message?.includes(`public.${table}`)) {
+            continue;
+          }
+          console.warn('Student lookup failed:', error);
+          break;
+        }
+
+        if (!studentRecord) break;
+
+        const metadata = parseMetadata(studentRecord.metadata);
+        const updatedMetadata = {
+          ...metadata,
+          full_name: fullName,
+          date_of_birth: dateOfBirth
+        };
+
+        const { error: updateError } = await supabaseInstance
+          .from(table)
+          .update({
+            full_name: fullName || studentRecord.full_name,
+            date_of_birth: dateOfBirth || studentRecord.date_of_birth,
+            metadata: updatedMetadata,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', studentRecord.id);
+
+        if (updateError) {
+          console.warn('Student profile update failed:', updateError);
+        }
+        break;
+      }
+    }
+
+    async function sendQuestionnaireEmail({ controlNumber, fullName, dateOfBirth, questionnaireId, payload }) {
+      const edgeFunctionUrl = `${SUPABASE_CONFIG.url}/functions/v1/send-email`;
+      
+      try {
+        const subject = `Enrollment Questionnaire Submitted - ${controlNumber || 'ACNHS Student'}`;
+        
+        // Build comprehensive HTML email with all questionnaire data
+        const html = buildQuestionnaireEmailHtml(payload, controlNumber, fullName, dateOfBirth, questionnaireId);
+        const text = `Enrollment Questionnaire Submitted\nControl Number: ${controlNumber || 'N/A'}\nFull Name: ${fullName || 'N/A'}\nDate of Birth: ${dateOfBirth || 'N/A'}\nQuestionnaire ID: ${questionnaireId || 'N/A'}`;
+
+        const payloadBody = {
+          from: 'documents@acnhs.am',
+          fromName: 'ACNHS Records',
+          to: 'acnhs.2026@gmail.com',
+          subject,
+          html,
+          text
+        };
+
+        let lastError = null;
+        for (let attempt = 1; attempt <= 2; attempt += 1) {
+          const response = await fetch(edgeFunctionUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${SUPABASE_CONFIG.anonKey}`
+            },
+            body: JSON.stringify(payloadBody)
+          });
+
+          if (response.ok) {
+            return;
+          }
+
+          lastError = await response.text();
+        }
+
+        if (lastError) {
+          throw new Error(lastError);
+        }
+      } catch (error) {
+        console.warn('Email send error:', error);
+        throw error;
+      }
+    }
+
+    function showAlertModal({ title, message, type = 'success' }) {
+      const overlay = document.getElementById('alertOverlay');
+      const modal = document.getElementById('alertModal');
+      const icon = document.getElementById('alertIcon');
+      const titleEl = document.getElementById('alertTitle');
+      const body = document.getElementById('alertBody');
+
+      if (!overlay || !modal || !icon || !titleEl || !body) return;
+
+      const isError = type === 'error';
+      modal.classList.toggle('error', isError);
+      icon.textContent = isError ? '!' : '✓';
+      titleEl.textContent = title;
+      body.textContent = message;
+
+      overlay.classList.add('active');
+      overlay.setAttribute('aria-hidden', 'false');
+      if (typeof modal.showModal === 'function') {
+        modal.showModal();
+      }
+    }
+
+    function closeAlertModal() {
+      const overlay = document.getElementById('alertOverlay');
+      const modal = document.getElementById('alertModal');
+      if (!overlay || !modal) return;
+
+      overlay.classList.remove('active');
+      overlay.setAttribute('aria-hidden', 'true');
+      if (typeof modal.close === 'function') {
+        modal.close();
+      }
+    }
+
+    document.getElementById('alertCloseBtn')?.addEventListener('click', closeAlertModal);
+    document.getElementById('alertOverlay')?.addEventListener('click', (event) => {
+      if (event.target?.id === 'alertOverlay') {
+        closeAlertModal();
+      }
+    });
+
+    function markFieldValidity(field) {
+      if (!field || !field.required) return;
+      
+      if (field.type === 'radio') {
+        const groupName = field.name;
+        if (!groupName) return;
+        const groupFields = Array.from(document.querySelectorAll(`input[type="radio"][name="${groupName}"]`));
+        const groupValid = groupFields.some((radio) => radio.checked);
+        groupFields.forEach((radio) => radio.classList.toggle('field-error', !groupValid));
+        const groupContainer = field.closest('.radio-group');
+        if (groupContainer) {
+          groupContainer.classList.toggle('field-error', !groupValid);
+        }
+        return;
+      }
+
+      // Manually check if field is valid
+      let isValid = false;
+      if (field.type === 'checkbox') {
+        isValid = field.checked;
+      } else if (field.value && field.value.trim() !== '') {
+        isValid = true;
+      }
+      
+      field.classList.toggle('field-error', !isValid);
+    }
+
+    function wireRequiredFieldValidation() {
+      const requiredFields = document.querySelectorAll('input[required], select[required], textarea[required]');
+      requiredFields.forEach((field) => {
+        ['input', 'change', 'blur'].forEach((eventName) => {
+          field.addEventListener(eventName, () => markFieldValidity(field));
+        });
+      });
+    }
+
+    wireRequiredFieldValidation();
+
+    document.getElementById('enrollmentForm')?.addEventListener('invalid', (event) => {
+      event.preventDefault();
+      markFieldValidity(event.target);
+    }, true);
+
+    // Auto-populate student information when control number is entered
+    let controlNumberTimeout;
+    document.getElementById('controlNumber').addEventListener('input', function(e) {
+      const controlNumber = e.target.value.trim();
+      const helper = document.getElementById('controlNumberHelper');
+      
+      // Clear previous timeout
+      clearTimeout(controlNumberTimeout);
+      
+      // Only fetch if it matches the pattern (ACN-YYYY-XXXXXX)
+      const pattern = /^ACN-\d{4}-\d{6}$/;
+      if (pattern.test(controlNumber)) {
+        // Add loading state
+        e.target.style.borderColor = '#eab308';
+        helper.textContent = '⏳ Looking up student data...';
+        helper.style.color = '#eab308';
+        
+        // Debounce the API call by 500ms
+        controlNumberTimeout = setTimeout(async () => {
+          try {
+            const { data: student, error } = await supabaseInstance
+              .from('applications')
+              .select('applicant_name, date_of_birth, email, payload')
+              .eq('control_number', controlNumber)
+              .single();
+            
+            if (error || !student) {
+              // Student not found - show warning but allow manual entry
+              e.target.style.borderColor = '#ef4444';
+              helper.textContent = '⚠️ Control number not found. Please verify or enter details manually.';
+              helper.style.color = '#ef4444';
+              console.log('Student not found with control number:', controlNumber);
+              
+              // Clear fields but leave them editable
+              document.getElementById('fullName').value = '';
+              document.getElementById('dateOfBirth').value = '';
+              
+              return;
+            }
+            
+            // Success - auto-populate fields
+            e.target.style.borderColor = '#2dd4bf';
+            helper.textContent = '✓ Student found! Data auto-populated (fields remain editable for corrections)';
+            helper.style.color = '#2dd4bf';
+            
+            // Populate full name
+            const fullName = student.applicant_name
+              || student.payload?.full_name
+              || student.payload?.fullName
+              || '';
+            const fullNameInput = document.getElementById('fullName');
+            fullNameInput.value = fullName;
+            
+            // Add subtle animation to show field was updated
+            fullNameInput.style.background = 'rgba(45, 212, 191, 0.15)';
+            setTimeout(() => {
+              fullNameInput.style.background = '';
+            }, 1500);
+            
+            // Populate date of birth if available
+            const rawDob = student.date_of_birth
+              || student.payload?.date_of_birth
+              || student.payload?.dob
+              || student.payload?.dateOfBirth;
+            const normalizedDob = normalizeDateToISO(rawDob);
+            if (normalizedDob) {
+              const dobInput = document.getElementById('dateOfBirth');
+              dobInput.value = normalizedDob;
+              
+              // Add animation
+              dobInput.style.background = 'rgba(45, 212, 191, 0.15)';
+              setTimeout(() => {
+                dobInput.style.background = '';
+              }, 1500);
+            }
+            
+            console.log('✓ Student data loaded:', student);
+            
+            // Reset helper text after 5 seconds
+            setTimeout(() => {
+              helper.textContent = 'Your unique student identification number assigned during admission';
+              helper.style.color = '';
+              e.target.style.borderColor = '';
+            }, 5000);
+            
+          } catch (err) {
+            console.error('Error fetching student data:', err);
+            e.target.style.borderColor = '#ef4444';
+            helper.textContent = '❌ Error loading data. Please try again or enter manually.';
+            helper.style.color = '#ef4444';
+          }
+        }, 500);
+      } else if (controlNumber.length > 0) {
+        // Invalid format - show red border
+        e.target.style.borderColor = '#ef4444';
+        helper.textContent = '⚠️ Format should be ACN-YYYY-XXXXXX (e.g., ACN-2026-677250)';
+        helper.style.color = '#ef4444';
+      } else {
+        // Empty - reset to default
+        e.target.style.borderColor = '';
+        helper.textContent = 'Your unique student identification number assigned during admission';
+        helper.style.color = '';
+      }
+    });
+
+    // Show/hide Armenian education section
+    document.getElementById('armenianEduYes').addEventListener('change', function() {
+      if (this.checked) {
+        document.getElementById('armenianEduSection').classList.add('active');
+        document.getElementById('armenianInstitution').required = true;
+        document.getElementById('applicationDate').required = true;
+      }
+    });
+
+    document.getElementById('armenianEduNo').addEventListener('change', function() {
+      if (this.checked) {
+        document.getElementById('armenianEduSection').classList.remove('active');
+        document.getElementById('armenianInstitution').required = false;
+        document.getElementById('applicationDate').required = false;
+        // Clear fields
+        document.getElementById('armenianInstitution').value = '';
+        document.getElementById('applicationDate').value = '';
+        document.getElementById('graduationDate').value = '';
+      }
+    });
+
+    // Calculate duration automatically
+    function calculateDuration(row) {
+      const arrivalInput = row.querySelector('.arrival-date');
+      const departureInput = row.querySelector('.departure-date');
+      const durationInput = row.querySelector('.duration');
+
+      if (arrivalInput.value && departureInput.value) {
+        const arrival = new Date(arrivalInput.value);
+        const departure = new Date(departureInput.value);
+        const diffTime = Math.abs(departure - arrival);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        durationInput.value = diffDays;
+      }
+    }
+
+    // Add event listeners to initial row
+    document.querySelectorAll('.arrival-date, .departure-date').forEach(input => {
+      input.addEventListener('change', function() {
+        calculateDuration(this.closest('tr'));
+      });
+    });
+
+    // Add travel row function
+    function addTravelRow() {
+      const tbody = document.getElementById('travelTableBody');
+      const newRow = document.createElement('tr');
+      newRow.innerHTML = `
+        <td><input type="date" name="arrivalDate[]" class="arrival-date" required></td>
+        <td><input type="date" name="departureDate[]" class="departure-date" required></td>
+        <td><input type="number" name="duration[]" class="duration" readonly></td>
+        <td><input type="text" name="purpose[]" placeholder="e.g., Family visit, vacation, business" required></td>
+      `;
+      tbody.appendChild(newRow);
+
+      // Add event listeners to new row
+      newRow.querySelectorAll('.arrival-date, .departure-date').forEach(input => {
+        input.addEventListener('change', function() {
+          calculateDuration(this.closest('tr'));
+        });
+      });
+    }
+
+    // Set today's date as default for attestation
+    document.getElementById('attestationDate').valueAsDate = new Date();
+
+    // Form submission
+    const enrollmentForm = document.getElementById('enrollmentForm');
+    
+    if (enrollmentForm) {
+      enrollmentForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        // Get all required fields in DOM order
+        const allRequiredFields = Array.from(this.querySelectorAll('input[required], select[required], textarea[required]'));      let firstInvalidField = null;
+      const processedRadioGroups = new Set();
+      const invalidFields = [];
+      
+      // Check each field manually to ensure we get the first one in DOM order
+      for (const field of allRequiredFields) {
+        let isFieldInvalid = false;
+        
+        // Handle radio buttons - only check once per group
+        if (field.type === 'radio') {
+          const groupName = field.name;
+          
+          // Skip if already checked this group
+          if (processedRadioGroups.has(groupName)) {
+            continue;
+          }
+          processedRadioGroups.add(groupName);
+          
+          // Check if any radio in group is selected
+          const groupRadios = Array.from(document.querySelectorAll(`input[type="radio"][name="${groupName}"]`));
+          const anyChecked = groupRadios.some(r => r.checked);
+          
+          if (!anyChecked) {
+            isFieldInvalid = true;
+            if (!firstInvalidField) {
+              firstInvalidField = field;
+            }
+            groupRadios.forEach(r => invalidFields.push(r));
+          }
+        }
+        // Handle all other field types
+        else {
+          let isEmpty = false;
+          
+          if (field.type === 'checkbox') {
+            isEmpty = !field.checked;
+          } else {
+            isEmpty = !field.value || field.value.trim() === '';
+          }
+          
+          if (isEmpty) {
+            isFieldInvalid = true;
+            if (!firstInvalidField) {
+              firstInvalidField = field;
+            }
+            invalidFields.push(field);
+          }
+        }
+      }
+      
+      // If there are invalid fields, show errors and scroll
+      if (firstInvalidField) {
+        // Mark all invalid fields
+        invalidFields.forEach(field => markFieldValidity(field));
+        
+        // Determine what element to scroll to
+        const elementToScroll = firstInvalidField.type === 'radio' 
+          ? firstInvalidField.closest('.radio-group') || firstInvalidField
+          : firstInvalidField;
+        
+        // Scroll with offset
+        const yOffset = -120;
+        const y = elementToScroll.getBoundingClientRect().top + window.pageYOffset + yOffset;
+        
+        window.scrollTo({
+          top: y,
+          behavior: 'smooth'
+        });
+        
+        // Focus after scroll
+        setTimeout(() => {
+          if (firstInvalidField.type !== 'radio') {
+            firstInvalidField.focus();
+          }
+        }, 500);
+        
+        showAlertModal({
+          title: 'Missing Required Information',
+          message: 'Please fill in all required fields marked with * before submitting the questionnaire. The page has scrolled to the first missing field.',
+          type: 'error'
+        });
+        return;
+      }
+
+      // Show loading state
+      const submitBtn = this.querySelector('.btn-primary');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '⏳ Submitting...';
+
+      try {
+        // Use the already initialized Supabase client
+        // (initialized at the top of the script)
+
+        // Collect form data
+        const formData = new FormData(this);
+        const controlNumber = formData.get('controlNumber');
+        
+        const data = {
+          control_number: controlNumber,
+          personal_info: {
+            full_name: formData.get('fullName'),
+            date_of_birth: formData.get('dateOfBirth')
+          },
+          education_history: {
+            hs_grad_date: formData.get('hsGradDate'),
+            armenian_edu: formData.get('armenianEdu'),
+            armenian_institution: formData.get('armenianInstitution') || null,
+            application_date: formData.get('applicationDate') || null,
+            graduation_date: formData.get('graduationDate') || null
+          },
+          residency_travel: {
+            permanent_departure_date: formData.get('departureDate'),
+            travel_history: []
+          },
+          emergency_contact: {
+            name: formData.get('emergencyName'),
+            relationship: formData.get('emergencyRelationship'),
+            phone: formData.get('emergencyPhone'),
+            address: formData.get('emergencyAddress')
+          },
+          attestation: {
+            signature: formData.get('signature'),
+            date: formData.get('attestationDate')
+          },
+          submitted_at: new Date().toISOString()
+        };
+
+        // Collect travel history
+        const arrivalDates = formData.getAll('arrivalDate[]');
+        const departureDates = formData.getAll('departureDate[]');
+        const durations = formData.getAll('duration[]');
+        const purposes = formData.getAll('purpose[]');
+
+        for (let i = 0; i < arrivalDates.length; i++) {
+          if (arrivalDates[i]) {
+            data.residency_travel.travel_history.push({
+              arrival: arrivalDates[i],
+              departure: departureDates[i],
+              duration: durations[i],
+              purpose: purposes[i]
+            });
+          }
+        }
+
+        // First, verify the student exists
+        const { data: student, error: studentError } = await supabaseInstance
+          .from('applications')
+          .select('id, control_number, document_id, uploaded_documents')
+          .eq('control_number', controlNumber)
+          .single();
+
+        if (studentError || !student) {
+          throw new Error('Student not found with control number: ' + controlNumber);
+        }
+
+        // Save enrollment questionnaire data
+        const { data: savedData, error: saveError } = await supabaseInstance
+          .from('enrollment_questionnaires')
+          .insert([{
+            application_id: student.id,
+            control_number: controlNumber,
+            document_id: student.document_id,
+            questionnaire_data: data,
+            created_at: new Date().toISOString()
+          }])
+          .select();
+
+        if (saveError) {
+          console.error('Save error:', saveError);
+          throw new Error('Failed to save questionnaire: ' + saveError.message);
+        }
+
+        // Update application's uploaded_documents with questionnaire reference
+        if (student.document_id) {
+          const { error: updateError } = await supabaseInstance
+            .from('applications')
+            .update({
+              uploaded_documents: {
+                ...(student.uploaded_documents || {}),
+                enrollment_questionnaire: {
+                  submitted: true,
+                  submitted_at: new Date().toISOString(),
+                  questionnaire_id: savedData[0].id
+                }
+              }
+            })
+            .eq('control_number', controlNumber);
+
+          if (updateError) {
+            console.warn('Could not update application documents:', updateError);
+          }
+        }
+
+        const questionnaireId = savedData?.[0]?.id;
+
+        await updateGlobalStudentInfo(student.id, data);
+        await updateStudentProfile(student.id, data, questionnaireId);
+        let emailWarning = '';
+        try {
+          await sendQuestionnaireEmail({
+            controlNumber,
+            fullName: data.personal_info.full_name,
+            dateOfBirth: data.personal_info.date_of_birth,
+            questionnaireId,
+            payload: data
+          });
+        } catch (emailError) {
+          emailWarning = '\n\n⚠️ We could not deliver the confirmation email. Please contact admissions@acnhs.am to confirm receipt.';
+        }
+
+        console.log('Questionnaire saved successfully:', savedData);
+        
+        // Success message
+        showAlertModal({
+          title: 'Questionnaire Submitted',
+          message: `Your enrollment questionnaire has been submitted successfully.\n\nControl Number: ${controlNumber}\nSubmission ID: ${savedData[0].id}\n\nYour submission has been linked to your student profile. Thank you for providing accurate information.${emailWarning}`,
+          type: 'success'
+        });
+        
+        // Reset form
+        this.reset();
+        document.getElementById('attestationDate').valueAsDate = new Date();
+        
+      } catch (error) {
+        console.error('Submission error:', error);
+        showAlertModal({
+          title: 'Submission Error',
+          message: `We could not submit your questionnaire.\n\n${error.message}\n\nPlease verify your control number and try again. If the issue persists, contact admissions@acnhs.am.`,
+          type: 'error'
+        });
+      } finally {
+        // Restore button
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
+      }
+    });
+    }
+  </script>
+</body>
+</html>
