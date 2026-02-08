@@ -5918,6 +5918,129 @@
           viewBtn.disabled = true;
           
           try {
+            // Generate enrollment questionnaire email using ACNHS template
+            const studentName = `${app.first_name || ''} ${app.last_name || ''}`.trim() || 'Student';
+            const questionnaireUrl = `https://acnhs.am/final-form.html?control=${app.control_number}`;
+            const currentDate = new Date().toLocaleDateString('en-US', { 
+              month: 'long', 
+              day: 'numeric', 
+              year: 'numeric' 
+            });
+            
+            // Email template variables
+            const variables = {
+              student_name: studentName,
+              student_email: app.email,
+              control_number: app.control_number,
+              questionnaire_url: questionnaireUrl,
+              support_email: 'student-services@acnhs.am',
+              sent_date: currentDate
+            };
+            
+            // ACNHS Email Template (matching email-system.html)
+            let emailHtml = `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Enrollment Questionnaire Required</title>
+  <style>
+    html,body{margin:0!important;padding:0!important;height:100%!important;width:100%!important}
+    *{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}
+    table,td{mso-table-lspace:0pt!important;mso-table-rspace:0pt!important;border-collapse:collapse!important}
+    img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;display:block}
+    a{color:inherit;text-decoration:none}
+    .u-link{color:#2dd4bf!important;text-decoration:underline!important}
+    .u-button{display:inline-block;background:#2dd4bf;color:#ffffff!important;padding:14px 32px;border-radius:8px;text-decoration:none!important;font-weight:700;font-size:16px;margin:20px 0;}
+    .u-button:hover{background:#14b8a6;}
+    @media (max-width: 620px){
+      .container{width:100%!important}
+      .px{padding-left:18px!important;padding-right:18px!important}
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
+    <tr>
+      <td align="center" style="padding:24px 10px;">
+        <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
+          <tr>
+            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);border-radius:14px 14px 0 0;padding:20px 26px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="68" valign="middle">
+                    <img src="{{ACNHS_SEAL_BASE64}}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                  </td>
+                  <td valign="middle" style="padding-left:14px;">
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#ffffff;font-weight:700;opacity:0.96;">&amp; Health Sciences</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#cbd5e1;font-weight:600;margin-top:6px;">Yerevan, Armenia</div>
+                  </td>
+                  <td valign="top" align="right" style="padding-left:14px;">
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:11px;color:#94a3b8;font-weight:700;text-align:right;">CONTROL NO.</div>
+                    <div style="font-family:monospace;font-size:13px;color:#2dd4bf;font-weight:900;text-align:right;margin-top:2px;">${variables.control_number}</div>
+                  </td>
+                </tr>
+              </table>
+              <div style="height:1px;background:rgba(255,255,255,0.10);margin:16px 0;"></div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:26px;color:#ffffff;font-weight:900;letter-spacing:-0.4px;">📋 Enrollment Questionnaire Required</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#94a3b8;font-weight:600;margin-top:6px;">${variables.sent_date}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:17px;color:#0f172a;font-weight:800;">Dear ${variables.student_name},</div>
+              
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:23px;color:#334155;margin-top:12px;">
+                This is a pre-enrollment form that must be completed very carefully and accurately.
+              </div>
+              
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:23px;color:#334155;margin-top:12px;">
+                Please make sure to submit this form as soon as possible to avoid any delay in your enrollment process.
+              </div>
+              
+              <div style="text-align:center;margin:28px 0;">
+                <a href="${variables.questionnaire_url}" class="u-button" style="display:inline-block;background:#2dd4bf;color:#ffffff!important;padding:14px 32px;border-radius:8px;text-decoration:none!important;font-weight:700;font-size:16px;">
+                  Complete Enrollment Questionnaire
+                </a>
+              </div>
+              
+              <div style="background:rgba(45,212,191,0.08);border-left:4px solid #2dd4bf;padding:16px;margin:20px 0;border-radius:8px;">
+                <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#334155;line-height:22px;">
+                  <strong style="color:#0f172a;">Your Control Number:</strong> ${variables.control_number}<br>
+                  <strong style="color:#0f172a;">Direct Link:</strong> <a href="${variables.questionnaire_url}" class="u-link">${variables.questionnaire_url}</a>
+                </div>
+              </div>
+              
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#0f172a;font-weight:800;margin-top:24px;">Respectfully,</div>
+              <div style="margin-top:12px;">
+                <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f172a;font-weight:900;">ACNHS Admissions Team</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#475569;font-weight:700;">Office of Admissions</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:6px;">+374 93 798879 • ${variables.support_email}</div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#020617;border-radius:0 0 14px 14px;padding:16px 26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#94a3b8;">© ${new Date().getFullYear()} Armenian College of Nursing &amp; Health Sciences</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+            
+            // Replace logo placeholder
+            const logoModule = await import('./js/acnhs-seal-hq-base64.js');
+            const logoSource = logoModule.ACNHS_SEAL_HQ_BASE64 || '';
+            if (logoSource) {
+              emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
+            } else {
+              emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, '');
+            }
+            
             const response = await fetch('https://eyhksbiceueoiamwnqpr.supabase.co/functions/v1/send-email', {
               method: 'POST',
               headers: {
@@ -5927,39 +6050,9 @@
               body: JSON.stringify({
                 to: app.email,
                 subject: 'Enrollment Questionnaire Required',
-                html: `
-                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                    <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-                      <h1 style="color: white; margin: 0; font-size: 24px;">📋 Enrollment Questionnaire Required</h1>
-                    </div>
-                    
-                    <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0;">
-                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">Dear ${app.first_name || 'Student'},</p>
-                      
-                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">
-                        This is a pre-enrollment form that must be completed very carefully and accurately.
-                      </p>
-                      
-                      <p style="color: #334155; line-height: 1.6; margin: 0 0 20px 0;">
-                        Please make sure to submit this form as soon as possible to avoid any delay in your enrollment process.
-                      </p>
-                      
-                      <div style="text-align: center; margin: 30px 0;">
-                        <a href="https://acnhs.am/final-form.html?control=${app.control_number}" 
-                           style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">
-                          Complete Enrollment Questionnaire
-                        </a>
-                      </div>
-                      
-                      <p style="color: #64748b; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-                        <strong>Your Control Number:</strong> ${app.control_number}<br>
-                        If you have any questions, please contact us at <a href="mailto:student-services@acnhs.am" style="color: #3b82f6;">student-services@acnhs.am</a>
-                      </p>
-                    </div>
-                  </div>
-                `,
-                text: `Enrollment Questionnaire Required\n\nDear ${app.first_name || 'Student'},\n\nThis is a pre-enrollment form that must be completed very carefully and accurately.\n\nPlease make sure to submit this form as soon as possible to avoid any delay in your enrollment process.\n\nComplete the questionnaire here: https://acnhs.am/final-form.html?control=${app.control_number}\n\nYour Control Number: ${app.control_number}\n\nIf you have any questions, please contact us at student-services@acnhs.am`,
-                fromName: 'Armenian College of Nurses'
+                html: emailHtml,
+                text: `Enrollment Questionnaire Required\n\nDear ${variables.student_name},\n\nThis is a pre-enrollment form that must be completed very carefully and accurately.\n\nPlease make sure to submit this form as soon as possible to avoid any delay in your enrollment process.\n\nComplete the questionnaire here: ${variables.questionnaire_url}\n\nYour Control Number: ${variables.control_number}\n\nIf you have any questions, please contact us at ${variables.support_email}`,
+                fromName: 'ACNHS Admissions'
               })
             });
             
