@@ -1375,6 +1375,7 @@
             <option value="WITHDRAWN">🚫 Withdrawn</option>
           </select>
           <button class="btn" id="sortStatusBtn" title="Order by status progression">Order by Status</button>
+          <button class="btn" id="filterQuestionnaireBtn" title="Show only applications with submitted questionnaires">QUEST.</button>
           <button class="btn" id="refreshApplications">Refresh</button>
         </div>
         <div class="status-text" id="applicationsStatus">Loading applications...</div>
@@ -5029,6 +5030,17 @@
     }
 
     function filterApplications() {
+      // Reset questionnaire filter when using other filters
+      if (questionnaireFilterActive) {
+        questionnaireFilterActive = false;
+        const btn = document.getElementById('filterQuestionnaireBtn');
+        if (btn) {
+          btn.style.background = '';
+          btn.style.border = '';
+          btn.textContent = 'QUEST.';
+        }
+      }
+      
       const { filtered, statusMessage } = computeFilteredApplications();
       renderApplications(filtered);
       setStatus('applicationsStatus', statusMessage);
@@ -9776,6 +9788,66 @@ The table needs to be created before registrations can be stored.`;
         await loadApplications();
         btn.disabled = false;
         btn.textContent = originalText;
+      });
+      
+      // Questionnaire filter button
+      let questionnaireFilterActive = false;
+      let applicationsWithQuestionnaires = new Set();
+      
+      document.getElementById('filterQuestionnaireBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('filterQuestionnaireBtn');
+        
+        if (questionnaireFilterActive) {
+          // Turn off filter
+          questionnaireFilterActive = false;
+          btn.style.background = '';
+          btn.style.border = '';
+          btn.textContent = 'QUEST.';
+          renderApplications();
+          setStatus('applicationsStatus', `✅ ${applicationsData.length} application(s) loaded`);
+        } else {
+          // Turn on filter
+          const originalText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = '⏳ Loading...';
+          
+          try {
+            const supabase = getSupabaseClient();
+            
+            // Fetch all application IDs that have submitted questionnaires
+            const { data: questionnaires, error } = await supabase
+              .from('enrollment_questionnaires')
+              .select('application_id');
+            
+            if (error) throw error;
+            
+            // Store application IDs with questionnaires
+            applicationsWithQuestionnaires = new Set(
+              questionnaires.map(q => q.application_id).filter(Boolean)
+            );
+            
+            console.log(`📋 Found ${applicationsWithQuestionnaires.size} applications with questionnaires`);
+            
+            // Filter and render
+            questionnaireFilterActive = true;
+            const filtered = applicationsData.filter(app => 
+              applicationsWithQuestionnaires.has(app.id)
+            );
+            
+            btn.style.background = 'rgba(45, 212, 191, 0.25)';
+            btn.style.border = '2px solid var(--primary)';
+            btn.textContent = `QUEST. (${filtered.length})`;
+            
+            renderApplications(filtered);
+            setStatus('applicationsStatus', `✅ ${filtered.length} application(s) with submitted questionnaires`);
+            
+          } catch (error) {
+            console.error('Error loading questionnaires:', error);
+            alert('Failed to load questionnaire data');
+          } finally {
+            btn.disabled = false;
+          }
+        }
       });
       
       document.getElementById('sortStatusBtn').addEventListener('click', () => {
