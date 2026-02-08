@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS public.applications (
         'ACTIVELY REVIEWING',
         'RFE PREPARING',
         'RFE SENT',
+        'NOIR',
         'ADDITIONAL DOCUMENTS REQUESTED',
         'DOCUMENTS RECEIVED',
         'FINAL REVIEW',
