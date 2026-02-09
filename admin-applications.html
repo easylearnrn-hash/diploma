@@ -3807,6 +3807,10 @@
                       <th style="width:50%;"><span class="lang en">Date Permanently Left Armenia</span><span class="lang hy"> / ՀՀ-ից մշտապես հեռանալու ամսաթիվ</span></th>
                       <td class="value">${langMode === 'two-col' ? formatDateDDMonYYYY(residency.permanent_departure_date).en : formatDateDDMonYYYY(residency.permanent_departure_date)}</td>
                     </tr>
+                    <tr>
+                      <th style="width:50%;"><span class="lang en">Visited Armenia After Leaving</span><span class="lang hy"> / Այցելել է Հայաստան մեկնելուց հետո</span></th>
+                      <td class="value">${residency.visited_armenia_after_leaving ? '<span style="color:#2dd4bf;font-weight:bold;">YES / ԱՅՈ</span>' : '<span style="color:#94a3b8;font-weight:bold;">NO / ՈՉ</span>'}</td>
+                    </tr>
                   </table>
                 </div>
               </div>
@@ -3822,7 +3826,7 @@
                   <p class="col hy">5. ՃԱՆԱՊԱՐՀՈՒԹՅՈՒՆՆԵՐԻ ՊԱՏՄՈՒԹՅՈՒՆ ԴԵՊԻ ՀԱՅԱՍՏԱՆ (ԿՅԱՆՔԻ ԸՆԹԱՑՔՈՒՄ)</p>
                 </div>
                 <div class="section-body">
-                  ${travelHistory && travelHistory.length > 0 ? (() => {
+                  ${residency.visited_armenia_after_leaving && travelHistory && travelHistory.length > 0 ? (() => {
                     const sortedTravel = [...travelHistory].sort((a, b) => {
                       const dateA = a.arrival ? new Date(a.arrival) : new Date(0);
                       const dateB = b.arrival ? new Date(b.arrival) : new Date(0);
@@ -3844,7 +3848,9 @@
                         </tr>
                       `).join('')}
                     </table>`;
-                  })() : `<p style="padding:10px;border:1px solid var(--line2);margin:0;background:#fcfcfc;"><span class="lang en">No travel history recorded.</span><span class="lang hy"> / Ճամփորդական պատմություն չկա։</span></p>`}
+                  })() : residency.visited_armenia_after_leaving === false ? 
+                    `<p style="padding:10px;border:1px solid var(--line2);margin:0;background:#fcfcfc;"><span class="lang en">Student indicated they have NOT visited Armenia after leaving permanently.</span><span class="lang hy"> / Ուսանողը նշել է, որ չի այցելել Հայաստան մշտապես հեռանալուց հետո։</span></p>` :
+                    `<p style="padding:10px;border:1px solid var(--line2);margin:0;background:#fcfcfc;"><span class="lang en">No travel history recorded.</span><span class="lang hy"> / Ճամփորդական պատմություն չկա։</span></p>`}
                 </div>
               </div>
 
@@ -4006,13 +4012,14 @@
         <div style="${sectionStyle}">
           <h3 style="${titleStyle}">🌍 Residency Information</h3>
           ${buildTable([
-            ['Date Permanently Left Armenia', formatDateDDMonYYYY(residency.permanent_departure_date)]
+            ['Date Permanently Left Armenia', formatDateDDMonYYYY(residency.permanent_departure_date)],
+            ['Visited Armenia After Leaving', residency.visited_armenia_after_leaving ? '<span style="color:#2dd4bf;font-weight:bold;">YES</span>' : '<span style="color:#94a3b8;font-weight:bold;">NO</span>']
           ])}
         </div>
       `;
       
-      // Travel History to Armenia - Sort by most recent first
-      if (travelHistory.length > 0) {
+      // Travel History to Armenia - Only show if visited after leaving
+      if (residency.visited_armenia_after_leaving && travelHistory.length > 0) {
         // Sort travel history by arrival date descending (most recent first)
         const sortedTravel = [...travelHistory].sort((a, b) => {
           const dateA = new Date(a.arrival);
@@ -4043,6 +4050,13 @@
                 `).join('')}
               </tbody>
             </table>
+          </div>
+        `;
+      } else if (residency.visited_armenia_after_leaving === false) {
+        html += `
+          <div style="${sectionStyle}">
+            <h3 style="${titleStyle}">✈️ Travel History to Armenia (Lifetime)</h3>
+            <p style="color:#64748b;font-style:italic;margin:0;">Student indicated they have NOT visited Armenia after leaving permanently.</p>
           </div>
         `;
       }
