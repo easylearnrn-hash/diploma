@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Check Final Forms</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #f8fafc;
+    }
+    .card {
+      background: white;
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    h1 { color: #0f172a; margin-bottom: 8px; }
+    h2 { color: #334155; margin-top: 0; }
+    pre {
+      background: #f1f5f9;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 13px;
+    }
+    .status {
+      display: inline-block;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      margin-left: 12px;
+    }
+    .has-form { background: #dcfce7; color: #166534; }
+    .no-form { background: #fee2e2; color: #991b1b; }
+    button {
+      background: #0b5cff;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 12px;
+      margin-top: 12px;
+    }
+    button:hover { background: #0a4fe0; }
+    .loading { opacity: 0.6; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <h1>🔍 Final Form Status Check</h1>
+  <p style="color: #64748b;">Checking Vardan Yeranosyan and Hrachya's enrollment questionnaire submissions</p>
+
+  <div id="results"></div>
+
+  <script>
+    const dbClient = initSupabase();
+
+    async function checkFinalForms() {
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '<div class="card"><h2>Loading...</h2></div>';
+
+      try {
+        // Search for applications
+        const { data: apps, error: appsError } = await dbClient
+          .from('applications')
+          .select('id, control_number, document_id, uploaded_documents, payload')
+          .or('payload->>fullName.ilike.%Vardan%,payload->>fullName.ilike.%Yeranosyan%,payload->>fullName.ilike.%Hrachya%,payload->>applicantName.ilike.%Vardan%,payload->>applicantName.ilike.%Yeranosyan%,payload->>applicantName.ilike.%Hrachya%');
+
+        if (appsError) throw appsError;
+
+        if (!apps || apps.length === 0) {
+          resultsDiv.innerHTML = '<div class="card"><h2>❌ No applications found</h2><p>Could not find applications for Vardan Yeranosyan or Hrachya</p></div>';
+          return;
+        }
+
+        // Check enrollment_questionnaires table
+        const controlNumbers = apps.map(a => a.control_number);
+        const { data: questionnaires, error: qError } = await dbClient
+          .from('enrollment_questionnaires')
+          .select('*')
+          .in('control_number', controlNumbers);
+
+        if (qError) console.warn('Could not fetch questionnaires:', qError);
+
+        let html = '';
+        apps.forEach(app => {
+          const name = app.payload?.fullName || app.payload?.applicantName || 'Unknown';
+          const uploadedDocs = app.uploaded_documents || {};
+          const questionnaireData = uploadedDocs.enrollment_questionnaire;
+          const questionnaire = questionnaires?.find(q => q.control_number === app.control_number);
+          
+          const hasForm = questionnaireData?.submitted || questionnaire;
+          
+          html += `
+            <div class="card">
+              <h2>
+                ${name}
+                <span class="status ${hasForm ? 'has-form' : 'no-form'}">
+                  ${hasForm ? '✅ Has Form' : '❌ No Form'}
+                </span>
+              </h2>
+              <p><strong>Control Number:</strong> ${app.control_number || 'N/A'}</p>
+              <p><strong>Document ID:</strong> ${app.document_id || 'N/A'}</p>
+              
+              <h3>uploaded_documents column:</h3>
+              <pre>${JSON.stringify(uploadedDocs, null, 2)}</pre>
+              
+              ${questionnaire ? `
+                <h3>enrollment_questionnaires table:</h3>
+                <pre>${JSON.stringify(questionnaire, null, 2)}</pre>
+              ` : '<p style="color: #991b1b;">No record in enrollment_questionnaires table</p>'}
+              
+              ${!hasForm && questionnaire ? `
+                <button onclick="fixApplication('${app.id}', '${questionnaire.id}', '${questionnaire.submitted_at}')">
+                  🔧 Fix Application Record
+                </button>
+              ` : ''}
+            </div>
+          `;
+        });
+
+        resultsDiv.innerHTML = html;
+
+      } catch (error) {
+        resultsDiv.innerHTML = `
+          <div class="card">
+            <h2>❌ Error</h2>
+            <pre>${error.message}</pre>
+          </div>
+        `;
+      }
+    }
+
+    async function fixApplication(appId, questionnaireId, submittedAt) {
+      if (!confirm('This will update the uploaded_documents column to link the questionnaire. Continue?')) return;
+      
+      const button = event.target;
+      button.classList.add('loading');
+      button.textContent = 'Fixing...';
+
+      try {
+        // Get current uploaded_documents
+        const { data: app, error: fetchError } = await dbClient
+          .from('applications')
+          .select('uploaded_documents')
+          .eq('id', appId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Update with questionnaire reference
+        const { error: updateError } = await dbClient
+          .from('applications')
+          .update({
+            uploaded_documents: {
+              ...(app.uploaded_documents || {}),
+              enrollment_questionnaire: {
+                submitted: true,
+                submitted_at: submittedAt,
+                questionnaire_id: questionnaireId
+              }
+            }
+          })
+          .eq('id', appId);
+
+        if (updateError) throw updateError;
+
+        alert('✅ Successfully fixed! The questionnaire is now linked to the application.');
+        checkFinalForms(); // Refresh
+
+      } catch (error) {
+        alert('❌ Error: ' + error.message);
+        button.classList.remove('loading');
+        button.textContent = '🔧 Fix Application Record';
+      }
+    }
+
+    // Auto-run on load
+    checkFinalForms();
+  </script>
+</body>
+</html>
