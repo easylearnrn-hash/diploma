@@ -1538,6 +1538,13 @@ function getStoredStudentId() {
       <span style="font-family:'Courier New',monospace;font-size:15px;font-weight:700;color:#0f172a" data-field="student-id">ACNHS-000000000</span>
       <span style="color:#cbd5e1;font-size:18px">•</span>
       <span style="font-size:14px;font-weight:600;color:#2563eb" data-field="student-email">student@acnhs.am</span>
+      <button onclick="openStudentHub()" style="margin-left:8px;padding:8px 16px;background:linear-gradient(135deg,var(--accent),#60a5fa);border:none;border-radius:8px;color:#022c22;font-weight:700;cursor:pointer;font-size:13px;transition:all 0.3s;box-shadow:0 4px 12px rgba(45,212,191,0.25);display:inline-flex;align-items:center;gap:6px" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 16px rgba(45,212,191,0.35)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(45,212,191,0.25)'">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+        Hub
+      </button>
     </div>
     
     <!-- Program & Enrollment Details -->
@@ -1676,6 +1683,7 @@ function getStoredStudentId() {
             <dt>Legal Name</dt><dd data-field="student-name">Loading...</dd>
             <dt>Date of Birth</dt><dd id="profileDobValue">—</dd>
             <dt>ACNHS Email</dt><dd data-field="student-email">student@acnhs.am</dd>
+            <dt>Learning Hub</dt><dd><button onclick="openStudentHub()" style="padding:8px 16px;background:linear-gradient(135deg,var(--accent),#60a5fa);border:none;border-radius:8px;color:#022c22;font-weight:700;cursor:pointer;font-size:13px;transition:all 0.3s;box-shadow:0 4px 12px rgba(45,212,191,0.25)">Open Hub</button></dd>
             <dt>Personal Email</dt><dd id="profilePersonalEmail">—</dd>
             <dt>Program Start</dt><dd id="profileStartDate">—</dd>
             <dt>Expected Graduation</dt><dd id="profileGradDate">—</dd>
@@ -5464,6 +5472,175 @@ document.addEventListener('click', function(event) {
     dropdown.classList.remove('active');
   }
 });
+
+// Open Student Hub with all student data
+async function openStudentHub() {
+  const studentProfile = portalState.profile;
+  
+  if (!studentProfile) {
+    showCustomAlert('Student data not available. Please refresh the page.', 'error');
+    return;
+  }
+  
+  // Fetch application data if available
+  let applicationData = null;
+  if (studentProfile.application_id) {
+    try {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('*')
+        .eq('id', studentProfile.application_id)
+        .single();
+      
+      if (!error && data) {
+        applicationData = data;
+      }
+    } catch (err) {
+      console.warn('Could not load application data:', err);
+    }
+  }
+  
+  // Helper function to safely get nested values
+  const getAppData = (key) => {
+    if (!applicationData) return null;
+    return applicationData[key] || 
+           (applicationData.metadata && applicationData.metadata[key]) || 
+           null;
+  };
+  
+  // Store comprehensive student data in sessionStorage for hub.html
+  const hubData = {
+    // ===== CORE IDENTITY =====
+    fullName: studentProfile.full_name || getAppData('fullName') || 'N/A',
+    firstName: getAppData('firstName') || studentProfile.first_name || 'N/A',
+    middleName: getAppData('middleName') || studentProfile.middle_name || 'N/A',
+    lastName: getAppData('lastName') || studentProfile.last_name || 'N/A',
+    preferredName: getAppData('preferredName') || 'N/A',
+    studentId: studentProfile.student_id || 'N/A',
+    
+    // ===== CONTACT INFORMATION =====
+    email: studentProfile.email || getAppData('email') || 'N/A',
+    personalEmail: studentProfile.personal_email || getAppData('personalEmail') || 'N/A',
+    phone: studentProfile.phone || getAppData('phone') || 'N/A',
+    alternatePhone: getAppData('alternatePhone') || 'N/A',
+    
+    // Current Address
+    address: getAppData('address') || 'N/A',
+    address2: getAppData('address2') || 'N/A',
+    city: getAppData('city') || 'N/A',
+    state: getAppData('state') || 'N/A',
+    zipCode: getAppData('zipCode') || 'N/A',
+    country: getAppData('country') || 'N/A',
+    
+    // Permanent Address
+    permanentAddress: getAppData('permanentAddress') || 'N/A',
+    permanentCity: getAppData('permanentCity') || 'N/A',
+    permanentState: getAppData('permanentState') || 'N/A',
+    permanentZip: getAppData('permanentZip') || 'N/A',
+    permanentCountry: getAppData('permanentCountry') || 'N/A',
+    
+    // ===== PERSONAL DETAILS =====
+    dateOfBirth: studentProfile.date_of_birth || getAppData('dateOfBirth') || 'N/A',
+    placeOfBirth: getAppData('placeOfBirth') || 'N/A',
+    gender: studentProfile.gender || getAppData('gender') || 'N/A',
+    nationality: studentProfile.nationality || getAppData('nationality') || 'N/A',
+    citizenship: getAppData('citizenship') || 'N/A',
+    armenianCitizen: getAppData('armenianCitizen') || 'N/A',
+    maritalStatus: getAppData('maritalStatus') || 'N/A',
+    ethnicity: getAppData('ethnicity') || 'N/A',
+    
+    // ID Documents
+    socialSecurityNumber: getAppData('socialSecurityNumber') ? '***-**-' + getAppData('socialSecurityNumber').slice(-4) : 'N/A',
+    passportNumber: getAppData('passportNumber') || 'N/A',
+    idNumber: getAppData('idNumber') || 'N/A',
+    
+    // ===== ACADEMIC INFORMATION =====
+    program: studentProfile.program || getAppData('program') || 'N/A',
+    programTrack: studentProfile.program_track || 'N/A',
+    studyMode: studentProfile.study_mode || 'N/A',
+    startTerm: studentProfile.start_term || getAppData('startTerm') || 'N/A',
+    currentSemester: studentProfile.current_semester || 'N/A',
+    enrollmentStatus: studentProfile.enrollment_status || 'N/A',
+    academicStanding: studentProfile.academic_standing || 'N/A',
+    
+    // ===== ACADEMIC PROGRESS =====
+    creditsEarned: studentProfile.credits_earned || studentProfile.total_credits_earned || 0,
+    creditsRequired: studentProfile.credits_required || 72,
+    cumulativeGpa: studentProfile.cumulative_gpa || studentProfile.current_gpa || '0.00',
+    transferGpa: studentProfile.transfer_gpa || 'N/A',
+    acnhsGpa: studentProfile.acnhs_gpa || 'N/A',
+    
+    // ===== DATES =====
+    enrollmentDate: studentProfile.enrollment_date || studentProfile.enrolled_at || 'N/A',
+    expectedGraduation: studentProfile.expected_graduation_date || studentProfile.expected_graduation || 'N/A',
+    applicationDate: applicationData ? applicationData.created_at : 'N/A',
+    
+    // ===== EMERGENCY CONTACTS =====
+    emergencyContact: studentProfile.emergency_contact_name || getAppData('emergencyName') || 'N/A',
+    emergencyPhone: studentProfile.emergency_contact_phone || getAppData('emergencyPhone') || 'N/A',
+    emergencyRelationship: studentProfile.emergency_contact_relation || getAppData('emergencyRelationship') || 'N/A',
+    emergencyEmail: getAppData('emergencyEmail') || 'N/A',
+    emergencyAddress: getAppData('emergencyAddress') || 'N/A',
+    
+    // Alternate Emergency Contact
+    alternateEmergencyName: getAppData('alternateEmergencyName') || 'N/A',
+    alternateEmergencyPhone: getAppData('alternateEmergencyPhone') || 'N/A',
+    alternateEmergencyRelation: getAppData('alternateEmergencyRelation') || 'N/A',
+    
+    // ===== EDUCATIONAL BACKGROUND =====
+    // High School
+    highSchoolName: getAppData('highSchoolName') || 'N/A',
+    highSchoolCity: getAppData('highSchoolCity') || 'N/A',
+    highSchoolState: getAppData('highSchoolState') || 'N/A',
+    highSchoolCountry: getAppData('highSchoolCountry') || 'N/A',
+    highSchoolGradYear: getAppData('highSchoolGradYear') || 'N/A',
+    highSchoolGradDate: getAppData('highSchoolGradDate') || 'N/A',
+    highSchoolGpa: getAppData('gpa') || 'N/A',
+    classRank: getAppData('classRank') || 'N/A',
+    classSize: getAppData('classSize') || 'N/A',
+    
+    // Test Scores
+    satScore: getAppData('satScore') || 'N/A',
+    actScore: getAppData('actScore') || 'N/A',
+    toeflScore: getAppData('toeflScore') || 'N/A',
+    ieltsScore: getAppData('ieltsScore') || 'N/A',
+    
+    // Previous College
+    previousCollege: getAppData('previousCollege') || 'N/A',
+    collegeCity: getAppData('collegeCity') || 'N/A',
+    collegeState: getAppData('collegeState') || 'N/A',
+    collegeCountry: getAppData('collegeCountry') || 'N/A',
+    collegeAttendanceDates: getAppData('collegeAttendanceDates') || 'N/A',
+    previousDegree: getAppData('previousDegree') || 'N/A',
+    previousMajor: getAppData('previousMajor') || 'N/A',
+    collegeGPA: getAppData('collegeGPA') || 'N/A',
+    
+    // ===== PROFESSIONAL EXPERIENCE =====
+    currentEmployer: getAppData('currentEmployer') || 'N/A',
+    jobTitle: getAppData('jobTitle') || 'N/A',
+    workExperience: getAppData('workExperience') || 'N/A',
+    healthcareExperience: getAppData('healthcareExperience') || 'N/A',
+    certifications: getAppData('certifications') || 'N/A',
+    
+    // ===== ADVANCED DATA =====
+    metadata: studentProfile.metadata || {},
+    dataset: portalState.dataset || {},
+    transcriptCodes: portalState.transcriptCodes || {},
+    gradebook: studentProfile.metadata?.gradebook || null,
+    academicProgress: studentProfile.metadata?.academic_progress || null,
+    
+    // Application Status
+    applicationStatus: applicationData ? applicationData.status : 'N/A',
+    applicationId: studentProfile.application_id || 'N/A'
+  };
+  
+  sessionStorage.setItem('hubStudentData', JSON.stringify(hubData));
+  
+  // Open hub in new tab
+  window.open('hub.html', '_blank');
+  
+  logPortalActivity('navigate', 'student', 'Opened Student Hub', { studentId: studentProfile.student_id });
+}
 </script>
 
 </body>

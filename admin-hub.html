@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Admin Hub — Armenian College of Nursing & Health Sciences</title>
+
+  <!-- Supabase Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root{
+      --bg-dark:#0a2540;
+      --bg-darker:#020617;
+      --bg-light:#f8fafc;
+      --accent:#2dd4bf;
+      --accent-2:#60a5fa;
+      --gold:#eab308;
+      --red:#ef4444;
+      --glass:rgba(255,255,255,0.08);
+      --border:rgba(255,255,255,0.14);
+      --text-muted:#94a3b8;
+
+      --card:#ffffff;
+      --card-border:#e5e7eb;
+      --shadow:0 18px 40px rgba(2,6,23,.10);
+      --shadow-soft:0 10px 28px rgba(2,6,23,.08);
+      --radius-xl:24px;
+      --radius-lg:18px;
+      --radius-md:14px;
+    }
+
+    *{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif}
+    body{
+      background: radial-gradient(1000px 450px at 20% 0%, rgba(45,212,191,.20), transparent 55%),
+                  radial-gradient(900px 450px at 85% 10%, rgba(96,165,250,.18), transparent 55%),
+                  var(--bg-light);
+      color:#0f172a;
+      min-height:100vh;
+    }
+
+    /* App Shell */
+    .app{
+      max-width:1600px;
+      margin:0 auto;
+      padding:22px;
+      display:grid;
+      grid-template-columns:290px 1fr;
+      gap:18px;
+    }
+
+    /* Sidebar */
+    .sidebar{
+      position:sticky;
+      top:18px;
+      height:calc(100vh - 36px);
+      border-radius:var(--radius-xl);
+      background:linear-gradient(135deg, rgba(10,37,64,.92), rgba(2,6,23,.92));
+      border:1px solid rgba(255,255,255,.10);
+      box-shadow:0 22px 44px rgba(2,6,23,.18);
+      overflow:hidden;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .brand{
+      padding:22px 20px 18px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .brand .line1{
+      color:#fff;
+      font-weight:800;
+      font-size:16px;
+      letter-spacing:-0.2px;
+      line-height:1.1;
+    }
+    .brand .line2{
+      color:#fff;
+      opacity:.92;
+      font-weight:700;
+      font-size:15px;
+      margin-top:3px;
+      line-height:1.1;
+    }
+    .brand .sub{
+      margin-top:12px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      color:#cbd5e1;
+      font-size:12px;
+      opacity:.95;
+    }
+    .dot{
+      width:8px;height:8px;border-radius:999px;background:var(--accent);
+      box-shadow:0 0 0 4px rgba(45,212,191,.12);
+    }
+
+    .profile{
+      padding:18px 20px;
+      display:flex;
+      gap:12px;
+      align-items:center;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .avatar{
+      width:44px;height:44px;border-radius:14px;
+      background:linear-gradient(135deg, rgba(234,179,8,.25), rgba(239,68,68,.22));
+      border:1px solid rgba(255,255,255,.14);
+      display:grid;place-items:center;
+      color:#fff;font-weight:800;
+      letter-spacing:-0.4px;
+      font-size:16px;
+    }
+    .pmeta strong{display:block;color:#fff;font-size:14px}
+    .pmeta span{display:block;color:#cbd5e1;font-size:12px;margin-top:2px;opacity:.95}
+
+    .nav{
+      padding:14px 10px 10px;
+      overflow:auto;
+    }
+    .nav a{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:12px 14px;
+      margin:6px 6px;
+      border-radius:14px;
+      text-decoration:none;
+      color:#e5e7eb;
+      border:1px solid transparent;
+      transition:.25s;
+      font-size:13.5px;
+      font-weight:600;
+      cursor:pointer;
+    }
+    .nav a:hover{
+      background:rgba(255,255,255,.06);
+      border-color:rgba(255,255,255,.10);
+      transform:translateY(-1px);
+    }
+    .nav a.active{
+      background:linear-gradient(135deg, rgba(234,179,8,.18), rgba(239,68,68,.14));
+      border-color:rgba(234,179,8,.22);
+    }
+    .badge{
+      font-size:11px;
+      padding:5px 10px;
+      border-radius:999px;
+      background:rgba(255,255,255,.10);
+      border:1px solid rgba(255,255,255,.12);
+      color:#fff;
+      opacity:.95;
+      white-space:nowrap;
+    }
+
+    .sidebar-footer{
+      margin-top:auto;
+      padding:14px 16px 16px;
+      border-top:1px solid rgba(255,255,255,.08);
+      display:flex;
+      gap:10px;
+    }
+    .sbtn{
+      flex:1;
+      border:none;
+      background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.10);
+      color:#fff;
+      padding:12px 12px;
+      border-radius:14px;
+      font-weight:700;
+      font-size:13px;
+      cursor:pointer;
+      transition:.25s;
+    }
+    .sbtn:hover{
+      background:rgba(255,255,255,.12);
+      border-color:rgba(234,179,8,.24);
+      transform:translateY(-1px);
+    }
+
+    /* Main */
+    .main{
+      border-radius:var(--radius-xl);
+      overflow:hidden;
+      border:1px solid rgba(15,23,42,.08);
+      background:rgba(255,255,255,.55);
+      backdrop-filter: blur(10px);
+      box-shadow:var(--shadow);
+      min-height:calc(100vh - 44px);
+    }
+
+    /* Topbar */
+    .topbar{
+      padding:18px 18px;
+      display:flex;
+      gap:14px;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid rgba(15,23,42,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.75), rgba(255,255,255,.40));
+    }
+    .top-left h1{
+      font-size:18px;
+      font-weight:900;
+      letter-spacing:-0.4px;
+    }
+    .top-left p{
+      margin-top:4px;
+      font-size:12.5px;
+      color:#64748b;
+      font-weight:600;
+    }
+
+    .top-right{
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .search{
+      width:min(520px, 42vw);
+      display:flex;
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-radius:999px;
+      background:rgba(255,255,255,.85);
+      border:1px solid rgba(15,23,42,.10);
+      box-shadow:0 10px 24px rgba(2,6,23,.06);
+    }
+    .search input{
+      flex:1;
+      border:none;
+      outline:none;
+      font-size:13.5px;
+      color:#0f172a;
+      background:transparent;
+      font-weight:600;
+    }
+    .pill{
+      padding:9px 12px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.10);
+      background:rgba(255,255,255,.80);
+      font-size:12px;
+      font-weight:800;
+      cursor:pointer;
+      transition:.2s;
+      white-space:nowrap;
+    }
+    .pill:hover{transform:translateY(-1px)}
+    .pill.primary{
+      border-color:rgba(234,179,8,.35);
+      background:linear-gradient(135deg, rgba(234,179,8,.18), rgba(239,68,68,.12));
+    }
+
+    /* Content */
+    .content{
+      padding:18px;
+      display:none;
+    }
+    .content.active{
+      display:block;
+    }
+
+    /* Cards */
+    .card{
+      background:rgba(255,255,255,.90);
+      border:1px solid rgba(15,23,42,.08);
+      border-radius:var(--radius-xl);
+      box-shadow:var(--shadow-soft);
+      overflow:hidden;
+      margin-bottom:16px;
+    }
+    .card-header{
+      padding:16px 16px 12px;
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:14px;
+    }
+    .card-header h2{
+      font-size:14px;
+      font-weight:900;
+      letter-spacing:-0.2px;
+    }
+    .card-header p{
+      margin-top:5px;
+      color:#64748b;
+      font-size:12.5px;
+      font-weight:600;
+      line-height:1.35;
+    }
+
+    .card-body{padding:0 16px 16px}
+
+    /* Stats Grid */
+    .stats-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));
+      gap:14px;
+      padding:0 16px 16px;
+    }
+    .stat-card{
+      border-radius:18px;
+      border:1px solid rgba(15,23,42,.08);
+      background:linear-gradient(135deg, #ffffff, #f8fafc);
+      padding:16px;
+      position:relative;
+      overflow:hidden;
+    }
+    .stat-card:before{
+      content:"";
+      position:absolute;left:0;top:0;right:0;height:4px;
+      background:linear-gradient(90deg, var(--accent), var(--accent-2));
+      opacity:.9;
+    }
+    .stat-card.warning:before{
+      background:linear-gradient(90deg, var(--gold), #f59e0b);
+    }
+    .stat-card.danger:before{
+      background:linear-gradient(90deg, var(--red), #dc2626);
+    }
+    .stat-card strong{
+      display:block;
+      font-size:28px;
+      font-weight:900;
+      letter-spacing:-0.8px;
+      margin-top:8px;
+    }
+    .stat-card span{
+      display:block;
+      margin-top:8px;
+      font-size:12px;
+      color:#64748b;
+      font-weight:700;
+      text-transform:uppercase;
+      letter-spacing:.6px;
+    }
+
+    /* Students Table */
+    .students-table{
+      width:100%;
+      border-collapse:collapse;
+      margin-top:16px;
+    }
+    .students-table thead{
+      background:rgba(248,250,252,.85);
+    }
+    .students-table th{
+      padding:12px 14px;
+      text-align:left;
+      font-size:12px;
+      font-weight:800;
+      color:#0f172a;
+      text-transform:uppercase;
+      letter-spacing:.8px;
+      border-bottom:2px solid rgba(15,23,42,.10);
+    }
+    .students-table td{
+      padding:14px 14px;
+      border-bottom:1px solid rgba(15,23,42,.06);
+      font-size:13.5px;
+      font-weight:600;
+    }
+    .students-table tbody tr{
+      transition:.2s;
+      cursor:pointer;
+    }
+    .students-table tbody tr:hover{
+      background:rgba(45,212,191,.05);
+    }
+    .status-badge{
+      font-size:11px;
+      font-weight:900;
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid rgba(15,23,42,.10);
+      background:#fff;
+      white-space:nowrap;
+      display:inline-block;
+    }
+    .status-badge.active{border-color:rgba(45,212,191,.30); background:rgba(45,212,191,.10); color:#065f46}
+    .status-badge.inactive{border-color:rgba(148,163,184,.30); background:rgba(148,163,184,.10); color:#475569}
+    .status-badge.probation{border-color:rgba(234,179,8,.30); background:rgba(234,179,8,.10); color:#78350f}
+    .status-badge.graduated{border-color:rgba(96,165,250,.30); background:rgba(96,165,250,.10); color:#1e40af}
+
+    /* Action Buttons */
+    .btn{
+      border:none;
+      border-radius:12px;
+      padding:11px 14px;
+      font-weight:900;
+      cursor:pointer;
+      transition:.2s;
+      font-size:12.5px;
+      white-space:nowrap;
+    }
+    .btn.primary{
+      background:var(--accent);
+      color:#022c22;
+      box-shadow:0 12px 22px rgba(45,212,191,.20);
+    }
+    .btn.primary:hover{transform:translateY(-1px); background:#26c4b5}
+    .btn.warning{
+      background:var(--gold);
+      color:#422006;
+      box-shadow:0 12px 22px rgba(234,179,8,.20);
+    }
+    .btn.warning:hover{transform:translateY(-1px); background:#f59e0b}
+    .btn.danger{
+      background:var(--red);
+      color:#fff;
+      box-shadow:0 12px 22px rgba(239,68,68,.20);
+    }
+    .btn.danger:hover{transform:translateY(-1px); background:#dc2626}
+    .btn.ghost{
+      background:rgba(255,255,255,.85);
+      border:1px solid rgba(15,23,42,.10);
+      color:#0f172a;
+    }
+    .btn.ghost:hover{transform:translateY(-1px)}
+
+    /* Loading State */
+    .loading{
+      text-align:center;
+      padding:40px;
+      color:#64748b;
+      font-weight:600;
+    }
+    .spinner{
+      width:40px;
+      height:40px;
+      border:4px solid rgba(45,212,191,.2);
+      border-top-color:var(--accent);
+      border-radius:50%;
+      animation:spin 1s linear infinite;
+      margin:0 auto 16px;
+    }
+    @keyframes spin{
+      to{transform:rotate(360deg)}
+    }
+
+    /* Modal */
+    .modal{
+      position:fixed;
+      inset:0;
+      background:rgba(2,6,23,.62);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+      z-index:9999;
+    }
+    .modal.open{display:flex}
+    .modal-card{
+      width:min(1200px, 96vw);
+      max-height:90vh;
+      overflow:hidden;
+      border-radius:26px;
+      background:rgba(255,255,255,.95);
+      border:1px solid rgba(255,255,255,.18);
+      box-shadow:0 28px 70px rgba(2,6,23,.35);
+      display:flex;
+      flex-direction:column;
+    }
+    .modal-head{
+      padding:18px 20px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      border-bottom:1px solid rgba(15,23,42,.08);
+      background:linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.55));
+    }
+    .modal-head strong{font-size:16px;font-weight:950}
+    .close-modal{
+      border:none;
+      border-radius:12px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:950;
+      background:rgba(15,23,42,.06);
+      font-size:14px;
+    }
+    .modal-body{
+      padding:20px;
+      overflow:auto;
+      min-height:0;
+    }
+
+    /* Student Details Grid */
+    .details-grid{
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(300px, 1fr));
+      gap:16px;
+      margin-bottom:16px;
+    }
+    .detail-section{
+      border-radius:16px;
+      background:rgba(248,250,252,.85);
+      border:1px solid rgba(15,23,42,.08);
+      padding:16px;
+    }
+    .detail-section h3{
+      font-size:14px;
+      font-weight:900;
+      margin-bottom:12px;
+      color:#0f172a;
+    }
+    .detail-row{
+      display:flex;
+      justify-content:space-between;
+      padding:8px 0;
+      border-bottom:1px dashed rgba(15,23,42,.10);
+      font-size:13px;
+    }
+    .detail-row:last-child{border-bottom:none}
+    .detail-row strong{font-weight:800;color:#475569}
+    .detail-row span{font-weight:600;color:#0f172a}
+
+    /* Filters */
+    .filters{
+      display:flex;
+      flex-wrap:wrap;
+      gap:10px;
+      padding:0 16px 16px;
+      align-items:center;
+    }
+    select{
+      border:1px solid rgba(15,23,42,.10);
+      background:#fff;
+      border-radius:12px;
+      padding:10px 12px;
+      font-weight:800;
+      font-size:12px;
+      outline:none;
+      cursor:pointer;
+    }
+
+    /* Responsive */
+    @media(max-width:1100px){
+      .search{width:min(620px, 55vw)}
+    }
+    @media(max-width:900px){
+      .app{grid-template-columns:1fr}
+      .sidebar{position:relative;height:auto}
+      .search{width:62vw}
+      .stats-grid{grid-template-columns:1fr}
+      .details-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="line1">Armenian College of Nursing</div>
+        <div class="line2">&amp; Health Sciences</div>
+        <div class="sub"><span class="dot"></span> Admin Hub</div>
+      </div>
+
+      <div class="profile">
+        <div class="avatar" id="avatar">👨‍🏫</div>
+        <div class="pmeta">
+          <strong id="adminName">Administrator</strong>
+          <span id="adminRole">Faculty • Registrar</span>
+        </div>
+      </div>
+
+      <div class="nav" id="nav">
+        <a class="active" data-view="dashboard">📊 Dashboard <span class="badge" id="totalStudentsBadge">0</span></a>
+        <a data-view="students">👥 All Students <span class="badge" id="activeStudentsBadge">0</span></a>
+        <a data-view="applications">📋 Applications <span class="badge" id="pendingAppsBadge">0</span></a>
+        <a data-view="grades">📝 Grades & GPA <span class="badge">Manage</span></a>
+        <a data-view="courses">📚 Courses <span class="badge">Catalog</span></a>
+        <a data-view="attendance">📅 Attendance <span class="badge">Track</span></a>
+        <a href="notes.html">📝 Notes <span class="badge">View</span></a>
+        <a data-view="reports">📊 Reports <span class="badge">Export</span></a>
+        <a data-view="settings">⚙️ Settings <span class="badge">Admin</span></a>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="sbtn" onclick="window.location.href='admin-home.html'">Portal</button>
+        <button class="sbtn" onclick="logout()">Logout</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <!-- TOPBAR -->
+      <div class="topbar">
+        <div class="top-left">
+          <h1 id="viewTitle">Dashboard</h1>
+          <p id="viewSubtitle">Complete overview of students, applications, and academic performance.</p>
+        </div>
+
+        <div class="top-right">
+          <div class="search">
+            <span style="font-weight:900;color:#64748b;font-size:12px;">🔍</span>
+            <input id="searchInput" placeholder="Search students by name, ID, email..." />
+          </div>
+          <button class="pill primary" onclick="refreshData()">Refresh Data</button>
+        </div>
+      </div>
+
+      <!-- DASHBOARD VIEW -->
+      <section class="content active" id="dashboardView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>System Statistics</h2>
+              <p>Real-time overview of enrollment, performance, and academic standing.</p>
+            </div>
+          </div>
+
+          <div class="stats-grid">
+            <div class="stat-card">
+              <strong id="totalStudents">0</strong>
+              <span>Total Students</span>
+            </div>
+            <div class="stat-card">
+              <strong id="activeStudents">0</strong>
+              <span>Active Enrollment</span>
+            </div>
+            <div class="stat-card warning">
+              <strong id="probationStudents">0</strong>
+              <span>Academic Probation</span>
+            </div>
+            <div class="stat-card">
+              <strong id="avgGpa">0.00</strong>
+              <span>Average GPA</span>
+            </div>
+            <div class="stat-card">
+              <strong id="pendingApplications">0</strong>
+              <span>Pending Applications</span>
+            </div>
+            <div class="stat-card">
+              <strong id="graduatedStudents">0</strong>
+              <span>Graduated</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Recent Students</h2>
+              <p>Latest enrolled students with quick access to their profiles.</p>
+            </div>
+            <button class="btn ghost" onclick="switchView('students')">View All</button>
+          </div>
+
+          <div class="card-body">
+            <div id="recentStudentsTable"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ALL STUDENTS VIEW -->
+      <section class="content" id="studentsView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>All Students</h2>
+              <p>Complete student directory with filtering and search capabilities.</p>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button class="btn ghost" onclick="exportStudents()">Export CSV</button>
+              <button class="btn primary" onclick="alert('Add student feature')">Add Student</button>
+            </div>
+          </div>
+
+          <div class="filters">
+            <select id="filterStatus" onchange="filterStudents()">
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+              <option value="graduated">Graduated</option>
+              <option value="withdrawn">Withdrawn</option>
+            </select>
+
+            <select id="filterProgram" onchange="filterStudents()">
+              <option value="all">All Programs</option>
+              <option value="ADN">ADN</option>
+              <option value="BSN">BSN</option>
+              <option value="RN to BSN">RN to BSN</option>
+            </select>
+
+            <select id="filterStanding" onchange="filterStudents()">
+              <option value="all">All Standing</option>
+              <option value="good">Good Standing</option>
+              <option value="probation">Probation</option>
+              <option value="warning">Warning</option>
+            </select>
+
+            <select id="filterSemester" onchange="filterStudents()">
+              <option value="all">All Semesters</option>
+              <option value="1">Semester 1</option>
+              <option value="2">Semester 2</option>
+              <option value="3">Semester 3</option>
+              <option value="4">Semester 4</option>
+            </select>
+          </div>
+
+          <div class="card-body">
+            <div id="allStudentsTable"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- APPLICATIONS VIEW -->
+      <section class="content" id="applicationsView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Pending Applications</h2>
+              <p>Review and process incoming student applications.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Applications management coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- GRADES VIEW -->
+      <section class="content" id="gradesView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Grade Management</h2>
+              <p>Manage student grades, GPAs, and academic performance.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Grade management coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- COURSES VIEW -->
+      <section class="content" id="coursesView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Course Catalog</h2>
+              <p>Manage courses, schedules, and curriculum.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Course management coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ATTENDANCE VIEW -->
+      <section class="content" id="attendanceView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Attendance Tracking</h2>
+              <p>Monitor and record student attendance.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Attendance tracking coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- REPORTS VIEW -->
+      <section class="content" id="reportsView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Reports & Analytics</h2>
+              <p>Generate comprehensive reports and analytics.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>Reports & analytics coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SETTINGS VIEW -->
+      <section class="content" id="settingsView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>System Settings</h2>
+              <p>Configure system preferences and permissions.</p>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="loading">
+              <div class="spinner"></div>
+              <p>System settings coming soon...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- STUDENT DETAIL MODAL -->
+  <div class="modal" id="studentModal">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <strong id="modalStudentName">Student Details</strong>
+        <button class="close-modal" onclick="closeStudentModal()">Close</button>
+      </div>
+      <div class="modal-body" id="modalStudentBody">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading student details...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Supabase
+    const supabase = initSupabase();
+    
+    // State
+    let allStudents = [];
+    let filteredStudents = [];
+
+    // Load data on init
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadDashboardData();
+      setupNavigation();
+      setupSearch();
+    });
+
+    // Navigation
+    function setupNavigation() {
+      document.querySelectorAll('.nav a[data-view]').forEach(link => {
+        link.addEventListener('click', (e) => {
+          e.preventDefault();
+          const view = link.dataset.view;
+          switchView(view);
+        });
+      });
+    }
+
+    function switchView(viewName) {
+      // Update nav active state
+      document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+      document.querySelector(`.nav a[data-view="${viewName}"]`)?.classList.add('active');
+
+      // Hide all content sections
+      document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+      
+      // Show selected view
+      const viewMap = {
+        dashboard: 'dashboardView',
+        students: 'studentsView',
+        applications: 'applicationsView',
+        grades: 'gradesView',
+        courses: 'coursesView',
+        attendance: 'attendanceView',
+        reports: 'reportsView',
+        settings: 'settingsView'
+      };
+      
+      const viewId = viewMap[viewName];
+      if (viewId) {
+        document.getElementById(viewId).classList.add('active');
+      }
+
+      // Update topbar
+      const titles = {
+        dashboard: ['Dashboard', 'Complete overview of students, applications, and academic performance.'],
+        students: ['All Students', 'Complete student directory with filtering and search capabilities.'],
+        applications: ['Applications', 'Review and process incoming student applications.'],
+        grades: ['Grades & GPA', 'Manage student grades, GPAs, and academic performance.'],
+        courses: ['Course Catalog', 'Manage courses, schedules, and curriculum.'],
+        attendance: ['Attendance', 'Monitor and record student attendance.'],
+        reports: ['Reports & Analytics', 'Generate comprehensive reports and analytics.'],
+        settings: ['System Settings', 'Configure system preferences and permissions.']
+      };
+
+      const [title, subtitle] = titles[viewName] || ['Admin Hub', 'Manage students and academics'];
+      document.getElementById('viewTitle').textContent = title;
+      document.getElementById('viewSubtitle').textContent = subtitle;
+
+      // Load view-specific data
+      if (viewName === 'students' && allStudents.length === 0) {
+        loadAllStudents();
+      }
+    }
+
+    // Load Dashboard Data
+    async function loadDashboardData() {
+      try {
+        // Fetch students
+        const { data: students, error } = await supabase
+          .from('students')
+          .select('*')
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        allStudents = students || [];
+        
+        // Calculate stats
+        const totalStudents = allStudents.length;
+        const activeStudents = allStudents.filter(s => s.enrollment_status === 'active').length;
+        const probationStudents = allStudents.filter(s => s.academic_standing === 'probation').length;
+        const graduatedStudents = allStudents.filter(s => s.enrollment_status === 'graduated').length;
+        
+        // Calculate average GPA
+        const gpas = allStudents
+          .map(s => parseFloat(s.cumulative_gpa || s.current_gpa || 0))
+          .filter(g => g > 0);
+        const avgGpa = gpas.length > 0 ? (gpas.reduce((a, b) => a + b, 0) / gpas.length).toFixed(2) : '0.00';
+
+        // Fetch pending applications
+        const { data: apps, error: appsError } = await supabase
+          .from('applications')
+          .select('id')
+          .eq('status', 'pending');
+
+        const pendingApplications = apps ? apps.length : 0;
+
+        // Update stats
+        document.getElementById('totalStudents').textContent = totalStudents;
+        document.getElementById('activeStudents').textContent = activeStudents;
+        document.getElementById('probationStudents').textContent = probationStudents;
+        document.getElementById('avgGpa').textContent = avgGpa;
+        document.getElementById('pendingApplications').textContent = pendingApplications;
+        document.getElementById('graduatedStudents').textContent = graduatedStudents;
+
+        // Update badges
+        document.getElementById('totalStudentsBadge').textContent = totalStudents;
+        document.getElementById('activeStudentsBadge').textContent = activeStudents;
+        document.getElementById('pendingAppsBadge').textContent = pendingApplications;
+
+        // Load recent students
+        renderRecentStudents(allStudents.slice(0, 10));
+
+        console.log('✅ Dashboard loaded:', totalStudents, 'students');
+      } catch (err) {
+        console.error('Error loading dashboard:', err);
+        alert('Failed to load dashboard data. Please refresh the page.');
+      }
+    }
+
+    // Render Recent Students
+    function renderRecentStudents(students) {
+      const container = document.getElementById('recentStudentsTable');
+      
+      if (students.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#64748b;padding:20px">No students found.</p>';
+        return;
+      }
+
+      const table = `
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Program</th>
+              <th>Status</th>
+              <th>GPA</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map(s => `
+              <tr onclick="openStudentModal('${s.id}')">
+                <td style="font-family:monospace;font-weight:800">${s.student_id || 'N/A'}</td>
+                <td><strong>${s.full_name || 'Unknown'}</strong></td>
+                <td style="color:#2563eb">${s.email || 'N/A'}</td>
+                <td>${s.program || 'N/A'}</td>
+                <td><span class="status-badge ${s.enrollment_status || 'inactive'}">${formatStatus(s.enrollment_status)}</span></td>
+                <td><strong>${s.cumulative_gpa || s.current_gpa || '—'}</strong></td>
+                <td><button class="btn ghost" style="padding:6px 10px;font-size:11px" onclick="event.stopPropagation();openStudentModal('${s.id}')">View</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML = table;
+    }
+
+    // Load All Students
+    async function loadAllStudents() {
+      const container = document.getElementById('allStudentsTable');
+      container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading students...</p></div>';
+
+      try {
+        if (allStudents.length === 0) {
+          const { data, error } = await supabase
+            .from('students')
+            .select('*')
+            .order('full_name', { ascending: true });
+
+          if (error) throw error;
+          allStudents = data || [];
+        }
+
+        filteredStudents = [...allStudents];
+        renderAllStudents(filteredStudents);
+      } catch (err) {
+        console.error('Error loading students:', err);
+        container.innerHTML = '<p style="text-align:center;color:#ef4444;padding:20px">Failed to load students.</p>';
+      }
+    }
+
+    // Render All Students
+    function renderAllStudents(students) {
+      const container = document.getElementById('allStudentsTable');
+      
+      if (students.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#64748b;padding:20px">No students match your filters.</p>';
+        return;
+      }
+
+      const table = `
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Program</th>
+              <th>Semester</th>
+              <th>Status</th>
+              <th>Standing</th>
+              <th>GPA</th>
+              <th>Credits</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map(s => `
+              <tr onclick="openStudentModal('${s.id}')">
+                <td style="font-family:monospace;font-weight:800">${s.student_id || 'N/A'}</td>
+                <td><strong>${s.full_name || 'Unknown'}</strong></td>
+                <td style="color:#2563eb;font-size:12px">${s.email || 'N/A'}</td>
+                <td>${s.program || 'N/A'}</td>
+                <td>${s.current_semester || '—'}</td>
+                <td><span class="status-badge ${s.enrollment_status || 'inactive'}">${formatStatus(s.enrollment_status)}</span></td>
+                <td><span class="status-badge ${s.academic_standing || ''}">${formatStanding(s.academic_standing)}</span></td>
+                <td><strong>${s.cumulative_gpa || s.current_gpa || '—'}</strong></td>
+                <td>${s.credits_earned || s.total_credits_earned || 0}</td>
+                <td><button class="btn ghost" style="padding:6px 10px;font-size:11px" onclick="event.stopPropagation();openStudentModal('${s.id}')">Details</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML = table;
+    }
+
+    // Filter Students
+    function filterStudents() {
+      const status = document.getElementById('filterStatus').value;
+      const program = document.getElementById('filterProgram').value;
+      const standing = document.getElementById('filterStanding').value;
+      const semester = document.getElementById('filterSemester').value;
+      const searchQuery = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      filteredStudents = allStudents.filter(s => {
+        const matchStatus = status === 'all' || s.enrollment_status === status;
+        const matchProgram = program === 'all' || s.program === program;
+        const matchStanding = standing === 'all' || s.academic_standing === standing;
+        const matchSemester = semester === 'all' || s.current_semester === `Semester ${semester}`;
+        const matchSearch = !searchQuery || 
+          (s.full_name || '').toLowerCase().includes(searchQuery) ||
+          (s.student_id || '').toLowerCase().includes(searchQuery) ||
+          (s.email || '').toLowerCase().includes(searchQuery);
+
+        return matchStatus && matchProgram && matchStanding && matchSemester && matchSearch;
+      });
+
+      renderAllStudents(filteredStudents);
+    }
+
+    // Search
+    function setupSearch() {
+      const searchInput = document.getElementById('searchInput');
+      let timeout;
+      
+      searchInput.addEventListener('input', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          filterStudents();
+        }, 300);
+      });
+    }
+
+    // Open Student Modal
+    async function openStudentModal(studentId) {
+      const modal = document.getElementById('studentModal');
+      const modalBody = document.getElementById('modalStudentBody');
+      
+      modal.classList.add('open');
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading student details...</p></div>';
+
+      try {
+        // Fetch student
+        const { data: student, error: studentError } = await supabase
+          .from('students')
+          .select('*')
+          .eq('id', studentId)
+          .single();
+
+        if (studentError) throw studentError;
+
+        // Fetch application if exists
+        let application = null;
+        if (student.application_id) {
+          const { data: appData, error: appError } = await supabase
+            .from('applications')
+            .select('*')
+            .eq('id', student.application_id)
+            .single();
+          
+          if (!appError && appData) {
+            application = appData;
+          }
+        }
+
+        // Render student details
+        document.getElementById('modalStudentName').textContent = student.full_name || 'Student Details';
+        
+        const getAppData = (key) => {
+          if (!application) return null;
+          return application[key] || (application.metadata && application.metadata[key]) || null;
+        };
+
+        modalBody.innerHTML = `
+          <div class="details-grid">
+            <div class="detail-section">
+              <h3>👤 Personal Information</h3>
+              <div class="detail-row"><strong>Full Name</strong><span>${student.full_name || '—'}</span></div>
+              <div class="detail-row"><strong>Student ID</strong><span>${student.student_id || '—'}</span></div>
+              <div class="detail-row"><strong>Date of Birth</strong><span>${formatDate(student.date_of_birth) || '—'}</span></div>
+              <div class="detail-row"><strong>Gender</strong><span>${student.gender || getAppData('gender') || '—'}</span></div>
+              <div class="detail-row"><strong>Nationality</strong><span>${student.nationality || '—'}</span></div>
+            </div>
+
+            <div class="detail-section">
+              <h3>📧 Contact Information</h3>
+              <div class="detail-row"><strong>Email</strong><span>${student.email || '—'}</span></div>
+              <div class="detail-row"><strong>Personal Email</strong><span>${student.personal_email || getAppData('personalEmail') || '—'}</span></div>
+              <div class="detail-row"><strong>Phone</strong><span>${student.phone || '—'}</span></div>
+              <div class="detail-row"><strong>Address</strong><span>${getAppData('address') || '—'}</span></div>
+              <div class="detail-row"><strong>City</strong><span>${getAppData('city') || '—'}</span></div>
+            </div>
+
+            <div class="detail-section">
+              <h3>🎓 Academic Status</h3>
+              <div class="detail-row"><strong>Program</strong><span>${student.program || '—'}</span></div>
+              <div class="detail-row"><strong>Start Term</strong><span>${student.start_term || '—'}</span></div>
+              <div class="detail-row"><strong>Current Semester</strong><span>${student.current_semester || '—'}</span></div>
+              <div class="detail-row"><strong>Enrollment Status</strong><span class="status-badge ${student.enrollment_status}">${formatStatus(student.enrollment_status)}</span></div>
+              <div class="detail-row"><strong>Academic Standing</strong><span class="status-badge ${student.academic_standing}">${formatStanding(student.academic_standing)}</span></div>
+            </div>
+
+            <div class="detail-section">
+              <h3>📊 Academic Performance</h3>
+              <div class="detail-row"><strong>Cumulative GPA</strong><span>${student.cumulative_gpa || student.current_gpa || '—'}</span></div>
+              <div class="detail-row"><strong>Credits Earned</strong><span>${student.credits_earned || student.total_credits_earned || 0}</span></div>
+              <div class="detail-row"><strong>Credits Required</strong><span>${student.credits_required || 72}</span></div>
+              <div class="detail-row"><strong>Enrollment Date</strong><span>${formatDate(student.enrollment_date || student.enrolled_at) || '—'}</span></div>
+              <div class="detail-row"><strong>Expected Graduation</strong><span>${formatDate(student.expected_graduation_date || student.expected_graduation) || '—'}</span></div>
+            </div>
+
+            <div class="detail-section">
+              <h3>🚨 Emergency Contact</h3>
+              <div class="detail-row"><strong>Contact Name</strong><span>${student.emergency_contact_name || getAppData('emergencyName') || '—'}</span></div>
+              <div class="detail-row"><strong>Relationship</strong><span>${student.emergency_contact_relation || getAppData('emergencyRelationship') || '—'}</span></div>
+              <div class="detail-row"><strong>Phone</strong><span>${student.emergency_contact_phone || getAppData('emergencyPhone') || '—'}</span></div>
+              <div class="detail-row"><strong>Email</strong><span>${getAppData('emergencyEmail') || '—'}</span></div>
+            </div>
+
+            <div class="detail-section">
+              <h3>📝 System Information</h3>
+              <div class="detail-row"><strong>Record ID</strong><span style="font-family:monospace;font-size:11px">${student.id}</span></div>
+              <div class="detail-row"><strong>Application ID</strong><span style="font-family:monospace;font-size:11px">${student.application_id || 'N/A'}</span></div>
+              <div class="detail-row"><strong>Created</strong><span>${formatDate(student.created_at) || '—'}</span></div>
+              <div class="detail-row"><strong>Last Updated</strong><span>${formatDate(student.updated_at) || '—'}</span></div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
+            <button class="btn ghost" onclick="openStudentHub('${student.id}')">Open Student Hub</button>
+            <button class="btn warning" onclick="editStudent('${student.id}')">Edit Student</button>
+            <button class="btn primary" onclick="viewTranscript('${student.id}')">View Transcript</button>
+          </div>
+        `;
+
+      } catch (err) {
+        console.error('Error loading student details:', err);
+        modalBody.innerHTML = '<p style="text-align:center;color:#ef4444;padding:40px">Failed to load student details.</p>';
+      }
+    }
+
+    // Close Student Modal
+    function closeStudentModal() {
+      document.getElementById('studentModal').classList.remove('open');
+    }
+
+    // Helper Functions
+    function formatStatus(status) {
+      if (!status) return 'Inactive';
+      return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+
+    function formatStanding(standing) {
+      if (!standing) return 'Good Standing';
+      return standing.charAt(0).toUpperCase() + standing.slice(1);
+    }
+
+    function formatDate(dateString) {
+      if (!dateString) return null;
+      try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return dateString;
+        return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+      } catch (error) {
+        return dateString;
+      }
+    }
+
+    // Actions
+    function openStudentHub(studentId) {
+      const student = allStudents.find(s => s.id === studentId);
+      if (student) {
+        window.open(`hub.html?student=${student.student_id}`, '_blank');
+      }
+    }
+
+    function editStudent(studentId) {
+      alert('Edit student feature coming soon...');
+    }
+
+    function viewTranscript(studentId) {
+      alert('Transcript viewer coming soon...');
+    }
+
+    function exportStudents() {
+      alert('CSV export coming soon...');
+    }
+
+    function refreshData() {
+      window.location.reload();
+    }
+
+    function logout() {
+      if (confirm('Are you sure you want to logout?')) {
+        window.location.href = 'login.html';
+      }
+    }
+
+    // Close modal on backdrop click
+    document.getElementById('studentModal').addEventListener('click', (e) => {
+      if (e.target.id === 'studentModal') {
+        closeStudentModal();
+      }
+    });
+
+    // Close modal on ESC
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeStudentModal();
+      }
+    });
+  </script>
+</body>
+</html>
