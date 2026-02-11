@@ -128,9 +128,12 @@
       max-width: 520px;
       width: 100%;
       box-shadow: 0 25px 60px rgba(15, 23, 42, 0.6);
-      position: relative;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
       overflow: hidden;
-      margin: auto;
     }
 
     .alert-modal[open] {
@@ -1113,6 +1116,22 @@
         logoImg.src = 'data:image/png;base64,' + ACNHS_LOGO_BASE64;
       }
 
+      const emergencyAddressInput = document.getElementById('emergencyAddress');
+      if (emergencyAddressInput) {
+        let addressAlertShown = false;
+        const showAddressAlert = () => {
+          if (addressAlertShown) return;
+          addressAlertShown = true;
+          showAlertModal({
+            title: 'Armenian Address Only',
+            message: 'Please enter an ARMENIAN address only (not USA).',
+            type: 'error'
+          });
+        };
+        emergencyAddressInput.addEventListener('focus', showAddressAlert);
+        emergencyAddressInput.addEventListener('click', showAddressAlert);
+      }
+
       // Auto-populate control number from URL parameter (?control=ACN-2026-XXXXXX)
       const urlParams = new URLSearchParams(window.location.search);
       const controlParam = urlParams.get('control');
@@ -1818,6 +1837,8 @@
       }
     }
 
+    let lastAlertScrollY = null;
+
     function showAlertModal({ title, message, type = 'success' }) {
       const overlay = document.getElementById('alertOverlay');
       const modal = document.getElementById('alertModal');
@@ -1833,10 +1854,14 @@
       titleEl.textContent = title;
       body.textContent = message;
 
+      lastAlertScrollY = window.scrollY || window.pageYOffset || 0;
+
       overlay.classList.add('active');
       overlay.setAttribute('aria-hidden', 'false');
-      if (typeof modal.showModal === 'function') {
-        modal.showModal();
+      modal.setAttribute('open', '');
+
+      if (lastAlertScrollY) {
+        requestAnimationFrame(() => window.scrollTo({ top: lastAlertScrollY, left: 0, behavior: 'auto' }));
       }
     }
 
@@ -1847,8 +1872,10 @@
 
       overlay.classList.remove('active');
       overlay.setAttribute('aria-hidden', 'true');
-      if (typeof modal.close === 'function') {
-        modal.close();
+      modal.removeAttribute('open');
+
+      if (typeof lastAlertScrollY === 'number') {
+        requestAnimationFrame(() => window.scrollTo({ top: lastAlertScrollY, left: 0, behavior: 'auto' }));
       }
     }
 

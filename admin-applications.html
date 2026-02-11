@@ -2540,14 +2540,7 @@
 
       for (const base of baseCandidates) {
         if (!base) continue;
-        for (let suffix = 0; suffix < 15; suffix++) {
-          const slug = suffix === 0 ? base : `${base}${suffix + 1}`;
-          const candidate = `${slug}@${STUDENT_EMAIL_DOMAIN}`;
-          const exists = await institutionalEmailExists(supabase, candidate);
-          if (!exists) {
-            return candidate;
-          }
-        }
+        return `${base}@${STUDENT_EMAIL_DOMAIN}`;
       }
 
       return `student${Date.now()}@${STUDENT_EMAIL_DOMAIN}`;
@@ -2722,11 +2715,7 @@
 
       const payload = { ...(linkResult?.payload || getPayloadForApp(app)) };
       const personalEmail = payload.email || app.email || null;
-      let institutionalEmail = payload.institutionalEmail || payload.studentEmail || payload.studentPortal?.institutionalEmail || null;
-
-      if (!institutionalEmail) {
-        institutionalEmail = await generateInstitutionalEmail(supabase, app, payload);
-      }
+      const institutionalEmail = await generateInstitutionalEmail(supabase, app, payload);
 
       const provisionedAt = new Date().toISOString();
       const updatedPortal = {
@@ -4013,7 +4002,7 @@
           <h3 style="${titleStyle}">🌍 Residency Information</h3>
           ${buildTable([
             ['Date Permanently Left Armenia', formatDateDDMonYYYY(residency.permanent_departure_date)],
-            ['Visited Armenia After Leaving', residency.visited_armenia_after_leaving ? '<span style="color:#2dd4bf;font-weight:bold;">YES</span>' : '<span style="color:#94a3b8;font-weight:bold;">NO</span>']
+            ['Visited Armenia After Leaving', residency.visited_armenia_after_leaving ? 'YES' : 'NO']
           ])}
         </div>
       `;
@@ -8026,14 +8015,6 @@
             throw new Error(provisionError?.message || 'Unable to provision student portal access for this enrollment.');
           }
         }
-
-        if (newStatus === 'ENROLLED') {
-          try {
-            studentLinkResult = await ensureEnrollmentProvisioned(supabase, currentApp, studentLinkResult);
-          } catch (provisionError) {
-            throw new Error(provisionError?.message || 'Unable to provision student portal access for this enrollment.');
-          }
-        }
         
         console.log('🔍 DEBUG: Updating application status', {
           currentApplicationId,
@@ -8195,6 +8176,14 @@
             }
           } catch (studentError) {
             throw new Error(studentError?.message || 'Unable to assign student ID for this approval.');
+          }
+        }
+
+        if (newStatus === 'ENROLLED') {
+          try {
+            studentLinkResult = await ensureEnrollmentProvisioned(supabase, currentApp, studentLinkResult);
+          } catch (provisionError) {
+            throw new Error(provisionError?.message || 'Unable to provision student portal access for this enrollment.');
           }
         }
         

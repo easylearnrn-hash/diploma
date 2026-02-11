@@ -259,6 +259,22 @@
       grid-template-columns:1.15fr .85fr;
       gap:16px;
     }
+    
+    /* Hide right column only in notes view */
+    .view-notes .content{
+      grid-template-columns:1fr;
+    }
+    .view-notes .stack:last-child{
+      display:none;
+    }
+    
+    /* Hide modules card in notes view */
+    .view-notes #modulesList{
+      display:none;
+    }
+    .view-notes .card:has(#modulesList){
+      display:none;
+    }
 
     /* Cards */
     .card{
@@ -751,24 +767,32 @@
       display:flex;
       align-items:center;
       justify-content:space-between;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: 16px;
+      margin-bottom: 16px;
     }
     .crumb{
       display:flex;
       align-items:center;
-      gap: 10px;
+      gap: 12px;
       min-width: 0;
+      flex: 1;
+    }
+    .crumb .btn{
+      flex-shrink: 0;
     }
     .crumb-title{
       min-width:0;
+      flex: 1;
     }
     .crumb-title .big{
       color: #0f172a;
       font-weight: 900;
-      font-size: 14px;
+      font-size: 18px;
       margin:0;
-      line-height:1.2;
+      line-height:1.3;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .crumb-title .small{
       margin: 4px 0 0 0;
@@ -777,7 +801,6 @@
       white-space: nowrap;
       overflow:hidden;
       text-overflow: ellipsis;
-      max-width: 52ch;
     }
 
     /* Notes list */
@@ -1209,7 +1232,8 @@
               </div>
 
               <div class="notes-empty" id="catsEmpty" style="display:none; margin-top:12px;">
-                No categories match your search.
+                <p><strong>No notes found in Notes Library.</strong></p>
+                <p style="font-size: 13px; margin-top: 8px; color: #64748b;">Open <strong>notes.html</strong> to add study notes, then they'll appear here automatically.</p>
               </div>
             </section>
 
@@ -1757,6 +1781,10 @@
       a.classList.add("active");
 
       const view = a.dataset.view;
+      
+      // Toggle view class on body for styling
+      document.body.className = `view-${view}`;
+      
       const titleMap = {
         dashboard: ["Dashboard", "Everything you need — notes, modules, schedule, grades, and announcements."],
         notes: ["Notes Library", "Search, filter, and open official notes in a clean study view."],
@@ -1795,7 +1823,6 @@
     });
 
     // ==================== MODERN NOTES LIBRARY SYSTEM ====================
-    const NOTES_STORAGE_KEY = 'acnhs_topics';
     const PUBLISHED_NOTES_KEY = 'acnhs_published_notes';
     const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
 
@@ -1810,68 +1837,48 @@
     const visibleNotesCount = document.getElementById('visibleNotesCount');
     const catGrid = document.getElementById('catGrid');
 
-    // Get all notes with categories
+    // HARDCODED NOTES - Directly wired to HTML files
+    const HARDCODED_NOTES = [
+      // Fundamentals
+      { title: 'Fundamentals of Nursing - NCLEX Review', htmlFile: 'fundamentals-nursing-nclex.html', category: 'Fundamentals' },
+      { title: 'Oxygenation Basics', htmlFile: 'oxygenation-basics-nursing-nclex.html', category: 'Fundamentals' },
+      { title: 'Pain Assessment', htmlFile: 'pain-assessment-nursing-nclex.html', category: 'Fundamentals' },
+      { title: 'Nutrition & Feeding', htmlFile: 'nutrition-feeding-nursing-nclex.html', category: 'Fundamentals' },
+      { title: 'Hygiene & Grooming', htmlFile: 'hygiene-grooming-nursing-nclex.html', category: 'Fundamentals' },
+      { title: 'Skin Integrity & Pressure Injuries', htmlFile: 'skin-integrity-pressure-injuries-nclex.html', category: 'Fundamentals' },
+      { title: 'Delegation Principles', htmlFile: 'delegation-nursing-nclex.html', category: 'Fundamentals' },
+      { title: "Nurse's Role in Informed Consent", htmlFile: 'informed-consent-nursing.html', category: 'Fundamentals' },
+      { title: 'Scope of Practice', htmlFile: 'scope-of-practice-nursing.html', category: 'Fundamentals' },
+      { title: 'Documentation & Informatics', htmlFile: 'documentation-informatics-nursing.html', category: 'Fundamentals' },
+      { title: 'Vital Signs Interpretation', htmlFile: 'vital-signs-interpretation-nursing.html', category: 'Fundamentals' },
+      { title: 'BMI Calculation', htmlFile: 'bmi-calculation-nursing.html', category: 'Fundamentals' },
+      { title: "Maslow's Hierarchy of Needs", htmlFile: 'maslows-hierarchy-nursing.html', category: 'Fundamentals' },
+      { title: 'Client Positioning', htmlFile: 'client-positioning-nursing.html', category: 'Fundamentals' },
+      { title: 'SBAR Communication', htmlFile: 'sbar-communication-nursing.html', category: 'Fundamentals' },
+      { title: 'Head-to-Toe Assessment', htmlFile: 'head-to-toe-assessment-nursing.html', category: 'Fundamentals' },
+      { title: 'Blood Products Administration', htmlFile: 'blood-products-administration-nursing.html', category: 'Fundamentals' },
+      { title: 'Physical Exam: Bowel Sounds', htmlFile: 'physical-exam-bowel-sounds-nursing.html', category: 'Fundamentals' },
+      { title: 'Emergency Triage Tag Colors', htmlFile: 'emergency-triage-tag-colors-nursing.html', category: 'Fundamentals' },
+      { title: 'Tube Care', htmlFile: 'tube-care-nursing.html', category: 'Fundamentals' },
+      { title: 'Elimination & Intake/Output', htmlFile: 'elimination-intake-output-nursing.html', category: 'Fundamentals' },
+      { title: 'Infection Control & Precautions', htmlFile: 'precautions-nursing.html', category: 'Fundamentals' },
+      { title: 'Complementary & Alternative Medicine', htmlFile: 'complementary-alternative-medicine-nursing.html', category: 'Fundamentals' },
+      { title: 'Physical Assessment Techniques', htmlFile: 'physical-assessment-nursing.html', category: 'Fundamentals' },
+      { title: 'Amputation Care', htmlFile: 'amputation-nursing.html', category: 'Fundamentals' },
+      { title: 'Family Dynamics', htmlFile: 'family-dynamics-nursing.html', category: 'Fundamentals' },
+    ];
+
+    // Get all notes (hardcoded, not from localStorage)
     function getAllNotesWithCategories() {
-      try {
-        const topics = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
-        const allNotes = [];
-        
-        // Exclude dashboard-only profile modules from Notes Library
-        const EXCLUDED_CATEGORIES = [
-          'Progress Overview',
-          'Personal Identity',
-          '👤 Personal Identity',
-          'Contact Information',
-          '📧 Contact Information',
-          'Current Address',
-          '🏠 Current Address',
-          'Citizenship & Identity',
-          '🌍 Citizenship & Identity',
-          'Academic Status',
-          '🎓 Academic Status',
-          'Academic Progress',
-          '📊 Academic Progress',
-          'Emergency Contacts',
-          '🚨 Emergency Contacts',
-          'High School Education',
-          '🏫 High School Education',
-          'Test Scores',
-          '📝 Test Scores',
-          'Complete Student Profile',
-          'Previous College',
-          '🎓 Previous College',
-          'Professional Experience',
-          '💼 Professional Experience'
-        ];
-        
-        topics.forEach(topic => {
-          // Skip excluded profile/dashboard categories
-          if (EXCLUDED_CATEGORIES.includes(topic.title)) {
-            return;
-          }
-          
-          if (topic.notes && Array.isArray(topic.notes)) {
-            topic.notes.forEach(note => {
-              if (note.htmlFile) {
-                allNotes.push({
-                  id: note.htmlFile,
-                  noteId: note.id,
-                  title: note.title,
-                  htmlFile: note.htmlFile,
-                  category: topic.title,
-                  created: note.created,
-                  type: note.type || 'html'
-                });
-              }
-            });
-          }
-        });
-        
-        return allNotes;
-      } catch (error) {
-        console.error('Error loading notes:', error);
-        return [];
-      }
+      console.log('📥 Using hardcoded notes list');
+      console.log(`📊 Total notes: ${HARDCODED_NOTES.length}`);
+      return HARDCODED_NOTES.map(note => ({
+        id: note.htmlFile,
+        title: note.title,
+        htmlFile: note.htmlFile,
+        category: note.category,
+        type: 'html'
+      }));
     }
 
     // Get published status
@@ -1904,9 +1911,15 @@
 
     // Render categories
     function renderCategories() {
-      if (!catGrid) return;
+      console.log('🎨 renderCategories() called');
+      if (!catGrid) {
+        console.error('❌ catGrid element not found!');
+        return;
+      }
       
       const allNotes = getAllNotesWithCategories();
+      console.log(`📚 getAllNotesWithCategories returned: ${allNotes.length} notes`);
+      
       const categoryCounts = {};
       
       allNotes.forEach(note => {
@@ -1914,7 +1927,17 @@
       });
 
       const categories = Object.keys(categoryCounts).sort();
+      console.log('📂 Categories to display:', categories);
+      console.log('🔢 Category counts:', categoryCounts);
       
+      if (categories.length === 0) {
+        console.warn('⚠️ No categories to display - showing empty state');
+        catGrid.innerHTML = '';
+        if (catsEmpty) catsEmpty.style.display = '';
+        return;
+      }
+      
+      console.log(`✅ Rendering ${categories.length} categories`);
       catGrid.innerHTML = categories.map(category => `
         <div class="cat-card" role="button" tabindex="0"
              data-category="${escapeAttr(category)}"
@@ -1933,6 +1956,8 @@
         </div>
       `).join('');
 
+      console.log('✅ catGrid.innerHTML set, length:', catGrid.innerHTML.length);
+      if (catsEmpty) catsEmpty.style.display = 'none';
       filterCurrentView();
     }
 
@@ -2064,7 +2089,7 @@
 
     console.log('✅ Modern Notes Library System initialized');
     console.log(`👤 User role: ${isAdmin ? 'Admin' : 'Student'}`);
-    console.log(`📚 Total notes: ${getAllNotesWithCategories().length}`);
+    console.log(`📚 Total notes available: ${HARDCODED_NOTES.length}`);
   </script>
 </body>
 </html>

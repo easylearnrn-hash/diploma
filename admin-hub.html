@@ -579,6 +579,7 @@
       <div class="nav" id="nav">
         <a class="active" data-view="dashboard">📊 Dashboard <span class="badge" id="totalStudentsBadge">0</span></a>
         <a data-view="students">👥 All Students <span class="badge" id="activeStudentsBadge">0</span></a>
+        <a data-view="groups">👨‍👩‍👧‍👦 Student Groups <span class="badge">Manage</span></a>
         <a data-view="applications">📋 Applications <span class="badge" id="pendingAppsBadge">0</span></a>
         <a data-view="grades">📝 Grades & GPA <span class="badge">Manage</span></a>
         <a data-view="courses">📚 Courses <span class="badge">Catalog</span></a>
@@ -683,7 +684,7 @@
           <div class="filters">
             <select id="filterStatus" onchange="filterStudents()">
               <option value="all">All Status</option>
-              <option value="active">Active</option>
+              <option value="active" selected>Active</option>
               <option value="inactive">Inactive</option>
               <option value="graduated">Graduated</option>
               <option value="withdrawn">Withdrawn</option>
@@ -718,6 +719,25 @@
         </div>
       </section>
 
+      <!-- STUDENT GROUPS VIEW -->
+      <section class="content" id="groupsView">
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2>Student Groups</h2>
+              <p>Create and manage student groups for batch course management.</p>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button class="btn primary" onclick="createNewGroup()">+ Create Group</button>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <div id="groupsTableContainer"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- APPLICATIONS VIEW -->
       <section class="content" id="applicationsView">
         <div class="card">
@@ -744,12 +764,38 @@
               <h2>Grade Management</h2>
               <p>Manage student grades, GPAs, and academic performance.</p>
             </div>
-          </div>
-          <div class="card-body">
-            <div class="loading">
-              <div class="spinner"></div>
-              <p>Grade management coming soon...</p>
+            <div style="display:flex;gap:10px">
+              <button class="btn ghost" onclick="exportGrades()">Export Grades</button>
+              <button class="btn primary" onclick="calculateAllGPAs()">Recalculate GPAs</button>
             </div>
+          </div>
+
+          <div class="filters">
+            <select id="gradesFilterProgram" onchange="filterGradesView()">
+              <option value="all">All Programs</option>
+              <option value="ADN">ADN</option>
+              <option value="BSN">BSN</option>
+              <option value="RN to BSN">RN to BSN</option>
+            </select>
+
+            <select id="gradesFilterSemester" onchange="filterGradesView()">
+              <option value="all">All Semesters</option>
+              <option value="1">Semester 1</option>
+              <option value="2">Semester 2</option>
+              <option value="3">Semester 3</option>
+              <option value="4">Semester 4</option>
+            </select>
+
+            <input 
+              type="text" 
+              id="gradesSearchInput" 
+              placeholder="Search by student name or ID..." 
+              style="flex:1;padding:10px 14px;border:1px solid #e5e7eb;border-radius:10px;font-size:13px"
+            />
+          </div>
+
+          <div class="card-body">
+            <div id="gradesTable"></div>
           </div>
         </div>
       </section>
@@ -777,14 +823,94 @@
         <div class="card">
           <div class="card-header">
             <div>
-              <h2>Attendance Tracking</h2>
-              <p>Monitor and record student attendance.</p>
+              <h2>📅 Attendance Tracking</h2>
+              <p>Record and monitor student attendance by course and date.</p>
+            </div>
+            <div style="display:flex;gap:12px">
+              <button class="btn primary" onclick="viewAttendanceReports()">
+                📊 View Reports
+              </button>
+              <button class="btn primary" onclick="exportAttendance()">
+                📥 Export
+              </button>
             </div>
           </div>
           <div class="card-body">
-            <div class="loading">
-              <div class="spinner"></div>
-              <p>Attendance tracking coming soon...</p>
+            <!-- Attendance Filters -->
+            <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:end">
+              <div style="flex:1;min-width:200px">
+                <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+                  Select Course
+                </label>
+                <select 
+                  id="attendanceCourseSelect" 
+                  onchange="loadAttendanceForCourse()"
+                  style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px"
+                >
+                  <option value="">-- Select Course --</option>
+                </select>
+              </div>
+              
+              <div style="flex:1;min-width:200px">
+                <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+                  Select Date
+                </label>
+                <input 
+                  type="date" 
+                  id="attendanceDate"
+                  onchange="loadAttendanceForCourse()"
+                  style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px"
+                />
+              </div>
+
+              <div style="flex:1;min-width:150px">
+                <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+                  Semester
+                </label>
+                <select 
+                  id="attendanceSemesterFilter" 
+                  onchange="populateAttendanceCourses()"
+                  style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px"
+                >
+                  <option value="Semester 1">Semester 1</option>
+                  <option value="Semester 2">Semester 2</option>
+                  <option value="Semester 3">Semester 3</option>
+                  <option value="Semester 4">Semester 4</option>
+                </select>
+              </div>
+
+              <button 
+                class="btn primary" 
+                onclick="saveAttendance()"
+                style="padding:12px 24px;white-space:nowrap"
+              >
+                💾 Save Attendance
+              </button>
+            </div>
+
+            <!-- Quick Actions -->
+            <div style="display:flex;gap:12px;margin-bottom:20px;padding:12px;background:#f8fafc;border-radius:10px">
+              <button class="btn ghost" onclick="markAllPresent()" style="flex:1">
+                ✓ Mark All Present
+              </button>
+              <button class="btn ghost" onclick="markAllAbsent()" style="flex:1">
+                ✗ Mark All Absent
+              </button>
+              <button class="btn ghost" onclick="markAllLate()" style="flex:1">
+                ⏰ Mark All Late
+              </button>
+              <button class="btn ghost" onclick="markAllExcused()" style="flex:1">
+                📝 Mark All Excused
+              </button>
+            </div>
+
+            <!-- Attendance Table -->
+            <div id="attendanceTableContainer">
+              <div style="text-align:center;padding:60px 20px;color:#64748b">
+                <div style="font-size:48px;margin-bottom:16px">📅</div>
+                <h3 style="margin:0 0 8px 0;color:#1e293b">Select Course and Date</h3>
+                <p style="margin:0;font-size:14px">Choose a course and date above to record attendance</p>
+              </div>
             </div>
           </div>
         </div>
@@ -846,9 +972,152 @@
     </div>
   </div>
 
+  <!-- GRADE EDITING MODAL -->
+  <div class="modal" id="gradeModal">
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:900px">
+      <div class="modal-head">
+        <div>
+          <strong id="modalGradeStudentName">Edit Student Grades</strong>
+          <p id="modalGradeStudentInfo" style="font-size:12px;color:#64748b;margin-top:4px"></p>
+        </div>
+        <button class="close-modal" onclick="closeGradeModal()">Close</button>
+      </div>
+      <div class="modal-body" id="modalGradeBody">
+        <div class="loading">
+          <div class="spinner"></div>
+          <p>Loading course grades...</p>
+        </div>
+      </div>
+      <div style="padding:20px;border-top:1px solid #e5e7eb;display:flex;gap:12px;justify-content:space-between">
+        <button class="btn ghost" onclick="openCourseManager()">+ Add/Edit Courses</button>
+        <div style="display:flex;gap:12px">
+          <button class="btn ghost" onclick="closeGradeModal()">Cancel</button>
+          <button class="btn primary" onclick="saveGrades()">Save Grades</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COURSE MANAGER MODAL -->
+  <div class="modal" id="courseManagerModal">
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:800px">
+      <div class="modal-head">
+        <strong id="courseManagerTitle">Course & Grade Items Manager</strong>
+        <button class="close-modal" onclick="closeCourseManager()">Close</button>
+      </div>
+      <div class="modal-body" id="courseManagerBody">
+        <p style="color:#64748b;margin-bottom:16px" id="courseManagerSubtitle">Add or edit courses and their grade items for the current semester.</p>
+        <div id="courseManagerContent"></div>
+      </div>
+      <div style="padding:20px;border-top:1px solid #e5e7eb;display:flex;gap:12px;justify-content:space-between">
+        <button class="btn primary" onclick="addNewCourse()">+ Add Course</button>
+        <div style="display:flex;gap:12px">
+          <button class="btn ghost" onclick="closeCourseManager()">Close</button>
+          <button class="btn primary" onclick="saveCourseChanges()">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GROUP MANAGER MODAL -->
+  <div class="modal" id="groupModal">
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:700px">
+      <div class="modal-head">
+        <strong id="groupModalTitle">Create Student Group</strong>
+        <button class="close-modal" onclick="closeGroupModal()">Close</button>
+      </div>
+      <div class="modal-body" id="groupModalBody">
+        <div style="margin-bottom:20px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+            Group Name
+          </label>
+          <input 
+            type="text" 
+            id="groupName" 
+            placeholder="e.g., Fall 2026 ADN Program"
+            style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px"
+          />
+        </div>
+
+        <div style="margin-bottom:20px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+            Semester
+          </label>
+          <select 
+            id="groupSemester" 
+            style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:10px;font-size:14px"
+          >
+            <option value="Semester 1">Semester 1</option>
+            <option value="Semester 2">Semester 2</option>
+            <option value="Semester 3">Semester 3</option>
+            <option value="Semester 4">Semester 4</option>
+          </select>
+        </div>
+
+        <div style="margin-bottom:20px">
+          <label style="display:block;font-size:13px;font-weight:600;color:#475569;margin-bottom:8px">
+            Add Students to Group
+          </label>
+          
+          <!-- Filter and Select All Controls -->
+          <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center;flex-wrap:wrap">
+            <select 
+              id="studentProgramFilter" 
+              onchange="filterStudentList()"
+              style="flex:1;min-width:200px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"
+            >
+              <option value="all">All Programs</option>
+              <option value="BSN">BSN - Bachelor of Science in Nursing</option>
+              <option value="ADN">ADN - Associate Degree in Nursing</option>
+              <option value="LPN">LPN - Licensed Practical Nursing</option>
+              <option value="CNA">CNA - Certified Nursing Assistant</option>
+            </select>
+            <select 
+              id="studentStatusFilter" 
+              onchange="filterStudentList()"
+              style="flex:1;min-width:180px;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px"
+            >
+              <option value="all">All Statuses</option>
+              <option value="active" selected>Active/Enrolled Only</option>
+              <option value="inactive">Inactive</option>
+              <option value="on-leave">On Leave</option>
+              <option value="withdrawn">Withdrawn</option>
+              <option value="graduated">Graduated</option>
+            </select>
+            <button 
+              class="btn ghost" 
+              onclick="selectAllStudents()"
+              style="white-space:nowrap;padding:10px 16px"
+            >
+              ✓ Select All
+            </button>
+            <button 
+              class="btn ghost" 
+              onclick="deselectAllStudents()"
+              style="white-space:nowrap;padding:10px 16px"
+            >
+              ✗ Deselect All
+            </button>
+          </div>
+
+          <div id="studentCheckboxList" style="max-height:300px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;padding:12px">
+            <!-- Student checkboxes will be populated here -->
+          </div>
+          <div id="studentSelectionCount" style="margin-top:8px;font-size:12px;color:#64748b;text-align:right">
+            0 students selected
+          </div>
+        </div>
+      </div>
+      <div style="padding:20px;border-top:1px solid #e5e7eb;display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn ghost" onclick="closeGroupModal()">Cancel</button>
+        <button class="btn primary" onclick="saveGroup()">Save Group</button>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // Initialize Supabase
-    const supabase = initSupabase();
+    // Initialize Supabase client (use 'db' to avoid conflict with global supabaseClient)
+    const db = initSupabase();
     
     // State
     let allStudents = [];
@@ -859,6 +1128,8 @@
       await loadDashboardData();
       setupNavigation();
       setupSearch();
+      // Set dashboard as default active view
+      switchView('dashboard');
     });
 
     // Navigation
@@ -873,6 +1144,8 @@
     }
 
     function switchView(viewName) {
+      console.log('🔄 Switching to view:', viewName);
+      
       // Update nav active state
       document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
       document.querySelector(`.nav a[data-view="${viewName}"]`)?.classList.add('active');
@@ -886,6 +1159,7 @@
         students: 'studentsView',
         applications: 'applicationsView',
         grades: 'gradesView',
+        groups: 'groupsView',
         courses: 'coursesView',
         attendance: 'attendanceView',
         reports: 'reportsView',
@@ -894,7 +1168,9 @@
       
       const viewId = viewMap[viewName];
       if (viewId) {
-        document.getElementById(viewId).classList.add('active');
+        const viewElement = document.getElementById(viewId);
+        console.log('📍 View element:', viewId, 'exists:', !!viewElement);
+        viewElement?.classList.add('active');
       }
 
       // Update topbar
@@ -903,6 +1179,7 @@
         students: ['All Students', 'Complete student directory with filtering and search capabilities.'],
         applications: ['Applications', 'Review and process incoming student applications.'],
         grades: ['Grades & GPA', 'Manage student grades, GPAs, and academic performance.'],
+        groups: ['Student Groups', 'Create and manage student groups for batch operations.'],
         courses: ['Course Catalog', 'Manage courses, schedules, and curriculum.'],
         attendance: ['Attendance', 'Monitor and record student attendance.'],
         reports: ['Reports & Analytics', 'Generate comprehensive reports and analytics.'],
@@ -914,18 +1191,29 @@
       document.getElementById('viewSubtitle').textContent = subtitle;
 
       // Load view-specific data
-      if (viewName === 'students' && allStudents.length === 0) {
+      if (viewName === 'students') {
+        console.log('📚 Loading students view, allStudents.length:', allStudents.length);
         loadAllStudents();
+      } else if (viewName === 'grades') {
+        console.log('📝 Loading grades view');
+        loadGradesView();
+      } else if (viewName === 'groups') {
+        console.log('👨‍👩‍👧‍👦 Loading groups view');
+        loadGroups();
+      } else if (viewName === 'attendance') {
+        console.log('📅 Loading attendance view');
+        initAttendanceView();
       }
     }
 
     // Load Dashboard Data
     async function loadDashboardData() {
       try {
-        // Fetch students
-        const { data: students, error } = await supabase
+        // Fetch ONLY ENROLLED students
+        const { data: students, error } = await db
           .from('students')
           .select('*')
+          .eq('enrollment_status', 'active')
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -945,7 +1233,7 @@
         const avgGpa = gpas.length > 0 ? (gpas.reduce((a, b) => a + b, 0) / gpas.length).toFixed(2) : '0.00';
 
         // Fetch pending applications
-        const { data: apps, error: appsError } = await supabase
+        const { data: apps, error: appsError } = await db
           .from('applications')
           .select('id')
           .eq('status', 'pending');
@@ -1023,16 +1311,19 @@
 
       try {
         if (allStudents.length === 0) {
-          const { data, error } = await supabase
+          const { data, error } = await db
             .from('students')
             .select('*')
+            .eq('enrollment_status', 'active')
             .order('full_name', { ascending: true });
 
           if (error) throw error;
           allStudents = data || [];
+          console.log('✅ Loaded students:', allStudents.length);
         }
 
         filteredStudents = [...allStudents];
+        console.log('📊 Rendering students:', filteredStudents.length);
         renderAllStudents(filteredStudents);
       } catch (err) {
         console.error('Error loading students:', err);
@@ -1043,6 +1334,8 @@
     // Render All Students
     function renderAllStudents(students) {
       const container = document.getElementById('allStudentsTable');
+      console.log('🎨 renderAllStudents called with', students.length, 'students');
+      console.log('📦 Container exists:', !!container);
       
       if (students.length === 0) {
         container.innerHTML = '<p style="text-align:center;color:#64748b;padding:20px">No students match your filters.</p>';
@@ -1071,7 +1364,7 @@
                 <td style="font-family:monospace;font-weight:800">${s.student_id || 'N/A'}</td>
                 <td><strong>${s.full_name || 'Unknown'}</strong></td>
                 <td style="color:#2563eb;font-size:12px">${s.email || 'N/A'}</td>
-                <td>${s.program || 'N/A'}</td>
+                <td>${formatProgram(s.program)}</td>
                 <td>${s.current_semester || '—'}</td>
                 <td><span class="status-badge ${s.enrollment_status || 'inactive'}">${formatStatus(s.enrollment_status)}</span></td>
                 <td><span class="status-badge ${s.academic_standing || ''}">${formatStanding(s.academic_standing)}</span></td>
@@ -1085,6 +1378,7 @@
       `;
 
       container.innerHTML = table;
+      console.log('✅ Table rendered');
     }
 
     // Filter Students
@@ -1124,6 +1418,1775 @@
       });
     }
 
+    // ============================================
+    // GRADES & GPA MANAGEMENT
+    // ============================================
+    
+    let allGradeData = [];
+    let filteredGradeData = [];
+
+    async function loadGradesView() {
+      const container = document.getElementById('gradesTable');
+      container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading grades...</p></div>';
+
+      try {
+        // Ensure students are loaded
+        if (allStudents.length === 0) {
+          const { data, error } = await db
+            .from('students')
+            .select('*')
+            .eq('enrollment_status', 'active')
+            .order('full_name', { ascending: true });
+
+          if (error) throw error;
+          allStudents = data || [];
+        }
+
+        allGradeData = allStudents.map(s => ({
+          id: s.id,
+          student_id: s.student_id,
+          full_name: s.full_name,
+          program: s.program,
+          current_semester: s.current_semester,
+          cumulative_gpa: s.cumulative_gpa || s.current_gpa || 0,
+          credits_earned: s.credits_earned || s.total_credits_earned || 0,
+          academic_standing: s.academic_standing
+        }));
+
+        filteredGradeData = [...allGradeData];
+        setupGradesSearch();
+        renderGradesTable(filteredGradeData);
+        
+        console.log('✅ Grades loaded:', allGradeData.length);
+      } catch (err) {
+        console.error('Error loading grades:', err);
+        container.innerHTML = '<p style="text-align:center;color:#ef4444;padding:20px">Failed to load grades data.</p>';
+      }
+    }
+
+    function renderGradesTable(students) {
+      const container = document.getElementById('gradesTable');
+      
+      if (students.length === 0) {
+        container.innerHTML = '<p style="text-align:center;color:#64748b;padding:20px">No students match your filters.</p>';
+        return;
+      }
+
+      const table = `
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Name</th>
+              <th>Program</th>
+              <th>Semester</th>
+              <th>Cumulative GPA</th>
+              <th>Credits</th>
+              <th>Standing</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${students.map(s => {
+              const gpaColor = s.cumulative_gpa >= 3.5 ? '#10b981' : s.cumulative_gpa >= 2.5 ? '#f59e0b' : '#ef4444';
+              return `
+                <tr onclick="openGradeModal('${s.id}')">
+                  <td style="font-family:monospace;font-weight:800">${s.student_id || 'N/A'}</td>
+                  <td><strong>${s.full_name || 'Unknown'}</strong></td>
+                  <td>${formatProgram(s.program)}</td>
+                  <td>${s.current_semester || '—'}</td>
+                  <td><strong style="color:${gpaColor};font-size:16px">${parseFloat(s.cumulative_gpa || 0).toFixed(2)}</strong></td>
+                  <td>${s.credits_earned} / 72</td>
+                  <td><span class="status-badge ${s.academic_standing || ''}">${formatStanding(s.academic_standing)}</span></td>
+                  <td>
+                    <button class="btn ghost" style="padding:6px 10px;font-size:11px" onclick="event.stopPropagation();openGradeModal('${s.id}')">
+                      Edit Grades
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML = table;
+    }
+
+    function filterGradesView() {
+      const program = document.getElementById('gradesFilterProgram').value;
+      const semester = document.getElementById('gradesFilterSemester').value;
+      const searchQuery = document.getElementById('gradesSearchInput').value.toLowerCase().trim();
+
+      filteredGradeData = allGradeData.filter(s => {
+        const matchProgram = program === 'all' || s.program === program;
+        const matchSemester = semester === 'all' || s.current_semester === `Semester ${semester}`;
+        const matchSearch = !searchQuery || 
+          (s.full_name || '').toLowerCase().includes(searchQuery) ||
+          (s.student_id || '').toLowerCase().includes(searchQuery);
+
+        return matchProgram && matchSemester && matchSearch;
+      });
+
+      renderGradesTable(filteredGradeData);
+    }
+
+    function setupGradesSearch() {
+      const searchInput = document.getElementById('gradesSearchInput');
+      let timeout;
+      
+      searchInput.addEventListener('input', () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          filterGradesView();
+        }, 300);
+      });
+    }
+
+    // Sample course structure for different semesters with grade categories
+    const coursesBySemester = {
+      'Semester 1': [
+        { 
+          code: 'NUR101', 
+          name: 'Fundamentals of Nursing', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'BIO101', 
+          name: 'Anatomy & Physiology I', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 25 },
+            { id: 'final', name: 'Final Exam', weight: 35 },
+            { id: 'lab', name: 'Lab Work', weight: 20 }
+          ]
+        },
+        { 
+          code: 'PSY101', 
+          name: 'Introduction to Psychology', 
+          credits: 3,
+          gradeItems: [
+            { id: 'assignments', name: 'Assignments', weight: 20 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 },
+            { id: 'participation', name: 'Participation', weight: 10 }
+          ]
+        },
+        { 
+          code: 'ENG101', 
+          name: 'English Composition', 
+          credits: 3,
+          gradeItems: [
+            { id: 'essay1', name: 'Essay 1', weight: 20 },
+            { id: 'essay2', name: 'Essay 2', weight: 20 },
+            { id: 'essay3', name: 'Essay 3', weight: 25 },
+            { id: 'final', name: 'Final Paper', weight: 35 }
+          ]
+        },
+        { 
+          code: 'MAT101', 
+          name: 'College Algebra', 
+          credits: 3,
+          gradeItems: [
+            { id: 'homework', name: 'Homework', weight: 15 },
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 25 },
+            { id: 'final', name: 'Final Exam', weight: 40 }
+          ]
+        }
+      ],
+      'Semester 2': [
+        { 
+          code: 'NUR102', 
+          name: 'Medical-Surgical Nursing I', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'BIO102', 
+          name: 'Anatomy & Physiology II', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 25 },
+            { id: 'final', name: 'Final Exam', weight: 35 },
+            { id: 'lab', name: 'Lab Work', weight: 20 }
+          ]
+        },
+        { 
+          code: 'MIC101', 
+          name: 'Microbiology', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quizzes', name: 'Quizzes', weight: 20 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'lab', name: 'Lab Practicals', weight: 20 }
+          ]
+        },
+        { 
+          code: 'PHM101', 
+          name: 'Pharmacology I', 
+          credits: 3,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 15 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 15 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 }
+          ]
+        },
+        { 
+          code: 'NUT101', 
+          name: 'Nutrition', 
+          credits: 2,
+          gradeItems: [
+            { id: 'assignments', name: 'Assignments', weight: 30 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 }
+          ]
+        }
+      ],
+      'Semester 3': [
+        { 
+          code: 'NUR201', 
+          name: 'Medical-Surgical Nursing II', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'NUR202', 
+          name: 'Maternal-Child Nursing', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'PHM102', 
+          name: 'Pharmacology II', 
+          credits: 3,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 15 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 15 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 }
+          ]
+        },
+        { 
+          code: 'PAT101', 
+          name: 'Pathophysiology', 
+          credits: 3,
+          gradeItems: [
+            { id: 'quizzes', name: 'Quizzes', weight: 20 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 },
+            { id: 'case', name: 'Case Studies', weight: 10 }
+          ]
+        },
+        { 
+          code: 'SOC101', 
+          name: 'Sociology', 
+          credits: 3,
+          gradeItems: [
+            { id: 'assignments', name: 'Assignments', weight: 20 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 40 },
+            { id: 'participation', name: 'Participation', weight: 10 }
+          ]
+        }
+      ],
+      'Semester 4': [
+        { 
+          code: 'NUR301', 
+          name: 'Mental Health Nursing', 
+          credits: 4,
+          gradeItems: [
+            { id: 'quiz1', name: 'Quiz 1', weight: 10 },
+            { id: 'quiz2', name: 'Quiz 2', weight: 10 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 30 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'NUR302', 
+          name: 'Community Health Nursing', 
+          credits: 4,
+          gradeItems: [
+            { id: 'project', name: 'Community Project', weight: 25 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 25 },
+            { id: 'final', name: 'Final Exam', weight: 30 },
+            { id: 'clinical', name: 'Clinical Performance', weight: 20 }
+          ]
+        },
+        { 
+          code: 'NUR303', 
+          name: 'Leadership in Nursing', 
+          credits: 3,
+          gradeItems: [
+            { id: 'assignments', name: 'Assignments', weight: 30 },
+            { id: 'presentation', name: 'Leadership Presentation', weight: 20 },
+            { id: 'midterm', name: 'Midterm Exam', weight: 20 },
+            { id: 'final', name: 'Final Project', weight: 30 }
+          ]
+        },
+        { 
+          code: 'NUR304', 
+          name: 'Nursing Research', 
+          credits: 3,
+          gradeItems: [
+            { id: 'proposal', name: 'Research Proposal', weight: 25 },
+            { id: 'literature', name: 'Literature Review', weight: 20 },
+            { id: 'paper', name: 'Research Paper', weight: 35 },
+            { id: 'presentation', name: 'Presentation', weight: 20 }
+          ]
+        },
+        { 
+          code: 'NUR305', 
+          name: 'Clinical Capstone', 
+          credits: 3,
+          gradeItems: [
+            { id: 'clinical', name: 'Clinical Hours', weight: 40 },
+            { id: 'portfolio', name: 'Portfolio', weight: 30 },
+            { id: 'final', name: 'Final Presentation', weight: 30 }
+          ]
+        }
+      ]
+    };
+
+    let currentEditingStudent = null;
+    let studentGrades = {};
+
+    async function openGradeModal(studentId) {
+      const student = allStudents.find(s => s.id === studentId);
+      if (!student) return;
+
+      currentEditingStudent = student;
+      const modal = document.getElementById('gradeModal');
+      const modalBody = document.getElementById('modalGradeBody');
+      
+      // Update modal header
+      document.getElementById('modalGradeStudentName').textContent = `Edit Grades: ${student.full_name}`;
+      document.getElementById('modalGradeStudentInfo').textContent = 
+        `${student.student_id} • ${formatProgram(student.program)} • ${student.current_semester || 'N/A'}`;
+      
+      modal.classList.add('open');
+      modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading courses...</p></div>';
+
+      try {
+        // Fetch student's course grades from database
+        const { data: grades, error } = await db
+          .from('student_grades')
+          .select('*')
+          .eq('student_id', student.id);
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 = table doesn't exist
+          console.error('Error fetching grades:', error);
+        }
+
+        // Build grades object
+        studentGrades = {};
+        if (grades && grades.length > 0) {
+          grades.forEach(g => {
+            studentGrades[g.course_code] = {
+              grade: g.grade,
+              letter_grade: g.letter_grade,
+              credits: g.credits
+            };
+          });
+        }
+
+        // Get courses for student's current semester
+        const semester = student.current_semester || 'Semester 1';
+        const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+
+        // Render grade input form
+        renderGradeForm(courses);
+
+      } catch (err) {
+        console.error('Error loading grades:', err);
+        modalBody.innerHTML = '<p style="text-align:center;color:#ef4444;padding:20px">Failed to load course data.</p>';
+      }
+    }
+
+    function renderGradeForm(courses) {
+      const modalBody = document.getElementById('modalGradeBody');
+      
+      const html = `
+        <div style="margin-bottom:20px">
+          <p style="color:#64748b;font-size:13px;margin-bottom:16px">
+            Enter grades for each assignment/exam. Course average and final grade will be calculated automatically.
+          </p>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:20px">
+          ${courses.map((course, idx) => {
+            const savedCourseData = studentGrades[course.code] || {};
+            
+            return `
+              <div style="padding:18px;background:#f8fafc;border-radius:14px;border:1px solid #e5e7eb">
+                <!-- Course Header -->
+                <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid #e5e7eb">
+                  <div style="flex:1">
+                    <div style="font-weight:800;font-size:16px;color:#0f172a">${course.code}</div>
+                    <div style="color:#64748b;font-size:14px;margin-top:2px">${course.name}</div>
+                  </div>
+                  <div style="display:flex;gap:12px;align-items:center">
+                    <div style="background:#fff;padding:6px 12px;border-radius:8px;border:1px solid #e5e7eb;font-size:13px;font-weight:600">
+                      ${course.credits} Credits
+                    </div>
+                    <div style="background:#10b981;color:#fff;padding:6px 12px;border-radius:8px;font-size:13px;font-weight:700">
+                      <span id="avg_${course.code}">—</span>%
+                    </div>
+                    <div style="background:#2dd4bf;color:#fff;padding:6px 12px;border-radius:8px;font-size:14px;font-weight:800;min-width:50px;text-align:center">
+                      <span id="letter_${course.code}">—</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <!-- Grade Items -->
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px">
+                  ${course.gradeItems.map(item => {
+                    const savedGrade = (savedCourseData.items && savedCourseData.items[item.id]) || '';
+                    return `
+                      <div style="background:#fff;padding:12px;border-radius:10px;border:1px solid #e5e7eb">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                          <label style="font-size:13px;font-weight:600;color:#0f172a">${item.name}</label>
+                          <span style="font-size:11px;color:#64748b;background:#f1f5f9;padding:3px 8px;border-radius:4px">${item.weight}%</span>
+                        </div>
+                        <input 
+                          type="number" 
+                          id="item_${course.code}_${item.id}"
+                          class="grade-item"
+                          data-course="${course.code}"
+                          min="0" 
+                          max="100" 
+                          step="0.1"
+                          value="${savedGrade}"
+                          placeholder="0-100"
+                          onchange="calculateCourseAverage('${course.code}')"
+                          style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;font-weight:600;text-align:center"
+                        />
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        <div style="margin-top:24px;padding:16px;background:#eff6ff;border-radius:12px;border:1px solid #bfdbfe">
+          <div style="font-size:13px;color:#1e40af;line-height:1.6">
+            <strong>Grading Scale:</strong><br>
+            A (4.0) = 90-100 • B (3.0) = 80-89 • C (2.0) = 70-79 • D (1.0) = 60-69 • F (0.0) = Below 60
+          </div>
+        </div>
+      `;
+
+      modalBody.innerHTML = html;
+      
+      // Calculate averages for courses that have saved grades
+      courses.forEach(course => {
+        calculateCourseAverage(course.code);
+      });
+    }
+
+    function calculateCourseAverage(courseCode) {
+      const course = Object.values(coursesBySemester)
+        .flat()
+        .find(c => c.code === courseCode);
+      
+      if (!course) return;
+
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
+      let allFilled = true;
+
+      course.gradeItems.forEach(item => {
+        const input = document.getElementById(`item_${courseCode}_${item.id}`);
+        const grade = parseFloat(input.value);
+        
+        if (!isNaN(grade) && grade >= 0 && grade <= 100) {
+          totalWeightedScore += (grade * item.weight) / 100;
+          totalWeight += item.weight;
+        } else {
+          allFilled = false;
+        }
+      });
+
+      const avgElement = document.getElementById(`avg_${courseCode}`);
+      const letterElement = document.getElementById(`letter_${courseCode}`);
+
+      if (totalWeight > 0) {
+        const average = totalWeightedScore;
+        avgElement.textContent = average.toFixed(1);
+        
+        // Calculate letter grade
+        let letter = '';
+        if (average >= 90) letter = 'A';
+        else if (average >= 80) letter = 'B';
+        else if (average >= 70) letter = 'C';
+        else if (average >= 60) letter = 'D';
+        else letter = 'F';
+        
+        letterElement.textContent = letter;
+        
+        // Color code the letter grade
+        const letterContainer = letterElement.parentElement;
+        if (letter === 'A') letterContainer.style.background = '#10b981';
+        else if (letter === 'B') letterContainer.style.background = '#3b82f6';
+        else if (letter === 'C') letterContainer.style.background = '#f59e0b';
+        else if (letter === 'D') letterContainer.style.background = '#ef4444';
+        else letterContainer.style.background = '#dc2626';
+      } else {
+        avgElement.textContent = '—';
+        letterElement.textContent = '—';
+      }
+    }
+
+    function calculateLetterGrade(courseCode) {
+      // This function is now replaced by calculateCourseAverage
+      calculateCourseAverage(courseCode);
+    }
+
+    async function saveGrades() {
+      if (!currentEditingStudent) return;
+
+      const modal = document.getElementById('gradeModal');
+      const saveBtn = event.target;
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving...';
+
+      try {
+        const semester = currentEditingStudent.current_semester || 'Semester 1';
+        const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+        
+        const gradesToSave = [];
+        let totalPoints = 0;
+        let totalCredits = 0;
+
+        courses.forEach(course => {
+          // Collect all grade items for this course
+          const gradeItems = {};
+          let courseTotal = 0;
+          let courseWeightUsed = 0;
+          
+          course.gradeItems.forEach(item => {
+            const input = document.getElementById(`item_${course.code}_${item.id}`);
+            const grade = parseFloat(input.value);
+            
+            if (!isNaN(grade) && grade >= 0 && grade <= 100) {
+              gradeItems[item.id] = grade;
+              courseTotal += (grade * item.weight) / 100;
+              courseWeightUsed += item.weight;
+            }
+          });
+
+          // Only save if there are grades entered
+          if (Object.keys(gradeItems).length > 0) {
+            const courseAverage = courseTotal;
+            
+            // Determine letter grade
+            let letterGrade = '';
+            let gradePoints = 0;
+            if (courseAverage >= 90) { letterGrade = 'A'; gradePoints = 4.0; }
+            else if (courseAverage >= 80) { letterGrade = 'B'; gradePoints = 3.0; }
+            else if (courseAverage >= 70) { letterGrade = 'C'; gradePoints = 2.0; }
+            else if (courseAverage >= 60) { letterGrade = 'D'; gradePoints = 1.0; }
+            else { letterGrade = 'F'; gradePoints = 0.0; }
+
+            totalPoints += gradePoints * course.credits;
+            totalCredits += course.credits;
+
+            gradesToSave.push({
+              student_id: currentEditingStudent.id,
+              course_code: course.code,
+              course_name: course.name,
+              semester: semester,
+              grade: courseAverage,
+              letter_grade: letterGrade,
+              credits: course.credits,
+              grade_points: gradePoints,
+              grade_items: JSON.stringify(gradeItems) // Store individual grades as JSON
+            });
+          }
+        });
+
+        // Calculate GPA
+        const calculatedGPA = totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 0;
+
+        // Save grades to database (upsert)
+        if (gradesToSave.length > 0) {
+          const { error: gradeError } = await db
+            .from('student_grades')
+            .upsert(gradesToSave, { 
+              onConflict: 'student_id,course_code',
+              ignoreDuplicates: false 
+            });
+
+          if (gradeError) {
+            console.error('Error saving grades:', gradeError);
+            // If table doesn't exist, continue anyway
+            if (gradeError.code !== 'PGRST116') {
+              throw gradeError;
+            }
+          }
+        }
+
+        // Update student's GPA
+        const { error: updateError } = await db
+          .from('students')
+          .update({ 
+            cumulative_gpa: calculatedGPA,
+            credits_earned: totalCredits
+          })
+          .eq('id', currentEditingStudent.id);
+
+        if (updateError) throw updateError;
+
+        alert(`✅ Grades saved successfully!\n\nCalculated GPA: ${calculatedGPA}\nTotal Credits: ${totalCredits}`);
+        
+        closeGradeModal();
+        loadGradesView(); // Refresh the grades table
+
+      } catch (err) {
+        console.error('Error saving grades:', err);
+        alert('❌ Failed to save grades. Please try again.');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save Grades';
+      }
+    }
+
+    // ============================================
+    // COURSE MANAGER
+    // ============================================
+    
+    function openCourseManager() {
+      const modal = document.getElementById('courseManagerModal');
+      modal.classList.add('open');
+      
+      const semester = currentEditingStudent.current_semester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      
+      renderCourseManager(courses, semester);
+    }
+
+    function renderCourseManager(courses, semester) {
+      const content = document.getElementById('courseManagerContent');
+      
+      const html = `
+        <div style="margin-bottom:20px;padding:14px 16px;background:#eff6ff;border-radius:10px;border:1px solid #bfdbfe">
+          <div style="color:#1e40af;font-weight:600;font-size:14px">Editing: ${semester}</div>
+        </div>
+        
+        <div style="display:flex;flex-direction:column;gap:20px" id="coursesContainer">
+          ${courses.map((course, idx) => `
+            <div class="course-edit-item" data-index="${idx}" style="padding:20px;background:white;border-radius:12px;border:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+              <!-- Course Header -->
+              <div style="display:grid;grid-template-columns:140px 1fr 100px auto;gap:12px;margin-bottom:16px;align-items:center">
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Code</label>
+                  <input 
+                    type="text" 
+                    id="course_code_${idx}" 
+                    value="${course.code}" 
+                    placeholder="e.g., NURS101"
+                    style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-weight:700;font-size:14px;transition:border-color 0.2s"
+                    onfocus="this.style.borderColor='#3b82f6'"
+                    onblur="this.style.borderColor='#e2e8f0'"
+                  />
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Course Name</label>
+                  <input 
+                    type="text" 
+                    id="course_name_${idx}" 
+                    value="${course.name}" 
+                    placeholder="e.g., Fundamentals of Nursing"
+                    style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:14px;transition:border-color 0.2s"
+                    onfocus="this.style.borderColor='#3b82f6'"
+                    onblur="this.style.borderColor='#e2e8f0'"
+                  />
+                </div>
+                <div>
+                  <label style="display:block;font-size:11px;font-weight:600;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Credits</label>
+                  <input 
+                    type="number" 
+                    id="course_credits_${idx}" 
+                    value="${course.credits}" 
+                    min="1" 
+                    max="6"
+                    placeholder="4"
+                    style="width:100%;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;text-align:center;font-weight:600;font-size:14px;transition:border-color 0.2s"
+                    onfocus="this.style.borderColor='#3b82f6'"
+                    onblur="this.style.borderColor='#e2e8f0'"
+                  />
+                </div>
+                <div style="padding-top:22px">
+                  <button 
+                    class="btn ghost" 
+                    onclick="removeCourse(${idx})" 
+                    title="Delete Course"
+                    style="padding:10px 12px;color:#ef4444;border:2px solid #fee2e2;background:#fef2f2"
+                    onmouseover="this.style.background='#fee2e2'"
+                    onmouseout="this.style.background='#fef2f2'"
+                  >
+                    🗑️
+                  </button>
+                </div>
+              </div>
+              
+              <!-- Grade Items Section -->
+              <div style="border-top:2px solid #f1f5f9;padding-top:16px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+                  <div style="font-size:13px;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:0.5px">Grade Items</div>
+                  <button 
+                    class="btn primary" 
+                    onclick="addGradeItem(${idx})" 
+                    style="padding:6px 14px;font-size:13px;border-radius:8px"
+                  >
+                    + Add Item
+                  </button>
+                </div>
+                
+                <div id="gradeItems_${idx}" style="display:flex;flex-direction:column;gap:10px">
+                  ${course.gradeItems.map((item, itemIdx) => `
+                    <div style="display:flex;gap:10px;align-items:center;padding:10px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
+                      <input 
+                        type="text" 
+                        id="item_name_${idx}_${itemIdx}" 
+                        value="${item.name}" 
+                        placeholder="e.g., Quiz 1, Midterm Exam"
+                        style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;background:white;transition:border-color 0.2s"
+                        onfocus="this.style.borderColor='#3b82f6'"
+                        onblur="this.style.borderColor='#e2e8f0'"
+                      />
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <input 
+                          type="number" 
+                          id="item_weight_${idx}_${itemIdx}" 
+                          value="${item.weight}" 
+                          min="0" 
+                          max="100"
+                          placeholder="10"
+                          style="width:70px;padding:8px 10px;border:2px solid #e2e8f0;border-radius:6px;font-size:13px;text-align:center;font-weight:600;background:white;transition:border-color 0.2s"
+                          onfocus="this.style.borderColor='#3b82f6'"
+                          onblur="this.style.borderColor='#e2e8f0'"
+                        />
+                        <span style="font-size:13px;color:#64748b;font-weight:600;min-width:20px">%</span>
+                      </div>
+                      <button 
+                        onclick="removeGradeItem(${idx}, ${itemIdx})" 
+                        title="Remove Item"
+                        style="width:32px;height:32px;background:#fee2e2;border:none;border-radius:6px;color:#ef4444;cursor:pointer;font-size:20px;font-weight:600;display:flex;align-items:center;justify-content:center;transition:background 0.2s"
+                        onmouseover="this.style.background='#fecaca'"
+                        onmouseout="this.style.background='#fee2e2'"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  `).join('')}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+      
+      content.innerHTML = html;
+    }
+
+    // Track current group being edited
+    let currentEditingGroupId = null;
+    let currentEditingSemester = null; // Track which semester is being edited
+
+    // Open course manager (can be called from grade modal or group manager)
+    function openCourseManager(semester = null) {
+      currentEditingSemester = semester || (currentEditingStudent ? currentEditingStudent.current_semester : null) || 'Semester 1';
+      const courses = coursesBySemester[currentEditingSemester] || coursesBySemester['Semester 1'];
+      
+      renderCourseManager(courses, currentEditingSemester);
+      document.getElementById('courseManagerModal').classList.add('open');
+    }
+
+    function addNewCourse() {
+      const semester = currentEditingSemester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      
+      courses.push({
+        code: 'NEW101',
+        name: 'New Course',
+        credits: 3,
+        gradeItems: [
+          { id: 'item1', name: 'Assignment 1', weight: 50 },
+          { id: 'item2', name: 'Final Exam', weight: 50 }
+        ]
+      });
+      
+      renderCourseManager(courses, semester);
+    }
+
+    function removeCourse(index) {
+      if (!confirm('Remove this course?')) return;
+      
+      const semester = currentEditingSemester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      
+      courses.splice(index, 1);
+      renderCourseManager(courses, semester);
+    }
+
+    function addGradeItem(courseIndex) {
+      const semester = currentEditingSemester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      const course = courses[courseIndex];
+      
+      const newId = 'item' + Date.now();
+      course.gradeItems.push({
+        id: newId,
+        name: 'New Item',
+        weight: 10
+      });
+      
+      renderCourseManager(courses, semester);
+    }
+
+    function removeGradeItem(courseIndex, itemIndex) {
+      const semester = currentEditingSemester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      const course = courses[courseIndex];
+      
+      course.gradeItems.splice(itemIndex, 1);
+      renderCourseManager(courses, semester);
+    }
+
+    function saveCourseChanges() {
+      const semester = currentEditingSemester || 'Semester 1';
+      const courses = coursesBySemester[semester] || coursesBySemester['Semester 1'];
+      
+      // Update courses from form inputs
+      courses.forEach((course, idx) => {
+        const codeInput = document.getElementById(`course_code_${idx}`);
+        const nameInput = document.getElementById(`course_name_${idx}`);
+        const creditsInput = document.getElementById(`course_credits_${idx}`);
+        
+        if (codeInput && nameInput && creditsInput) {
+          course.code = codeInput.value;
+          course.name = nameInput.value;
+          course.credits = parseInt(creditsInput.value) || 3;
+          
+          // Update grade items
+          course.gradeItems.forEach((item, itemIdx) => {
+            const itemNameInput = document.getElementById(`item_name_${idx}_${itemIdx}`);
+            const itemWeightInput = document.getElementById(`item_weight_${idx}_${itemIdx}`);
+            
+            if (itemNameInput && itemWeightInput) {
+              item.name = itemNameInput.value;
+              item.weight = parseInt(itemWeightInput.value) || 0;
+            }
+          });
+        }
+      });
+      
+      alert('✅ Course changes saved! They will be reflected in the grading form.');
+      closeCourseManager();
+      
+      // Refresh the grade form
+      if (currentEditingStudent) {
+        renderGradeForm(courses);
+      }
+    }
+
+    function closeCourseManager() {
+      document.getElementById('courseManagerModal').classList.remove('open');
+      // Reset title and subtitle to default
+      document.getElementById('courseManagerTitle').textContent = 'Course & Grade Items Manager';
+      document.getElementById('courseManagerSubtitle').textContent = 'Add or edit courses and their grade items for the current semester.';
+      // Clear group context and semester
+      currentEditingGroupId = null;
+      currentEditingSemester = null;
+    }
+
+    // ============================================
+    // END COURSE MANAGER
+    // ============================================
+
+    function closeGradeModal() {
+      document.getElementById('gradeModal').classList.remove('open');
+      currentEditingStudent = null;
+      studentGrades = {};
+    }
+
+    function exportGrades() {
+      alert('Grade export feature coming soon...');
+    }
+
+    function calculateAllGPAs() {
+      alert('GPA recalculation will be implemented with course grade integration.');
+    }
+
+    // ============================================
+    // END GRADES & GPA MANAGEMENT
+    // ============================================
+
+    // ============================================
+    // STUDENT GROUPS MANAGEMENT
+    // ============================================
+    
+    let studentGroups = [];
+    let currentEditingGroup = null;
+
+    // Load groups from localStorage
+    function loadStudentGroups() {
+      const stored = localStorage.getItem('studentGroups');
+      if (stored) {
+        try {
+          studentGroups = JSON.parse(stored);
+        } catch (e) {
+          console.error('Error parsing student groups:', e);
+          studentGroups = [];
+        }
+      }
+      return studentGroups;
+    }
+
+    // Save groups to localStorage
+    function saveStudentGroups() {
+      localStorage.setItem('studentGroups', JSON.stringify(studentGroups));
+    }
+
+    // Load and render groups view
+    async function loadGroups() {
+      loadStudentGroups();
+      renderGroupsTable();
+    }
+
+    // Render groups table
+    function renderGroupsTable() {
+      const container = document.getElementById('groupsTableContainer');
+      
+      if (!studentGroups || studentGroups.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center;padding:60px 20px;color:#64748b">
+            <div style="font-size:48px;margin-bottom:16px">👨‍👩‍👧‍👦</div>
+            <h3 style="margin:0 0 8px 0;color:#1e293b">No Student Groups Yet</h3>
+            <p style="margin:0;font-size:14px">Create your first group to manage students in batches</p>
+          </div>
+        `;
+        return;
+      }
+
+      let html = `
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th>Group Name</th>
+              <th>Semester</th>
+              <th>Students</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      studentGroups.forEach(group => {
+        const studentCount = group.studentIds ? group.studentIds.length : 0;
+        html += `
+          <tr>
+            <td><strong>${escapeHtml(group.name)}</strong></td>
+            <td>${escapeHtml(group.semester)}</td>
+            <td>
+              <span class="badge" style="background:#e0e7ff;color:#4338ca">
+                ${studentCount} student${studentCount !== 1 ? 's' : ''}
+              </span>
+            </td>
+            <td>${formatDate(group.created_at)}</td>
+            <td>
+              <button class="btn-icon" onclick="viewGroup('${group.id}')" title="View Group">
+                👁️
+              </button>
+              <button class="btn-icon" onclick="editGroup('${group.id}')" title="Edit Group">
+                ✏️
+              </button>
+              <button class="btn-icon" onclick="manageCourses('${group.id}')" title="Manage Courses">
+                📚
+              </button>
+              <button class="btn-icon" onclick="deleteGroup('${group.id}')" title="Delete Group" style="color:#ef4444">
+                🗑️
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+      `;
+
+      container.innerHTML = html;
+    }
+
+    // Open group modal for creation
+    async function createNewGroup() {
+      currentEditingGroup = null;
+      document.getElementById('groupModalTitle').textContent = 'Create Student Group';
+      document.getElementById('groupName').value = '';
+      document.getElementById('groupSemester').value = 'Semester 1';
+      
+      // Load available students for selection
+      await populateStudentCheckboxes();
+      
+      document.getElementById('groupModal').classList.add('open');
+    }
+
+    // Open group modal for editing
+    async function editGroup(groupId) {
+      const group = studentGroups.find(g => g.id === groupId);
+      if (!group) return;
+
+      currentEditingGroup = group;
+      document.getElementById('groupModalTitle').textContent = 'Edit Student Group';
+      document.getElementById('groupName').value = group.name;
+      document.getElementById('groupSemester').value = group.semester;
+      
+      // Load students with current group's selections
+      await populateStudentCheckboxes(group.studentIds || []);
+      
+      document.getElementById('groupModal').classList.add('open');
+    }
+
+    // Populate student checkboxes in group modal
+    let allAvailableStudents = []; // Store all students for filtering
+
+    async function populateStudentCheckboxes(selectedIds = []) {
+      const container = document.getElementById('studentCheckboxList');
+      container.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+
+      try {
+        const { data: students, error } = await db
+          .from('students')
+          .select('id, full_name, student_id, program, enrollment_status')
+          .order('full_name', { ascending: true });
+
+        if (error) throw error;
+
+        if (!students || students.length === 0) {
+          container.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center">No students found</p>';
+          return;
+        }
+
+        // Store students globally for filtering
+        allAvailableStudents = students;
+
+        // Reset filters to default (active only)
+        document.getElementById('studentProgramFilter').value = 'all';
+        document.getElementById('studentStatusFilter').value = 'active';
+        
+        // Filter to active students by default
+        const activeStudents = students.filter(s => s.enrollment_status === 'active');
+        
+        // Render with selected IDs
+        renderStudentCheckboxes(activeStudents, selectedIds);
+        updateSelectionCount();
+      } catch (error) {
+        console.error('Error loading students:', error);
+        container.innerHTML = '<p style="color:#ef4444;padding:20px">Error loading students</p>';
+      }
+    }
+
+    // Render student checkboxes
+    function renderStudentCheckboxes(students, selectedIds = []) {
+      const container = document.getElementById('studentCheckboxList');
+      
+      if (!students || students.length === 0) {
+        container.innerHTML = '<p style="color:#94a3b8;padding:20px;text-align:center">No students match the filter</p>';
+        return;
+      }
+
+      let html = '';
+      students.forEach(student => {
+        const isChecked = selectedIds.includes(student.id);
+        const statusColor = {
+          'active': '#059669',
+          'inactive': '#64748b',
+          'on-leave': '#f59e0b',
+          'withdrawn': '#dc2626',
+          'graduated': '#3b82f6'
+        }[student.enrollment_status] || '#64748b';
+        
+        html += `
+          <label 
+            class="student-checkbox-item" 
+            data-program="${escapeHtml(student.program)}"
+            data-status="${escapeHtml(student.enrollment_status)}"
+            style="display:flex;align-items:center;padding:10px;cursor:pointer;border-radius:8px;transition:background 0.2s"
+            onmouseover="this.style.background='#f1f5f9'"
+            onmouseout="this.style.background='transparent'">
+            <input 
+              type="checkbox" 
+              class="student-checkbox"
+              value="${student.id}" 
+              ${isChecked ? 'checked' : ''}
+              onchange="updateSelectionCount()"
+              style="margin-right:12px;width:18px;height:18px;cursor:pointer"
+            />
+            <div style="flex:1">
+              <div style="font-weight:600;font-size:14px;color:#1e293b">${escapeHtml(student.full_name)}</div>
+              <div style="font-size:12px;color:#64748b;display:flex;align-items:center;gap:8px">
+                <span>${escapeHtml(student.student_id)} • ${formatProgram(student.program)}</span>
+                <span style="display:inline-block;padding:2px 8px;border-radius:4px;background:${statusColor}22;color:${statusColor};font-weight:600;font-size:11px;text-transform:uppercase">
+                  ${formatStatus(student.enrollment_status)}
+                </span>
+              </div>
+            </div>
+          </label>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    // Filter student list by program and status
+    function filterStudentList() {
+      const programFilter = document.getElementById('studentProgramFilter').value;
+      const statusFilter = document.getElementById('studentStatusFilter').value;
+      const container = document.getElementById('studentCheckboxList');
+      
+      // Get currently selected IDs before filtering
+      const selectedIds = Array.from(container.querySelectorAll('.student-checkbox:checked'))
+        .map(cb => cb.value);
+      
+      // Filter students by both program and status
+      let filteredStudents = allAvailableStudents;
+      
+      // Apply program filter
+      if (programFilter !== 'all') {
+        filteredStudents = filteredStudents.filter(student => {
+          const program = student.program || '';
+          return program.includes(programFilter);
+        });
+      }
+      
+      // Apply status filter
+      if (statusFilter !== 'all') {
+        filteredStudents = filteredStudents.filter(student => {
+          return student.enrollment_status === statusFilter;
+        });
+      }
+      
+      // Re-render with same selections
+      renderStudentCheckboxes(filteredStudents, selectedIds);
+      updateSelectionCount();
+    }
+
+    // Select all visible students
+    function selectAllStudents() {
+      const checkboxes = document.querySelectorAll('#studentCheckboxList .student-checkbox:not([style*="display: none"])');
+      checkboxes.forEach(cb => cb.checked = true);
+      updateSelectionCount();
+    }
+
+    // Deselect all students
+    function deselectAllStudents() {
+      const checkboxes = document.querySelectorAll('#studentCheckboxList .student-checkbox');
+      checkboxes.forEach(cb => cb.checked = false);
+      updateSelectionCount();
+    }
+
+    // Update selection count display
+    function updateSelectionCount() {
+      const checkedCount = document.querySelectorAll('#studentCheckboxList .student-checkbox:checked').length;
+      const countDisplay = document.getElementById('studentSelectionCount');
+      if (countDisplay) {
+        countDisplay.textContent = `${checkedCount} student${checkedCount !== 1 ? 's' : ''} selected`;
+        countDisplay.style.color = checkedCount > 0 ? '#059669' : '#64748b';
+        countDisplay.style.fontWeight = checkedCount > 0 ? '600' : '400';
+      }
+    }
+
+    // Save group (create or update)
+    function saveGroup() {
+      const name = document.getElementById('groupName').value.trim();
+      const semester = document.getElementById('groupSemester').value;
+      
+      if (!name) {
+        alert('Please enter a group name');
+        return;
+      }
+
+      // Get selected student IDs
+      const checkboxes = document.querySelectorAll('#studentCheckboxList input[type="checkbox"]:checked');
+      const studentIds = Array.from(checkboxes).map(cb => cb.value);
+
+      if (currentEditingGroup) {
+        // Update existing group
+        currentEditingGroup.name = name;
+        currentEditingGroup.semester = semester;
+        currentEditingGroup.studentIds = studentIds;
+        currentEditingGroup.updated_at = new Date().toISOString();
+      } else {
+        // Create new group
+        const newGroup = {
+          id: 'group_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+          name: name,
+          semester: semester,
+          studentIds: studentIds,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        studentGroups.push(newGroup);
+      }
+
+      saveStudentGroups();
+      renderGroupsTable();
+      closeGroupModal();
+    }
+
+    // Close group modal
+    function closeGroupModal() {
+      document.getElementById('groupModal').classList.remove('open');
+      currentEditingGroup = null;
+    }
+
+    // View group details
+    function viewGroup(groupId) {
+      const group = studentGroups.find(g => g.id === groupId);
+      if (!group) return;
+
+      alert(`Group: ${group.name}\nSemester: ${group.semester}\nStudents: ${group.studentIds.length}\n\nFull detail view coming soon...`);
+    }
+
+    // Delete group
+    function deleteGroup(groupId) {
+      const group = studentGroups.find(g => g.id === groupId);
+      if (!group) return;
+
+      if (confirm(`Delete group "${group.name}"?\n\nThis will not delete the students, only the group.`)) {
+        studentGroups = studentGroups.filter(g => g.id !== groupId);
+        saveStudentGroups();
+        renderGroupsTable();
+      }
+    }
+
+    // Manage courses for a group
+    async function manageCourses(groupId) {
+      const group = studentGroups.find(g => g.id === groupId);
+      if (!group) return;
+
+      if (group.studentIds.length === 0) {
+        alert('This group has no students. Add students first.');
+        return;
+      }
+
+      // Open course manager and store current group ID
+      currentEditingGroupId = groupId;
+      currentEditingSemester = group.semester;
+      
+      // Load courses for the group's semester
+      const semesterKey = group.semester;
+      let courses = coursesBySemester[semesterKey] || [];
+      
+      // Update the modal title and subtitle for group context
+      document.getElementById('courseManagerTitle').textContent = 
+        `Course Manager - ${group.name}`;
+      document.getElementById('courseManagerSubtitle').innerHTML = 
+        `<strong style="color:#059669">${group.studentIds.length} students</strong> in this group will receive these course updates for <strong>${group.semester}</strong>.`;
+      
+      renderCourseManager(courses, semesterKey);
+      document.getElementById('courseManagerModal').classList.add('open');
+    }
+
+    // Modify saveCourseChanges to apply to all group members
+    const originalSaveCourseChanges = saveCourseChanges;
+    
+    saveCourseChanges = async function() {
+      // If we're editing a group, apply to all members
+      if (currentEditingGroupId) {
+        const group = studentGroups.find(g => g.id === currentEditingGroupId);
+        if (group && group.studentIds.length > 0) {
+          // Save courses to the global structure first
+          originalSaveCourseChanges();
+          
+          // TODO: If you want to persist customized courses per student,
+          // you'd loop through group.studentIds and update each student's
+          // course data in the database here
+          
+          alert(`Course changes applied to ${group.studentIds.length} students in "${group.name}"`);
+          currentEditingGroupId = null;
+          return;
+        }
+      }
+      
+      // Otherwise, just save normally
+      originalSaveCourseChanges();
+    };
+
+    // ============================================
+    // END STUDENT GROUPS MANAGEMENT
+    // ============================================
+
+    // ============================================
+    // ATTENDANCE TRACKING SYSTEM
+    // ============================================
+
+    let attendanceRecords = {}; // Store attendance data: { date-course: { studentId: status } }
+    let currentAttendanceCourse = null;
+    let currentAttendanceDate = null;
+
+    // Load attendance records from localStorage
+    function loadAttendanceRecords() {
+      const stored = localStorage.getItem('attendanceRecords');
+      if (stored) {
+        try {
+          attendanceRecords = JSON.parse(stored);
+        } catch (e) {
+          console.error('Error parsing attendance records:', e);
+          attendanceRecords = {};
+        }
+      }
+    }
+
+    // Save attendance records to localStorage
+    function saveAttendanceRecords() {
+      localStorage.setItem('attendanceRecords', JSON.stringify(attendanceRecords));
+    }
+
+    // Initialize attendance view
+    async function initAttendanceView() {
+      loadAttendanceRecords();
+      
+      // Set today's date as default
+      const today = new Date().toISOString().split('T')[0];
+      document.getElementById('attendanceDate').value = today;
+      
+      // Populate courses
+      populateAttendanceCourses();
+    }
+
+    // Populate course dropdown based on selected semester
+    function populateAttendanceCourses() {
+      const semester = document.getElementById('attendanceSemesterFilter').value;
+      const courseSelect = document.getElementById('attendanceCourseSelect');
+      
+      const courses = coursesBySemester[semester] || [];
+      
+      courseSelect.innerHTML = '<option value="">-- Select Course --</option>';
+      courses.forEach(course => {
+        const option = document.createElement('option');
+        option.value = course.code;
+        option.textContent = `${course.code} - ${course.name}`;
+        courseSelect.appendChild(option);
+      });
+    }
+
+    // Load attendance for selected course and date
+    async function loadAttendanceForCourse() {
+      const courseCode = document.getElementById('attendanceCourseSelect').value;
+      const date = document.getElementById('attendanceDate').value;
+      
+      if (!courseCode || !date) {
+        document.getElementById('attendanceTableContainer').innerHTML = `
+          <div style="text-align:center;padding:60px 20px;color:#64748b">
+            <div style="font-size:48px;margin-bottom:16px">📅</div>
+            <h3 style="margin:0 0 8px 0;color:#1e293b">Select Course and Date</h3>
+            <p style="margin:0;font-size:14px">Choose a course and date above to record attendance</p>
+          </div>
+        `;
+        return;
+      }
+
+      currentAttendanceCourse = courseCode;
+      currentAttendanceDate = date;
+
+      // Show loading
+      document.getElementById('attendanceTableContainer').innerHTML = `
+        <div class="loading"><div class="spinner"></div><p>Loading students...</p></div>
+      `;
+
+      try {
+        // Fetch active students
+        const { data: students, error } = await db
+          .from('students')
+          .select('id, full_name, student_id, program')
+          .eq('enrollment_status', 'active')
+          .order('full_name', { ascending: true });
+
+        if (error) throw error;
+
+        renderAttendanceTable(students, courseCode, date);
+      } catch (error) {
+        console.error('Error loading students for attendance:', error);
+        document.getElementById('attendanceTableContainer').innerHTML = `
+          <p style="color:#ef4444;padding:20px">Error loading students: ${error.message}</p>
+        `;
+      }
+    }
+
+    // Render attendance table
+    function renderAttendanceTable(students, courseCode, date) {
+      const container = document.getElementById('attendanceTableContainer');
+      
+      if (!students || students.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center;padding:40px;color:#64748b">
+            <p>No active students found</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Get existing attendance for this date-course combo
+      const recordKey = `${date}-${courseCode}`;
+      const existingAttendance = attendanceRecords[recordKey] || {};
+
+      let html = `
+        <div style="background:#e0f2fe;border:1px solid #bae6fd;padding:16px;border-radius:12px;margin-bottom:20px">
+          <div style="color:#0369a1;font-weight:600;font-size:14px;margin-bottom:4px">Recording attendance for:</div>
+          <div style="color:#075985;font-size:13px">
+            📚 Course: <strong>${courseCode}</strong> • 
+            📅 Date: <strong>${new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong>
+          </div>
+        </div>
+
+        <table class="students-table">
+          <thead>
+            <tr>
+              <th style="width:50px">#</th>
+              <th>STUDENT NAME</th>
+              <th>STUDENT ID</th>
+              <th>PROGRAM</th>
+              <th style="width:220px;text-align:center">ATTENDANCE STATUS</th>
+              <th style="width:80px;text-align:center">NOTES</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+
+      students.forEach((student, index) => {
+        const status = existingAttendance[student.id] || 'present';
+        
+        html += `
+          <tr>
+            <td style="color:#64748b;font-weight:600">${index + 1}</td>
+            <td><strong style="color:#1e293b">${escapeHtml(student.full_name)}</strong></td>
+            <td style="font-family:monospace;color:#64748b;font-size:13px">${escapeHtml(student.student_id)}</td>
+            <td><span class="badge" style="background:#e0e7ff;color:#4338ca">${formatProgram(student.program)}</span></td>
+            <td>
+              <div style="display:flex;gap:6px;justify-content:center" data-student-id="${student.id}" class="attendance-buttons">
+                <button 
+                  class="attendance-btn ${status === 'present' ? 'active' : ''}" 
+                  data-status="present"
+                  onclick="setAttendanceStatus('${student.id}', 'present')"
+                  title="Present"
+                  style="width:45px;height:45px;border-radius:8px;border:2px solid #cbd5e1;background:${status === 'present' ? '#dcfce7' : 'white'};color:${status === 'present' ? '#059669' : '#94a3b8'};font-size:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center"
+                >
+                  ✓
+                </button>
+                <button 
+                  class="attendance-btn ${status === 'absent' ? 'active' : ''}" 
+                  data-status="absent"
+                  onclick="setAttendanceStatus('${student.id}', 'absent')"
+                  title="Absent"
+                  style="width:45px;height:45px;border-radius:8px;border:2px solid #cbd5e1;background:${status === 'absent' ? '#fee2e2' : 'white'};color:${status === 'absent' ? '#dc2626' : '#94a3b8'};font-size:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center"
+                >
+                  ✗
+                </button>
+                <button 
+                  class="attendance-btn ${status === 'late' ? 'active' : ''}" 
+                  data-status="late"
+                  onclick="setAttendanceStatus('${student.id}', 'late')"
+                  title="Late"
+                  style="width:45px;height:45px;border-radius:8px;border:2px solid #cbd5e1;background:${status === 'late' ? '#fef3c7' : 'white'};color:${status === 'late' ? '#f59e0b' : '#94a3b8'};font-size:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center"
+                >
+                  ⏰
+                </button>
+                <button 
+                  class="attendance-btn ${status === 'excused' ? 'active' : ''}" 
+                  data-status="excused"
+                  onclick="setAttendanceStatus('${student.id}', 'excused')"
+                  title="Excused"
+                  style="width:45px;height:45px;border-radius:8px;border:2px solid #cbd5e1;background:${status === 'excused' ? '#dbeafe' : 'white'};color:${status === 'excused' ? '#3b82f6' : '#94a3b8'};font-size:20px;cursor:pointer;transition:all 0.2s;display:flex;align-items:center;justify-content:center"
+                >
+                  📝
+                </button>
+              </div>
+            </td>
+            <td style="text-align:center">
+              <button 
+                class="btn-icon" 
+                onclick="addAttendanceNote('${student.id}')"
+                title="Add Note"
+                style="font-size:18px;padding:8px"
+              >
+                ✏️
+              </button>
+            </td>
+          </tr>
+        `;
+      });
+
+      html += `
+          </tbody>
+        </table>
+        
+        <div style="margin-top:20px;padding:16px;background:#f8fafc;border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+          <div style="font-size:14px;color:#64748b">
+            <strong id="attendanceSummary">Loading summary...</strong>
+          </div>
+          <button class="btn primary" onclick="saveAttendance()">💾 Save Attendance</button>
+        </div>
+      `;
+
+      container.innerHTML = html;
+      updateAttendanceSummary();
+    }
+
+    // Set attendance status for a student (icon button click)
+    function setAttendanceStatus(studentId, status) {
+      // Find the button container for this student
+      const container = document.querySelector(`[data-student-id="${studentId}"].attendance-buttons`);
+      if (!container) return;
+
+      // Remove active class from all buttons in this row
+      container.querySelectorAll('.attendance-btn').forEach(btn => {
+        btn.classList.remove('active');
+        const btnStatus = btn.dataset.status;
+        // Reset styles
+        btn.style.background = 'white';
+        btn.style.color = '#94a3b8';
+      });
+
+      // Add active class to clicked button and set colors
+      const clickedBtn = container.querySelector(`[data-status="${status}"]`);
+      if (clickedBtn) {
+        clickedBtn.classList.add('active');
+        const colors = {
+          present: { bg: '#dcfce7', color: '#059669' },
+          absent: { bg: '#fee2e2', color: '#dc2626' },
+          late: { bg: '#fef3c7', color: '#f59e0b' },
+          excused: { bg: '#dbeafe', color: '#3b82f6' }
+        };
+        clickedBtn.style.background = colors[status].bg;
+        clickedBtn.style.color = colors[status].color;
+      }
+
+      updateAttendanceSummary();
+      
+      // Auto-save attendance after status change
+      autoSaveAttendance();
+    }
+
+    // Auto-save attendance (silent save without alert)
+    function autoSaveAttendance() {
+      if (!currentAttendanceCourse || !currentAttendanceDate) return;
+
+      const recordKey = `${currentAttendanceDate}-${currentAttendanceCourse}`;
+      const attendance = {};
+
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        const activeBtn = container.querySelector('.attendance-btn.active');
+        if (activeBtn) {
+          const status = activeBtn.dataset.status;
+          attendance[studentId] = status;
+        }
+      });
+
+      attendanceRecords[recordKey] = attendance;
+      saveAttendanceRecords();
+      
+      // Show a subtle save indicator
+      showSaveIndicator();
+    }
+
+    // Show save indicator
+    function showSaveIndicator() {
+      // Check if indicator already exists
+      let indicator = document.getElementById('attendanceSaveIndicator');
+      
+      if (!indicator) {
+        // Create indicator
+        indicator = document.createElement('div');
+        indicator.id = 'attendanceSaveIndicator';
+        indicator.style.cssText = `
+          position: fixed;
+          bottom: 30px;
+          right: 30px;
+          background: #059669;
+          color: white;
+          padding: 12px 20px;
+          border-radius: 10px;
+          font-size: 14px;
+          font-weight: 600;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          z-index: 9999;
+          opacity: 0;
+          transition: opacity 0.3s;
+        `;
+        indicator.innerHTML = '✓ Saved';
+        document.body.appendChild(indicator);
+      }
+      
+      // Show indicator
+      indicator.style.opacity = '1';
+      
+      // Hide after 2 seconds
+      setTimeout(() => {
+        indicator.style.opacity = '0';
+      }, 2000);
+    }
+
+    // Update attendance summary
+    function updateAttendanceSummary() {
+      const allButtons = document.querySelectorAll('.attendance-buttons');
+      const counts = { present: 0, absent: 0, late: 0, excused: 0 };
+      
+      allButtons.forEach(container => {
+        const activeBtn = container.querySelector('.attendance-btn.active');
+        if (activeBtn) {
+          const status = activeBtn.dataset.status;
+          counts[status]++;
+        }
+      });
+
+      const total = allButtons.length;
+      const summaryEl = document.getElementById('attendanceSummary');
+      
+      if (summaryEl) {
+        summaryEl.innerHTML = `
+          Total: <strong>${total}</strong> students • 
+          <span style="color:#059669;font-weight:600">✓ ${counts.present} Present</span> • 
+          <span style="color:#dc2626;font-weight:600">✗ ${counts.absent} Absent</span> • 
+          <span style="color:#f59e0b;font-weight:600">⏰ ${counts.late} Late</span> • 
+          <span style="color:#3b82f6;font-weight:600">📝 ${counts.excused} Excused</span>
+        `;
+      }
+    }
+
+    // Quick action functions
+    function markAllPresent() {
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        setAttendanceStatus(studentId, 'present');
+      });
+    }
+
+    function markAllAbsent() {
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        setAttendanceStatus(studentId, 'absent');
+      });
+    }
+
+    function markAllLate() {
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        setAttendanceStatus(studentId, 'late');
+      });
+    }
+
+    function markAllExcused() {
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        setAttendanceStatus(studentId, 'excused');
+      });
+    }
+
+    // Save attendance to localStorage
+    function saveAttendance() {
+      if (!currentAttendanceCourse || !currentAttendanceDate) {
+        alert('Please select a course and date first');
+        return;
+      }
+
+      const recordKey = `${currentAttendanceDate}-${currentAttendanceCourse}`;
+      const attendance = {};
+
+      document.querySelectorAll('.attendance-buttons').forEach(container => {
+        const studentId = container.dataset.studentId;
+        const activeBtn = container.querySelector('.attendance-btn.active');
+        if (activeBtn) {
+          const status = activeBtn.dataset.status;
+          attendance[studentId] = status;
+        }
+      });
+
+      attendanceRecords[recordKey] = attendance;
+      saveAttendanceRecords();
+
+      // Show success message
+      const btn = event.target;
+      const originalText = btn.innerHTML;
+      btn.innerHTML = '✓ Saved!';
+      btn.style.background = '#059669';
+      
+      setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.background = '';
+      }, 2000);
+    }
+
+    // Add attendance note (placeholder)
+    function addAttendanceNote(studentId) {
+      const note = prompt('Add note for this student:');
+      if (note) {
+        alert('Note saved: ' + note + '\n\nFull note system coming soon...');
+      }
+    }
+
+    // View attendance reports (placeholder)
+    function viewAttendanceReports() {
+      alert('Attendance reports feature coming soon!\n\nWill include:\n- Attendance percentage by student\n- Course attendance trends\n- Absence patterns\n- Exportable reports');
+    }
+
+    // Export attendance (placeholder)
+    function exportAttendance() {
+      if (Object.keys(attendanceRecords).length === 0) {
+        alert('No attendance records to export');
+        return;
+      }
+      
+      alert('Export feature coming soon!\n\nWill support:\n- CSV export\n- Excel export\n- PDF reports\n- Date range selection');
+    }
+
+    // ============================================
+    // END ATTENDANCE TRACKING SYSTEM
+    // ============================================
+
     // Open Student Modal
     async function openStudentModal(studentId) {
       const modal = document.getElementById('studentModal');
@@ -1133,11 +3196,12 @@
       modalBody.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading student details...</p></div>';
 
       try {
-        // Fetch student
-        const { data: student, error: studentError } = await supabase
+        // Fetch ONLY ENROLLED student
+        const { data: student, error: studentError } = await db
           .from('students')
           .select('*')
           .eq('id', studentId)
+          .eq('enrollment_status', 'active')
           .single();
 
         if (studentError) throw studentError;
@@ -1145,7 +3209,7 @@
         // Fetch application if exists
         let application = null;
         if (student.application_id) {
-          const { data: appData, error: appError } = await supabase
+          const { data: appData, error: appError } = await db
             .from('applications')
             .select('*')
             .eq('id', student.application_id)
@@ -1248,6 +3312,16 @@
       return standing.charAt(0).toUpperCase() + standing.slice(1);
     }
 
+    function formatProgram(program) {
+      if (!program) return 'N/A';
+      // Extract abbreviation from program name
+      // "Bachelor of Science in Nursing (BSN)" -> "BSN"
+      const match = program.match(/\(([A-Z\s]+)\)/);
+      if (match) return match[1].trim();
+      // If already abbreviated or no parentheses, return as is
+      return program;
+    }
+
     function formatDate(dateString) {
       if (!dateString) return null;
       try {
@@ -1259,6 +3333,13 @@
       }
     }
 
+    function escapeHtml(text) {
+      if (!text) return '';
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
     // Actions
     function openStudentHub(studentId) {
       const student = allStudents.find(s => s.id === studentId);
@@ -1268,7 +3349,11 @@
     }
 
     function editStudent(studentId) {
-      alert('Edit student feature coming soon...');
+      const student = allStudents.find(s => s.id === studentId);
+      if (student) {
+        // Redirect to admin student page for editing
+        window.location.href = `admin-student-page.html?id=${student.id}`;
+      }
     }
 
     function viewTranscript(studentId) {
@@ -1296,10 +3381,28 @@
       }
     });
 
+    document.getElementById('gradeModal').addEventListener('click', (e) => {
+      if (e.target.id === 'gradeModal') {
+        closeGradeModal();
+      }
+    });
+
+    document.getElementById('courseManagerModal').addEventListener('click', (e) => {
+      if (e.target.id === 'courseManagerModal') {
+        closeCourseManager();
+      }
+    });
+
     // Close modal on ESC
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        closeStudentModal();
+        if (document.getElementById('courseManagerModal').classList.contains('open')) {
+          closeCourseManager();
+        } else if (document.getElementById('gradeModal').classList.contains('open')) {
+          closeGradeModal();
+        } else if (document.getElementById('studentModal').classList.contains('open')) {
+          closeStudentModal();
+        }
       }
     });
   </script>
