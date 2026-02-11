@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Student Hub — Armenian College of Nursing & Health Sciences</title>
 
+  <!-- Supabase Client -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
 
   <style>
@@ -1554,6 +1558,9 @@
   </div>
 
   <script>
+    // Initialize Supabase client
+    const db = initSupabase();
+    
     // Load student data from sessionStorage
     let studentData = null;
     
@@ -1801,8 +1808,62 @@
     });
 
     // ==================== MODERN NOTES LIBRARY SYSTEM ====================
-    const PUBLISHED_NOTES_KEY = 'acnhs_published_notes';
+    const PUBLISHED_NOTES_KEY = 'publishedNotes'; // Changed to match admin hub
     const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+    
+    // Get current student's database ID - with safety check
+    let currentStudentId = null;
+
+    async function resolveStudentId() {
+      if (currentStudentId) return currentStudentId;
+
+      if (studentData && studentData.id) {
+        currentStudentId = studentData.id;
+        console.log('✅ Current student ID (database UUID):', currentStudentId);
+        return currentStudentId;
+      }
+
+      const storedRecordId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId');
+      if (storedRecordId) {
+        currentStudentId = storedRecordId;
+        console.log('✅ Current student ID loaded from storage:', currentStudentId);
+        return currentStudentId;
+      }
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlStudentId = urlParams.get('student');
+      const studentIdText = studentData?.studentId || studentData?.student_id || urlStudentId || null;
+
+      if (!studentIdText) {
+        console.error('❌ studentData.id not found - notes filtering will fail');
+        console.log('🔍 Available studentData keys:', studentData ? Object.keys(studentData) : 'studentData is null');
+        return null;
+      }
+
+      try {
+        const { data, error } = await db
+          .from('students')
+          .select('id, student_id')
+          .eq('student_id', studentIdText)
+          .single();
+
+        if (error) throw error;
+
+        if (data?.id) {
+          currentStudentId = data.id;
+          if (studentData) studentData.id = data.id;
+          sessionStorage.setItem('studentRecordId', data.id);
+          localStorage.setItem('studentRecordId', data.id);
+          console.log('✅ Resolved student UUID from student_id:', studentIdText, '→', data.id);
+          return currentStudentId;
+        }
+      } catch (err) {
+        console.error('❌ Failed to resolve student UUID:', err);
+      }
+
+      console.error('❌ No student ID available - notes filtering will fail');
+      return null;
+    }
 
     const hubSearchInput = document.getElementById('hubSearchInput');
     const categoriesView = document.getElementById('hubCategoriesView');
@@ -1817,33 +1878,36 @@
 
     // HARDCODED NOTES - Directly wired to HTML files
     const HARDCODED_NOTES = [
-      // Fundamentals
-      { title: 'Fundamentals of Nursing - NCLEX Review', htmlFile: 'fundamentals-nursing-nclex.html', category: 'Fundamentals' },
-      { title: 'Oxygenation Basics', htmlFile: 'oxygenation-basics-nursing-nclex.html', category: 'Fundamentals' },
-      { title: 'Pain Assessment', htmlFile: 'pain-assessment-nursing-nclex.html', category: 'Fundamentals' },
-      { title: 'Nutrition & Feeding', htmlFile: 'nutrition-feeding-nursing-nclex.html', category: 'Fundamentals' },
-      { title: 'Hygiene & Grooming', htmlFile: 'hygiene-grooming-nursing-nclex.html', category: 'Fundamentals' },
-      { title: 'Skin Integrity & Pressure Injuries', htmlFile: 'skin-integrity-pressure-injuries-nclex.html', category: 'Fundamentals' },
-      { title: 'Delegation Principles', htmlFile: 'delegation-nursing-nclex.html', category: 'Fundamentals' },
-      { title: "Nurse's Role in Informed Consent", htmlFile: 'informed-consent-nursing.html', category: 'Fundamentals' },
-      { title: 'Scope of Practice', htmlFile: 'scope-of-practice-nursing.html', category: 'Fundamentals' },
-      { title: 'Documentation & Informatics', htmlFile: 'documentation-informatics-nursing.html', category: 'Fundamentals' },
-      { title: 'Vital Signs Interpretation', htmlFile: 'vital-signs-interpretation-nursing.html', category: 'Fundamentals' },
-      { title: 'BMI Calculation', htmlFile: 'bmi-calculation-nursing.html', category: 'Fundamentals' },
-      { title: "Maslow's Hierarchy of Needs", htmlFile: 'maslows-hierarchy-nursing.html', category: 'Fundamentals' },
-      { title: 'Client Positioning', htmlFile: 'client-positioning-nursing.html', category: 'Fundamentals' },
-      { title: 'SBAR Communication', htmlFile: 'sbar-communication-nursing.html', category: 'Fundamentals' },
-      { title: 'Head-to-Toe Assessment', htmlFile: 'head-to-toe-assessment-nursing.html', category: 'Fundamentals' },
-      { title: 'Blood Products Administration', htmlFile: 'blood-products-administration-nursing.html', category: 'Fundamentals' },
-      { title: 'Physical Exam: Bowel Sounds', htmlFile: 'physical-exam-bowel-sounds-nursing.html', category: 'Fundamentals' },
-      { title: 'Emergency Triage Tag Colors', htmlFile: 'emergency-triage-tag-colors-nursing.html', category: 'Fundamentals' },
-      { title: 'Tube Care', htmlFile: 'tube-care-nursing.html', category: 'Fundamentals' },
-      { title: 'Elimination & Intake/Output', htmlFile: 'elimination-intake-output-nursing.html', category: 'Fundamentals' },
-      { title: 'Infection Control & Precautions', htmlFile: 'precautions-nursing.html', category: 'Fundamentals' },
-      { title: 'Complementary & Alternative Medicine', htmlFile: 'complementary-alternative-medicine-nursing.html', category: 'Fundamentals' },
-      { title: 'Physical Assessment Techniques', htmlFile: 'physical-assessment-nursing.html', category: 'Fundamentals' },
-      { title: 'Amputation Care', htmlFile: 'amputation-nursing.html', category: 'Fundamentals' },
-      { title: 'Family Dynamics', htmlFile: 'family-dynamics-nursing.html', category: 'Fundamentals' },
+      // Fundamentals (29 notes total) - IDs match admin-hub.html for publishing system
+      { id: 'note_1', title: 'Fundamentals of Nursing - NCLEX Review', htmlFile: 'fundamentals-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_2', title: "Nurse's Role in Informed Consent", htmlFile: 'informed-consent-nursing.html', category: 'Fundamentals' },
+      { id: 'note_3', title: 'Scope of Practice', htmlFile: 'scope-of-practice-nursing.html', category: 'Fundamentals' },
+      { id: 'note_4', title: 'Delegation Principles', htmlFile: 'delegation-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_5', title: 'Family Dynamics', htmlFile: 'family-dynamics-nursing.html', category: 'Fundamentals' },
+      { id: 'note_6', title: "Maslow's Hierarchy of Needs", htmlFile: 'maslows-hierarchy-nursing.html', category: 'Fundamentals' },
+      { id: 'note_7', title: 'SBAR Communication', htmlFile: 'sbar-communication-nursing.html', category: 'Fundamentals' },
+      { id: 'note_8', title: 'Infection Control & Precautions', htmlFile: 'precautions-nursing.html', category: 'Fundamentals' },
+      { id: 'note_9', title: 'Vital Signs Interpretation', htmlFile: 'vital-signs-interpretation-nursing.html', category: 'Fundamentals' },
+      { id: 'note_10', title: 'Physical Exam: Bowel Sounds', htmlFile: 'physical-exam-bowel-sounds-nursing.html', category: 'Fundamentals' },
+      { id: 'note_11', title: 'Physical Assessment Techniques', htmlFile: 'physical-assessment-nursing.html', category: 'Fundamentals' },
+      { id: 'note_12', title: 'Head-to-Toe Assessment', htmlFile: 'head-to-toe-assessment-nursing.html', category: 'Fundamentals' },
+      { id: 'note_13', title: 'Nursing Diagnosis', htmlFile: 'nursing-diagnosis-nclex.html', category: 'Fundamentals' },
+      { id: 'note_14', title: 'Documentation & Informatics', htmlFile: 'documentation-informatics-nursing.html', category: 'Fundamentals' },
+      { id: 'note_15', title: 'Client Positioning', htmlFile: 'client-positioning-nursing.html', category: 'Fundamentals' },
+      { id: 'note_16', title: 'Tube Care', htmlFile: 'tube-care-nursing.html', category: 'Fundamentals' },
+      { id: 'note_17', title: 'Blood Products Administration', htmlFile: 'blood-products-administration-nursing.html', category: 'Fundamentals' },
+      { id: 'note_18', title: 'Amputation Care', htmlFile: 'amputation-nursing.html', category: 'Fundamentals' },
+      { id: 'note_19', title: 'Nursing Calculations', htmlFile: 'nursing-calculations-nclex.html', category: 'Fundamentals' },
+      { id: 'note_20', title: 'BMI Calculation', htmlFile: 'bmi-calculation-nursing.html', category: 'Fundamentals' },
+      { id: 'note_21', title: 'Complementary & Alternative Medicine', htmlFile: 'complementary-alternative-medicine-nursing.html', category: 'Fundamentals' },
+      { id: 'note_22', title: 'Emergency Triage Tag Colors', htmlFile: 'emergency-triage-tag-colors-nursing.html', category: 'Fundamentals' },
+      { id: 'note_23', title: 'Hygiene & Grooming', htmlFile: 'hygiene-grooming-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_24', title: 'Elimination & Intake/Output', htmlFile: 'elimination-intake-output-nursing.html', category: 'Fundamentals' },
+      { id: 'note_25', title: 'Nutrition & Feeding', htmlFile: 'nutrition-feeding-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_26', title: 'Oxygenation Basics', htmlFile: 'oxygenation-basics-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_27', title: 'Pain Assessment', htmlFile: 'pain-assessment-nursing-nclex.html', category: 'Fundamentals' },
+      { id: 'note_28', title: 'Skin Integrity & Pressure Injuries', htmlFile: 'skin-integrity-pressure-injuries-nclex.html', category: 'Fundamentals' },
+      { id: 'note_29', title: 'Sleep & Sensory Needs', htmlFile: 'sleep-sensory-needs-nclex.html', category: 'Fundamentals' },
     ];
 
     // Get all notes (hardcoded, not from localStorage)
@@ -1851,7 +1915,7 @@
       console.log('📥 Using hardcoded notes list');
       console.log(`📊 Total notes: ${HARDCODED_NOTES.length}`);
       return HARDCODED_NOTES.map(note => ({
-        id: note.htmlFile,
+        id: note.id, // Use explicit ID (note_1, note_2, etc.) to match admin hub
         title: note.title,
         htmlFile: note.htmlFile,
         category: note.category,
@@ -1888,21 +1952,59 @@
     }
 
     // Render categories
-    function renderCategories() {
+    async function renderCategories() {
       console.log('🎨 renderCategories() called');
       if (!catGrid) {
         console.error('❌ catGrid element not found!');
         return;
       }
       
+      // Safety check for student ID
+      if (!currentStudentId) {
+        console.error('❌ No student ID available - cannot filter notes');
+        catGrid.innerHTML = '<p style="color: red; padding: 20px;">Error: Student ID not found. Please refresh the page.</p>';
+        return;
+      }
+      
       const allNotes = getAllNotesWithCategories();
       console.log(`📚 getAllNotesWithCategories returned: ${allNotes.length} notes`);
       
-      const categoryCounts = {};
+      let publishedNoteIds = [];
+      let showAllNotes = false;
       
-      allNotes.forEach(note => {
-        categoryCounts[note.category] = (categoryCounts[note.category] || 0) + 1;
-      });
+      // Fetch published notes for this student from Supabase
+      try {
+        const { data: publishedData, error } = await db
+          .from('published_notes')
+          .select('note_id')
+          .eq('student_id', currentStudentId);
+        
+        if (error) {
+          console.warn('⚠️ published_notes table may not exist or query failed:', error.message);
+          console.log('📖 Fallback: Showing ALL notes to student');
+          showAllNotes = true;
+        } else {
+          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+          console.log(`📋 Student has access to ${publishedNoteIds.length} notes`);
+          
+          // If no notes are published yet, show all notes as fallback
+          if (publishedNoteIds.length === 0) {
+            console.log('📖 No published notes found - showing ALL notes as fallback');
+            showAllNotes = true;
+          }
+        }
+        
+        const categoryCounts = {};
+        
+        allNotes.forEach(note => {
+          // Show all notes if table doesn't exist or is empty, otherwise filter by published
+          const isPublishedToStudent = publishedNoteIds.includes(note.id);
+          const canView = showAllNotes || isPublishedToStudent || isAdmin;
+          
+          if (canView) {
+            categoryCounts[note.category] = (categoryCounts[note.category] || 0) + 1;
+          }
+        });
 
       const categories = Object.keys(categoryCounts).sort();
       console.log('📂 Categories to display:', categories);
@@ -1937,6 +2039,10 @@
       console.log('✅ catGrid.innerHTML set, length:', catGrid.innerHTML.length);
       if (catsEmpty) catsEmpty.style.display = 'none';
       filterCurrentView();
+      } catch (err) {
+        console.error('❌ Error loading published notes:', err);
+        catGrid.innerHTML = '<p style="color:#ef4444;text-align:center;padding:40px">Error loading notes</p>';
+      }
     }
 
     // Open category
@@ -1966,38 +2072,69 @@
     }
 
     // Render notes in category
-    function renderNotesInCategory(category) {
+    async function renderNotesInCategory(category) {
       if (!notesList) return;
       
+      // Safety check for student ID
+      if (!currentStudentId) {
+        console.error('❌ No student ID available - cannot filter notes');
+        notesList.innerHTML = '<p style="color: red; padding: 20px;">Error: Student ID not found. Please refresh the page.</p>';
+        return;
+      }
+      
       const allNotes = getAllNotesWithCategories();
-      const publishedNotes = getPublishedNotes();
       const categoryNotes = allNotes.filter(n => n.category === category);
 
-      notesList.innerHTML = categoryNotes.map(note => {
-        const isPublished = publishedNotes[note.id] === true;
-        const canView = isPublished || isAdmin;
-        const lockedClass = !canView ? 'locked' : '';
+      let publishedNoteIds = [];
+      let showAllNotes = false;
+      
+      try {
+        // Fetch published notes for this student from Supabase
+        const { data: publishedData, error } = await db
+          .from('published_notes')
+          .select('note_id')
+          .eq('student_id', currentStudentId);
         
-        return `
-          <div class="note-item ${lockedClass}" data-title="${escapeAttr(note.title)}">
-            <div class="note-item-header">
-              <div class="note-title">${escapeHtml(note.title)}</div>
-              <div class="note-actions-small">
-                ${canView ? `
-                  <button class="btn-small" type="button"
-                    onclick="event.stopPropagation(); window.open('${note.htmlFile}', '_blank')">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 4.6 10.8 6.1a1.6 1.6 0 010 1.8C21.7 14.4 17.5 19 12 19S2.3 14.4 1.2 12.9a1.6 1.6 0 010-1.8C2.3 9.6 6.5 5 12 5zm0 3.2A3.8 3.8 0 1015.8 12 3.8 3.8 0 0012 8.2z"/></svg>
-                    View
-                  </button>
-                ` : ''}
-                ${isAdmin ? `
-                  <button class="btn-small ${isPublished ? '' : 'delete'}" type="button"
-                    onclick="togglePublishNote('${escapeAttr(note.id)}', event)">
-                    ${isPublished ? '✓ Published' : '🔒 Locked'}
-                  </button>
-                ` : ''}
+        if (error) {
+          console.warn('⚠️ published_notes table may not exist or query failed:', error.message);
+          console.log('📖 Fallback: Showing ALL notes in this category');
+          showAllNotes = true;
+        } else {
+          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+          
+          // If no notes are published yet, show all notes as fallback
+          if (publishedNoteIds.length === 0) {
+            console.log('📖 No published notes found - showing ALL notes as fallback');
+            showAllNotes = true;
+          }
+        }
+
+        notesList.innerHTML = categoryNotes.map(note => {
+          // Check if this note is published to the current student
+          const isPublishedToStudent = publishedNoteIds.includes(note.id);
+          const canView = showAllNotes || isPublishedToStudent || isAdmin;
+          const lockedClass = !canView ? 'locked' : '';
+          
+          return `
+            <div class="note-item ${lockedClass}" data-title="${escapeAttr(note.title)}">
+              <div class="note-item-header">
+                <div class="note-title">${escapeHtml(note.title)}</div>
+                <div class="note-actions-small">
+                  ${canView ? `
+                    <button class="btn-small" type="button"
+                      onclick="event.stopPropagation(); window.open('${note.htmlFile}', '_blank')">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5.5 0 9.7 4.6 10.8 6.1a1.6 1.6 0 010 1.8C21.7 14.4 17.5 19 12 19S2.3 14.4 1.2 12.9a1.6 1.6 0 010-1.8C2.3 9.6 6.5 5 12 5zm0 3.2A3.8 3.8 0 1015.8 12 3.8 3.8 0 0012 8.2z"/></svg>
+                      View
+                    </button>
+                  ` : ''}
+                  ${isAdmin ? `
+                    <button class="btn-small ${isPublishedToStudent ? '' : 'delete'}" type="button"
+                      onclick="togglePublishNote('${escapeAttr(note.id)}', event)">
+                      ${isPublishedToStudent ? '✓ Published' : '🔒 Locked'}
+                    </button>
+                  ` : ''}
+                </div>
               </div>
-            </div>
             <div class="note-text"></div>
           </div>
         `;
@@ -2007,6 +2144,10 @@
       if (visibleNotesCount) visibleNotesCount.textContent = String(categoryNotes.length);
       
       filterCurrentView();
+      } catch (err) {
+        console.error('❌ Error loading notes:', err);
+        notesList.innerHTML = '<p style="color:#ef4444;text-align:center;padding:40px">Error loading notes</p>';
+      }
     }
 
     // Search filter
@@ -2063,7 +2204,17 @@
     }
 
     // Initialize
-    renderCategories();
+    (async function initNotesLibrary(){
+      await resolveStudentId();
+      
+      // Update sidebar badge with correct count
+      const notesCountBadge = document.getElementById('notesCount');
+      if (notesCountBadge) {
+        notesCountBadge.textContent = String(HARDCODED_NOTES.length);
+      }
+      
+      renderCategories();
+    })();
 
     console.log('✅ Modern Notes Library System initialized');
     console.log(`👤 User role: ${isAdmin ? 'Admin' : 'Student'}`);
