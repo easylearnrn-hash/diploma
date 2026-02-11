@@ -1596,14 +1596,22 @@
   <title>${escapeHtml(note.title)} — ACNHS Notes</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body{margin:0;background:#0b1124;font-family:'Inter',sans-serif;color:#0f172a;padding:40px 20px;}
-    main{max-width:900px;margin:0 auto;}
-    .note-shell{background:#fff;border-radius:28px;box-shadow:0 40px 80px rgba(15,23,42,0.15);overflow:hidden;border:1px solid rgba(15,23,42,0.08);}
-    header{padding:48px;background:linear-gradient(135deg,#0f172a,#1d3a68);color:#fff;}
-    header h1{margin:0;font-size:2.5rem;line-height:1.2;}
-    header p{margin-top:12px;color:rgba(248,250,252,0.8);} 
-    section{padding:40px;background:#fff;font-size:1.02rem;line-height:1.8;color:#1e293b;white-space:pre-wrap;}
-    footer{text-align:center;font-size:0.85rem;color:#64748b;margin:24px 0;}
+    *{-webkit-user-select:none;-moz-user-select:none;user-select:none;-webkit-touch-callout:none}
+    body{margin:0;background:#0b1124;font-family:'Inter',sans-serif;color:#0f172a;padding:40px 20px;position:relative}
+    main{max-width:900px;margin:0 auto;position:relative}
+    .note-shell{background:#fff;border-radius:28px;box-shadow:0 40px 80px rgba(15,23,42,0.15);overflow:hidden;border:1px solid rgba(15,23,42,0.08);position:relative}
+    header{padding:48px;background:linear-gradient(135deg,#0f172a,#1d3a68);color:#fff}
+    header h1{margin:0;font-size:2.5rem;line-height:1.2}
+    header p{margin-top:12px;color:rgba(248,250,252,0.8)} 
+    section{padding:40px;background:#fff;font-size:1.02rem;line-height:1.8;color:#1e293b;white-space:pre-wrap;cursor:text;position:relative}
+    footer{text-align:center;font-size:0.85rem;color:#64748b;margin:24px 0}
+    .annotation{position:absolute;background:rgba(251,191,36,0.85);color:#0f172a;padding:8px 12px;border-radius:8px;font-size:13px;font-weight:600;border:2px solid #fbbf24;box-shadow:0 4px 12px rgba(251,191,36,0.3);z-index:100;cursor:move;min-width:120px;max-width:300px;word-wrap:break-word;-webkit-user-select:text;-moz-user-select:text;user-select:text}
+    .annotation:hover{box-shadow:0 6px 20px rgba(251,191,36,0.5)}
+    .annotation-delete{position:absolute;top:-8px;right:-8px;width:24px;height:24px;background:#ef4444;color:#fff;border:none;border-radius:50%;cursor:pointer;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(239,68,68,0.4)}
+    .annotation-delete:hover{background:#dc2626;transform:scale(1.1)}
+    .tools-bar{position:fixed;bottom:24px;right:24px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;padding:16px 24px;border-radius:16px;box-shadow:0 8px 24px rgba(59,130,246,0.4);z-index:1000;display:flex;align-items:center;gap:12px;font-size:14px;font-weight:700}
+    .tools-bar button{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700;transition:all 0.2s}
+    .tools-bar button:hover{background:rgba(255,255,255,0.3);transform:translateY(-2px)}
   </style>
 </head>
 <body>
@@ -1614,10 +1622,168 @@
         <h1>${escapeHtml(note.title)}</h1>
         <p>Topic: ${escapeHtml(topic.title)} • Created ${new Date(note.created).toLocaleString()}</p>
       </header>
-      <section>${escapeHtml(note.content)}</section>
+      <section id="noteContent">${escapeHtml(note.content)}</section>
     </article>
     <footer>Generated ${new Date().toLocaleString()} · Internal use only</footer>
   </main>
+
+  <div class="tools-bar">
+    <span>📝 Click anywhere to add notes</span>
+    <button onclick="clearAllAnnotations()">🗑️ Clear All</button>
+  </div>
+
+  <script>
+    const noteId = '${note.id}';
+    const STORAGE_KEY = 'acnhs_annotations_' + noteId;
+    let annotations = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    let draggedAnnotation = null;
+
+    // PREVENT COPYING - Disable all copy mechanisms
+    document.addEventListener('copy', (e) => {
+      e.preventDefault();
+      e.clipboardData.setData('text/plain', '');
+      return false;
+    });
+
+    document.addEventListener('cut', (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      return false;
+    });
+
+    document.addEventListener('selectstart', (e) => {
+      if (!e.target.classList.contains('annotation')) {
+        e.preventDefault();
+        return false;
+      }
+    });
+
+    // Disable keyboard shortcuts for copying
+    document.addEventListener('keydown', (e) => {
+      // Cmd+C, Cmd+A, Cmd+X on Mac or Ctrl+C, Ctrl+A, Ctrl+X on Windows
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'c' || e.key === 'C' || e.key === 'x' || e.key === 'X' || e.key === 'a' || e.key === 'A')) {
+        if (!e.target.classList.contains('annotation')) {
+          e.preventDefault();
+          return false;
+        }
+      }
+    });
+
+    // Render existing annotations
+    function renderAnnotations() {
+      document.querySelectorAll('.annotation').forEach(el => el.remove());
+      annotations.forEach(ann => {
+        createAnnotationElement(ann);
+      });
+    }
+
+    // Create annotation element
+    function createAnnotationElement(ann) {
+      const section = document.getElementById('noteContent');
+      const div = document.createElement('div');
+      div.className = 'annotation';
+      div.style.left = ann.x + 'px';
+      div.style.top = ann.y + 'px';
+      div.contentEditable = true;
+      div.textContent = ann.text;
+      div.dataset.id = ann.id;
+
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'annotation-delete';
+      deleteBtn.textContent = '×';
+      deleteBtn.onclick = (e) => {
+        e.stopPropagation();
+        deleteAnnotation(ann.id);
+      };
+      div.appendChild(deleteBtn);
+
+      // Save on edit
+      div.oninput = () => {
+        ann.text = div.textContent.replace('×', '').trim();
+        saveAnnotations();
+      };
+
+      // Dragging
+      div.onmousedown = (e) => {
+        if (e.target === deleteBtn) return;
+        draggedAnnotation = { el: div, ann: ann, offsetX: e.clientX - div.offsetLeft, offsetY: e.clientY - div.offsetTop };
+        e.preventDefault();
+      };
+
+      section.appendChild(div);
+    }
+
+    // Add annotation on click
+    document.getElementById('noteContent').onclick = (e) => {
+      if (e.target.classList.contains('annotation') || e.target.classList.contains('annotation-delete')) return;
+      
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      
+      const ann = {
+        id: Date.now(),
+        x: x,
+        y: y,
+        text: 'Your note here...'
+      };
+      
+      annotations.push(ann);
+      saveAnnotations();
+      createAnnotationElement(ann);
+      
+      // Focus the new annotation
+      setTimeout(() => {
+        const newEl = document.querySelector(\`[data-id="\${ann.id}"]\`);
+        if (newEl) {
+          newEl.focus();
+          document.execCommand('selectAll', false, null);
+        }
+      }, 10);
+    };
+
+    // Dragging handlers
+    document.onmousemove = (e) => {
+      if (!draggedAnnotation) return;
+      const section = document.getElementById('noteContent');
+      const rect = section.getBoundingClientRect();
+      draggedAnnotation.el.style.left = (e.clientX - rect.left - draggedAnnotation.offsetX) + 'px';
+      draggedAnnotation.el.style.top = (e.clientY - rect.top - draggedAnnotation.offsetY) + 'px';
+      draggedAnnotation.ann.x = parseInt(draggedAnnotation.el.style.left);
+      draggedAnnotation.ann.y = parseInt(draggedAnnotation.el.style.top);
+    };
+
+    document.onmouseup = () => {
+      if (draggedAnnotation) {
+        saveAnnotations();
+        draggedAnnotation = null;
+      }
+    };
+
+    function deleteAnnotation(id) {
+      annotations = annotations.filter(a => a.id !== id);
+      saveAnnotations();
+      renderAnnotations();
+    }
+
+    function clearAllAnnotations() {
+      if (confirm('Clear all your notes? This cannot be undone.')) {
+        annotations = [];
+        saveAnnotations();
+        renderAnnotations();
+      }
+    }
+
+    function saveAnnotations() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(annotations));
+    }
+
+    renderAnnotations();
+  </script>
 </body>
 </html>`;
 
