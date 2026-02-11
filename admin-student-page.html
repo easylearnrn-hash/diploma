@@ -1215,6 +1215,9 @@
         <button class="btn btn-secondary" onclick="sendEmail()">
           <span>📧</span> Send Email
         </button>
+        <button class="btn btn-secondary" onclick="unenrollStudent()" style="background:rgba(251,191,36,0.15);border-color:rgba(251,191,36,0.3);color:#fbbf24;">
+          <span>🔙</span> Unenroll Student
+        </button>
         <button class="btn btn-danger" onclick="withdrawStudent()">
           <span>⚠️</span> Withdraw Student
         </button>
@@ -1712,6 +1715,28 @@
       setOverviewValue('emergencyPhone', student?.emergency_contact_phone || payload.emergencyPhone || '—');
     }
 
+    async function runSupabaseRequest(requestFn, label = 'request') {
+      const maxAttempts = 2;
+      let lastError = null;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        try {
+          return await requestFn();
+        } catch (error) {
+          lastError = error;
+          const message = error?.message || '';
+          if (!message.includes('Load failed') || attempt === maxAttempts) {
+            throw error;
+          }
+          console.warn(`Retrying ${label} after load failure (attempt ${attempt + 1}/${maxAttempts})`);
+          await new Promise(resolve => setTimeout(resolve, 600));
+          sbClient = sbClient || initSupabase();
+        }
+      }
+
+      throw lastError || new Error(`${label} failed`);
+    }
+
     async function loadDocuments(student) {
       if (!student.application_id) {
         renderDocuments([]);
@@ -1719,11 +1744,13 @@
       }
 
       try {
-        const { data: app, error } = await sbClient
-          .from('applications')
-          .select('uploaded_documents, payload')
-          .eq('id', student.application_id)
-          .single();
+        const { data: app, error } = await runSupabaseRequest(() => (
+          sbClient
+            .from('applications')
+            .select('uploaded_documents, payload')
+            .eq('id', student.application_id)
+            .single()
+        ), 'load documents');
 
         if (error) throw error;
 
@@ -2196,7 +2223,7 @@
             <div class="email-subject">${email.subject || 'No Subject'}</div>
             <div class="email-date">${formatDate(email.created_at)}</div>
           </div>
-          <div class="email-preview">${truncate(stripHtml(email.html_body || email.text_body || ''), 150)}</div>
+          <div class="email-preview">${truncate(stripHtml(email.body || ''), 150)}</div>
         </div>
       `).join('');
     }
@@ -2215,11 +2242,13 @@
       }
 
       try {
-        const { data: app, error } = await sbClient
-          .from('applications')
-          .select('*')
-          .eq('id', applicationId)
-          .single();
+        const { data: app, error } = await runSupabaseRequest(() => (
+          sbClient
+            .from('applications')
+            .select('*')
+            .eq('id', applicationId)
+            .single()
+        ), 'load application');
 
         if (error) throw error;
 
@@ -3259,10 +3288,331 @@
     }
 
     function sendEmail() {
+      showEmailTemplateSelector();
+    }
+
+    function showEmailTemplateSelector() {
+      const templates = [
+        {
+          title: "Request Contact",
+          subject: "Important: Please Contact ACNHS",
+          body: `We hope this message finds you well.\n\nWe have an important matter to discuss with you regarding your application/enrollment at Armenian College of Nursing and Health Sciences. Please contact us at your earliest convenience.\n\nContact Information:\n📞 Phone: +374 93 798879 (WhatsApp)\n📧 Email: admissions@acnhs.am\n\nWe value your education and want to support your success. Please reach out to us as soon as possible.`
+        },
+        {
+          title: "Attendance Warning (48 Hours)",
+          subject: "⚠️ Urgent: Attendance Required - Action Needed Within 48 Hours",
+          body: `This is an important notice regarding your enrollment status at Armenian College of Nursing and Health Sciences.\n\nOur records indicate that you have been approved and enrolled in the ${currentStudent.program || 'Associate Degree in Nursing (ADN)'}, however, you have not been attending classes as required.\n\n⚠️ IMPORTANT NOTICE:\nIf we do not hear from you within 48 hours, your enrollment will be suspended and your application status will be placed on hold.\n\nTo maintain your enrollment status, please:\n1. Contact us immediately to explain your absence\n2. Provide documentation if there are extenuating circumstances\n3. Confirm your intention to continue your studies\n\nContact Information:\n📞 Phone: +374 93 798879 (WhatsApp)\n📧 Email: admissions@acnhs.am\n\nWe value your education and want to support your success. Please reach out to us as soon as possible.`
+        },
+        {
+          title: "Document Request",
+          subject: "Document Submission Required",
+          body: `We are writing to request additional documentation for your student file at Armenian College of Nursing and Health Sciences.\n\nPlease submit the following documents:\n• [List specific documents needed]\n\nDocuments can be submitted:\n📧 Email: admissions@acnhs.am\n📞 Phone: +374 93 798879 (WhatsApp)\n🏢 In person: [Office Address]\n💻 Upload portal: [Portal Link]\n\nDeadline: [Specify deadline]\n\nIf you have any questions or need assistance, please don't hesitate to contact us.\n\nThank you for your prompt attention to this matter.`
+        },
+        {
+          title: "Grade/Performance Concern",
+          subject: "Academic Performance Discussion",
+          body: `We hope this message finds you well.\n\nWe would like to schedule a meeting to discuss your current academic performance and explore ways we can support your success at Armenian College of Nursing and Health Sciences.\n\nOur faculty and student support team are here to help you achieve your educational goals. We believe that with the right support and resources, you can excel in your studies.\n\nPlease contact us to arrange a convenient time to meet:\n📞 Phone: +374 93 798879 (WhatsApp)\n📧 Email: admissions@acnhs.am\n\nWe're committed to your success and look forward to speaking with you.`
+        },
+        {
+          title: "Payment/Financial Matter",
+          subject: "Important: Financial Account Update Required",
+          body: `We are reaching out regarding your student account at Armenian College of Nursing and Health Sciences.\n\nWe need to discuss your account status and available payment options. Our financial services team is here to help you understand your options and work with you to find a solution.\n\nPlease contact our Financial Services office:\n📞 Phone: +374 93 798879 (WhatsApp)\n📧 Email: finance@acnhs.am\n🏢 Office Hours: [Hours]\n\nWe offer various payment plans and may be able to assist you in finding financial aid resources.\n\nYour education is important to us, and we're here to help.`
+        },
+        {
+          title: "Schedule Meeting",
+          subject: "Meeting Request - ACNHS",
+          body: `We would like to schedule a meeting with you to discuss your progress and future plans at Armenian College of Nursing and Health Sciences.\n\nPlease let us know your availability for a meeting in the coming week. We can meet:\n🏢 In person at our campus\n💻 Via video conference\n📞 By phone\n\nSuggested times:\n• [Date/Time Option 1]\n• [Date/Time Option 2]\n• [Date/Time Option 3]\n\nOr propose a time that works better for you.\n\nContact us at:\n📧 Email: admissions@acnhs.am\n📞 Phone: +374 93 798879 (WhatsApp)\n\nWe look forward to connecting with you.`
+        },
+        {
+          title: "Congratulations/Positive News",
+          subject: "Congratulations from ACNHS! 🎉",
+          body: `Congratulations! We are pleased to share some exciting news with you.\n\n[Specify the achievement or positive update]\n\nYour dedication and hard work have not gone unnoticed, and we are proud to have you as part of the Armenian College of Nursing and Health Sciences community.\n\nKeep up the excellent work! If you have any questions or need any support, please don't hesitate to reach out.\n\nContact us:\n📧 Email: admissions@acnhs.am\n📞 Phone: +374 93 798879 (WhatsApp)\n\nOnce again, congratulations!`
+        },
+        {
+          title: "Custom Email",
+          subject: "",
+          body: ""
+        }
+      ];
+
+      // Create modal
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+      
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = 'background:#0f1f3a;border-radius:16px;max-width:900px;width:100%;position:relative;border:1px solid rgba(45,212,191,0.3);box-shadow:0 20px 60px rgba(0,0,0,0.5);margin:20px auto;max-height:90vh;display:flex;flex-direction:column;';
+      
+      modalContent.innerHTML = `
+        <div style="padding:24px;border-bottom:1px solid rgba(45,212,191,0.2);flex-shrink:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <h2 style="margin:0 0 8px 0;color:#fff;font-size:24px;font-weight:700;">📧 Select Email Template</h2>
+              <p style="margin:0;color:#94a3b8;font-size:14px;">Send to: ${currentStudent.email}</p>
+            </div>
+            <button onclick="this.closest('.modal-backdrop').remove()" style="background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:24px;transition:all 0.2s;">×</button>
+          </div>
+        </div>
+        
+        <div style="padding:24px;overflow-y:auto;flex:1;">
+          <div style="display:grid;gap:16px;">
+            ${templates.map((template, index) => `
+              <div onclick="selectEmailTemplate(${index})" style="background:rgba(255,255,255,0.03);border:1px solid rgba(45,212,191,0.2);border-radius:12px;padding:20px;cursor:pointer;transition:all 0.2s;" onmouseover="this.style.borderColor='rgba(45,212,191,0.4)';this.style.background='rgba(45,212,191,0.05)';" onmouseout="this.style.borderColor='rgba(45,212,191,0.2)';this.style.background='rgba(255,255,255,0.03)';">
+                <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+                  <span style="font-size:24px;">${index === 7 ? '✏️' : '📨'}</span>
+                  <h3 style="margin:0;color:#2dd4bf;font-size:16px;font-weight:700;">${template.title}</h3>
+                </div>
+                ${template.subject ? `<p style="margin:8px 0 0 0;color:#94a3b8;font-size:13px;"><strong>Subject:</strong> ${template.subject}</p>` : '<p style="margin:8px 0 0 0;color:#94a3b8;font-size:13px;font-style:italic;">Write your own custom email</p>'}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+      
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+      
+      // Store templates in window for access
+      window.emailTemplates = templates;
+      
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+    }
+
+    function selectEmailTemplate(templateIndex) {
+      const template = window.emailTemplates[templateIndex];
+      const modal = document.querySelector('.modal-backdrop');
+      if (modal) modal.remove();
+      
+      // Show email editor/preview modal
+      showEmailEditor(template);
+    }
+
+    function showEmailEditor(template) {
+      // Create modal
+      const modal = document.createElement('div');
+      modal.id = 'emailEditorModal';
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10001;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;';
+      
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = 'background:#0f1f3a;border-radius:16px;max-width:800px;width:100%;position:relative;border:1px solid rgba(45,212,191,0.3);box-shadow:0 20px 60px rgba(0,0,0,0.5);margin:20px auto;max-height:90vh;display:flex;flex-direction:column;';
+      
+      modalContent.innerHTML = `
+        <div style="padding:24px;border-bottom:1px solid rgba(45,212,191,0.2);flex-shrink:0;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <h2 style="margin:0 0 8px 0;color:#fff;font-size:24px;font-weight:700;">✉️ Compose Email</h2>
+              <p style="margin:0;color:#94a3b8;font-size:14px;">To: ${currentStudent.email}</p>
+            </div>
+            <button onclick="document.getElementById('emailEditorModal').remove()" style="background:rgba(239,68,68,0.2);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;width:40px;height:40px;border-radius:50%;cursor:pointer;font-size:24px;transition:all 0.2s;">×</button>
+          </div>
+        </div>
+        
+        <div style="padding:24px;overflow-y:auto;flex:1;">
+          <div style="margin-bottom:20px;">
+            <label style="display:block;margin-bottom:8px;color:#f8fafc;font-weight:600;font-size:14px;">Subject</label>
+            <input type="text" id="emailSubjectInput" value="${template.subject}" style="width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;color:#f8fafc;font-size:14px;outline:none;transition:all 0.2s;" onfocus="this.style.borderColor='rgba(45,212,191,0.4)';this.style.background='rgba(255,255,255,0.08)';" onblur="this.style.borderColor='rgba(45,212,191,0.2)';this.style.background='rgba(255,255,255,0.05)';">
+          </div>
+          
+          <div style="margin-bottom:20px;">
+            <label style="display:block;margin-bottom:8px;color:#f8fafc;font-weight:600;font-size:14px;">Message</label>
+            <textarea id="emailBodyInput" rows="12" style="width:100%;padding:12px 16px;background:rgba(255,255,255,0.05);border:1px solid rgba(45,212,191,0.2);border-radius:8px;color:#f8fafc;font-size:14px;outline:none;resize:vertical;font-family:inherit;line-height:1.6;transition:all 0.2s;" onfocus="this.style.borderColor='rgba(45,212,191,0.4)';this.style.background='rgba(255,255,255,0.08)';" onblur="this.style.borderColor='rgba(45,212,191,0.2)';this.style.background='rgba(255,255,255,0.05)';">${template.body}</textarea>
+          </div>
+          
+          <div id="sendEmailStatus" style="margin-bottom:20px;padding:12px 16px;border-radius:8px;display:none;"></div>
+        </div>
+        
+        <div style="padding:24px;border-top:1px solid rgba(45,212,191,0.2);display:flex;gap:12px;justify-content:flex-end;flex-shrink:0;">
+          <button onclick="document.getElementById('emailEditorModal').remove()" style="padding:12px 24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)';" onmouseout="this.style.background='rgba(255,255,255,0.05)';">
+            Cancel
+          </button>
+          <button onclick="sendEmailFromEditor()" style="padding:12px 24px;background:linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);border:none;color:#022c22;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;transition:all 0.2s;display:flex;align-items:center;gap:8px;" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(45,212,191,0.4)';" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none';">
+            <span>📤</span> Send Email
+          </button>
+        </div>
+      `;
+      
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+      
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+    }
+
+    async function sendEmailFromEditor() {
+      const subject = document.getElementById('emailSubjectInput').value.trim();
+      const body = document.getElementById('emailBodyInput').value.trim();
+      const statusDiv = document.getElementById('sendEmailStatus');
+      const sendButton = event.target;
+      
+      if (!subject) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'rgba(239,68,68,0.15)';
+        statusDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+        statusDiv.style.color = '#fca5a5';
+        statusDiv.innerHTML = '⚠️ Please enter a subject';
+        return;
+      }
+      
+      if (!body) {
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'rgba(239,68,68,0.15)';
+        statusDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+        statusDiv.style.color = '#fca5a5';
+        statusDiv.innerHTML = '⚠️ Please enter a message';
+        return;
+      }
+      
+      // Disable button and show loading
+      sendButton.disabled = true;
+      sendButton.style.opacity = '0.6';
+      sendButton.style.cursor = 'not-allowed';
+      sendButton.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid #022c22;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></span> Sending...';
+      
+      // Add spin animation if not exists
+      if (!document.getElementById('spinAnimation')) {
+        const style = document.createElement('style');
+        style.id = 'spinAnimation';
+        style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+      }
+      
       try {
-        window.parent.location.href = `email-system.html?to=${currentStudent.email}&name=${currentStudent.full_name}`;
-      } catch (e) {
-        window.location.href = `email-system.html?to=${currentStudent.email}&name=${currentStudent.full_name}`;
+        // Escape special characters for safe HTML embedding
+        const escapeHtml = (text) => {
+          const div = document.createElement('div');
+          div.textContent = text;
+          return div.innerHTML;
+        };
+        
+        const safeName = escapeHtml(currentStudent.full_name || 'Student');
+        const safeSubject = escapeHtml(subject);
+        const safeBody = body.replace(/\n/g, '<br>');
+        const safeStudentId = escapeHtml(currentStudent.student_id || 'N/A');
+        
+        // Generate HTML email using official ACNHS template
+        const emailTemplate = `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${safeSubject}</title>
+  <style>
+    html,body{margin:0!important;padding:0!important;height:100%!important;width:100%!important}
+    *{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}
+    table,td{mso-table-lspace:0pt!important;mso-table-rspace:0pt!important;border-collapse:collapse!important}
+    img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;display:block}
+    a{color:inherit;text-decoration:none}
+    .u-link{color:#2dd4bf!important;text-decoration:underline!important}
+    @media (max-width: 620px){
+      .container{width:100%!important}
+      .px{padding-left:18px!important;padding-right:18px!important}
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
+    <tr>
+      <td align="center" style="padding:24px 10px;">
+        <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
+          <tr>
+            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);border-radius:14px 14px 0 0;padding:20px 26px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="68" valign="middle">
+                    <img src="https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/images/Seal.png" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                  </td>
+                  <td valign="middle" style="padding-left:14px;">
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#ffffff;font-weight:700;opacity:0.96;">&amp; Health Sciences</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#cbd5e1;font-weight:600;margin-top:6px;">Yerevan, Armenia</div>
+                  </td>
+                  <td valign="top" align="right" style="padding-left:14px;">
+                    <div style="text-align:right;">
+                      <div style="font-family:Inter,Arial,sans-serif;font-size:11px;color:#94a3b8;font-weight:700;letter-spacing:0.5px;">STUDENT ID</div>
+                      <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#2dd4bf;font-weight:800;margin-top:4px;">${safeStudentId}</div>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              <div style="height:1px;background:rgba(255,255,255,0.10);margin:16px 0;"></div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:26px;color:#ffffff;font-weight:900;letter-spacing:-0.4px;">${safeSubject}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#94a3b8;font-weight:600;margin-top:6px;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:17px;color:#0f172a;font-weight:800;">Dear ${safeName},</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:23px;color:#334155;margin-top:12px;">${safeBody}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#0f172a;font-weight:800;margin-top:24px;">Respectfully,</div>
+              <div style="margin-top:12px;">
+                <div style="font-family:Inter,Arial,sans-serif;font-size:14px;color:#0f172a;font-weight:900;">ACNHS Admissions Team</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#475569;font-weight:700;">Office of Admissions</div>
+                <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#64748b;margin-top:6px;">+374 93 798879 (WhatsApp) • admissions@acnhs.am</div>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#020617;border-radius:0 0 14px 14px;padding:16px 26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#94a3b8;">© ${new Date().getFullYear()} Armenian College of Nursing &amp; Health Sciences</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+        
+        // Send email via Supabase - save to email_history
+        const emailData = {
+          recipient: currentStudent.email,
+          subject: subject,
+          body: emailTemplate, // Store full HTML template in body
+          status: 'sent',
+          sent_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await sbClient
+          .from('email_history')
+          .insert([emailData])
+          .select();
+        
+        if (error) throw error;
+        
+        // Show success
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'rgba(45,212,191,0.15)';
+        statusDiv.style.border = '1px solid rgba(45,212,191,0.3)';
+        statusDiv.style.color = '#2dd4bf';
+        statusDiv.innerHTML = '✅ Email sent successfully!';
+        
+        // Close modal after 1.5 seconds
+        setTimeout(() => {
+          document.getElementById('emailEditorModal').remove();
+          showCustomAlert('Email sent successfully!', 'success');
+        }, 1500);
+        
+      } catch (error) {
+        console.error('Error sending email:', error);
+        
+        // Show error
+        statusDiv.style.display = 'block';
+        statusDiv.style.background = 'rgba(239,68,68,0.15)';
+        statusDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+        statusDiv.style.color = '#fca5a5';
+        statusDiv.innerHTML = `❌ Failed to send email: ${error.message}`;
+        
+        // Re-enable button
+        sendButton.disabled = false;
+        sendButton.style.opacity = '1';
+        sendButton.style.cursor = 'pointer';
+        sendButton.innerHTML = '<span>📤</span> Send Email';
       }
     }
 
@@ -3287,6 +3637,125 @@
             showCustomAlert('Student withdrawn successfully', 'success');
             safePostMessage('reloadStudents');
           });
+      }
+    }
+
+    async function unenrollStudent() {
+      // Create custom confirmation modal
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
+      
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = 'background:#0f1f3a;border-radius:16px;max-width:500px;width:100%;position:relative;border:1px solid rgba(251,191,36,0.3);box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+      
+      modalContent.innerHTML = `
+        <div style="padding:32px;">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:rgba(251,191,36,0.15);display:flex;align-items:center;justify-content:center;font-size:24px;">⚠️</div>
+            <h2 style="margin:0;color:#fff;font-size:22px;font-weight:700;">Unenroll ${currentStudent.full_name}?</h2>
+          </div>
+          
+          <p style="color:#94a3b8;margin:0 0 20px 0;font-size:15px;line-height:1.6;">This action will:</p>
+          
+          <div style="background:rgba(0,0,0,0.2);border-radius:8px;padding:16px;margin-bottom:24px;">
+            <div style="display:flex;align-items:start;gap:12px;margin-bottom:12px;">
+              <span style="color:#fbbf24;font-size:18px;">•</span>
+              <span style="color:#e2e8f0;font-size:14px;">Remove student from Students Management</span>
+            </div>
+            <div style="display:flex;align-items:start;gap:12px;">
+              <span style="color:#fbbf24;font-size:18px;">•</span>
+              <span style="color:#e2e8f0;font-size:14px;">Change application status to "ON HOLD"</span>
+            </div>
+          </div>
+          
+          <div style="display:flex;gap:12px;justify-content:flex-end;">
+            <button onclick="this.closest('.modal-backdrop').remove()" style="padding:12px 24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;">
+              Cancel
+            </button>
+            <button id="confirmUnenrollBtn" style="padding:12px 24px;background:rgba(251,191,36,0.2);border:1px solid rgba(251,191,36,0.4);color:#fbbf24;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;transition:all 0.2s;">
+              🔙 Unenroll Student
+            </button>
+          </div>
+        </div>
+      `;
+      
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+      
+      // Close on backdrop click
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+      
+      // Handle confirmation
+      return new Promise((resolve) => {
+        document.getElementById('confirmUnenrollBtn').onclick = async () => {
+          modal.remove();
+          await performUnenrollment();
+        };
+      });
+    }
+
+    async function performUnenrollment() {
+      try {
+        // Get application_id if available
+        const applicationId = currentStudent.application_id;
+        
+        if (!applicationId) {
+          showCustomAlert('No application ID found for this student', 'error');
+          return;
+        }
+
+        // First, get the current application to append to status_history
+        const { data: appData, error: fetchError } = await sbClient
+          .from('applications')
+          .select('status_history')
+          .eq('id', applicationId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Prepare new status history entry
+        const currentHistory = appData?.status_history || [];
+        const newHistoryEntry = {
+          status: 'ON HOLD',
+          timestamp: new Date().toISOString(),
+          note: 'Student unenrolled - application placed on hold'
+        };
+        const updatedHistory = [...currentHistory, newHistoryEntry];
+
+        // Delete student record
+        const { error: deleteError } = await sbClient
+          .from(studentTableName)
+          .delete()
+          .eq('id', currentStudent.id);
+
+        if (deleteError) throw deleteError;
+
+        // Update application status to On Hold
+        const { error: updateError } = await sbClient
+          .from('applications')
+          .update({
+            status: 'ON HOLD',
+            status_updated_at: new Date().toISOString(),
+            status_history: updatedHistory
+          })
+          .eq('id', applicationId);
+
+        if (updateError) throw updateError;
+
+        showCustomAlert('Student unenrolled successfully. Application placed on hold.', 'success');
+        
+        // Reload students list and close this page
+        safePostMessage('reloadStudents');
+        setTimeout(() => {
+          window.close();
+        }, 1500);
+
+      } catch (error) {
+        console.error('Error unenrolling student:', error);
+        showCustomAlert('Failed to unenroll student: ' + error.message, 'error');
       }
     }
 
@@ -3330,7 +3799,7 @@
             </div>
           </div>
           <div style="padding:24px;">
-            <iframe srcdoc="${email.html_body?.replace(/"/g, '&quot;') || email.body || 'No content'}" style="width:100%;min-height:400px;border:1px solid rgba(45,212,191,0.2);border-radius:8px;background:#fff;"></iframe>
+            <iframe srcdoc="${(email.body || 'No content').replace(/"/g, '&quot;')}" style="width:100%;min-height:400px;border:1px solid rgba(45,212,191,0.2);border-radius:8px;background:#fff;"></iframe>
           </div>
         `;
         
@@ -3613,13 +4082,33 @@
 
         if (studentUpdateError) throw studentUpdateError;
 
+        let updateUsername = true;
+        const { data: usernameOwner, error: usernameCheckError } = await sbClient
+          .from('applications')
+          .select('id')
+          .eq('username', institutionalEmail)
+          .maybeSingle();
+
+        if (usernameCheckError) {
+          console.warn('Username availability check failed:', usernameCheckError);
+        }
+
+        if (usernameOwner && usernameOwner.id !== currentStudent.application_id) {
+          updateUsername = false;
+        }
+
+        const applicationUpdate = {
+          institutional_email: institutionalEmail,
+          payload: updatedPayload
+        };
+
+        if (updateUsername) {
+          applicationUpdate.username = institutionalEmail;
+        }
+
         const { error: appUpdateError } = await sbClient
           .from('applications')
-          .update({
-            username: institutionalEmail,
-            institutional_email: institutionalEmail,
-            payload: updatedPayload
-          })
+          .update(applicationUpdate)
           .eq('id', currentStudent.application_id);
 
         if (appUpdateError) throw appUpdateError;
@@ -3628,7 +4117,11 @@
         currentStudent.metadata = mergedMetadata;
 
         await loadSettings();
-        showNotification('Success', `Portal email updated to ${institutionalEmail}`, 'success');
+        if (updateUsername) {
+          showNotification('Success', `Portal email updated to ${institutionalEmail}`, 'success');
+        } else {
+          showNotification('Warning', `Portal email updated to ${institutionalEmail}. Username is already used by another application.`, 'warning');
+        }
       } catch (error) {
         console.error('Error rebuilding portal email:', error);
         showNotification('Error', 'Failed to rebuild portal email', 'error');
@@ -3669,6 +4162,7 @@
       }
 
       const modal = document.createElement('div');
+      modal.id = 'resetPasswordModal';
       modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);z-index:10002;display:flex;align-items:center;justify-content:center;padding:20px;';
       
       modal.innerHTML = `
@@ -3687,7 +4181,7 @@
             <p style="margin:0;font-size:12px;color:var(--text-muted);">Must be at least 8 characters long</p>
           </div>
           <div style="padding:24px 32px;border-top:1px solid var(--border);display:flex;gap:12px;">
-            <button onclick="this.closest('[style*=fixed]').remove()" 
+            <button onclick="document.getElementById('resetPasswordModal')?.remove()" 
               style="flex:1;padding:14px 24px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:12px;color:var(--text);font-weight:600;font-size:15px;cursor:pointer;">
               Cancel
             </button>
@@ -3738,7 +4232,7 @@
         if (error) throw error;
 
         // Close modal
-        document.querySelector('[style*="position:fixed"][style*="z-index:10002"]').remove();
+  document.getElementById('resetPasswordModal')?.remove();
 
         // Reload settings to show new password
         await loadSettings();
@@ -4341,5 +4835,6 @@
     window.saveTransferCredit = saveTransferCredit;
     window.deleteTransferCredit = deleteTransferCredit;
   </script>
+  <script src="./Seal_base64.js"></script>
 </body>
 </html>
