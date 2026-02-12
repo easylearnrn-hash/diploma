@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VID Auth Tester</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 800px;
+      margin: 40px auto;
+      padding: 20px;
+      background: #0a0e1a;
+      color: #f8fafc;
+    }
+    .section {
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-right: 10px;
+    }
+    button:hover { background: #2563eb; }
+    input {
+      width: 100%;
+      padding: 12px;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+      border-radius: 8px;
+      color: white;
+      margin: 8px 0;
+    }
+    pre {
+      background: #111827;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      font-size: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+    }
+    .success { color: #10b981; }
+    .error { color: #ef4444; }
+    h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <h1>🔐 VID Authentication Tester</h1>
+  
+  <div class="section">
+    <h2>1. Check Current Session</h2>
+    <button onclick="checkSession()">Check Session</button>
+    <button onclick="clearSession()">Clear Session</button>
+    <pre id="sessionResult">Click "Check Session" to see current auth state</pre>
+  </div>
+
+  <div class="section">
+    <h2>2. Test Login</h2>
+    <input type="email" id="testEmail" placeholder="Email" value="Hrachfilm@gmail.com">
+    <input type="password" id="testPassword" placeholder="Password" value="ACNHSAdmin2026!">
+    <button onclick="testLogin()">Test Login</button>
+    <pre id="loginResult">Enter credentials and click "Test Login"</pre>
+  </div>
+
+  <div class="section">
+    <h2>3. Create Test User</h2>
+    <p>Copy this SQL and run in Supabase SQL Editor:</p>
+    <pre>INSERT INTO auth.users (
+  instance_id, id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at,
+  raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, is_sso_user
+) VALUES (
+  '00000000-0000-0000-0000-000000000000',
+  gen_random_uuid(),
+  'authenticated',
+  'authenticated',
+  'Hrachfilm@gmail.com',
+  crypt('ACNHSAdmin2026!', gen_salt('bf')),
+  NOW(), NOW(), NOW(),
+  '{"provider":"email","providers":["email"]}',
+  '{}', '', false
+);</pre>
+    <a href="https://supabase.com/dashboard/project/zlvnxvrzotamhpezqedr/sql/new" target="_blank" style="color: #3b82f6;">
+      → Open Supabase SQL Editor
+    </a>
+  </div>
+
+  <div class="section">
+    <h2>4. Check Existing Users</h2>
+    <button onclick="listUsers()">List Auth Users</button>
+    <pre id="usersResult">Click "List Auth Users" to see registered users</pre>
+  </div>
+
+  <script>
+    let testSupabase;
+
+    async function initTest() {
+      testSupabase = initSupabase();
+      console.log('Supabase client initialized');
+    }
+
+    async function checkSession() {
+      const result = document.getElementById('sessionResult');
+      try {
+        const { data: { session }, error } = await testSupabase.auth.getSession();
+        
+        if (error) {
+          result.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+          return;
+        }
+
+        if (session) {
+          result.innerHTML = `<span class="success">✅ Logged in as: ${session.user.email}</span>
+
+Session Details:
+${JSON.stringify({
+  email: session.user.email,
+  id: session.user.id,
+  created_at: session.user.created_at,
+  expires_at: new Date(session.expires_at * 1000).toLocaleString()
+}, null, 2)}`;
+        } else {
+          result.innerHTML = `<span class="error">❌ No active session</span>`;
+        }
+      } catch (error) {
+        result.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+      }
+    }
+
+    async function clearSession() {
+      const result = document.getElementById('sessionResult');
+      try {
+        const { error } = await testSupabase.auth.signOut();
+        if (error) throw error;
+        result.innerHTML = `<span class="success">✅ Session cleared</span>`;
+      } catch (error) {
+        result.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+      }
+    }
+
+    async function testLogin() {
+      const result = document.getElementById('loginResult');
+      const email = document.getElementById('testEmail').value;
+      const password = document.getElementById('testPassword').value;
+      
+      result.innerHTML = '⏳ Attempting login...';
+      
+      try {
+        const { data, error } = await testSupabase.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+        
+        if (error) throw error;
+        
+        result.innerHTML = `<span class="success">✅ Login successful!</span>
+
+User Details:
+${JSON.stringify({
+  email: data.user.email,
+  id: data.user.id,
+  created_at: data.user.created_at
+}, null, 2)}
+
+Session:
+${JSON.stringify({
+  access_token: data.session.access_token.substring(0, 20) + '...',
+  refresh_token: data.session.refresh_token.substring(0, 20) + '...',
+  expires_at: new Date(data.session.expires_at * 1000).toLocaleString()
+}, null, 2)}
+
+<span class="success">Now try opening VID.html - you should be logged in!</span>`;
+      } catch (error) {
+        result.innerHTML = `<span class="error">❌ Login failed: ${error.message}</span>
+
+Common issues:
+• User doesn't exist (run SQL in step 3)
+• Wrong password
+• Email not confirmed (check "email_confirmed_at" in database)`;
+      }
+    }
+
+    async function listUsers() {
+      const result = document.getElementById('usersResult');
+      result.innerHTML = '⏳ Fetching users...';
+      
+      try {
+        // Try to query auth.users table (requires service role, will likely fail)
+        const { data, error } = await testSupabase
+          .from('auth.users')
+          .select('email, created_at, email_confirmed_at');
+        
+        if (error) {
+          result.innerHTML = `<span class="error">❌ Cannot list users from client</span>
+
+This requires service role access. Instead:
+1. Go to: <a href="https://supabase.com/dashboard/project/zlvnxvrzotamhpezqedr/auth/users" target="_blank" style="color: #3b82f6;">Supabase Auth Users</a>
+2. Check if "Hrachfilm@gmail.com" exists
+3. If not, run the SQL in step 3 above`;
+          return;
+        }
+        
+        result.innerHTML = JSON.stringify(data, null, 2);
+      } catch (error) {
+        result.innerHTML = `<span class="error">❌ Error: ${error.message}</span>`;
+      }
+    }
+
+    // Initialize on page load
+    initTest();
+  </script>
+</body>
+</html>
