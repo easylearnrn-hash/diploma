@@ -1097,6 +1097,44 @@
       color: var(--text-muted);
     }
 
+    .notes-actions {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .btn-save-notes {
+      background: rgba(59, 130, 246, 0.1);
+      color: #3b82f6;
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      padding: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      font-size: 18px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .btn-save-notes:hover {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.4);
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-save-notes:active {
+      transform: scale(0.95);
+    }
+
+    .btn-save-notes span {
+      font-size: 20px;
+    }
+
     .modal-footer {
       padding: 20px 28px;
       border-top: 1px solid var(--border-subtle);
@@ -1339,9 +1377,11 @@
       }
       
       .toast-container {
-        right: 10px;
-        left: 10px;
-        top: 70px;
+        bottom: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: calc(100% - 20px);
+        max-width: 400px;
       }
     }
     
@@ -1377,11 +1417,12 @@
       background: var(--text-muted);
     }
 
-    /* Premium Toast Notifications */
+    /* Premium Toast Notifications - Bottom Center */
     .toast-container {
       position: fixed;
-      top: 80px;
-      right: 20px;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 3000;
       display: flex;
       flex-direction: column;
@@ -1439,6 +1480,17 @@
       to {
         transform: translateX(0);
         opacity: 1;
+      }
+    }
+
+    @keyframes slideOutLeft {
+      from {
+        transform: translateX(0);
+        opacity: 1;
+      }
+      to {
+        transform: translateX(-400px);
+        opacity: 0;
       }
     }
 
@@ -1676,6 +1728,11 @@
             class="notes-textarea" 
             placeholder="Add your private notes about this student...&#10;&#10;• Academic performance observations&#10;• Behavioral notes&#10;• Special considerations&#10;• Follow-up reminders&#10;&#10;These notes are private and only visible to you."
           ></textarea>
+          <div class="notes-actions">
+            <button class="btn-save-notes" onclick="saveNotes(true, false)" title="Save Notes">
+              <span>💾</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1702,6 +1759,8 @@
     // Use the inline Supabase client
     let vidSupabase = vidSupabaseClient;
     let currentStudent = null;
+    let originalNotesValue = ''; // Track original notes to detect deletion attempts
+    let notesAutoSaveTimer = null; // Debounce timer for auto-save
     let allStudents = [];
     let studentsWithNotes = new Set();
     let studentsWithQuestionnaires = new Set(); // Track students who have submitted questionnaires
@@ -1932,7 +1991,7 @@
     }
 
     // Premium Toast Notification System
-    function showToast(type, title, message, duration = 4000) {
+    function showToast(type, title, message, duration = 3000) {
       const container = document.getElementById('toastContainer');
       const toast = document.createElement('div');
       toast.className = `toast ${type}`;
@@ -1955,9 +2014,9 @@
       
       container.appendChild(toast);
       
-      // Auto remove after duration
+      // Auto remove after duration - slide out to left
       setTimeout(() => {
-        toast.style.animation = 'slideInRight var(--transition-slow) reverse';
+        toast.style.animation = 'slideOutLeft 0.35s ease-in-out forwards';
         setTimeout(() => toast.remove(), 350);
       }, duration);
     }
@@ -2348,6 +2407,44 @@
           await autoSaveAndClose();
         }
       });
+
+      // Auto-save notes on typing (debounced)
+      const notesTextarea = document.getElementById('notesTextarea');
+      if (notesTextarea) {
+        notesTextarea.addEventListener('input', () => {
+          // Clear existing timer
+          if (notesAutoSaveTimer) {
+            clearTimeout(notesAutoSaveTimer);
+          }
+
+          // Show "saving..." indicator
+          const metaDiv = document.getElementById('notesMeta');
+          if (metaDiv) {
+            metaDiv.innerHTML = '<span style="color: var(--warning)">💾 Saving...</span>';
+          }
+
+          // Set new timer - save after 2 seconds of no typing
+          notesAutoSaveTimer = setTimeout(async () => {
+            const saved = await saveNotes(false, true); // auto-save, skip confirmation
+            if (saved) {
+              if (metaDiv) {
+                metaDiv.innerHTML = '<span style="color: var(--success)">✅ Saved</span>';
+                // Reset to timestamp after 2 seconds
+                setTimeout(() => {
+                  const updated = new Date().toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  });
+                  metaDiv.textContent = `Last updated: ${updated}`;
+                }, 2000);
+              }
+            }
+          }, 2000);
+        });
+      }
     }
 
     // Load Students - Optimized with pagination and timeout
@@ -2917,6 +3014,7 @@
           // If table doesn't exist (406 error), show helpful message
           if (error.message.includes('does not exist') || error.code === '42P01') {
             textarea.value = '';
+            originalNotesValue = ''; // Store original value
             metaDiv.innerHTML = '<span style="color: var(--warning)">⚠️ Notes table not created yet. Run VID-SETUP.sql first.</span>';
             showToast('warning', 'Setup Required', 'Run VID-SETUP.sql in Supabase to enable notes functionality.', 6000);
             return;
@@ -2926,6 +3024,7 @@
 
         if (data) {
           textarea.value = data.notes || '';
+          originalNotesValue = data.notes || ''; // Store original value
           const updated = new Date(data.updated_at).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -2936,6 +3035,7 @@
           metaDiv.textContent = `Last updated: ${updated}`;
         } else {
           textarea.value = '';
+          originalNotesValue = ''; // Store original value
           metaDiv.textContent = 'No notes yet';
         }
       } catch (error) {
@@ -2945,11 +3045,27 @@
     }
 
     // Save Notes (silent auto-save) - Optimized with surgical DOM updates
-    async function saveNotes(showFeedback = false) {
+    async function saveNotes(showFeedback = false, skipConfirmation = false) {
       if (!currentStudent) return false;
 
       const notes = document.getElementById('notesTextarea').value.trim();
       const studentId = currentStudent.student_id;
+
+      // SAFETY CHECK: If user is deleting existing notes, ask for confirmation
+      if (notes.length === 0 && originalNotesValue.length > 0 && !skipConfirmation && showFeedback) {
+        const confirmed = confirm(
+          `⚠️ WARNING: You are about to DELETE existing notes for ${currentStudent.first_name} ${currentStudent.last_name}.\n\n` +
+          `Original note preview: "${originalNotesValue.substring(0, 100)}${originalNotesValue.length > 100 ? '...' : ''}"\n\n` +
+          `This action cannot be undone. Continue?`
+        );
+        
+        if (!confirmed) {
+          // Restore original notes value in textarea
+          document.getElementById('notesTextarea').value = originalNotesValue;
+          showToast('info', 'Cancelled', 'Note deletion cancelled. Original notes restored.');
+          return false;
+        }
+      }
 
       try {
         // First, try to check if record exists
@@ -2971,8 +3087,22 @@
         }
 
         let result;
-        if (existing) {
-          // Update existing record
+        
+        // CRITICAL FIX: Delete record if notes are empty, don't save blank notes
+        if (notes.length === 0) {
+          if (existing) {
+            // Delete the existing record when notes are cleared
+            result = await vidSupabase
+              .from('admin_private_notes')
+              .delete()
+              .eq('admin_email', AUTHORIZED_EMAIL)
+              .eq('student_id', studentId);
+          } else {
+            // No record exists and notes are empty - nothing to do
+            result = { error: null };
+          }
+        } else if (existing) {
+          // Update existing record with new notes
           result = await vidSupabase
             .from('admin_private_notes')
             .update({
@@ -2982,7 +3112,7 @@
             .eq('admin_email', AUTHORIZED_EMAIL)
             .eq('student_id', studentId);
         } else {
-          // Insert new record
+          // Insert new record (only if notes are not empty)
           result = await vidSupabase
             .from('admin_private_notes')
             .insert({
@@ -3036,7 +3166,8 @@
           filterAndRenderStudents();
         }
 
-        // Update metadata
+        // Update metadata and originalNotesValue
+        originalNotesValue = notes; // Update tracked value after successful save
         const updated = new Date().toLocaleString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -3044,10 +3175,19 @@
           hour: '2-digit',
           minute: '2-digit'
         });
-        document.getElementById('notesMeta').textContent = `Last updated: ${updated}`;
+        
+        if (notes.length === 0) {
+          document.getElementById('notesMeta').textContent = 'No notes';
+        } else {
+          document.getElementById('notesMeta').textContent = `Last updated: ${updated}`;
+        }
 
         if (showFeedback) {
-          showToast('success', 'Notes Saved', 'Your private notes have been saved successfully.');
+          if (notes.length === 0) {
+            showToast('success', 'Notes Deleted', '🗑️ Private notes have been deleted from the database.');
+          } else {
+            showToast('success', 'Notes Saved', '✅ Your private notes have been saved to Supabase successfully.');
+          }
         }
 
         return true;
@@ -3055,59 +3195,37 @@
       } catch (error) {
         console.error('Error saving notes:', error);
         if (showFeedback) {
-          showToast('error', 'Save Failed', `Failed to save notes: ${error.message}`);
+          showToast('error', 'Save Failed', `❌ Failed to save notes: ${error.message}`);
         }
         return false;
       }
     }
 
-    // Auto-save and close modal - OPTIMIZED for instant close (SAFE against accidental deletes)
+    // Auto-save and close modal - OPTIMIZED for instant close
     async function autoSaveAndClose() {
       const modal = document.getElementById('studentModal');
-      const textarea = document.getElementById('notesTextarea');
-
+      
       // Close modal IMMEDIATELY for instant feel
       modal.classList.remove('active');
-
-      // Nothing to save
-      if (!currentStudent) {
+      
+      // Save notes in background (don't wait)
+      if (currentStudent) {
+        const studentToSave = currentStudent; // Capture reference
+        const notesTextarea = document.getElementById('privateNotes');
+        const notesValue = notesTextarea ? notesTextarea.value : '';
+        
+        currentStudent = null; // Clear immediately
+        
+        // Save asynchronously (fire and forget) - skipConfirmation=true for auto-save
+        saveNotes(false, true).then(saved => {
+        }).catch(error => {
+          console.error('❌ Background save failed:', error);
+          // Show brief error toast only on failure
+          showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
+        });
+      } else {
         currentStudent = null;
-        return;
       }
-
-      const studentId = currentStudent.student_id;
-      const typedNotes = (textarea?.value || '').trim();
-
-      // Capture then clear ASAP (so UI is free)
-      currentStudent = null;
-
-      // If user left notes empty, do NOT overwrite an existing note via background save.
-      // This prevents accidental deletions caused by timing/blank textarea states.
-      if (!typedNotes) {
-        try {
-          const { data: existing, error: checkError } = await vidSupabase
-            .from('admin_private_notes')
-            .select('id, notes')
-            .eq('admin_email', AUTHORIZED_EMAIL)
-            .eq('student_id', studentId)
-            .maybeSingle();
-
-          if (!checkError && existing?.notes && existing.notes.trim().length > 0) {
-            // Keep existing notes; skip background save.
-            return;
-          }
-        } catch (e) {
-          // If we can't check, err on the safe side and skip deleting.
-          return;
-        }
-      }
-
-      // Save asynchronously (fire and forget)
-      saveNotes(false).catch(error => {
-        console.error('❌ Background save failed:', error);
-        // Show brief error toast only on failure
-        showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
-      });
     }
 
     // Close Modal - Instant close
