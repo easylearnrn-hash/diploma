@@ -1431,7 +1431,16 @@
           return false;
         }
         
-        console.log('✅ User authenticated:', session.user.email);
+        // ⚠️ VID-SPECIFIC: Check if user is authorized (hrachfilm@gmail.com ONLY)
+        const userEmail = session.user.email?.toLowerCase();
+        if (userEmail !== AUTHORIZED_EMAIL.toLowerCase()) {
+          console.warn('❌ Unauthorized user attempted VID access:', userEmail);
+          await vidSupabaseClient.auth.signOut();
+          showLoginScreen('Access Denied', 'VID is restricted to authorized personnel only.');
+          return false;
+        }
+        
+        console.log('✅ User authenticated and authorized:', session.user.email);
         return true;
       } catch (error) {
         console.error('❌ Auth check failed:', error);
@@ -1441,7 +1450,14 @@
     }
 
     // Show Login Screen
-    function showLoginScreen() {
+    function showLoginScreen(errorTitle = null, errorMessage = null) {
+      const errorHTML = errorTitle ? `
+        <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 16px; margin-bottom: 24px; text-align: left;">
+          <div style="color: #f87171; font-weight: 600; font-size: 14px; margin-bottom: 4px;">${errorTitle}</div>
+          <div style="color: #fca5a5; font-size: 13px;">${errorMessage}</div>
+        </div>
+      ` : '';
+      
       document.body.innerHTML = `
         <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #1f2937 100%); padding: 20px;">
           <div style="background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 48px; max-width: 420px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4); border: 1px solid rgba(148, 163, 184, 0.15);">
@@ -1450,6 +1466,8 @@
               <h2 style="color: #f8fafc; font-size: 28px; font-weight: 700; margin-bottom: 8px;">VID Access</h2>
               <p style="color: #94a3b8; font-size: 14px;">Student Intelligence Dashboard</p>
             </div>
+            
+            ${errorHTML}
 
             <form id="loginForm" onsubmit="return handleLogin(event)" style="display: flex; flex-direction: column; gap: 20px;">
               <div>
