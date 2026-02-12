@@ -1720,8 +1720,10 @@
       const parts = [];
       let birthYear = null;
       let currentAge = null;
+      let hsGradYear = null;
+      let uniGradYear = null;
       
-      // Calculate age from date of birth
+      // 1. Birth date and current age (FIRST)
       if (q.personal_info.date_of_birth) {
         const birthDate = new Date(q.personal_info.date_of_birth);
         birthYear = birthDate.getFullYear();
@@ -1733,46 +1735,18 @@
         const birthDay = birthDate.getDate();
         
         parts.push(`The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>.`);
+        parts.push(`The student is currently <strong>${currentAge} years old</strong>.`);
       }
       
-      // High school graduation
+      // 2. High school graduation
       if (q.education_history && q.education_history.hs_grad_date && birthYear) {
         const hsGradDate = new Date(q.education_history.hs_grad_date);
-        const hsGradYear = hsGradDate.getFullYear();
+        hsGradYear = hsGradDate.getFullYear();
         const hsGradAge = hsGradYear - birthYear;
         parts.push(`They graduated high school in <strong>${hsGradYear}</strong> at age <strong>${hsGradAge}</strong>.`);
       }
       
-      // Armenian university education
-      if (q.education_history && q.education_history.armenian_edu === 'yes') {
-        let uniText = 'They attended';
-        if (q.education_history.armenian_institution) {
-          uniText += ` <strong>${q.education_history.armenian_institution}</strong>`;
-        } else {
-          uniText += ' university in Armenia';
-        }
-        
-        if (q.education_history.application_date && birthYear) {
-          const appDate = new Date(q.education_history.application_date);
-          const appYear = appDate.getFullYear();
-          const appAge = appYear - birthYear;
-          uniText += ` (applied in <strong>${appYear}</strong> at age <strong>${appAge}</strong>`;
-          
-          if (q.education_history.graduation_date) {
-            const gradDate = new Date(q.education_history.graduation_date);
-            const gradYear = gradDate.getFullYear();
-            const gradAge = gradYear - birthYear;
-            uniText += `, graduated in <strong>${gradYear}</strong> at age <strong>${gradAge}</strong>`;
-          }
-          uniText += ').';
-        } else {
-          uniText += '.';
-        }
-        
-        parts.push(uniText);
-      }
-      
-      // Permanent departure from Armenia
+      // 3. Permanent departure with "lived in Armenia for X years" calculation
       if (q.residency_travel && q.residency_travel.permanent_departure_date && birthYear) {
         const depDate = new Date(q.residency_travel.permanent_departure_date);
         const depYear = depDate.getFullYear();
@@ -1780,10 +1754,27 @@
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const depMonth = monthNames[depDate.getMonth()];
         
-        parts.push(`The student left Armenia permanently in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at age <strong>${depAge}</strong>.`);
+        let departureText = `The student left Armenia permanently in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong>`;
+        
+        // Calculate years lived in Armenia after graduation
+        let afterGradYear = hsGradYear || uniGradYear;
+        if (q.education_history && q.education_history.graduation_date) {
+          const uniGradDate = new Date(q.education_history.graduation_date);
+          uniGradYear = uniGradDate.getFullYear();
+          afterGradYear = uniGradYear;
+        }
+        
+        if (afterGradYear && depYear > afterGradYear) {
+          const yearsAfterGrad = depYear - afterGradYear;
+          const gradType = uniGradYear ? 'university' : 'high school';
+          departureText += ` (after graduation of ${gradType}, they lived in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>)`;
+        }
+        
+        departureText += ` at age <strong>${depAge}</strong>.`;
+        parts.push(departureText);
       }
       
-      // Travel history - visits back to Armenia
+      // 4. Travel history - visits back to Armenia
       if (q.residency_travel && q.residency_travel.travel_history && q.residency_travel.travel_history.length > 0) {
         const trips = q.residency_travel.travel_history;
         const tripCount = trips.length;
@@ -1805,13 +1796,6 @@
         travelText += '.';
         
         parts.push(travelText);
-      } else if (q.residency_travel && q.residency_travel.permanent_departure_date) {
-        parts.push('The student has <strong>not returned</strong> to Armenia since leaving.');
-      }
-      
-      // Current age summary
-      if (currentAge) {
-        parts.push(`<em style="color: var(--text-secondary);">The student is currently <strong>${currentAge} years old</strong>.</em>`);
       }
       
       return parts.length > 0 ? parts.join(' ') : null;
@@ -2576,6 +2560,17 @@
         
         let html = '';
         
+        // ============================================
+        // TIMELINE SUMMARY - AT THE TOP (Most Important)
+        // ============================================
+        const summary = generateTimelineSummary(q);
+        if (summary) {
+          html += '<div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 12px; border-left: 4px solid var(--primary);">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 16px; font-weight: 700;">📊 Timeline Summary</h4>';
+          html += `<div style="font-size: 14px; line-height: 1.8; color: var(--text-primary);">${summary}</div>`;
+          html += '</div>';
+        }
+        
         // Personal Information
         if (q.personal_info) {
           html += '<div style="margin-bottom: 24px;">';
@@ -2714,17 +2709,6 @@
               <div class="questionnaire-value">${q.emergency_contact.address}</div>
             </div>`;
           }
-          html += '</div>';
-        }
-        
-        // ============================================
-        // TIMELINE SUMMARY - Intelligent narrative
-        // ============================================
-        const summary = generateTimelineSummary(q);
-        if (summary) {
-          html += '<div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 12px; border-left: 4px solid var(--primary);">';
-          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 16px; font-weight: 700;">📊 Timeline Summary</h4>';
-          html += `<div style="font-size: 14px; line-height: 1.8; color: var(--text-primary);">${summary}</div>`;
           html += '</div>';
         }
         
