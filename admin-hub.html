@@ -1680,6 +1680,9 @@
       // Check authentication first
       if (!checkAdminAccess()) return;
 
+      // Load courses from Supabase before rendering dashboard
+      await loadCoursesFromSupabase();
+      
       await loadDashboardData();
       setupNavigation();
       setupSearch();
@@ -2421,7 +2424,7 @@
     // };
     
     // Load COURSE_CATALOG from localStorage or initialize empty
-    const COURSE_CATALOG = JSON.parse(localStorage.getItem('COURSE_CATALOG')) || {
+    let COURSE_CATALOG = JSON.parse(localStorage.getItem('COURSE_CATALOG')) || {
       // Add your courses here by semester
       // Example:
       // 'Semester 1': [],
@@ -2429,6 +2432,136 @@
       // 'Semester 3': [],
       // 'Semester 4': []
     };
+
+    // ==========================================
+    // COURSE SUPABASE INTEGRATION
+    // ==========================================
+    
+    /**
+     * Load all courses from Supabase and sync with localStorage
+     */
+    async function loadCoursesFromSupabase() {
+      console.log('📥 Loading courses from Supabase...');
+      
+      try {
+        const { data, error } = await db
+          .from('courses')
+          .select('*')
+          .eq('status', 'active')
+          .order('semester', { ascending: true })
+          .order('code', { ascending: true });
+
+        if (error) {
+          console.error('❌ Error loading courses:', error);
+          return;
+        }
+
+        if (!data || data.length === 0) {
+          console.log('ℹ️ No courses found in Supabase');
+          return;
+        }
+
+        console.log('✅ Loaded', data.length, 'courses from Supabase');
+
+        // Convert to COURSE_CATALOG format
+        const catalogFromDB = {};
+        data.forEach(course => {
+          if (!catalogFromDB[course.semester]) {
+            catalogFromDB[course.semester] = [];
+          }
+          catalogFromDB[course.semester].push({
+            id: course.id,
+            code: course.code,
+            name: course.name,
+            credits: course.credits,
+            type: course.course_type,
+            description: course.description,
+            prerequisites: course.prerequisites,
+            gradeItems: course.grade_items || [] // Initialize empty array if not present
+          });
+        });
+
+        // Merge with localStorage (Supabase takes priority)
+        COURSE_CATALOG = { ...COURSE_CATALOG, ...catalogFromDB };
+        localStorage.setItem('COURSE_CATALOG', JSON.stringify(COURSE_CATALOG));
+        
+        console.log('✅ Courses synced to localStorage');
+
+      } catch (error) {
+        console.error('❌ Failed to load courses from Supabase:', error);
+      }
+    }
+
+    /**
+     * Save course to Supabase
+     */
+    async function saveCourseToSupabase(courseData, semester) {
+      console.log('💾 Saving course to Supabase...', courseData);
+      
+      try {
+        const adminEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || 'admin';
+        
+        const courseRecord = {
+          code: courseData.code,
+          name: courseData.name,
+          semester: semester,
+          credits: courseData.credits || 3,
+          course_type: courseData.type || 'theory',
+          description: courseData.description || '',
+          prerequisites: courseData.prerequisites || null,
+          status: 'active',
+          created_by: adminEmail,
+          updated_at: new Date().toISOString()
+        };
+
+        // Use upsert to insert or update
+        const { data, error } = await db
+          .from('courses')
+          .upsert([courseRecord], {
+            onConflict: 'code,semester',
+            ignoreDuplicates: false
+          })
+          .select();
+
+        if (error) {
+          console.error('❌ Error saving course:', error);
+          throw error;
+        }
+
+        console.log('✅ Course saved to Supabase:', data);
+        return data[0];
+
+      } catch (error) {
+        console.error('❌ Failed to save course to Supabase:', error);
+        throw error;
+      }
+    }
+
+    /**
+     * Delete course from Supabase
+     */
+    async function deleteCourseFromSupabase(code, semester) {
+      console.log('🗑️ Deleting course from Supabase:', code, semester);
+      
+      try {
+        const { error } = await db
+          .from('courses')
+          .delete()
+          .eq('code', code)
+          .eq('semester', semester);
+
+        if (error) {
+          console.error('❌ Error deleting course:', error);
+          throw error;
+        }
+
+        console.log('✅ Course deleted from Supabase');
+
+      } catch (error) {
+        console.error('❌ Failed to delete course from Supabase:', error);
+        throw error;
+      }
+    }
 
     // ==========================================
     // COURSE CATALOG HELPER FUNCTIONS
@@ -2958,14 +3091,29 @@
       renderCourseManager(courses, semester);
     }
 
-    function removeCourse(index) {
-      if (!confirm('Remove this course?')) return;
+    async function removeCourse(index) {
+      if (!confirm('Remove this course? This will also delete it from the database.')) return;
       
       const semester = currentEditingSemester || 'Semester 1';
       const courses = COURSE_CATALOG[semester] || [];
+      const courseToRemove = courses[index];
       
-      courses.splice(index, 1);
-      renderCourseManager(courses, semester);
+      try {
+        // Delete from Supabase
+        await deleteCourseFromSupabase(courseToRemove.code, semester);
+        
+        // Remove from local array
+        courses.splice(index, 1);
+        COURSE_CATALOG[semester] = courses;
+        localStorage.setItem('COURSE_CATALOG', JSON.stringify(COURSE_CATALOG));
+        
+        renderCourseManager(courses, semester);
+        
+        alert('✅ Course deleted from database');
+      } catch (error) {
+        alert('⚠️ Error deleting from database: ' + error.message);
+        console.error(error);
+      }
     }
 
     function addGradeItem(courseIndex) {
@@ -2992,7 +3140,7 @@
       renderCourseManager(courses, semester);
     }
 
-    function saveCourseChanges() {
+    async function saveCourseChanges() {
       const semester = currentEditingSemester || 'Semester 1';
       const courses = COURSE_CATALOG[semester] || [];
       
@@ -3020,7 +3168,21 @@
         }
       });
       
-      alert('✅ Course changes saved! They will be reflected in the grading form.');
+      // Save to Supabase
+      try {
+        for (const course of courses) {
+          await saveCourseToSupabase(course, semester);
+        }
+        
+        // Update localStorage
+        COURSE_CATALOG[semester] = courses;
+        localStorage.setItem('COURSE_CATALOG', JSON.stringify(COURSE_CATALOG));
+        
+        alert('✅ Course changes saved to Supabase! They will be reflected everywhere.');
+      } catch (error) {
+        alert('⚠️ Error saving to Supabase, but saved locally: ' + error.message);
+      }
+      
       closeCourseManager();
       
       // Refresh the grade form
@@ -3796,16 +3958,18 @@
 
         <div style="background:#fff;border:2px solid #e2e8f0;border-radius:12px;padding:20px">
           <h4 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:#1e293b">Grade Breakdown</h4>
-          ${course.gradeItems.map(item => `
+          ${course.gradeItems && course.gradeItems.length > 0 ? course.gradeItems.map(item => `
             <div style="display:flex;align-items:center;justify-content:space-between;padding:12px;background:#f8fafc;border-radius:8px;margin-bottom:8px">
               <span style="font-size:14px;font-weight:600;color:#1e293b">${item.name}</span>
               <span style="font-size:14px;font-weight:800;color:#3b82f6">${item.weight}%</span>
             </div>
-          `).join('')}
+          `).join('') : '<p style="color:#64748b;font-size:14px;margin:0">No grade items defined yet. Add grade items in the Grades section.</p>'}
+          ${course.gradeItems && course.gradeItems.length > 0 ? `
           <div style="margin-top:12px;padding-top:12px;border-top:2px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center">
             <span style="font-size:14px;font-weight:700;color:#64748b">Total Weight</span>
             <span style="font-size:16px;font-weight:800;color:#10b981">100%</span>
           </div>
+          ` : ''}
         </div>
       `;
 

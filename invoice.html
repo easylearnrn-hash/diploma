@@ -1025,7 +1025,7 @@ Payment must be made to the following account:
   <div id="invoicesModal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>📋 All Invoices</h2>
+        <h2 id="invoicesHeader">📋 All Invoices</h2>
         <button class="modal-close" onclick="document.getElementById('invoicesModal').style.display='none'">&times;</button>
       </div>
       <div class="modal-body">
@@ -1048,7 +1048,7 @@ Payment must be made to the following account:
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabase-config.js"></script>
-  <script src="./Seal_base64.js"></script>
+  <script src="./Final-ACNHS-Logo.js"></script>
   <script>
     // Use existing Supabase client from supabase-config.js
     const invoiceSupabase = initSupabase();
@@ -2746,8 +2746,37 @@ Payment must be made to the following account:
 
         if (!invoices || invoices.length === 0) {
           invoicesList.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No invoices found.</p>';
+          // Reset header to default
+          document.getElementById('invoicesHeader').textContent = '📋 All Invoices';
           return;
         }
+
+        // Calculate total sum of all invoices
+        let totalSum = 0;
+        invoices.forEach(invoice => {
+          let displayTotal = invoice.total;
+          if (!displayTotal || displayTotal === 0) {
+            if (invoice.items && invoice.items.length > 0) {
+              displayTotal = invoice.items.reduce((sum, item) => {
+                const qty = item.qty || item.quantity || 1;
+                const price = item.price || 0;
+                const discountPercent = item.discount || 0;
+                const lineSubtotal = qty * price;
+                const discountAmount = lineSubtotal * (discountPercent / 100);
+                const lineTotal = lineSubtotal - discountAmount;
+                return sum + lineTotal;
+              }, 0);
+            }
+          }
+          totalSum += displayTotal || 0;
+        });
+
+        // Update header with total sum
+        const formattedTotal = totalSum.toLocaleString('en-US', {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2
+        });
+        document.getElementById('invoicesHeader').textContent = `📋 All Invoices - ${formattedTotal} $`;
 
         invoicesList.innerHTML = invoices.map(invoice => {
           const invoiceUrl = `${window.location.origin}${window.location.pathname.replace('invoice.html', 'invoice-view.html')}?id=${invoice.id}`;
@@ -2798,6 +2827,7 @@ Payment must be made to the following account:
             <div class="invoice-card-body">
               <div><strong>Program:</strong> ${invoice.program || 'N/A'}</div>
               <div><strong>Date:</strong> ${new Date(invoice.invoice_date).toLocaleDateString()}</div>
+              <div><strong>Due Date:</strong> ${invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A'}</div>
               <div><strong>Total:</strong> ${formatMoney(displayTotal)}</div>
               <div><strong>Payment:</strong> ${invoice.payment_method || 'N/A'}</div>
             </div>

@@ -740,9 +740,9 @@
               <td><span class="student-id">${escapeHtml(student.student_id || 'N/A')}</span></td>
               <td>${escapeHtml(student.full_name || 'N/A')}</td>
               <td>${escapeHtml(student.email || 'N/A')}</td>
-              <td>${escapeHtml(student.phone || 'N/A')}</td>
-              <td>${escapeHtml(student.program || 'N/A')}</td>
-              <td>${escapeHtml(student.start_term || 'N/A')}</td>
+              <td>${formatPhoneNumber(student.phone)}</td>
+              <td>${shortenProgram(student.program)}</td>
+              <td>${shortenStartTerm(student.start_term)}</td>
               <td><span class="status-badge status-${statusValue}">${statusValue.toUpperCase()}</span></td>
               <td onclick="event.stopPropagation()">
                 <div class="actions">
@@ -902,6 +902,45 @@
         hour: '2-digit',
         minute: '2-digit'
       });
+    }
+
+    function formatPhoneNumber(phone) {
+      if (!phone) return 'N/A';
+      
+      // Remove all non-digit characters
+      const cleaned = phone.replace(/\D/g, '');
+      
+      // Format as +X XXX XXX XX XX
+      if (cleaned.length >= 11) {
+        const countryCode = cleaned.substring(0, 1);
+        const part1 = cleaned.substring(1, 4);
+        const part2 = cleaned.substring(4, 7);
+        const part3 = cleaned.substring(7, 9);
+        const part4 = cleaned.substring(9, 11);
+        return `+${countryCode} ${part1} ${part2} ${part3} ${part4}`;
+      }
+      
+      // If less than 11 digits, return original
+      return phone;
+    }
+
+    function shortenProgram(program) {
+      if (!program) return 'N/A';
+      return program
+        .replace('Associate Degree in Nursing (ADN)', 'ADN')
+        .replace('Bachelor of Science in Nursing (BSN)', 'BSN')
+        .replace('Associate Degree in Nursing', 'ADN')
+        .replace('Bachelor of Science in Nursing', 'BSN')
+        .replace('RN Bridge Program', 'RN Bridge');
+    }
+
+    function shortenStartTerm(term) {
+      if (!term) return 'N/A';
+      return term
+        .replace('Spring Semester ', 'Spring ')
+        .replace('Fall Semester ', 'Fall ')
+        .replace(' (Early – Mid January)', '')
+        .replace(' (Late August – Early September)', '');
     }
 
     function escapeHtml(text) {

@@ -1677,6 +1677,259 @@
       el.textContent = value;
     }
 
+    // Inline editing system
+    const EDITABLE_FIELDS = {
+      // field_id: { studentTable: 'column_name', applicationsTable: 'column_name', type: 'text|select|date' }
+      fullName: { student: 'full_name', application: 'applicant_name', type: 'text' },
+      dob: { student: 'date_of_birth', application: null, type: 'date' },
+      gender: { student: 'gender', application: null, type: 'text' },
+      nationality: { student: 'nationality', application: null, type: 'text' },
+      email: { student: 'email', application: 'email', type: 'email' },
+      phone: { student: 'phone', application: 'phone', type: 'tel' },
+      program: { student: 'program', application: 'program', type: 'select', options: [
+        'Associate Degree in Nursing (ADN)',
+        'Bachelor of Science in Nursing (BSN)',
+        'RN Bridge Program'
+      ]},
+      startTerm: { student: 'start_term', application: 'start_term', type: 'select', options: [
+        'Spring Semester 2026',
+        'Fall Semester 2026',
+        'Spring Semester 2027',
+        'Fall Semester 2027',
+        'Spring Semester 2028',
+        'Fall Semester 2028'
+      ]},
+      expectedGrad: { student: 'expected_graduation', application: null, type: 'text' },
+      credits: { student: 'total_credits_earned', application: null, type: 'number' },
+      emergencyName: { student: 'emergency_contact_name', application: null, type: 'text' },
+      emergencyRelation: { student: 'emergency_contact_relation', application: null, type: 'text' },
+      emergencyPhone: { student: 'emergency_contact_phone', application: null, type: 'tel' }
+    };
+
+    function makeFieldsEditable() {
+      Object.keys(EDITABLE_FIELDS).forEach(fieldId => {
+        const el = document.getElementById(fieldId);
+        if (!el) return;
+        
+        el.style.cursor = 'pointer';
+        el.style.transition = 'all 0.2s';
+        el.title = 'Click to edit';
+        
+        el.addEventListener('click', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          editField(fieldId);
+        });
+        
+        el.addEventListener('mouseenter', () => {
+          if (!el.classList.contains('editing')) {
+            el.style.background = 'rgba(14, 165, 233, 0.1)';
+            el.style.padding = '4px 8px';
+            el.style.borderRadius = '4px';
+          }
+        });
+        
+        el.addEventListener('mouseleave', () => {
+          if (!el.classList.contains('editing')) {
+            el.style.background = '';
+            el.style.padding = '';
+            el.style.borderRadius = '';
+          }
+        });
+      });
+    }
+
+    function editField(fieldId) {
+      const el = document.getElementById(fieldId);
+      if (!el || el.classList.contains('editing')) return;
+      
+      const config = EDITABLE_FIELDS[fieldId];
+      const currentValue = el.textContent === '—' ? '' : el.textContent;
+      
+      el.classList.add('editing');
+      el.style.background = 'rgba(14, 165, 233, 0.15)';
+      el.style.padding = '4px 8px';
+      el.style.borderRadius = '4px';
+      
+      let isActive = true; // Flag to track if edit is active
+      let isSaving = false; // Flag to prevent double-save
+      
+      if (config.type === 'select') {
+        const select = document.createElement('select');
+        select.style.cssText = 'width:100%; padding:6px; background:#0f172a; color:#f1f5f9; border:1.5px solid #0ea5e9; border-radius:6px; font-size:13px; cursor:pointer;';
+        
+        config.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt;
+          option.textContent = opt.replace('Semester ', '').replace('Associate Degree in Nursing (ADN)', 'ADN').replace('Bachelor of Science in Nursing (BSN)', 'BSN');
+          if (currentValue.includes(opt) || opt.includes(currentValue)) {
+            option.selected = true;
+          }
+          select.appendChild(option);
+        });
+        
+        el.textContent = '';
+        el.appendChild(select);
+        
+        // Prevent all event bubbling
+        select.addEventListener('mousedown', (e) => e.stopPropagation());
+        select.addEventListener('mouseup', (e) => e.stopPropagation());
+        select.addEventListener('click', (e) => e.stopPropagation());
+        
+        setTimeout(() => select.focus(), 50);
+        
+        select.addEventListener('change', () => {
+          if (!isSaving) {
+            isActive = false;
+            isSaving = true;
+            saveField(fieldId, select.value, el, currentValue);
+          }
+        });
+        
+        select.addEventListener('blur', () => {
+          setTimeout(() => {
+            if (isActive && !isSaving && el.contains(select)) {
+              cancelEdit(fieldId, currentValue, el);
+            }
+          }, 300);
+        });
+      } else {
+        const input = document.createElement('input');
+        input.type = config.type;
+        input.value = currentValue;
+        input.style.cssText = 'width:100%; padding:6px; background:#0f172a; color:#f1f5f9; border:1.5px solid #0ea5e9; border-radius:6px; font-size:13px;';
+        
+        el.textContent = '';
+        el.appendChild(input);
+        
+        // Prevent all event bubbling
+        input.addEventListener('mousedown', (e) => e.stopPropagation());
+        input.addEventListener('mouseup', (e) => e.stopPropagation());
+        input.addEventListener('click', (e) => e.stopPropagation());
+        input.addEventListener('focus', (e) => e.stopPropagation());
+        
+        setTimeout(() => {
+          input.focus();
+          input.select();
+        }, 50);
+        
+        input.addEventListener('keydown', (e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (!isSaving) {
+              isActive = false;
+              isSaving = true;
+              saveField(fieldId, input.value, el, currentValue);
+            }
+          } else if (e.key === 'Escape') {
+            e.preventDefault();
+            if (!isSaving) {
+              isActive = false;
+              cancelEdit(fieldId, currentValue, el);
+            }
+          }
+        });
+        
+        input.addEventListener('blur', () => {
+          setTimeout(() => {
+            if (isActive && !isSaving && el.contains(input)) {
+              isActive = false;
+              isSaving = true;
+              saveField(fieldId, input.value, el, currentValue);
+            }
+          }, 300);
+        });
+      }
+    }
+
+    function cancelEdit(fieldId, originalValue, el) {
+      el.classList.remove('editing');
+      el.textContent = originalValue || '—';
+      el.style.background = '';
+      el.style.padding = '';
+    }
+
+    async function saveField(fieldId, newValue, el, originalValue) {
+      const config = EDITABLE_FIELDS[fieldId];
+      if (!currentStudent) {
+        alert('No student loaded');
+        return;
+      }
+      
+      // If value hasn't changed, just cancel the edit
+      const trimmedNew = (newValue || '').trim();
+      const trimmedOriginal = (originalValue || '').trim();
+      
+      if (trimmedNew === trimmedOriginal || (trimmedNew === '' && trimmedOriginal === '—')) {
+        cancelEdit(fieldId, originalValue, el);
+        return;
+      }
+      
+      try {
+        const supabase = initSupabase();
+        if (!supabase) throw new Error('Failed to initialize Supabase');
+        
+        // Update students table
+        if (config.student) {
+          const updates = {
+            [config.student]: trimmedNew || null,
+            updated_at: new Date().toISOString()
+          };
+          
+          const { error: studentError } = await supabase
+            .from('students')
+            .update(updates)
+            .eq('id', currentStudent.id);
+          
+          if (studentError) throw studentError;
+          
+          // Update local data
+          currentStudent[config.student] = trimmedNew;
+        }
+        
+        // Update applications table if field exists there
+        if (config.application && currentStudent.application_id) {
+          const appUpdates = {
+            [config.application]: trimmedNew || null
+          };
+          
+          const { error: appError } = await supabase
+            .from('applications')
+            .update(appUpdates)
+            .eq('id', currentStudent.application_id);
+          
+          if (appError) console.warn('Failed to update application:', appError);
+        }
+        
+        // Update student name in header if it was changed
+        if (fieldId === 'fullName') {
+          document.getElementById('studentName').textContent = trimmedNew || 'Unknown Student';
+          const initials = (trimmedNew || 'U S').split(' ').map(n => n[0]).join('').toUpperCase();
+          document.getElementById('studentInitials').textContent = initials;
+        }
+        
+        // Show success feedback
+        el.classList.remove('editing');
+        el.style.background = 'rgba(16, 185, 129, 0.2)';
+        el.style.borderLeft = '3px solid #10b981';
+        el.textContent = trimmedNew || '—';
+        
+        setTimeout(() => {
+          el.style.background = '';
+          el.style.borderLeft = '';
+          el.style.padding = '';
+        }, 1000);
+        
+        console.log(`✅ Updated ${fieldId} from "${originalValue}" to "${trimmedNew}"`);
+      } catch (error) {
+        console.error(`❌ Failed to update ${fieldId}:`, error);
+        alert(`Failed to update field. Please try again.`);
+        // Restore original value
+        cancelEdit(fieldId, originalValue, el);
+      }
+    }
+
     function formatYesNo(value) {
       if (value === null || value === undefined || value === '') return '—';
       if (typeof value === 'boolean') return value ? 'Yes' : 'No';
@@ -1713,6 +1966,9 @@
       setOverviewValue('emergencyName', student?.emergency_contact_name || payload.emergencyName || '—');
       setOverviewValue('emergencyRelation', student?.emergency_contact_relation || payload.emergencyRelation || '—');
       setOverviewValue('emergencyPhone', student?.emergency_contact_phone || payload.emergencyPhone || '—');
+      
+      // Make fields inline editable
+      makeFieldsEditable();
     }
 
     async function runSupabaseRequest(requestFn, label = 'request') {
@@ -3042,15 +3298,15 @@
         let template = await templateResponse.text();
         console.log('✅ Loaded fresh acceptance letter template for PDF generation');
 
-        // Fetch Seal_base64.js script
+        // Fetch Final-ACNHS-Logo.js script
         let sealScript = '';
         try {
-          const sealResponse = await fetch(`Seal_base64.js?cache=${Date.now()}`);
+          const sealResponse = await fetch(`Final-ACNHS-Logo.js?cache=${Date.now()}`);
           if (sealResponse.ok) {
             sealScript = await sealResponse.text();
           }
         } catch (e) {
-          console.warn('Could not load Seal_base64.js, will use fallback URL');
+          console.warn('Could not load Final-ACNHS-Logo.js, will use fallback URL');
         }
 
         // Prepare the data injection script
@@ -3065,8 +3321,8 @@
         }
         injectScripts += scriptOpen + 'window.ACCEPTANCE_LETTER_DATA = ' + safeData + ';' + scriptClose + '\n';
 
-        // Replace the Seal_base64.js script tag reference with inline content + data
-        const sealScriptTag = '<scr' + 'ipt src="./Seal_base64.js"><' + '/script>';
+        // Replace the Final-ACNHS-Logo.js script tag reference with inline content + data
+        const sealScriptTag = '<scr' + 'ipt src="./Final-ACNHS-Logo.js"><' + '/script>';
         if (template.includes(sealScriptTag)) {
           template = template.replace(sealScriptTag, injectScripts);
         } else if (template.includes('</head>')) {
@@ -4356,8 +4612,8 @@
 
   const portalEmail = app.payload?.institutionalEmail || app.payload?.studentPortal?.institutionalEmail || app.institutional_email || `${username}@acnhs.am`;
         
-        // ACNHS Logo URL for emails
-        const ACNHS_LOGO_EMAIL_URL = 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/images/Seal.png';
+        // Use the official ACNHS logo from Final-ACNHS-Logo.js
+        const logoForEmail = typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? ACNHS_LOGO_DATA_URL : 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png';
         
         // Official ACNHS Email Template with credentials content
         const now = new Date();
@@ -4439,7 +4695,7 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td width="68" valign="middle">
-                    <img src="${ACNHS_LOGO_EMAIL_URL}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                    <img src="${logoForEmail}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
                   </td>
                   <td valign="middle" style="padding-left:14px;">
                     <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
@@ -4462,7 +4718,7 @@
                 <table style="border:none;padding:0;margin:0;line-height:1.3;font-family:Arial,sans-serif;">
                   <tr>
                     <td style="padding:2px 8px 2px 2px;vertical-align:middle;">
-                      <img src="${ACNHS_LOGO_EMAIL_URL}" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">
+                      <img src="${logoForEmail}" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">
                     </td>
                     <td style="padding:2px;vertical-align:middle;">
                       <div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">Admissions Officer</div>
@@ -4835,6 +5091,6 @@
     window.saveTransferCredit = saveTransferCredit;
     window.deleteTransferCredit = deleteTransferCredit;
   </script>
-  <script src="./Seal_base64.js"></script>
+  <script src="./Final-ACNHS-Logo.js"></script>
 </body>
 </html>

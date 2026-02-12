@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/admin-sidebar.css">
   <!-- ACNHS Logo Base64 - External asset to prevent IDE lag -->
-  <script src="Seal_base64.js"></script>
+  <script src="Final-ACNHS-Logo.js"></script>
   <script src="js/acnhs-seal-base64.js"></script>
   <style>
     :root {
@@ -362,6 +362,36 @@
 
     .btn-view:hover {
       color: var(--primary-dark);
+    }
+
+    .inline-edit-select {
+      padding: 6px 12px;
+      border: 1.5px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: #f1f5f9;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      width: 100%;
+      max-width: 160px;
+      appearance: none;
+      background-image: none;
+    }
+
+    .inline-edit-select:hover {
+      border-color: #475569;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      box-shadow: 0 2px 8px rgba(14, 165, 233, 0.15);
+    }
+
+    .inline-edit-select:focus,
+    .inline-edit-select:active {
+      outline: none;
+      border-color: #0ea5e9;
+      background: linear-gradient(135deg, #0f172a 0%, #020617 100%);
+      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.3), 0 4px 12px rgba(14, 165, 233, 0.2);
     }
 
     .empty {
@@ -1351,7 +1381,7 @@
     <div class="tab-content" id="tab-applications">
       <div class="panel">
         <div class="filters">
-          <input id="searchApplications" type="search" placeholder="Search by name, reference, email, or barcode">
+          <input id="searchApplications" type="search" placeholder="Search by name, reference, email, phone, or barcode">
           <select id="programFilter">
             <option value="">All programs</option>
           </select>
@@ -4683,13 +4713,23 @@
     }
 
     function buildSearchBlob(app) {
+      // Helper to normalize phone numbers (remove all non-digits for searching)
+      const normalizePhone = (phone) => {
+        if (!phone) return '';
+        const digitsOnly = phone.toString().replace(/\D/g, ''); // Remove all non-digit characters
+        return digitsOnly; // Just digits for partial matching
+      };
+
       return [
         app.applicant_name,
         app.reference_number,
         app.email,
         app.barcode,
         app.program,
-        app.start_term
+        app.start_term,
+        // Add phone number - both formatted and digits-only for flexible searching
+        app.phone,
+        normalizePhone(app.phone)
       ]
         .filter(Boolean)
         .join(' | ')
@@ -4916,13 +4956,13 @@
       console.time('⏱️ Applications query');
       
       // ===== PERFORMANCE: Optimized query - Don't load payload initially =====
-      // - Only fetch fields needed for table display
+      // - Only fetch fields needed for table display + search (including phone numbers)
       // - Fetch ALL applications (removed limit)
       // - Payload is fetched only when drawer is opened
       // - Use DISTINCT to avoid duplicates
       const { data, error } = await supabase
         .from('applications')
-        .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history')
+        .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history, phone')
         .order('submission_date', { ascending: false });
       
       console.timeEnd('⏱️ Applications query');
@@ -4989,8 +5029,23 @@
           tr.innerHTML = `
             <td><span class="pill" onclick="handleReferenceClick('${app.id}')" style="cursor:pointer;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" title="Click to view questionnaire">${app.reference_number || '—'}</span></td>
             <td><strong>${app.applicant_name || '—'}</strong></td>
-            <td>${programName}</td>
-            <td>${startTerm}</td>
+            <td>
+              <select class="inline-edit-select" onchange="updateApplicationField('${app.id}', 'program', this.value)" title="Change program">
+                <option value="Associate Degree in Nursing (ADN)" ${app.program === 'Associate Degree in Nursing (ADN)' ? 'selected' : ''}>ADN</option>
+                <option value="Bachelor of Science in Nursing (BSN)" ${app.program === 'Bachelor of Science in Nursing (BSN)' ? 'selected' : ''}>BSN</option>
+                <option value="RN Bridge Program" ${app.program === 'RN Bridge Program' ? 'selected' : ''}>RN Bridge</option>
+              </select>
+            </td>
+            <td>
+              <select class="inline-edit-select" onchange="updateApplicationField('${app.id}', 'start_term', this.value)" title="Change start term">
+                <option value="Spring Semester 2026" ${app.start_term === 'Spring Semester 2026' ? 'selected' : ''}>Spring 2026</option>
+                <option value="Fall Semester 2026" ${app.start_term === 'Fall Semester 2026' ? 'selected' : ''}>Fall 2026</option>
+                <option value="Spring Semester 2027" ${app.start_term === 'Spring Semester 2027' ? 'selected' : ''}>Spring 2027</option>
+                <option value="Fall Semester 2027" ${app.start_term === 'Fall Semester 2027' ? 'selected' : ''}>Fall 2027</option>
+                <option value="Spring Semester 2028" ${app.start_term === 'Spring Semester 2028' ? 'selected' : ''}>Spring 2028</option>
+                <option value="Fall Semester 2028" ${app.start_term === 'Fall Semester 2028' ? 'selected' : ''}>Fall 2028</option>
+              </select>
+            </td>
             <td><span class="pill ${statusData.pillClass}" onclick="openStatusHistoryModal('${app.id}')" style="cursor:pointer;transition:transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">${statusData.label}</span></td>
             <td>${formatDate(app.submission_date)}</td>
             <td><button class="btn-view" onclick="openApplicationDrawer('${app.id}')">View</button></td>
@@ -7886,14 +7941,13 @@
 </body>
 </html>`;
 
-      const hostedLogo = (typeof ACNHS_LOGO_EMAIL_URL !== 'undefined' && ACNHS_LOGO_EMAIL_URL) ? ACNHS_LOGO_EMAIL_URL : null;
-      const inlineLogo = (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) ? ACNHS_LOGO_BASE64 : null;
-      const logoSource = hostedLogo || inlineLogo;
-
+      // Use the official ACNHS logo from Final-ACNHS-Logo.js
+      const logoSource = typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? ACNHS_LOGO_DATA_URL : (typeof ACNHS_LOGO_BASE64 !== 'undefined' ? `data:image/png;base64,${ACNHS_LOGO_BASE64}` : 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png');
+      
       console.log('🔍 Email logo source preference:', {
-        hasHostedLogo: !!hostedLogo,
-        hasInlineLogo: !!inlineLogo,
-        sourceUsed: hostedLogo ? 'hosted-url' : (inlineLogo ? 'base64' : 'none')
+        hasDataURL: typeof ACNHS_LOGO_DATA_URL !== 'undefined',
+        hasBase64: typeof ACNHS_LOGO_BASE64 !== 'undefined',
+        sourceUsed: typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? 'data-url' : (typeof ACNHS_LOGO_BASE64 !== 'undefined' ? 'base64' : 'fallback-url')
       });
       console.log('🔍 Logo preview:', logoSource ? logoSource.substring(0, 80) : 'N/A');
       console.log('🔍 Placeholders in template BEFORE replacement:', (emailHtml.match(/{{ACNHS_SEAL_BASE64}}/g) || []).length);
@@ -7932,6 +7986,32 @@
         const result = await response.json();
         console.log('✅ Status change email sent successfully:', result);
         
+        // ✅ LOG EMAIL TO HISTORY TABLE
+        const supabase = getSupabaseClient();
+        if (supabase && studentId) {
+          const emailLogEntry = {
+            student_id: studentId,
+            application_id: applicationId,
+            recipient_email: studentEmail,
+            subject: emailSubject,
+            html_body: emailHtml,
+            sent_at: new Date().toISOString(),
+            sent_by: sessionStorage.getItem('adminEmail') || 'system',
+            email_type: 'status_change',
+            status: 'sent'
+          };
+          
+          const { error: logError } = await supabase
+            .from('email_history')
+            .insert([emailLogEntry]);
+          
+          if (logError) {
+            console.error('⚠️ Failed to log email to history:', logError);
+          } else {
+            console.log('✅ Email logged to history table');
+          }
+        }
+        
         return result;
       } catch (error) {
         console.error('❌ Failed to send status change email:', error);
@@ -7939,6 +8019,60 @@
       }
     }
 
+    async function updateApplicationField(applicationId, field, newValue) {
+      const supabase = initSupabase();
+      if (!supabase) {
+        alert('Failed to initialize Supabase');
+        return;
+      }
+
+      try {
+        // Update in database
+        const { data, error } = await supabase
+          .from('applications')
+          .update({ [field]: newValue })
+          .eq('id', applicationId);
+
+        if (error) throw error;
+
+        // Update local data
+        const app = applicationsData.find(a => a.id === applicationId);
+        if (app) {
+          app[field] = newValue;
+          // Clear index cache to force rebuild with new values
+          if (applicationIndexCache.has(applicationId)) {
+            applicationIndexCache.delete(applicationId);
+          }
+        }
+
+        // Show success feedback with better animation
+        const select = event?.target;
+        if (select) {
+          // Add success state
+          select.style.borderColor = '#10b981';
+          select.style.background = 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)';
+          select.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.3), 0 4px 12px rgba(16, 185, 129, 0.2)';
+          
+          // Add a checkmark icon briefly
+          const originalText = select.options[select.selectedIndex].text;
+          select.options[select.selectedIndex].text = '✓ ' + originalText;
+          
+          setTimeout(() => {
+            select.style.borderColor = '';
+            select.style.background = '';
+            select.style.boxShadow = '';
+            select.options[select.selectedIndex].text = originalText;
+          }, 800);
+        }
+
+        console.log(`✅ Updated ${field} to "${newValue}" for application ${applicationId}`);
+      } catch (error) {
+        console.error(`❌ Failed to update ${field}:`, error);
+        alert(`Failed to update ${field}. Please try again.`);
+        // Reload to restore original value
+        await loadApplications();
+      }
+    }
     async function updateApplicationStatus() {
       if (!currentApplicationId) return;
       
