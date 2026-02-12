@@ -1740,13 +1740,40 @@
         html += `<p style="margin-bottom: 12px;">The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>, and is currently <strong>${currentAge} years old</strong>.</p>`;
       }
       
-      // 2. High school graduation + years lived in Armenia - Second paragraph
+      // 2. High school graduation + university (if applicable) - Second paragraph
       let graduationParagraph = '';
       if (q.education_history && q.education_history.hs_grad_date && birthYear) {
         const hsGradDate = new Date(q.education_history.hs_grad_date);
         hsGradYear = hsGradDate.getFullYear();
         const hsGradAge = hsGradYear - birthYear;
         graduationParagraph = `${pronounCap} graduated from high school in <strong>${hsGradYear}</strong> at the age of <strong>${hsGradAge}</strong>.`;
+      }
+      
+      // Add university information if they attended
+      if (q.education_history && q.education_history.armenian_edu === 'yes') {
+        // Application/Entry date
+        if (q.education_history.application_date && birthYear) {
+          const appDate = new Date(q.education_history.application_date);
+          const appYear = appDate.getFullYear();
+          const appAge = appYear - birthYear;
+          
+          let uniText = ` ${pronounCap} entered`;
+          if (q.education_history.armenian_institution) {
+            uniText += ` <strong>${q.education_history.armenian_institution}</strong>`;
+          } else {
+            uniText += ` university`;
+          }
+          uniText += ` in <strong>${appYear}</strong> at the age of <strong>${appAge}</strong>.`;
+          graduationParagraph += uniText;
+        }
+        
+        // University graduation
+        if (q.education_history.graduation_date && birthYear) {
+          const gradDate = new Date(q.education_history.graduation_date);
+          uniGradYear = gradDate.getFullYear();
+          const gradAge = uniGradYear - birthYear;
+          graduationParagraph += ` ${pronounCap} graduated in <strong>${uniGradYear}</strong> at the age of <strong>${gradAge}</strong>.`;
+        }
       }
       
       // 3. Years lived in Armenia after graduation + permanent departure
@@ -1757,17 +1784,13 @@
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const depMonth = monthNames[depDate.getMonth()];
         
-        // Calculate years lived in Armenia after graduation
-        let afterGradYear = hsGradYear || uniGradYear;
-        if (q.education_history && q.education_history.graduation_date) {
-          const uniGradDate = new Date(q.education_history.graduation_date);
-          uniGradYear = uniGradDate.getFullYear();
-          afterGradYear = uniGradYear;
-        }
+        // Calculate years lived in Armenia after final graduation
+        let afterGradYear = uniGradYear || hsGradYear;
         
         if (afterGradYear && depYear > afterGradYear) {
           const yearsAfterGrad = depYear - afterGradYear;
-          graduationParagraph += `<br>After graduating, ${pronoun} continued to reside in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>.`;
+          const gradType = uniGradYear ? 'university' : 'high school';
+          graduationParagraph += `<br>After graduating from ${gradType}, ${pronoun} continued to reside in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>.`;
         }
         
         graduationParagraph += ` ${pronounCap} permanently left Armenia in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at the age of <strong>${depAge}</strong>.`;
