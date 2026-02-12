@@ -2815,27 +2815,52 @@
       const studentId = currentStudent.student_id;
 
       try {
-        const { error } = await vidSupabase
+        // First, try to check if record exists
+        const { data: existing, error: checkError } = await vidSupabase
           .from('admin_private_notes')
-          .upsert({
-            admin_email: AUTHORIZED_EMAIL,
-            student_id: studentId,
-            notes: notes,
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'admin_email,student_id'
-          });
+          .select('id')
+          .eq('admin_email', AUTHORIZED_EMAIL)
+          .eq('student_id', studentId)
+          .maybeSingle();
 
-        if (error) {
-          // Check if table doesn't exist
-          if (error.message.includes('does not exist') || error.code === '42P01') {
+        if (checkError && checkError.code !== 'PGRST116') {
+          console.error('Error checking notes:', checkError);
+          if (checkError.message.includes('does not exist') || checkError.code === '42P01') {
             if (showFeedback) {
               showToast('error', 'Setup Required', 'Notes table not found. Please run VID-SETUP.sql in Supabase SQL Editor first.', 6000);
             }
             return false;
           }
-          throw error;
         }
+
+        let result;
+        if (existing) {
+          // Update existing record
+          result = await vidSupabase
+            .from('admin_private_notes')
+            .update({
+              notes: notes,
+              updated_at: new Date().toISOString()
+            })
+            .eq('admin_email', AUTHORIZED_EMAIL)
+            .eq('student_id', studentId);
+        } else {
+          // Insert new record
+          result = await vidSupabase
+            .from('admin_private_notes')
+            .insert({
+              admin_email: AUTHORIZED_EMAIL,
+              student_id: studentId,
+              notes: notes,
+              updated_at: new Date().toISOString()
+            });
+        }
+
+        if (result.error) {
+          throw result.error;
+        }
+
+        console.log('✅ Notes saved successfully');
 
         // Update notes tracking based on whether notes exist
         const hadNotes = studentsWithNotes.has(studentId);
@@ -2895,22 +2920,20 @@
       }
     }
 
-    // Auto-save and close modal - Non-blocking
+    // Auto-save and close modal - MUST save before closing
     async function autoSaveAndClose() {
-      // Close immediately for instant feedback
-      document.getElementById('studentModal').classList.remove('active');
-      
-      // Save in background
+      // Save notes FIRST (wait for completion)
       if (currentStudent) {
-        saveNotes(false).then(() => {
-          currentStudent = null;
-        });
-      } else {
-        currentStudent = null;
+        const saved = await saveNotes(false);
+        console.log('📝 Notes saved before closing:', saved);
       }
+      
+      // Then close modal
+      document.getElementById('studentModal').classList.remove('active');
+      currentStudent = null;
     }
 
-    // Close Modal - Optimized
+    // Close Modal - Waits for save to complete
     async function closeModal() {
       await autoSaveAndClose();
     }
