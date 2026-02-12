@@ -1177,6 +1177,13 @@
           </div>
         </div>
         <div class="nav-actions">
+          <div id="userInfo" style="display: none; margin-right: 16px; color: var(--text-secondary); font-size: 14px;">
+            <span id="userEmail"></span>
+          </div>
+          <button class="nav-btn" onclick="handleLogout()" id="logoutBtn" style="display: none; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3);">
+            <span>🚪</span>
+            Logout
+          </button>
           <button class="nav-btn nav-btn-primary" onclick="exportData()">
             <span>📊</span>
             Export Data
@@ -1374,9 +1381,165 @@
       }, duration);
     }
 
-    // Initialize - Enhanced for mobile compatibility
+    // Check Authentication
+    async function checkAuth() {
+      try {
+        vidSupabase = initSupabase();
+        
+        // Check if user is logged in
+        const { data: { session }, error } = await vidSupabase.auth.getSession();
+        
+        if (error || !session) {
+          // Not logged in - show login screen
+          showLoginScreen();
+          return false;
+        }
+        
+        console.log('✅ User authenticated:', session.user.email);
+        return true;
+      } catch (error) {
+        console.error('❌ Auth check failed:', error);
+        showLoginScreen();
+        return false;
+      }
+    }
+
+    // Show Login Screen
+    function showLoginScreen() {
+      document.body.innerHTML = `
+        <div style="min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #1f2937 100%); padding: 20px;">
+          <div style="background: rgba(17, 24, 39, 0.95); backdrop-filter: blur(20px); border-radius: 20px; padding: 48px; max-width: 420px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4); border: 1px solid rgba(148, 163, 184, 0.15);">
+            <div style="text-align: center; margin-bottom: 32px;">
+              <div style="font-size: 48px; margin-bottom: 16px;">🔐</div>
+              <h2 style="color: #f8fafc; font-size: 28px; font-weight: 700; margin-bottom: 8px;">VID Access</h2>
+              <p style="color: #94a3b8; font-size: 14px;">Student Intelligence Dashboard</p>
+            </div>
+
+            <form id="loginForm" onsubmit="return handleLogin(event)" style="display: flex; flex-direction: column; gap: 20px;">
+              <div>
+                <label style="display: block; color: #cbd5e1; font-size: 14px; font-weight: 500; margin-bottom: 8px;">Email</label>
+                <input 
+                  type="email" 
+                  id="loginEmail" 
+                  required
+                  placeholder="admin@acnhs.edu"
+                  style="width: 100%; padding: 12px 16px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 8px; color: #f8fafc; font-size: 14px; transition: all 0.2s;"
+                  onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(30, 41, 59, 0.8)';"
+                  onblur="this.style.borderColor='rgba(148, 163, 184, 0.25)'; this.style.background='rgba(30, 41, 59, 0.5)';"
+                />
+              </div>
+
+              <div>
+                <label style="display: block; color: #cbd5e1; font-size: 14px; font-weight: 500; margin-bottom: 8px;">Password</label>
+                <input 
+                  type="password" 
+                  id="loginPassword" 
+                  required
+                  placeholder="Enter your password"
+                  style="width: 100%; padding: 12px 16px; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.25); border-radius: 8px; color: #f8fafc; font-size: 14px; transition: all 0.2s;"
+                  onfocus="this.style.borderColor='#3b82f6'; this.style.background='rgba(30, 41, 59, 0.8)';"
+                  onblur="this.style.borderColor='rgba(148, 163, 184, 0.25)'; this.style.background='rgba(30, 41, 59, 0.5)';"
+                />
+              </div>
+
+              <div id="loginError" style="display: none; padding: 12px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; color: #fca5a5; font-size: 14px;"></div>
+
+              <button 
+                type="submit" 
+                id="loginBtn"
+                style="width: 100%; padding: 14px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border: none; border-radius: 8px; color: white; font-size: 16px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.4);"
+                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 10px 15px -3px rgba(59, 130, 246, 0.4)';"
+                onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 6px -1px rgba(59, 130, 246, 0.4)';"
+              >
+                Sign In
+              </button>
+            </form>
+
+            <div style="margin-top: 24px; text-align: center; color: #64748b; font-size: 12px;">
+              <p>Authorized personnel only</p>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Handle Login
+    async function handleLogin(event) {
+      event.preventDefault();
+      
+      const email = document.getElementById('loginEmail').value;
+      const password = document.getElementById('loginPassword').value;
+      const loginBtn = document.getElementById('loginBtn');
+      const loginError = document.getElementById('loginError');
+      
+      // Show loading state
+      loginBtn.disabled = true;
+      loginBtn.textContent = 'Signing in...';
+      loginError.style.display = 'none';
+      
+      try {
+        vidSupabase = initSupabase();
+        
+        const { data, error } = await vidSupabase.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+        
+        if (error) throw error;
+        
+        console.log('✅ Login successful');
+        
+        // Reload the page to show VID dashboard
+        location.reload();
+        
+      } catch (error) {
+        console.error('❌ Login failed:', error);
+        loginError.textContent = error.message || 'Invalid email or password';
+        loginError.style.display = 'block';
+        loginBtn.disabled = false;
+        loginBtn.textContent = 'Sign In';
+      }
+      
+      return false;
+    }
+
+    // Handle Logout
+    async function handleLogout() {
+      try {
+        const { error } = await vidSupabase.auth.signOut();
+        if (error) throw error;
+        
+        console.log('✅ Logged out successfully');
+        location.reload();
+      } catch (error) {
+        console.error('❌ Logout failed:', error);
+        showToast('error', 'Logout Failed', error.message);
+      }
+    }
+
+    // Initialize - Enhanced for mobile compatibility with auth
     async function init() {
       try {
+        // Check authentication first
+        const isAuthenticated = await checkAuth();
+        if (!isAuthenticated) {
+          return; // Stop initialization if not logged in
+        }
+
+        // Show user email and logout button
+        const { data: { session } } = await vidSupabase.auth.getSession();
+        if (session?.user) {
+          const userEmail = document.getElementById('userEmail');
+          const userInfo = document.getElementById('userInfo');
+          const logoutBtn = document.getElementById('logoutBtn');
+          
+          if (userEmail && userInfo && logoutBtn) {
+            userEmail.textContent = session.user.email;
+            userInfo.style.display = 'block';
+            logoutBtn.style.display = 'flex';
+          }
+        }
+
         // Log device/browser info for debugging
         console.log('🔧 VID Initialization Started');
         console.log('📱 Device Info:', {
