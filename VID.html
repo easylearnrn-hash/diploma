@@ -1717,13 +1717,16 @@
     function generateTimelineSummary(q) {
       if (!q || !q.personal_info) return null;
       
-      const parts = [];
+      let html = '';
       let birthYear = null;
       let currentAge = null;
       let hsGradYear = null;
       let uniGradYear = null;
+      let pronoun = 'they'; // Default pronoun
+      let pronounCap = 'They';
+      let possessive = 'their';
       
-      // 1. Birth date and current age (FIRST)
+      // 1. Birth date and current age - First paragraph
       if (q.personal_info.date_of_birth) {
         const birthDate = new Date(q.personal_info.date_of_birth);
         birthYear = birthDate.getFullYear();
@@ -1734,27 +1737,25 @@
         const birthMonth = monthNames[birthDate.getMonth()];
         const birthDay = birthDate.getDate();
         
-        parts.push(`The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>.`);
-        parts.push(`The student is currently <strong>${currentAge} years old</strong>.`);
+        html += `<p style="margin-bottom: 12px;">The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>, and is currently <strong>${currentAge} years old</strong>.</p>`;
       }
       
-      // 2. High school graduation
+      // 2. High school graduation + years lived in Armenia - Second paragraph
+      let graduationParagraph = '';
       if (q.education_history && q.education_history.hs_grad_date && birthYear) {
         const hsGradDate = new Date(q.education_history.hs_grad_date);
         hsGradYear = hsGradDate.getFullYear();
         const hsGradAge = hsGradYear - birthYear;
-        parts.push(`They graduated high school in <strong>${hsGradYear}</strong> at age <strong>${hsGradAge}</strong>.`);
+        graduationParagraph = `${pronounCap} graduated from high school in <strong>${hsGradYear}</strong> at the age of <strong>${hsGradAge}</strong>.`;
       }
       
-      // 3. Permanent departure with "lived in Armenia for X years" calculation
+      // 3. Years lived in Armenia after graduation + permanent departure
       if (q.residency_travel && q.residency_travel.permanent_departure_date && birthYear) {
         const depDate = new Date(q.residency_travel.permanent_departure_date);
         const depYear = depDate.getFullYear();
         const depAge = depYear - birthYear;
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const depMonth = monthNames[depDate.getMonth()];
-        
-        let departureText = `The student left Armenia permanently in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong>`;
         
         // Calculate years lived in Armenia after graduation
         let afterGradYear = hsGradYear || uniGradYear;
@@ -1766,39 +1767,43 @@
         
         if (afterGradYear && depYear > afterGradYear) {
           const yearsAfterGrad = depYear - afterGradYear;
-          const gradType = uniGradYear ? 'university' : 'high school';
-          departureText += ` (after graduation of ${gradType}, they lived in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>)`;
+          graduationParagraph += `<br>After graduating, ${pronoun} continued to reside in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>.`;
         }
         
-        departureText += ` at age <strong>${depAge}</strong>.`;
-        parts.push(departureText);
+        graduationParagraph += ` ${pronounCap} permanently left Armenia in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at the age of <strong>${depAge}</strong>.`;
       }
       
-      // 4. Travel history - visits back to Armenia
+      if (graduationParagraph) {
+        html += `<p style="margin-bottom: 12px;">${graduationParagraph}</p>`;
+      }
+      
+      // 4. Travel history - Third paragraph with bullet list
       if (q.residency_travel && q.residency_travel.travel_history && q.residency_travel.travel_history.length > 0) {
         const trips = q.residency_travel.travel_history;
         const tripCount = trips.length;
         
-        let travelText = `Since leaving, the student has visited Armenia <strong>${tripCount} time${tripCount > 1 ? 's' : ''}</strong>: `;
+        // Number words for better readability
+        const numberWords = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+        const countWord = tripCount <= 10 ? numberWords[tripCount] : tripCount;
         
-        const tripDescriptions = trips.map((trip, index) => {
+        html += `<p style="margin-bottom: 8px;">Since that time, ${pronoun} ${tripCount === 1 ? 'has' : 'have'} visited Armenia on <strong>${countWord} occasion${tripCount > 1 ? 's' : ''}</strong>:</p>`;
+        html += '<ul style="margin: 0; padding-left: 24px; list-style-type: disc;">';
+        
+        trips.forEach((trip) => {
           const arrDate = new Date(trip.arrival);
           const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
           const month = monthNames[arrDate.getMonth()];
           const year = arrDate.getFullYear();
           const duration = trip.duration || '?';
-          const purpose = trip.purpose || 'unspecified purpose';
+          const purpose = trip.purpose ? trip.purpose.toLowerCase() : 'unspecified purpose';
           
-          return `<strong>${duration} days</strong> in <strong>${month} ${year}</strong> (${purpose})`;
+          html += `<li style="margin-bottom: 4px;"><strong>${duration} days</strong> in <strong>${month} ${year}</strong> (${purpose})</li>`;
         });
         
-        travelText += tripDescriptions.join(', ');
-        travelText += '.';
-        
-        parts.push(travelText);
+        html += '</ul>';
       }
       
-      return parts.length > 0 ? parts.join(' ') : null;
+      return html || null;
     }
 
     // Premium Toast Notification System
