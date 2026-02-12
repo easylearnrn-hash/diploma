@@ -140,7 +140,7 @@
         return hasAccess;
       })
       .map(item => `
-        <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}" ${item.id ? `id="${item.id}"` : ''} ${item.text === 'Admin Hub' ? 'target="_blank" rel="noopener noreferrer"' : ''}>
+        <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}" ${item.id ? `id="${item.id}"` : ''}>
           <span class="icon">${item.icon}</span>
           <span class="text">${item.text}</span>
         </a>
