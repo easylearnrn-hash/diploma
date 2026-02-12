@@ -1757,12 +1757,12 @@
 
         console.log('🔧 Query range:', startRange, '-', endRange);
 
-        // Load students and notes in parallel for better performance
+        // Load applications (includes all applicants, even those who became students)
         const dataPromise = Promise.allSettled([
           vidSupabase
-            .from('students')
-            .select('student_id, full_name, email, phone, program, status, date_of_birth, start_term, created_at')
-            .order('created_at', { ascending: false })
+            .from('applications')
+            .select('id, control_number, applicant_name, email, phone, program, status, date_of_birth, start_term, submission_date')
+            .order('submission_date', { ascending: false })
             .range(startRange, endRange),
           vidSupabase
             .from('admin_private_notes')
@@ -1783,9 +1783,24 @@
           notesStatus: notesResult.status
         });
 
-        // Process students
+        // Process applications (normalize field names to match expected format)
         if (studentsResult.status === 'fulfilled' && !studentsResult.value.error) {
-          const newStudents = studentsResult.value.data || [];
+          let newStudents = studentsResult.value.data || [];
+          
+          // Map applications fields to student format
+          newStudents = newStudents.map(app => ({
+            student_id: app.control_number || app.id,  // Use control_number or fallback to id
+            full_name: app.applicant_name,
+            email: app.email,
+            phone: app.phone,
+            program: app.program,
+            status: app.status,
+            date_of_birth: app.date_of_birth,
+            start_term: app.start_term,
+            created_at: app.submission_date,
+            // Keep original id for notes lookup
+            _original_id: app.id
+          }));
           
           if (append) {
             allStudents = [...allStudents, ...newStudents];
