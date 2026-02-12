@@ -1088,6 +1088,25 @@
                 </select>
               </div>
 
+              <!-- Group Selection -->
+              <div>
+                <label style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:8px">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:middle">
+                    <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+                  </svg>
+                  Student Group
+                </label>
+                <select 
+                  id="attendanceGroupFilter" 
+                  onchange="loadAttendanceForCourse()"
+                  style="width:100%;padding:12px 14px;border:2px solid #e2e8f0;border-radius:10px;font-size:14px;font-weight:600;color:#1e293b;transition:all 0.2s;background:#fff"
+                  onfocus="this.style.borderColor='#3b82f6';this.style.boxShadow='0 0 0 3px rgba(59,130,246,0.1)'"
+                  onblur="this.style.borderColor='#e2e8f0';this.style.boxShadow='none'"
+                >
+                  <option value="">All Students</option>
+                </select>
+              </div>
+
               <!-- Search Students -->
               <div>
                 <label style="display:block;font-size:13px;font-weight:700;color:#475569;margin-bottom:8px">
@@ -1660,8 +1679,35 @@
     let allStudents = [];
     let filteredStudents = [];
 
+    // AUTHENTICATION CHECK - Only allow specific admin emails
+    function checkAdminAccess() {
+      const ALLOWED_ADMINS = [
+        'hrachfilm@gmail.com',
+        's.gharibyan@acnhs.am'
+      ];
+
+      const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+      const userEmail = sessionStorage.getItem('userEmail');
+      
+      console.log('🔐 Admin access check:', { isAdmin, userEmail });
+
+      if (!isAdmin || !userEmail || !ALLOWED_ADMINS.includes(userEmail.toLowerCase())) {
+        alert('⛔ Access Denied\n\nOnly authorized administrators can access this page.\n\nRedirecting to login...');
+        sessionStorage.clear();
+        localStorage.clear();
+        window.location.href = 'login.html';
+        return false;
+      }
+
+      console.log('✅ Admin access granted:', userEmail);
+      return true;
+    }
+
     // Load data on init
     document.addEventListener('DOMContentLoaded', async () => {
+      // Check authentication first
+      if (!checkAdminAccess()) return;
+
       await loadDashboardData();
       setupNavigation();
       setupSearch();
@@ -4023,6 +4069,19 @@
 
     // Initialize attendance view
     async function initAttendanceView() {
+      // Load groups first
+      await loadStudentGroups();
+      
+      // Populate group dropdown
+      const groupSelect = document.getElementById('attendanceGroupFilter');
+      groupSelect.innerHTML = '<option value="">All Students</option>';
+      studentGroups.forEach(group => {
+        const option = document.createElement('option');
+        option.value = group.id;
+        option.textContent = `${group.name} (${group.studentIds.length} students)`;
+        groupSelect.appendChild(option);
+      });
+      
       loadAttendanceRecords();
       
       // Set today's date as default
@@ -4053,6 +4112,7 @@
     async function loadAttendanceForCourse() {
       const courseCode = document.getElementById('attendanceCourseSelect').value;
       const date = document.getElementById('attendanceDate').value;
+      const groupId = document.getElementById('attendanceGroupFilter').value;
       
       if (!courseCode || !date) {
         document.getElementById('attendanceTableContainer').innerHTML = `
@@ -4074,14 +4134,34 @@
       `;
 
       try {
-        // Fetch active students
-        const { data: students, error } = await db
-          .from('students')
-          .select('id, full_name, student_id, program')
-          .eq('enrollment_status', 'active')
-          .order('full_name', { ascending: true });
+        let students;
+        
+        if (groupId) {
+          // Filter by group
+          const group = studentGroups.find(g => g.id === groupId);
+          if (!group) throw new Error('Group not found');
+          
+          // Fetch only students in this group
+          const { data, error } = await db
+            .from('students')
+            .select('id, full_name, student_id, program')
+            .in('id', group.studentIds)
+            .eq('enrollment_status', 'active')
+            .order('full_name', { ascending: true });
 
-        if (error) throw error;
+          if (error) throw error;
+          students = data;
+        } else {
+          // Fetch all active students
+          const { data, error } = await db
+            .from('students')
+            .select('id, full_name, student_id, program')
+            .eq('enrollment_status', 'active')
+            .order('full_name', { ascending: true });
+
+          if (error) throw error;
+          students = data;
+        }
 
         renderAttendanceTable(students, courseCode, date);
       } catch (error) {

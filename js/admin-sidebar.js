@@ -86,6 +86,13 @@
         permission: 'view_applications'
       },
       { 
+        href: 'admin-hub.html', 
+        icon: '🎯', 
+        text: 'Admin Hub', 
+        permission: null, // Checks internally for specific admins
+        allowedEmails: ['hrachfilm@gmail.com', 's.gharibyan@acnhs.am']
+      },
+      { 
         href: 'admin-users.html', 
         icon: '👥', 
         text: 'User Management', 
@@ -116,6 +123,14 @@
     console.log('🔧 Filtering menu items...');
     const navItemsHTML = menuItems
       .filter(item => {
+        // Check for email-specific access
+        if (item.allowedEmails) {
+          const currentEmail = (sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '').toLowerCase();
+          const hasEmailAccess = item.allowedEmails.some(email => email.toLowerCase() === currentEmail);
+          console.log(`${hasEmailAccess ? '✅' : '❌'} ${item.text}: ${hasEmailAccess ? 'VISIBLE' : 'HIDDEN'} (email check: ${currentEmail})`);
+          return hasEmailAccess;
+        }
+        
         if (!item.permission) {
           console.log(`✅ ${item.text}: Always visible (no permission required)`);
           return true;
@@ -125,7 +140,7 @@
         return hasAccess;
       })
       .map(item => `
-        <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}" ${item.id ? `id="${item.id}"` : ''}>
+        <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}" ${item.id ? `id="${item.id}"` : ''} ${item.text === 'Admin Hub' ? 'target="_blank" rel="noopener noreferrer"' : ''}>
           <span class="icon">${item.icon}</span>
           <span class="text">${item.text}</span>
         </a>
