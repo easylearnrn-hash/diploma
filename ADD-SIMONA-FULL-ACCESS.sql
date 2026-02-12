@@ -1,13 +1,13 @@
 -- Check Simona Gharibyan's admin user record
 SELECT 
   id,
-  full_name,
+  name,
   username,
   email,
   title,
   phone_ext,
   status,
-  email_sending_access,
+  email_permissions,
   permissions,
   created_at
 FROM admin_users 
@@ -18,55 +18,87 @@ WHERE email = 's.gharibyan@acnhs.am'
 -- If she doesn't exist, create her with full permissions
 -- Run this AFTER checking if she exists:
 
-INSERT INTO admin_users (
-  full_name,
-  username,
+-- First check if user exists
+DO $$
+DECLARE
+  user_exists boolean;
+BEGIN
+  SELECT EXISTS(SELECT 1 FROM admin_users WHERE email = 's.gharibyan@acnhs.am') INTO user_exists;
+  
+  IF user_exists THEN
+    -- Update existing user with full permissions
+    UPDATE admin_users 
+    SET 
+      permissions = jsonb_build_object(
+        'send_emails', true,
+        'edit_students', true,
+        'manage_appeals', true,
+        'verify_documents', true,
+        'generate_qr_codes', true,
+        'view_applications', true,
+        'manage_transcripts', true,
+        'export_data', true,
+        'manage_users', true,
+        'view_reports', true,
+        'view_students', true,
+        'manage_settings', true,
+        'delete_students', true
+      ),
+      status = 'active',
+      email_permissions = ARRAY['admissions', 'info', 'documents']
+    WHERE email = 's.gharibyan@acnhs.am';
+    
+    RAISE NOTICE 'Updated existing user: s.gharibyan@acnhs.am';
+  ELSE
+    -- Insert new user with full permissions
+    INSERT INTO admin_users (
+      name,
+      username,
+      email,
+      title,
+      phone_ext,
+      status,
+      email_permissions,
+      permissions,
+      signature,
+      role
+    ) VALUES (
+      'Simona Gharibyan',
+      'simona',
+      's.gharibyan@acnhs.am',
+      'Executive Director',
+      '101',
+      'active',
+      ARRAY['admissions', 'info', 'documents'],
+      jsonb_build_object(
+        'send_emails', true,
+        'edit_students', true,
+        'manage_appeals', true,
+        'verify_documents', true,
+        'generate_qr_codes', true,
+        'view_applications', true,
+        'manage_transcripts', true,
+        'export_data', true,
+        'manage_users', true,
+        'view_reports', true,
+        'view_students', true,
+        'manage_settings', true,
+        'delete_students', true
+      ),
+      NULL,
+      'admin'
+    );
+    
+    RAISE NOTICE 'Created new user: s.gharibyan@acnhs.am';
+  END IF;
+END $$;
+
+-- Verify the user has all permissions
+SELECT 
+  name,
   email,
-  title,
-  phone_ext,
   status,
-  email_sending_access,
-  permissions,
-  email_signature
-) VALUES (
-  'Simona Gharibyan',
-  '@simona',
-  's.gharibyan@acnhs.am',
-  'Executive Director',
-  '101',
-  'active',
-  ARRAY['admissions', 'info', 'documents'],
-  ARRAY[
-    'Send Emails',
-    'Edit Students',
-    'Manage Appeals',
-    'Verify Documents',
-    'Generate Qr Codes',
-    'View Applications',
-    'Manage Transcripts',
-    'Export Data',
-    'Manage Users',
-    'View Reports',
-    'View Students',
-    'Manage Settings',
-    'Delete Students'
-  ],
-  NULL
-)
-ON CONFLICT (email) DO UPDATE SET
-  permissions = ARRAY[
-    'Send Emails',
-    'Edit Students',
-    'Manage Appeals',
-    'Verify Documents',
-    'Generate Qr Codes',
-    'View Applications',
-    'Manage Transcripts',
-    'Export Data',
-    'Manage Users',
-    'View Reports',
-    'View Students',
-    'Manage Settings',
-    'Delete Students'
-  ],
-  status = 'active';
+  jsonb_pretty(permissions) as permissions_formatted
+FROM admin_users 
+WHERE email = 's.gharibyan@acnhs.am';
+
