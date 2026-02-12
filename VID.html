@@ -1713,6 +1713,110 @@
       return statusMap[normalized] || 'status-unknown';
     }
 
+    // Generate Timeline Summary - Intelligent narrative from questionnaire data
+    function generateTimelineSummary(q) {
+      if (!q || !q.personal_info) return null;
+      
+      const parts = [];
+      let birthYear = null;
+      let currentAge = null;
+      
+      // Calculate age from date of birth
+      if (q.personal_info.date_of_birth) {
+        const birthDate = new Date(q.personal_info.date_of_birth);
+        birthYear = birthDate.getFullYear();
+        const today = new Date();
+        currentAge = today.getFullYear() - birthYear;
+        
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const birthMonth = monthNames[birthDate.getMonth()];
+        const birthDay = birthDate.getDate();
+        
+        parts.push(`The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>.`);
+      }
+      
+      // High school graduation
+      if (q.education_history && q.education_history.hs_grad_date && birthYear) {
+        const hsGradDate = new Date(q.education_history.hs_grad_date);
+        const hsGradYear = hsGradDate.getFullYear();
+        const hsGradAge = hsGradYear - birthYear;
+        parts.push(`They graduated high school in <strong>${hsGradYear}</strong> at age <strong>${hsGradAge}</strong>.`);
+      }
+      
+      // Armenian university education
+      if (q.education_history && q.education_history.armenian_edu === 'yes') {
+        let uniText = 'They attended';
+        if (q.education_history.armenian_institution) {
+          uniText += ` <strong>${q.education_history.armenian_institution}</strong>`;
+        } else {
+          uniText += ' university in Armenia';
+        }
+        
+        if (q.education_history.application_date && birthYear) {
+          const appDate = new Date(q.education_history.application_date);
+          const appYear = appDate.getFullYear();
+          const appAge = appYear - birthYear;
+          uniText += ` (applied in <strong>${appYear}</strong> at age <strong>${appAge}</strong>`;
+          
+          if (q.education_history.graduation_date) {
+            const gradDate = new Date(q.education_history.graduation_date);
+            const gradYear = gradDate.getFullYear();
+            const gradAge = gradYear - birthYear;
+            uniText += `, graduated in <strong>${gradYear}</strong> at age <strong>${gradAge}</strong>`;
+          }
+          uniText += ').';
+        } else {
+          uniText += '.';
+        }
+        
+        parts.push(uniText);
+      }
+      
+      // Permanent departure from Armenia
+      if (q.residency_travel && q.residency_travel.permanent_departure_date && birthYear) {
+        const depDate = new Date(q.residency_travel.permanent_departure_date);
+        const depYear = depDate.getFullYear();
+        const depAge = depYear - birthYear;
+        const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const depMonth = monthNames[depDate.getMonth()];
+        
+        parts.push(`The student left Armenia permanently in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at age <strong>${depAge}</strong>.`);
+      }
+      
+      // Travel history - visits back to Armenia
+      if (q.residency_travel && q.residency_travel.travel_history && q.residency_travel.travel_history.length > 0) {
+        const trips = q.residency_travel.travel_history;
+        const tripCount = trips.length;
+        
+        let travelText = `Since leaving, the student has visited Armenia <strong>${tripCount} time${tripCount > 1 ? 's' : ''}</strong>: `;
+        
+        const tripDescriptions = trips.map((trip, index) => {
+          const arrDate = new Date(trip.arrival);
+          const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+          const month = monthNames[arrDate.getMonth()];
+          const year = arrDate.getFullYear();
+          const duration = trip.duration || '?';
+          const purpose = trip.purpose || 'unspecified purpose';
+          
+          return `<strong>${duration} days</strong> in <strong>${month} ${year}</strong> (${purpose})`;
+        });
+        
+        travelText += tripDescriptions.join(', ');
+        travelText += '.';
+        
+        parts.push(travelText);
+      } else if (q.residency_travel && q.residency_travel.permanent_departure_date) {
+        parts.push('The student has <strong>not returned</strong> to Armenia since leaving.');
+      }
+      
+      // Current age summary
+      if (currentAge) {
+        parts.push(`<em style="color: var(--text-secondary);">The student is currently <strong>${currentAge} years old</strong>.</em>`);
+      }
+      
+      return parts.length > 0 ? parts.join(' ') : null;
+    }
+
     // Premium Toast Notification System
     function showToast(type, title, message, duration = 4000) {
       const container = document.getElementById('toastContainer');
@@ -2610,6 +2714,17 @@
               <div class="questionnaire-value">${q.emergency_contact.address}</div>
             </div>`;
           }
+          html += '</div>';
+        }
+        
+        // ============================================
+        // TIMELINE SUMMARY - Intelligent narrative
+        // ============================================
+        const summary = generateTimelineSummary(q);
+        if (summary) {
+          html += '<div style="margin-bottom: 24px; padding: 20px; background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%); border-radius: 12px; border-left: 4px solid var(--primary);">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 16px; font-weight: 700;">📊 Timeline Summary</h4>';
+          html += `<div style="font-size: 14px; line-height: 1.8; color: var(--text-primary);">${summary}</div>`;
           html += '</div>';
         }
         
