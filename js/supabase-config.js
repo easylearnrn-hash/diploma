@@ -11,8 +11,10 @@ const SUPABASE_CONFIG = {
   // Optional: Additional configuration
   options: {
     auth: {
-      persistSession: false,
-      autoRefreshToken: false
+      persistSession: true,  // MUST be true to keep users logged in!
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined
     }
   }
 };
