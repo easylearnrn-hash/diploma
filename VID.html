@@ -2,9 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  
+  <!-- iPhone/iOS Optimizations -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="VID">
+  <meta name="format-detection" content="telephone=no">
+  
   <title>VID - Student Intelligence Dashboard</title>
   <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/images/favicon-32.png">
+  <!-- Preconnect to speed up external resources -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
+  <link rel="preconnect" href="https://eyhksbiceueoiamwnqpr.supabase.co">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
@@ -87,6 +100,11 @@
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
+      /* iPhone optimizations */
+      -webkit-text-size-adjust: 100%; /* Prevent text scaling on orientation change */
+      -webkit-tap-highlight-color: transparent; /* Remove tap highlight */
+      touch-action: pan-y; /* Smooth scrolling */
+      overscroll-behavior-y: none; /* Prevent bounce effect */
       /* Performance optimizations */
       will-change: scroll-position;
     }
@@ -1010,16 +1028,24 @@
 
       .students-grid {
         grid-template-columns: 1fr;
+        gap: 12px; /* Smaller gap for mobile */
       }
 
       .control-header {
         flex-direction: column;
         align-items: stretch;
+        gap: 12px;
       }
 
       .filter-bar {
         overflow-x: auto;
         flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        scrollbar-width: none; /* Hide scrollbar on mobile */
+      }
+      
+      .filter-bar::-webkit-scrollbar {
+        display: none; /* Hide scrollbar on mobile */
       }
 
       .modal-dialog {
@@ -1027,10 +1053,104 @@
         margin: 0;
         border-radius: 0;
         max-height: 100vh;
+        /* iPhone safe area support */
+        padding-bottom: env(safe-area-inset-bottom);
       }
 
       .details-grid {
         grid-template-columns: 1fr;
+      }
+      
+      /* Larger touch targets for iPhone */
+      .filter-chip,
+      .nav-btn,
+      .student-card {
+        min-height: 44px; /* Apple's recommended touch target size */
+      }
+      
+      .modal-close {
+        min-width: 44px;
+        min-height: 44px;
+      }
+    }
+    
+    /* iPhone-specific optimizations */
+    @media (max-width: 480px) {
+      .top-nav {
+        padding: 12px 0;
+      }
+      
+      .brand-logo {
+        width: 36px;
+        height: 36px;
+        font-size: 18px;
+      }
+      
+      .brand-text h1 {
+        font-size: 14px;
+      }
+      
+      .nav-btn {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+      
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+      }
+      
+      .stat-card {
+        padding: 16px;
+      }
+      
+      .stat-value {
+        font-size: 28px;
+      }
+      
+      .stat-label {
+        font-size: 12px;
+      }
+      
+      .student-card {
+        padding: 14px;
+      }
+      
+      .student-name {
+        font-size: 14px;
+      }
+      
+      .student-id {
+        font-size: 11px;
+      }
+      
+      .student-meta {
+        font-size: 11px;
+      }
+      
+      /* Toast notifications smaller on mobile */
+      .toast {
+        min-width: 280px;
+        max-width: calc(100vw - 40px);
+      }
+      
+      .toast-container {
+        right: 10px;
+        left: 10px;
+        top: 70px;
+      }
+    }
+    
+    /* Landscape iPhone optimization */
+    @media (max-width: 844px) and (orientation: landscape) {
+      .modal-dialog {
+        max-height: 90vh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+      
+      .top-nav {
+        position: relative; /* Don't sticky in landscape to save space */
       }
     }
 
@@ -2248,9 +2368,92 @@
     function exportData() {
       showToast('info', 'Coming Soon', 'Export functionality will be available in the next update.');
     }
+    
+    // iPhone Touch Gestures for Modal
+    function initTouchGestures() {
+      const modal = document.getElementById('studentModal');
+      const modalDialog = modal?.querySelector('.modal-dialog');
+      
+      if (!modal || !modalDialog) return;
+      
+      let startY = 0;
+      let currentY = 0;
+      let isDragging = false;
+      
+      modalDialog.addEventListener('touchstart', (e) => {
+        // Only enable swipe from top area of modal
+        const rect = modalDialog.getBoundingClientRect();
+        const touchY = e.touches[0].clientY;
+        
+        if (touchY - rect.top < 60) { // Top 60px is swipe-to-close area
+          startY = e.touches[0].clientY;
+          isDragging = true;
+          modalDialog.style.transition = 'none';
+        }
+      }, { passive: true });
+      
+      modalDialog.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        
+        currentY = e.touches[0].clientY;
+        const deltaY = currentY - startY;
+        
+        // Only allow downward swipes
+        if (deltaY > 0) {
+          modalDialog.style.transform = `translateY(${deltaY}px)`;
+          modalDialog.style.opacity = Math.max(0.5, 1 - (deltaY / 300));
+        }
+      }, { passive: true });
+      
+      modalDialog.addEventListener('touchend', () => {
+        if (!isDragging) return;
+        
+        const deltaY = currentY - startY;
+        modalDialog.style.transition = 'all 0.3s ease';
+        
+        // Close if swiped down more than 100px
+        if (deltaY > 100) {
+          closeModal();
+        } else {
+          // Reset position
+          modalDialog.style.transform = 'translateY(0)';
+          modalDialog.style.opacity = '1';
+        }
+        
+        isDragging = false;
+      });
+    }
+    
+    // Prevent body scroll when modal is open (iOS fix)
+    function preventBodyScroll() {
+      const modal = document.getElementById('studentModal');
+      if (!modal) return;
+      
+      const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+          if (mutation.attributeName === 'class') {
+            if (modal.classList.contains('active')) {
+              document.body.style.overflow = 'hidden';
+              document.body.style.position = 'fixed';
+              document.body.style.width = '100%';
+            } else {
+              document.body.style.overflow = '';
+              document.body.style.position = '';
+              document.body.style.width = '';
+            }
+          }
+        });
+      });
+      
+      observer.observe(modal, { attributes: true });
+    }
 
     // Initialize on page load
-    window.addEventListener('DOMContentLoaded', init);
+    window.addEventListener('DOMContentLoaded', () => {
+      init();
+      initTouchGestures();
+      preventBodyScroll();
+    });
   </script>
 </body>
 </html>
