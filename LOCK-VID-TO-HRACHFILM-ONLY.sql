@@ -10,13 +10,13 @@ DROP POLICY IF EXISTS "VID: Allow all users to read students" ON students;
 DROP POLICY IF EXISTS "VID: Only authenticated users can read students" ON students;
 DROP POLICY IF EXISTS "VID: Only admin emails can read students" ON students;
 
--- 2. Create STRICT policy - ONLY your email
+-- 2. Create STRICT policy - ONLY your email (case-insensitive)
 CREATE POLICY "VID: ONLY hrachfilm can read students"
 ON students
 FOR SELECT
 TO authenticated
 USING (
-  auth.jwt() ->> 'email' = 'Hrachfilm@gmail.com'
+  LOWER(auth.jwt() ->> 'email') = 'hrachfilm@gmail.com'
 );
 
 -- 3. Secure admin_private_notes - ONLY your email
@@ -28,8 +28,8 @@ CREATE POLICY "VID: ONLY hrachfilm can manage notes"
 ON admin_private_notes
 FOR ALL
 TO authenticated
-USING (auth.jwt() ->> 'email' = 'Hrachfilm@gmail.com')
-WITH CHECK (auth.jwt() ->> 'email' = 'Hrachfilm@gmail.com');
+USING (LOWER(auth.jwt() ->> 'email') = 'hrachfilm@gmail.com')
+WITH CHECK (LOWER(auth.jwt() ->> 'email') = 'hrachfilm@gmail.com');
 
 -- 4. Ensure RLS is enabled (critical!)
 ALTER TABLE students ENABLE ROW LEVEL SECURITY;
