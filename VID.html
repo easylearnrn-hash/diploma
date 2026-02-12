@@ -471,6 +471,55 @@
       gap: 20px;
     }
 
+    /* List View Mode - Single column, compact cards */
+    .students-grid.list-view {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+
+    .students-grid.list-view .student-card {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 16px;
+      padding: 16px 20px;
+      align-items: center;
+    }
+
+    .students-grid.list-view .card-header {
+      flex-direction: row;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+
+    .students-grid.list-view .card-body {
+      display: flex;
+      gap: 24px;
+      padding: 0;
+      margin-top: 0;
+    }
+
+    .students-grid.list-view .info-row {
+      flex-direction: row;
+      gap: 8px;
+      margin-bottom: 0;
+    }
+
+    .students-grid.list-view .info-label {
+      display: none; /* Hide labels in list view */
+    }
+
+    .students-grid.list-view .card-footer {
+      margin-top: 0;
+      justify-content: flex-end;
+    }
+
+    .students-grid.list-view .card-badge {
+      top: 8px;
+      right: 8px;
+      font-size: 11px;
+      padding: 4px 8px;
+    }
+
     /* Premium Student Card - Optimized for performance */
     .student-card {
       background: var(--bg-secondary);
@@ -628,6 +677,8 @@
       border-top: 1px solid var(--border-subtle);
       display: flex;
       gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .status-badge {
@@ -637,6 +688,28 @@
       font-weight: 700;
       letter-spacing: 0.5px;
       text-transform: uppercase;
+    }
+
+    .questionnaire-badge {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .questionnaire-badge.has-q {
+      background: rgba(34, 197, 94, 0.1);
+      color: #22c55e;
+      border: 1px solid rgba(34, 197, 94, 0.3);
+    }
+
+    .questionnaire-badge.no-q {
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
     }
 
     /* Subtle Status Colors */
@@ -1501,8 +1574,8 @@
           <button class="filter-btn active" data-filter="all">
             <span>📚</span> All Students
           </button>
-          <button class="filter-btn" data-filter="active">
-            <span>✅</span> Active
+          <button class="filter-btn" data-filter="enrolled">
+            <span>✅</span> Enrolled
           </button>
           <button class="filter-btn" data-filter="inactive">
             <span>⏸️</span> Inactive
@@ -1513,6 +1586,13 @@
           </button>
           <button class="filter-btn" data-filter="no-notes">
             <span>📭</span> No Notes
+          </button>
+          <div class="filter-divider"></div>
+          <button class="filter-btn" data-filter="has-eq">
+            <span>✅</span> Has EQ
+          </button>
+          <button class="filter-btn" data-filter="no-eq">
+            <span>❌</span> No EQ
           </button>
         </div>
 
@@ -1624,7 +1704,9 @@
     let currentStudent = null;
     let allStudents = [];
     let studentsWithNotes = new Set();
-    let currentFilter = 'all';
+    let studentsWithQuestionnaires = new Set(); // Track students who have submitted questionnaires
+    let activeFilters = new Set(['all']); // Track multiple active filters
+    let currentView = 'grid'; // 'grid' or 'list'
     let searchDebounceTimer = null;
     let lastRenderedHTML = '';
     let currentPage = 0;
@@ -2188,6 +2270,9 @@
       searchInput.addEventListener('input', () => {
         clearSearch.style.display = searchInput.value ? 'flex' : 'none';
         
+        // Clear HTML cache when search changes
+        lastRenderedHTML = '';
+        
         // Debounce search for performance
         clearTimeout(searchDebounceTimer);
         searchDebounceTimer = setTimeout(() => {
@@ -2198,15 +2283,74 @@
       clearSearch.addEventListener('click', () => {
         searchInput.value = '';
         clearSearch.style.display = 'none';
+        
+        // Clear HTML cache when clearing search
+        lastRenderedHTML = '';
+        
         filterAndRenderStudents();
       });
 
-      // Filter buttons
+      // Filter buttons - Support multiple selections
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          const filterType = btn.dataset.filter;
+          
+          // Special handling for "all" - clears all other filters
+          if (filterType === 'all') {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeFilters = new Set(['all']);
+          } else {
+            // Remove "all" filter when selecting specific filters
+            activeFilters.delete('all');
+            const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
+            if (allBtn) allBtn.classList.remove('active');
+            
+            // Toggle the clicked filter
+            if (activeFilters.has(filterType)) {
+              activeFilters.delete(filterType);
+              btn.classList.remove('active');
+            } else {
+              activeFilters.add(filterType);
+              btn.classList.add('active');
+            }
+            
+            // If no filters selected, revert to "all"
+            if (activeFilters.size === 0) {
+              activeFilters.add('all');
+              if (allBtn) allBtn.classList.add('active');
+            }
+          }
+          
+          // Clear HTML cache when filter changes to force re-render
+          lastRenderedHTML = '';
+          
+          filterAndRenderStudents();
+        });
+      });
+
+      // View toggle buttons (Grid vs List)
+      document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
           btn.classList.add('active');
-          currentFilter = btn.dataset.filter;
+          
+          // Determine which view based on button title
+          currentView = btn.title.includes('Grid') ? 'grid' : 'list';
+          
+          // Clear HTML cache to force re-render with new view
+          lastRenderedHTML = '';
+          
+          // Toggle grid class on container
+          const grid = document.getElementById('studentsGrid');
+          if (currentView === 'list') {
+            grid.classList.add('list-view');
+            grid.classList.remove('grid-view');
+          } else {
+            grid.classList.add('grid-view');
+            grid.classList.remove('list-view');
+          }
+          
           filterAndRenderStudents();
         });
       });
@@ -2244,7 +2388,7 @@
 
         console.log('🔧 Query range:', startRange, '-', endRange);
 
-        // Load applications (includes all applicants, even those who became students)
+        // Load applications, notes, and questionnaires in parallel
         const dataPromise = Promise.allSettled([
           vidSupabase
             .from('applications')
@@ -2254,11 +2398,14 @@
           vidSupabase
             .from('admin_private_notes')
             .select('student_id, notes')
-            .eq('admin_email', AUTHORIZED_EMAIL)
+            .eq('admin_email', AUTHORIZED_EMAIL),
+          vidSupabase
+            .from('enrollment_questionnaires')
+            .select('control_number')
         ]);
 
         // Race between data fetch and timeout
-        const [studentsResult, notesResult] = await Promise.race([
+        const [studentsResult, notesResult, questionnairesResult] = await Promise.race([
           dataPromise,
           timeoutPromise
         ]);
@@ -2267,7 +2414,8 @@
           studentsStatus: studentsResult.status,
           studentsError: studentsResult.value?.error?.message,
           studentsCount: studentsResult.value?.data?.length,
-          notesStatus: notesResult.status
+          notesStatus: notesResult.status,
+          questionnairesStatus: questionnairesResult.status
         });
 
         // Process applications (normalize field names to match expected format)
@@ -2311,8 +2459,19 @@
               .filter(n => n.notes && n.notes.trim().length > 0)
               .map(n => n.student_id)
           );
+          console.log(`📝 Loaded ${studentsWithNotes.size} students with notes:`, Array.from(studentsWithNotes));
         } else if (!append && notesResult.status === 'rejected') {
           console.warn('Notes table not found. Run VID-SETUP.sql to create it.');
+        }
+
+        // Process questionnaires (only on first load)
+        if (!append && questionnairesResult.status === 'fulfilled' && !questionnairesResult.value.error && questionnairesResult.value.data) {
+          studentsWithQuestionnaires = new Set(
+            questionnairesResult.value.data.map(q => q.control_number)
+          );
+          console.log(`📋 Loaded ${studentsWithQuestionnaires.size} students with questionnaires`);
+        } else if (!append && questionnairesResult.status === 'rejected') {
+          console.warn('Questionnaires table query failed.');
         }
 
         updateStats();
@@ -2359,12 +2518,9 @@
       });
     }
 
-    // Filter and Render - Optimized
+    // Filter and Render - Optimized with multiple filter support
     function filterAndRenderStudents() {
       const query = document.getElementById('searchInput').value.toLowerCase().trim();
-      
-      // Early return if no filter change
-      const cacheKey = `${query}_${currentFilter}`;
       
       let filtered = allStudents.filter(student => {
         // Search filter - optimized with early returns
@@ -2380,21 +2536,49 @@
           if (!searchFields.includes(query)) return false;
         }
 
-        // Category filter
-        switch(currentFilter) {
-          case 'active':
-            return student.status === 'active';
-          case 'inactive':
-            return student.status !== 'active';
-          case 'has-notes':
-            return studentsWithNotes.has(student.student_id);
-          case 'no-notes':
-            return !studentsWithNotes.has(student.student_id);
-          default:
-            return true;
+        // If "all" is active, show everything (no category filter)
+        if (activeFilters.has('all')) {
+          return true;
         }
+
+        // Multiple category filters - ALL must match (AND logic)
+        let matches = true;
+
+        // Status filters (mutually exclusive - only check if one is active)
+        if (activeFilters.has('enrolled')) {
+          // Check for enrolled status (case-insensitive)
+          matches = matches && student.status && student.status.toUpperCase() === 'ENROLLED';
+        } else if (activeFilters.has('inactive')) {
+          // Inactive = NOT enrolled
+          matches = matches && (!student.status || student.status.toUpperCase() !== 'ENROLLED');
+        }
+
+        // Notes filters (mutually exclusive - only check if one is active)
+        if (activeFilters.has('has-notes')) {
+          matches = matches && studentsWithNotes.has(student.student_id);
+        } else if (activeFilters.has('no-notes')) {
+          matches = matches && !studentsWithNotes.has(student.student_id);
+        }
+
+        // EQ filters (mutually exclusive - only check if one is active)
+        if (activeFilters.has('has-eq')) {
+          matches = matches && studentsWithQuestionnaires.has(student.student_id);
+        } else if (activeFilters.has('no-eq')) {
+          matches = matches && !studentsWithQuestionnaires.has(student.student_id);
+        }
+
+        return matches;
       });
 
+      console.log(`🔍 Filters: [${Array.from(activeFilters).join(', ')}] | Query: "${query}" | Results: ${filtered.length}/${allStudents.length}`);
+      
+      // Debug: Show unique status values when enrolled filter is active
+      if (activeFilters.has('enrolled')) {
+        const statuses = new Set(allStudents.map(s => s.status));
+        console.log('📊 Unique status values in database:', Array.from(statuses));
+        console.log('📊 Sample students:', allStudents.slice(0, 3).map(s => ({ name: s.full_name, status: s.status })));
+      }
+      
       document.getElementById('filteredCount').textContent = filtered.length;
       renderStudents(filtered);
     }
@@ -2417,6 +2601,7 @@
       // Build HTML string for better performance than createElement
       const htmlParts = students.map(student => {
         const hasNotes = studentsWithNotes.has(student.student_id);
+        const hasQuestionnaire = studentsWithQuestionnaires.has(student.student_id);
         const initials = (student.full_name || 'N/A').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
         const statusClass = getStatusClass(student.status);
         
@@ -2455,6 +2640,9 @@
             </div>
             <div class="card-footer">
               <span class="status-badge ${statusClass}">${student.status || 'Unknown'}</span>
+              <span class="questionnaire-badge ${hasQuestionnaire ? 'has-q' : 'no-q'}" title="${hasQuestionnaire ? 'Enrollment Questionnaire Submitted' : 'No Enrollment Questionnaire'}">
+                ${hasQuestionnaire ? '✅ EQ' : '❌ NO EQ'}
+              </span>
             </div>
           </div>
         `;
@@ -2920,20 +3108,35 @@
       }
     }
 
-    // Auto-save and close modal - MUST save before closing
+    // Auto-save and close modal - OPTIMIZED for instant close
     async function autoSaveAndClose() {
-      // Save notes FIRST (wait for completion)
-      if (currentStudent) {
-        const saved = await saveNotes(false);
-        console.log('📝 Notes saved before closing:', saved);
-      }
+      const modal = document.getElementById('studentModal');
       
-      // Then close modal
-      document.getElementById('studentModal').classList.remove('active');
-      currentStudent = null;
+      // Close modal IMMEDIATELY for instant feel
+      modal.classList.remove('active');
+      
+      // Save notes in background (don't wait)
+      if (currentStudent) {
+        const studentToSave = currentStudent; // Capture reference
+        const notesTextarea = document.getElementById('privateNotes');
+        const notesValue = notesTextarea ? notesTextarea.value : '';
+        
+        currentStudent = null; // Clear immediately
+        
+        // Save asynchronously (fire and forget)
+        saveNotes(false).then(saved => {
+          console.log('📝 Notes auto-saved in background');
+        }).catch(error => {
+          console.error('❌ Background save failed:', error);
+          // Show brief error toast only on failure
+          showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
+        });
+      } else {
+        currentStudent = null;
+      }
     }
 
-    // Close Modal - Waits for save to complete
+    // Close Modal - Instant close
     async function closeModal() {
       await autoSaveAndClose();
     }

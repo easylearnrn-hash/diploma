@@ -5,37 +5,50 @@
 -- database indexes for lightning-fast queries
 -- ============================================
 
--- 1. Index on students.student_id (most frequently queried)
-CREATE INDEX IF NOT EXISTS idx_students_student_id 
-ON students(student_id);
+-- 1. Index on applications table (VID queries this table)
+CREATE INDEX IF NOT EXISTS idx_applications_control_number 
+ON applications(control_number);
 
--- 2. Index on students.status (for filtering active/inactive)
-CREATE INDEX IF NOT EXISTS idx_students_status 
-ON students(status);
+CREATE INDEX IF NOT EXISTS idx_applications_submission_date 
+ON applications(submission_date DESC);
 
--- 3. Index on students.created_at (for ordering)
-CREATE INDEX IF NOT EXISTS idx_students_created_at 
-ON students(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_applications_status 
+ON applications(status);
 
--- 4. Composite index for pagination queries
-CREATE INDEX IF NOT EXISTS idx_students_created_at_status 
-ON students(created_at DESC, status);
+-- 2. Composite index for pagination queries on applications
+CREATE INDEX IF NOT EXISTS idx_applications_submission_status 
+ON applications(submission_date DESC, status);
 
--- 5. Index on admin_private_notes.admin_email (for notes lookup)
+-- 3. Index on admin_private_notes.admin_email (for notes lookup)
 CREATE INDEX IF NOT EXISTS idx_admin_notes_email 
 ON admin_private_notes(admin_email);
 
--- 6. Index on admin_private_notes.student_id (for joins)
+-- 4. Index on admin_private_notes.student_id (VID uses control_numbers here)
 CREATE INDEX IF NOT EXISTS idx_admin_notes_student_id 
 ON admin_private_notes(student_id);
 
--- 7. Composite index for fast notes queries
+-- 5. Composite index for fast notes queries (most important for filter speed)
 CREATE INDEX IF NOT EXISTS idx_admin_notes_email_student 
 ON admin_private_notes(admin_email, student_id);
 
--- 8. Index on full_name for search (if you add search later)
-CREATE INDEX IF NOT EXISTS idx_students_full_name 
-ON students(full_name);
+-- 6. Index on enrollment_questionnaires.control_number
+CREATE INDEX IF NOT EXISTS idx_questionnaires_control_number 
+ON enrollment_questionnaires(control_number);
+
+-- 7. Index on applicant_name for search
+CREATE INDEX IF NOT EXISTS idx_applications_applicant_name 
+ON applications(applicant_name);
+
+-- 8. Index on email for search
+CREATE INDEX IF NOT EXISTS idx_applications_email 
+ON applications(email);
+
+-- ============================================
+-- Analyze Tables (Update Statistics)
+-- ============================================
+ANALYZE applications;
+ANALYZE admin_private_notes;
+ANALYZE enrollment_questionnaires;
 
 -- ============================================
 -- Verification Query
@@ -43,12 +56,12 @@ ON students(full_name);
 -- Run this to verify indexes were created:
 
 SELECT 
-    schemaname,
     tablename,
     indexname,
     indexdef
 FROM pg_indexes
-WHERE tablename IN ('students', 'admin_private_notes')
+WHERE schemaname = 'public'
+  AND tablename IN ('applications', 'admin_private_notes', 'enrollment_questionnaires')
 ORDER BY tablename, indexname;
 
 -- ============================================
