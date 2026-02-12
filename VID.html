@@ -831,6 +831,52 @@
       font-weight: 600;
     }
 
+    /* Questionnaire Section */
+    .questionnaire-content {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+
+    .questionnaire-item {
+      margin-bottom: 16px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .questionnaire-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .questionnaire-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .questionnaire-value {
+      font-size: 14px;
+      color: var(--text-primary);
+      line-height: 1.5;
+    }
+
+    .questionnaire-empty {
+      text-align: center;
+      padding: 32px 16px;
+      color: var(--text-tertiary);
+    }
+
+    .questionnaire-empty-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
     /* Premium Notes Editor */
     .notes-editor {
       background: var(--bg-tertiary);
@@ -1443,6 +1489,14 @@
           <h3>📋 Student Information</h3>
           <div class="details-grid" id="studentDetailsGrid">
             <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Enrollment Questionnaire Section -->
+        <div class="details-section" id="questionnaireSection" style="display: none;">
+          <h3>📋 Enrollment Questionnaire</h3>
+          <div class="questionnaire-content" id="questionnaireContent">
+            <div class="loading-spinner">Loading questionnaire...</div>
           </div>
         </div>
 
@@ -2236,8 +2290,154 @@
         `;
       });
 
-      // Load notes asynchronously without blocking UI
+      // Load notes and questionnaire asynchronously without blocking UI
       loadNotes(studentId);
+      loadQuestionnaire(currentStudent);
+    }
+
+    // Load Enrollment Questionnaire
+    async function loadQuestionnaire(student) {
+      const section = document.getElementById('questionnaireSection');
+      const content = document.getElementById('questionnaireContent');
+      
+      try {
+        // Try to find questionnaire by control_number or application id
+        const { data, error } = await vidSupabase
+          .from('enrollment_questionnaires')
+          .select('*')
+          .eq('control_number', student.student_id)
+          .maybeSingle();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error('Error loading questionnaire:', error);
+          section.style.display = 'none';
+          return;
+        }
+
+        if (!data || !data.questionnaire_data) {
+          // No questionnaire found - hide section
+          section.style.display = 'none';
+          return;
+        }
+
+        // Show section and render questionnaire
+        section.style.display = 'block';
+        const q = data.questionnaire_data;
+        
+        let html = '';
+        
+        // Personal Information
+        if (q.personalInfo) {
+          html += '<div style="margin-bottom: 24px;">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 12px; font-weight: 700;">👤 Personal Information</h4>';
+          if (q.personalInfo.fullLegalName) {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">Full Legal Name</div>
+              <div class="questionnaire-value">${q.personalInfo.fullLegalName}</div>
+            </div>`;
+          }
+          if (q.personalInfo.dateOfBirth) {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">Date of Birth</div>
+              <div class="questionnaire-value">${q.personalInfo.dateOfBirth}</div>
+            </div>`;
+          }
+          if (q.personalInfo.countryOfBirth) {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">Country of Birth</div>
+              <div class="questionnaire-value">${q.personalInfo.countryOfBirth}</div>
+            </div>`;
+          }
+          if (q.personalInfo.nationality) {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">Nationality</div>
+              <div class="questionnaire-value">${q.personalInfo.nationality}</div>
+            </div>`;
+          }
+          html += '</div>';
+        }
+        
+        // Travel History
+        if (q.travelHistory && q.travelHistory.length > 0) {
+          html += '<div style="margin-bottom: 24px;">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 12px; font-weight: 700;">✈️ Travel History (Past 5 Years)</h4>';
+          q.travelHistory.forEach((trip, index) => {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">Trip ${index + 1}: ${trip.country || 'N/A'}</div>
+              <div class="questionnaire-value">
+                <strong>Dates:</strong> ${trip.startDate || 'N/A'} to ${trip.endDate || 'N/A'}<br>
+                <strong>Purpose:</strong> ${trip.purpose || 'N/A'}
+              </div>
+            </div>`;
+          });
+          html += '</div>';
+        }
+        
+        // Education History
+        if (q.educationHistory && q.educationHistory.length > 0) {
+          html += '<div style="margin-bottom: 24px;">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 12px; font-weight: 700;">🎓 Education History</h4>';
+          q.educationHistory.forEach((edu, index) => {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">${edu.institution || 'N/A'}</div>
+              <div class="questionnaire-value">
+                <strong>Degree:</strong> ${edu.degree || 'N/A'}<br>
+                <strong>Dates:</strong> ${edu.startDate || 'N/A'} to ${edu.endDate || 'N/A'}<br>
+                <strong>Country:</strong> ${edu.country || 'N/A'}
+              </div>
+            </div>`;
+          });
+          html += '</div>';
+        }
+        
+        // Employment History
+        if (q.employmentHistory && q.employmentHistory.length > 0) {
+          html += '<div style="margin-bottom: 24px;">';
+          html += '<h4 style="color: var(--primary); font-size: 14px; margin-bottom: 12px; font-weight: 700;">💼 Employment History</h4>';
+          q.employmentHistory.forEach((job, index) => {
+            html += `<div class="questionnaire-item">
+              <div class="questionnaire-label">${job.employer || 'N/A'} - ${job.position || 'N/A'}</div>
+              <div class="questionnaire-value">
+                <strong>Dates:</strong> ${job.startDate || 'N/A'} to ${job.endDate || job.isCurrent ? 'Present' : 'N/A'}<br>
+                <strong>Country:</strong> ${job.country || 'N/A'}
+              </div>
+            </div>`;
+          });
+          html += '</div>';
+        }
+        
+        // Emergency Contact
+        if (q.emergencyContact) {
+          html += '<div style="margin-bottom: 24px;">';
+          html += '<h4 style="color: var(--danger); font-size: 14px; margin-bottom: 12px; font-weight: 700;">🚨 Emergency Contact</h4>';
+          html += `<div class="questionnaire-item">
+            <div class="questionnaire-label">Name</div>
+            <div class="questionnaire-value">${q.emergencyContact.name || 'N/A'}</div>
+          </div>`;
+          html += `<div class="questionnaire-item">
+            <div class="questionnaire-label">Relationship</div>
+            <div class="questionnaire-value">${q.emergencyContact.relationship || 'N/A'}</div>
+          </div>`;
+          html += `<div class="questionnaire-item">
+            <div class="questionnaire-label">Phone</div>
+            <div class="questionnaire-value">${formatPhoneNumber(q.emergencyContact.phone)}</div>
+          </div>`;
+          html += `<div class="questionnaire-item">
+            <div class="questionnaire-label">Email</div>
+            <div class="questionnaire-value">${q.emergencyContact.email || 'N/A'}</div>
+          </div>`;
+          html += '</div>';
+        }
+        
+        content.innerHTML = html || `<div class="questionnaire-empty">
+          <div class="questionnaire-empty-icon">📋</div>
+          <p>No questionnaire data available</p>
+        </div>`;
+        
+      } catch (error) {
+        console.error('Failed to load questionnaire:', error);
+        section.style.display = 'none';
+      }
     }
 
     // Load Notes
