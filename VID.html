@@ -1384,13 +1384,26 @@
     // Check Authentication
     async function checkAuth() {
       try {
+        console.log('🔧 Checking authentication...');
         vidSupabase = initSupabase();
         
         // Check if user is logged in
         const { data: { session }, error } = await vidSupabase.auth.getSession();
         
-        if (error || !session) {
-          // Not logged in - show login screen
+        console.log('🔧 Session check result:', { 
+          hasSession: !!session, 
+          hasError: !!error,
+          email: session?.user?.email 
+        });
+        
+        if (error) {
+          console.error('❌ Session error:', error);
+          showLoginScreen();
+          return false;
+        }
+        
+        if (!session) {
+          console.log('ℹ️ No session found, showing login');
           showLoginScreen();
           return false;
         }
@@ -1487,10 +1500,23 @@
         
         if (error) throw error;
         
-        console.log('✅ Login successful');
+        console.log('✅ Login successful:', data);
         
-        // Reload the page to show VID dashboard
-        location.reload();
+        // Wait a moment for session to be stored, then redirect to dashboard
+        loginBtn.textContent = '✓ Success! Loading...';
+        
+        // Wait for session to be persisted (important for mobile)
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Verify session is stored
+        const { data: { session } } = await vidSupabase.auth.getSession();
+        if (session) {
+          console.log('✅ Session confirmed, redirecting...');
+          // Force reload to initialize dashboard
+          window.location.href = window.location.href;
+        } else {
+          throw new Error('Session not found after login');
+        }
         
       } catch (error) {
         console.error('❌ Login failed:', error);
