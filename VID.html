@@ -1559,9 +1559,185 @@
       background: var(--danger);
       color: white;
     }
+
+    /* Custom Confirmation Modal */
+    .confirm-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 10000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    .confirm-overlay.active {
+      display: flex;
+    }
+
+    .confirm-dialog {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-medium);
+      border-radius: 16px;
+      padding: 0;
+      max-width: 440px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+      animation: scaleIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes scaleIn {
+      from {
+        transform: scale(0.95);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .confirm-header {
+      padding: 24px 24px 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .confirm-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: rgba(245, 158, 11, 0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .confirm-content {
+      flex: 1;
+    }
+
+    .confirm-title {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin: 0 0 8px 0;
+    }
+
+    .confirm-message {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      margin: 0;
+    }
+
+    .confirm-body {
+      padding: 0 24px 24px 88px;
+    }
+
+    .confirm-body ul {
+      margin: 12px 0 0 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .confirm-body li {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .confirm-body li::before {
+      content: '•';
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    .confirm-actions {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      background: var(--bg-tertiary);
+      border-radius: 0 0 16px 16px;
+    }
+
+    .confirm-btn {
+      padding: 10px 24px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .confirm-btn-cancel {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-medium);
+    }
+
+    .confirm-btn-cancel:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-strong);
+    }
+
+    .confirm-btn-primary {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      color: white;
+    }
+
+    .confirm-btn-primary:hover {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
   </style>
 </head>
 <body>
+  <!-- Custom Confirmation Dialog -->
+  <div class="confirm-overlay" id="confirmOverlay">
+    <div class="confirm-dialog">
+      <div class="confirm-header">
+        <div class="confirm-icon" id="confirmIcon">⚠️</div>
+        <div class="confirm-content">
+          <h3 class="confirm-title" id="confirmTitle">Confirm Action</h3>
+          <p class="confirm-message" id="confirmMessage">Are you sure?</p>
+        </div>
+      </div>
+      <div class="confirm-body" id="confirmBody"></div>
+      <div class="confirm-actions">
+        <button class="confirm-btn confirm-btn-cancel" id="confirmCancel">
+          <span>✕</span> Cancel
+        </button>
+        <button class="confirm-btn confirm-btn-primary" id="confirmOk">
+          <span>✓</span> OK
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Top Navigation -->
   <nav class="top-nav">
     <div class="container">
@@ -1761,6 +1937,7 @@
     let currentStudent = null;
     let originalNotesValue = ''; // Track original notes to detect deletion attempts
     let notesAutoSaveTimer = null; // Debounce timer for auto-save
+    let hasUnsavedNotes = false; // Track if notes have been modified
     let allStudents = [];
     let studentsWithNotes = new Set();
     let studentsWithQuestionnaires = new Set(); // Track students who have submitted questionnaires
@@ -2019,6 +2196,55 @@
         toast.style.animation = 'slideOutLeft 0.35s ease-in-out forwards';
         setTimeout(() => toast.remove(), 350);
       }, duration);
+    }
+
+    // Custom Confirm Dialog
+    function showConfirm(title, message, bodyHtml = '') {
+      return new Promise((resolve) => {
+        const overlay = document.getElementById('confirmOverlay');
+        const titleEl = document.getElementById('confirmTitle');
+        const messageEl = document.getElementById('confirmMessage');
+        const bodyEl = document.getElementById('confirmBody');
+        const cancelBtn = document.getElementById('confirmCancel');
+        const okBtn = document.getElementById('confirmOk');
+
+        // Set content
+        titleEl.textContent = title;
+        messageEl.textContent = message;
+        bodyEl.innerHTML = bodyHtml;
+
+        // Show overlay
+        overlay.classList.add('active');
+
+        // Handle buttons
+        const handleCancel = () => {
+          overlay.classList.remove('active');
+          cleanup();
+          resolve(false);
+        };
+
+        const handleOk = () => {
+          overlay.classList.remove('active');
+          cleanup();
+          resolve(true);
+        };
+
+        const cleanup = () => {
+          cancelBtn.removeEventListener('click', handleCancel);
+          okBtn.removeEventListener('click', handleOk);
+          overlay.removeEventListener('click', handleOverlayClick);
+        };
+
+        const handleOverlayClick = (e) => {
+          if (e.target === overlay) {
+            handleCancel();
+          }
+        };
+
+        cancelBtn.addEventListener('click', handleCancel);
+        okBtn.addEventListener('click', handleOk);
+        overlay.addEventListener('click', handleOverlayClick);
+      });
     }
 
     // Check Authentication
@@ -2412,6 +2638,10 @@
       const notesTextarea = document.getElementById('notesTextarea');
       if (notesTextarea) {
         notesTextarea.addEventListener('input', () => {
+          // Mark notes as unsaved when user types
+          const currentValue = notesTextarea.value.trim();
+          hasUnsavedNotes = (currentValue !== originalNotesValue);
+          
           // Clear existing timer
           if (notesAutoSaveTimer) {
             clearTimeout(notesAutoSaveTimer);
@@ -2427,6 +2657,7 @@
           notesAutoSaveTimer = setTimeout(async () => {
             const saved = await saveNotes(false, true); // auto-save, skip confirmation
             if (saved) {
+              hasUnsavedNotes = false; // Mark as saved
               if (metaDiv) {
                 metaDiv.innerHTML = '<span style="color: var(--success)">✅ Saved</span>';
                 // Reset to timestamp after 2 seconds
@@ -3005,18 +3236,18 @@
           .select('*')
           .eq('admin_email', AUTHORIZED_EMAIL)
           .eq('student_id', studentId)
-          .single();
+          .maybeSingle(); // Use maybeSingle() instead of single() to avoid 406 when no record exists
 
         const textarea = document.getElementById('notesTextarea');
         const metaDiv = document.getElementById('notesMeta');
 
-        if (error && error.code !== 'PGRST116') {
-          // If table doesn't exist (406 error), show helpful message
+        if (error) {
+          // If table doesn't exist, show helpful message
           if (error.message.includes('does not exist') || error.code === '42P01') {
             textarea.value = '';
             originalNotesValue = ''; // Store original value
-            metaDiv.innerHTML = '<span style="color: var(--warning)">⚠️ Notes table not created yet. Run VID-SETUP.sql first.</span>';
-            showToast('warning', 'Setup Required', 'Run VID-SETUP.sql in Supabase to enable notes functionality.', 6000);
+            metaDiv.innerHTML = '<span style="color: var(--warning)">⚠️ Notes table not created yet. Run FIX-VID-TABLE.sql first.</span>';
+            showToast('warning', 'Setup Required', 'Run FIX-VID-TABLE.sql in Supabase to enable notes functionality.', 6000);
             return;
           }
           throw error;
@@ -3025,6 +3256,7 @@
         if (data) {
           textarea.value = data.notes || '';
           originalNotesValue = data.notes || ''; // Store original value
+          hasUnsavedNotes = false; // Reset unsaved flag
           const updated = new Date(data.updated_at).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
@@ -3036,6 +3268,7 @@
         } else {
           textarea.value = '';
           originalNotesValue = ''; // Store original value
+          hasUnsavedNotes = false; // Reset unsaved flag
           metaDiv.textContent = 'No notes yet';
         }
       } catch (error) {
@@ -3053,10 +3286,21 @@
 
       // SAFETY CHECK: If user is deleting existing notes, ask for confirmation
       if (notes.length === 0 && originalNotesValue.length > 0 && !skipConfirmation && showFeedback) {
-        const confirmed = confirm(
-          `⚠️ WARNING: You are about to DELETE existing notes for ${currentStudent.first_name} ${currentStudent.last_name}.\n\n` +
-          `Original note preview: "${originalNotesValue.substring(0, 100)}${originalNotesValue.length > 100 ? '...' : ''}"\n\n` +
-          `This action cannot be undone. Continue?`
+        const notePreview = originalNotesValue.substring(0, 100) + (originalNotesValue.length > 100 ? '...' : '');
+        const bodyHtml = `
+          <p style="margin: 0 0 12px; color: var(--text-secondary); font-size: 13px;">
+            <strong>Original note preview:</strong><br>
+            <span style="font-style: italic; color: var(--text-tertiary);">"${notePreview}"</span>
+          </p>
+          <p style="margin: 0; color: var(--danger); font-size: 13px; font-weight: 600;">
+            ⚠️ This action cannot be undone.
+          </p>
+        `;
+        
+        const confirmed = await showConfirm(
+          'Delete Notes',
+          `You are about to DELETE existing notes for ${currentStudent.first_name} ${currentStudent.last_name}.`,
+          bodyHtml
         );
         
         if (!confirmed) {
@@ -3168,6 +3412,7 @@
 
         // Update metadata and originalNotesValue
         originalNotesValue = notes; // Update tracked value after successful save
+        hasUnsavedNotes = false; // Clear unsaved flag after successful save
         const updated = new Date().toLocaleString('en-US', {
           month: 'short',
           day: 'numeric',
@@ -3203,29 +3448,52 @@
 
     // Auto-save and close modal - OPTIMIZED for instant close
     async function autoSaveAndClose() {
+      // Check if there are unsaved notes
+      if (hasUnsavedNotes && currentStudent) {
+        const textarea = document.getElementById('notesTextarea');
+        const currentValue = textarea ? textarea.value.trim() : '';
+        
+        // Only show confirmation if notes have actually changed
+        if (currentValue !== originalNotesValue) {
+          const bodyHtml = `
+            <ul>
+              <li>Click <strong>OK</strong> to save and close</li>
+              <li>Click <strong>Cancel</strong> to close without saving</li>
+            </ul>
+          `;
+          
+          const confirmed = await showConfirm(
+            'Unsaved Notes',
+            'You have unsaved notes! Do you want to save your changes before closing?',
+            bodyHtml
+          );
+          
+          if (confirmed) {
+            // Save notes with feedback, then close
+            const saved = await saveNotes(true, false);
+            if (!saved) {
+              // If save failed, don't close
+              return;
+            }
+          } else {
+            // User chose not to save - reset to original value
+            hasUnsavedNotes = false;
+          }
+        }
+      }
+      
       const modal = document.getElementById('studentModal');
       
-      // Close modal IMMEDIATELY for instant feel
+      // Close modal
       modal.classList.remove('active');
       
-      // Save notes in background (don't wait)
+      // Clear current student
       if (currentStudent) {
-        const studentToSave = currentStudent; // Capture reference
-        const notesTextarea = document.getElementById('privateNotes');
-        const notesValue = notesTextarea ? notesTextarea.value : '';
-        
-        currentStudent = null; // Clear immediately
-        
-        // Save asynchronously (fire and forget) - skipConfirmation=true for auto-save
-        saveNotes(false, true).then(saved => {
-        }).catch(error => {
-          console.error('❌ Background save failed:', error);
-          // Show brief error toast only on failure
-          showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
-        });
-      } else {
         currentStudent = null;
       }
+      
+      // Reset unsaved flag
+      hasUnsavedNotes = false;
     }
 
     // Close Modal - Instant close
