@@ -1449,6 +1449,27 @@
       return (student?.status || student?.enrollment_status || metadata?.status || metadata?.enrollment_status || 'active').toLowerCase();
     }
 
+    function formatPhoneNumber(phone) {
+      if (!phone) return '—';
+      // Remove all non-digit characters
+      const digits = phone.replace(/\D/g, '');
+      if (digits.length === 0) return '—';
+      
+      // Format as +1 XXX XXX XX XX
+      if (digits.length >= 10) {
+        const countryCode = digits.length === 11 ? digits.slice(0, 1) : '1';
+        const remaining = digits.length === 11 ? digits.slice(1) : digits;
+        const part1 = remaining.slice(0, 3);
+        const part2 = remaining.slice(3, 6);
+        const part3 = remaining.slice(6, 8);
+        const part4 = remaining.slice(8, 10);
+        return `+${countryCode} ${part1} ${part2} ${part3} ${part4}`;
+      }
+      
+      // Return original if too short
+      return phone;
+    }
+
     function deriveSalutation(genderValue, explicitSalutation) {
       if (explicitSalutation && explicitSalutation.trim()) {
         return explicitSalutation.trim();
@@ -1913,7 +1934,13 @@
         el.classList.remove('editing');
         el.style.background = 'rgba(16, 185, 129, 0.2)';
         el.style.borderLeft = '3px solid #10b981';
-        el.textContent = trimmedNew || '—';
+        
+        // Format phone numbers for display
+        if (fieldId === 'phone' || fieldId === 'emergencyPhone') {
+          el.textContent = formatPhoneNumber(trimmedNew);
+        } else {
+          el.textContent = trimmedNew || '—';
+        }
         
         setTimeout(() => {
           el.style.background = '';
@@ -1958,14 +1985,14 @@
       setOverviewValue('lastTimeInArmenia', payload.lastTimeInArmenia || student?.last_time_in_armenia || metadata?.lastTimeInArmenia || '—');
       setOverviewValue('armeniaExitDate', payload.armeniaExitDate || student?.armenia_exit_date || metadata?.armeniaExitDate || '—');
       setOverviewValue('email', student?.email || application?.email || payload.email || metadata?.contactEmail || '—');
-      setOverviewValue('phone', student?.phone || application?.phone || payload.phone || metadata?.contactPhone || '—');
+      setOverviewValue('phone', formatPhoneNumber(student?.phone || application?.phone || payload.phone || metadata?.contactPhone));
       setOverviewValue('program', program || '—');
       setOverviewValue('startTerm', startTerm || '—');
       setOverviewValue('expectedGrad', student?.expected_graduation || payload.expectedGraduation || '—');
       setOverviewValue('credits', student?.total_credits_earned ?? payload.creditsEarned ?? '0');
       setOverviewValue('emergencyName', student?.emergency_contact_name || payload.emergencyName || '—');
       setOverviewValue('emergencyRelation', student?.emergency_contact_relation || payload.emergencyRelation || '—');
-      setOverviewValue('emergencyPhone', student?.emergency_contact_phone || payload.emergencyPhone || '—');
+      setOverviewValue('emergencyPhone', formatPhoneNumber(student?.emergency_contact_phone || payload.emergencyPhone));
       
       // Make fields inline editable
       makeFieldsEditable();
