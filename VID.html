@@ -1965,18 +1965,8 @@
     // Check Authentication
     async function checkAuth() {
       try {
-        console.log('🔧 Checking authentication...');
-        console.log('🔧 LocalStorage keys:', Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('vid') || k.includes('auth')));
-        
         // Use the inline client
         const { data: { session }, error } = await vidSupabaseClient.auth.getSession();
-        
-        console.log('🔧 Session check result:', { 
-          hasSession: !!session, 
-          hasError: !!error,
-          email: session?.user?.email,
-          accessToken: session?.access_token ? session.access_token.substring(0, 20) + '...' : null
-        });
         
         if (error) {
           console.error('❌ Session error:', error);
@@ -1985,7 +1975,6 @@
         }
         
         if (!session) {
-          console.log('ℹ️ No session found, showing login');
           showLoginScreen();
           return false;
         }
@@ -1993,13 +1982,10 @@
         // ⚠️ VID-SPECIFIC: Check if user is authorized (hrachfilm@gmail.com ONLY)
         const userEmail = session.user.email?.toLowerCase();
         if (userEmail !== AUTHORIZED_EMAIL.toLowerCase()) {
-          console.warn('❌ Unauthorized user attempted VID access:', userEmail);
           await vidSupabaseClient.auth.signOut();
           showLoginScreen('Access Denied', 'VID is restricted to authorized personnel only.');
           return false;
         }
-        
-        console.log('✅ User authenticated and authorized:', session.user.email);
         return true;
       } catch (error) {
         console.error('❌ Auth check failed:', error);
@@ -2091,8 +2077,6 @@
       loginError.style.display = 'none';
       
       try {
-        console.log('🔧 Attempting login for:', email);
-        
         const { data, error } = await vidSupabaseClient.auth.signInWithPassword({
           email: email,
           password: password
@@ -2100,26 +2084,17 @@
         
         if (error) throw error;
         
-        console.log('✅ Login successful:', data);
-        console.log('✅ Session:', data.session ? 'Created' : 'Missing');
-        console.log('✅ Access token:', data.session?.access_token ? data.session.access_token.substring(0, 20) + '...' : 'Missing');
-        
         // Verify session is in localStorage
         loginBtn.textContent = '✓ Verifying session...';
         await new Promise(resolve => setTimeout(resolve, 1000));
         
-        const storageKeys = Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('vid') || k.includes('auth'));
-        console.log('✅ Storage keys after login:', storageKeys);
-        
         // Check if session persisted
         const { data: { session: verifySession } } = await vidSupabaseClient.auth.getSession();
-        console.log('✅ Session verification:', verifySession ? 'Found' : 'NOT FOUND - PROBLEM!');
         
         if (!verifySession) {
           throw new Error('Session created but not persisted. Clear browser cache and try again.');
         }
         
-        console.log('✅ Session confirmed, redirecting...');
         loginBtn.textContent = '✓ Success! Loading dashboard...';
         
         // Wait a bit more, then reload
@@ -2142,8 +2117,6 @@
       try {
         const { error } = await vidSupabaseClient.auth.signOut();
         if (error) throw error;
-        
-        console.log('✅ Logged out successfully');
         location.reload();
       } catch (error) {
         console.error('❌ Logout failed:', error);
@@ -2174,17 +2147,6 @@
           }
         }
 
-        // Log device/browser info for debugging
-        console.log('🔧 VID Initialization Started');
-        console.log('📱 Device Info:', {
-          userAgent: navigator.userAgent,
-          platform: navigator.platform,
-          language: navigator.language,
-          online: navigator.onLine,
-          connection: navigator.connection?.effectiveType || 'unknown',
-          viewport: `${window.innerWidth}x${window.innerHeight}`
-        });
-
         // Check if we're online
         if (!navigator.onLine) {
           throw new Error('No internet connection detected. Please connect to WiFi or cellular data.');
@@ -2205,16 +2167,10 @@
           `;
         }
 
-        console.log('🔧 Initializing Supabase client...');
-
         // Client already initialized inline, just verify it works
         if (!vidSupabase) {
           throw new Error('Supabase client not initialized');
         }
-        
-        console.log('✅ Supabase client ready');
-
-        console.log('🔧 Testing database connection...');
 
         // Test connection with a simple query
         const { data: testData, error: testError } = await vidSupabase
@@ -2227,14 +2183,9 @@
           throw new Error(`Database connection test failed: ${testError.message}. Check RLS policies!`);
         }
 
-        console.log('✅ Database connection test passed, found', testData?.length || 0, 'students');
-        console.log('🔧 Loading students data...');
-
         // Load data
         await loadStudents();
         setupEventListeners();
-
-        console.log('✅ VID initialized successfully');
       } catch (error) {
         console.error('❌ VID initialization failed:', error);
         
@@ -2302,6 +2253,9 @@
       document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.addEventListener('click', () => {
           const filterType = btn.dataset.filter;
+          const statusFilters = new Set(['enrolled', 'inactive']);
+          const notesFilters = new Set(['has-notes', 'no-notes']);
+          const eqFilters = new Set(['has-eq', 'no-eq']);
           
           // Special handling for "all" - clears all other filters
           if (filterType === 'all') {
@@ -2313,12 +2267,30 @@
             activeFilters.delete('all');
             const allBtn = document.querySelector('.filter-btn[data-filter="all"]');
             if (allBtn) allBtn.classList.remove('active');
+
+            // Enforce mutual exclusivity within groups (status / notes / EQ)
+            // If user turns ON one filter in a group, turn OFF the other in that same group.
+            const turnOffOtherInGroup = (group) => {
+              if (!group.has(filterType)) return;
+              group.forEach(f => {
+                if (f !== filterType && activeFilters.has(f)) {
+                  activeFilters.delete(f);
+                  const otherBtn = document.querySelector(`.filter-btn[data-filter="${f}"]`);
+                  if (otherBtn) otherBtn.classList.remove('active');
+                }
+              });
+            };
             
             // Toggle the clicked filter
             if (activeFilters.has(filterType)) {
               activeFilters.delete(filterType);
               btn.classList.remove('active');
             } else {
+              // Before turning it on, clear conflicting filter in the same group.
+              turnOffOtherInGroup(statusFilters);
+              turnOffOtherInGroup(notesFilters);
+              turnOffOtherInGroup(eqFilters);
+
               activeFilters.add(filterType);
               btn.classList.add('active');
             }
@@ -2389,12 +2361,8 @@
       );
 
       try {
-        console.log('🔧 Loading students - Page:', currentPage);
-        
         const startRange = currentPage * STUDENTS_PER_PAGE;
         const endRange = startRange + STUDENTS_PER_PAGE - 1;
-
-        console.log('🔧 Query range:', startRange, '-', endRange);
 
         // Load applications, notes, and questionnaires in parallel
         const dataPromise = Promise.allSettled([
@@ -2418,13 +2386,6 @@
           timeoutPromise
         ]);
 
-        console.log('🔧 Query results:', {
-          studentsStatus: studentsResult.status,
-          studentsError: studentsResult.value?.error?.message,
-          studentsCount: studentsResult.value?.data?.length,
-          notesStatus: notesResult.status,
-          questionnairesStatus: questionnairesResult.status
-        });
 
         // Process applications (normalize field names to match expected format)
         if (studentsResult.status === 'fulfilled' && !studentsResult.value.error) {
@@ -2467,9 +2428,8 @@
               .filter(n => n.notes && n.notes.trim().length > 0)
               .map(n => n.student_id)
           );
-          console.log(`📝 Loaded ${studentsWithNotes.size} students with notes:`, Array.from(studentsWithNotes));
         } else if (!append && notesResult.status === 'rejected') {
-          console.warn('Notes table not found. Run VID-SETUP.sql to create it.');
+          // Notes query failed; notes filters/badges will be empty.
         }
 
         // Process questionnaires (only on first load)
@@ -2477,15 +2437,12 @@
           studentsWithQuestionnaires = new Set(
             questionnairesResult.value.data.map(q => q.control_number)
           );
-          console.log(`📋 Loaded ${studentsWithQuestionnaires.size} students with questionnaires`);
         } else if (!append && questionnairesResult.status === 'rejected') {
-          console.warn('Questionnaires table query failed.');
+          // Questionnaires query failed; EQ filters/badges will be empty.
         }
 
         updateStats();
         filterAndRenderStudents();
-        
-        console.log(`✅ Loaded ${allStudents.length} students`);
       } catch (error) {
         console.error('❌ Error loading students:', error);
         
@@ -2578,15 +2535,6 @@
         return matches;
       });
 
-      console.log(`🔍 Filters: [${Array.from(activeFilters).join(', ')}] | Query: "${query}" | Results: ${filtered.length}/${allStudents.length}`);
-      
-      // Debug: Show unique status values when enrolled filter is active
-      if (activeFilters.has('enrolled')) {
-        const statuses = new Set(allStudents.map(s => s.status));
-        console.log('📊 Unique status values in database:', Array.from(statuses));
-        console.log('📊 Sample students:', allStudents.slice(0, 3).map(s => ({ name: s.full_name, status: s.status })));
-      }
-      
       document.getElementById('filteredCount').textContent = filtered.length;
       renderStudents(filtered);
     }
@@ -2763,8 +2711,6 @@
       const section = document.getElementById('questionnaireSection');
       const content = document.getElementById('questionnaireContent');
       
-      console.log('🔧 Loading questionnaire for:', student.student_id);
-      
       try {
         // Try to find questionnaire by control_number or application id
         const { data, error } = await vidSupabase
@@ -2772,8 +2718,6 @@
           .select('*')
           .eq('control_number', student.student_id)
           .maybeSingle();
-
-        console.log('🔧 Questionnaire query result:', { data, error, student_id: student.student_id });
 
         if (error && error.code !== 'PGRST116') {
           console.error('❌ Error loading questionnaire:', error);
@@ -2783,12 +2727,9 @@
 
         if (!data || !data.questionnaire_data) {
           // No questionnaire found - hide section
-          console.log('ℹ️ No questionnaire found for student:', student.student_id);
           section.style.display = 'none';
           return;
         }
-
-        console.log('✅ Questionnaire found! Data:', data.questionnaire_data);
 
         // Show section and render questionnaire
         section.style.display = 'block';
@@ -3056,8 +2997,6 @@
           throw result.error;
         }
 
-        console.log('✅ Notes saved successfully');
-
         // Update notes tracking based on whether notes exist
         const hadNotes = studentsWithNotes.has(studentId);
         const hasNotes = notes.length > 0;
@@ -3071,6 +3010,9 @@
         // Only update if notes status changed - use surgical DOM update
         if (hadNotes !== hasNotes) {
           updateStats();
+
+          // Notes status impacts filtering/badges; force next render to refresh.
+          lastRenderedHTML = '';
           
           // Surgical update: only update the specific card instead of full re-render
           const card = document.querySelector(`[data-student-id="${studentId}"]`);
@@ -3089,6 +3031,9 @@
               if (badge) badge.remove();
             }
           }
+
+          // Re-apply filters so counts/grid match new notes state.
+          filterAndRenderStudents();
         }
 
         // Update metadata
@@ -3116,32 +3061,53 @@
       }
     }
 
-    // Auto-save and close modal - OPTIMIZED for instant close
+    // Auto-save and close modal - OPTIMIZED for instant close (SAFE against accidental deletes)
     async function autoSaveAndClose() {
       const modal = document.getElementById('studentModal');
-      
+      const textarea = document.getElementById('notesTextarea');
+
       // Close modal IMMEDIATELY for instant feel
       modal.classList.remove('active');
-      
-      // Save notes in background (don't wait)
-      if (currentStudent) {
-        const studentToSave = currentStudent; // Capture reference
-        const notesTextarea = document.getElementById('privateNotes');
-        const notesValue = notesTextarea ? notesTextarea.value : '';
-        
-        currentStudent = null; // Clear immediately
-        
-        // Save asynchronously (fire and forget)
-        saveNotes(false).then(saved => {
-          console.log('📝 Notes auto-saved in background');
-        }).catch(error => {
-          console.error('❌ Background save failed:', error);
-          // Show brief error toast only on failure
-          showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
-        });
-      } else {
+
+      // Nothing to save
+      if (!currentStudent) {
         currentStudent = null;
+        return;
       }
+
+      const studentId = currentStudent.student_id;
+      const typedNotes = (textarea?.value || '').trim();
+
+      // Capture then clear ASAP (so UI is free)
+      currentStudent = null;
+
+      // If user left notes empty, do NOT overwrite an existing note via background save.
+      // This prevents accidental deletions caused by timing/blank textarea states.
+      if (!typedNotes) {
+        try {
+          const { data: existing, error: checkError } = await vidSupabase
+            .from('admin_private_notes')
+            .select('id, notes')
+            .eq('admin_email', AUTHORIZED_EMAIL)
+            .eq('student_id', studentId)
+            .maybeSingle();
+
+          if (!checkError && existing?.notes && existing.notes.trim().length > 0) {
+            // Keep existing notes; skip background save.
+            return;
+          }
+        } catch (e) {
+          // If we can't check, err on the safe side and skip deleting.
+          return;
+        }
+      }
+
+      // Save asynchronously (fire and forget)
+      saveNotes(false).catch(error => {
+        console.error('❌ Background save failed:', error);
+        // Show brief error toast only on failure
+        showToast('warning', 'Note Save Issue', 'Notes may not have saved. Please check your connection.');
+      });
     }
 
     // Close Modal - Instant close
