@@ -7,7 +7,28 @@
   <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase-config.js"></script>
+  <script>
+    // Initialize Supabase with proper auth persistence
+    const SUPABASE_URL = 'https://eyhksbiceueoiamwnqpr.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8';
+    
+    // Create Supabase client with explicit auth settings
+    const vidSupabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: window.localStorage,
+        storageKey: 'vid-auth-token',
+        flowType: 'pkce'
+      }
+    });
+    
+    // Helper function for backward compatibility
+    function initSupabase() {
+      return vidSupabaseClient;
+    }
+  </script>
   <style>
     :root {
       /* Premium Color Palette */
@@ -1339,7 +1360,8 @@
     const STUDENTS_PER_PAGE = 100;
     const RENDER_BATCH_SIZE = 50;
     
-    let vidSupabase = null;
+    // Use the inline Supabase client
+    let vidSupabase = vidSupabaseClient;
     let currentStudent = null;
     let allStudents = [];
     let studentsWithNotes = new Set();
@@ -1385,15 +1407,16 @@
     async function checkAuth() {
       try {
         console.log('🔧 Checking authentication...');
-        vidSupabase = initSupabase();
+        console.log('🔧 LocalStorage keys:', Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('vid') || k.includes('auth')));
         
-        // Check if user is logged in
-        const { data: { session }, error } = await vidSupabase.auth.getSession();
+        // Use the inline client
+        const { data: { session }, error } = await vidSupabaseClient.auth.getSession();
         
         console.log('🔧 Session check result:', { 
           hasSession: !!session, 
           hasError: !!error,
-          email: session?.user?.email 
+          email: session?.user?.email,
+          accessToken: session?.access_token ? session.access_token.substring(0, 20) + '...' : null
         });
         
         if (error) {
@@ -1491,9 +1514,9 @@
       loginError.style.display = 'none';
       
       try {
-        vidSupabase = initSupabase();
+        console.log('🔧 Attempting login for:', email);
         
-        const { data, error } = await vidSupabase.auth.signInWithPassword({
+        const { data, error } = await vidSupabaseClient.auth.signInWithPassword({
           email: email,
           password: password
         });
@@ -1501,22 +1524,30 @@
         if (error) throw error;
         
         console.log('✅ Login successful:', data);
+        console.log('✅ Session:', data.session ? 'Created' : 'Missing');
+        console.log('✅ Access token:', data.session?.access_token ? data.session.access_token.substring(0, 20) + '...' : 'Missing');
         
-        // Wait a moment for session to be stored, then redirect to dashboard
-        loginBtn.textContent = '✓ Success! Loading...';
+        // Verify session is in localStorage
+        loginBtn.textContent = '✓ Verifying session...';
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
-        // Wait for session to be persisted (important for mobile)
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const storageKeys = Object.keys(localStorage).filter(k => k.includes('supabase') || k.includes('vid') || k.includes('auth'));
+        console.log('✅ Storage keys after login:', storageKeys);
         
-        // Verify session is stored
-        const { data: { session } } = await vidSupabase.auth.getSession();
-        if (session) {
-          console.log('✅ Session confirmed, redirecting...');
-          // Force reload to initialize dashboard
-          window.location.href = window.location.href;
-        } else {
-          throw new Error('Session not found after login');
+        // Check if session persisted
+        const { data: { session: verifySession } } = await vidSupabaseClient.auth.getSession();
+        console.log('✅ Session verification:', verifySession ? 'Found' : 'NOT FOUND - PROBLEM!');
+        
+        if (!verifySession) {
+          throw new Error('Session created but not persisted. Clear browser cache and try again.');
         }
+        
+        console.log('✅ Session confirmed, redirecting...');
+        loginBtn.textContent = '✓ Success! Loading dashboard...';
+        
+        // Wait a bit more, then reload
+        await new Promise(resolve => setTimeout(resolve, 500));
+        window.location.href = window.location.href.split('?')[0];
         
       } catch (error) {
         console.error('❌ Login failed:', error);
@@ -1532,7 +1563,7 @@
     // Handle Logout
     async function handleLogout() {
       try {
-        const { error } = await vidSupabase.auth.signOut();
+        const { error } = await vidSupabaseClient.auth.signOut();
         if (error) throw error;
         
         console.log('✅ Logged out successfully');
@@ -1553,7 +1584,7 @@
         }
 
         // Show user email and logout button
-        const { data: { session } } = await vidSupabase.auth.getSession();
+        const { data: { session } } = await vidSupabaseClient.auth.getSession();
         if (session?.user) {
           const userEmail = document.getElementById('userEmail');
           const userInfo = document.getElementById('userInfo');
@@ -1599,30 +1630,12 @@
 
         console.log('🔧 Initializing Supabase client...');
 
-        // Initialize Supabase with retry for mobile networks
-        let retries = 0;
-        const maxRetries = 3;
-        
-        while (retries < maxRetries) {
-          try {
-            vidSupabase = initSupabase();
-            if (vidSupabase) {
-              console.log(`✅ Supabase client created (attempt ${retries + 1})`);
-              break;
-            }
-          } catch (e) {
-            console.warn(`⚠️ Supabase init attempt ${retries + 1} failed:`, e);
-            retries++;
-            if (retries < maxRetries) {
-              console.log(`⏳ Waiting ${retries} seconds before retry...`);
-              await new Promise(resolve => setTimeout(resolve, 1000 * retries));
-            }
-          }
-        }
-
+        // Client already initialized inline, just verify it works
         if (!vidSupabase) {
-          throw new Error('Failed to initialize database connection after ' + maxRetries + ' attempts. This could be due to CORS restrictions on your network.');
+          throw new Error('Supabase client not initialized');
         }
+        
+        console.log('✅ Supabase client ready');
 
         console.log('🔧 Testing database connection...');
 
