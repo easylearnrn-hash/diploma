@@ -36,17 +36,40 @@ class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         print(f"[{self.log_date_time_string()}] {format % args}")
 
 with socketserver.TCPServer(("", PORT), MyHTTPRequestHandler) as httpd:
-    print("=" * 60)
+    # Get local IP address (not localhost)
+    import socket
+    import subprocess
+    try:
+        # Get WiFi IP on macOS
+        result = subprocess.run(['ipconfig', 'getifaddr', 'en0'], 
+                                capture_output=True, text=True, timeout=2)
+        local_ip = result.stdout.strip()
+        if not local_ip:
+            # Fallback to ethernet
+            result = subprocess.run(['ipconfig', 'getifaddr', 'en1'], 
+                                    capture_output=True, text=True, timeout=2)
+            local_ip = result.stdout.strip()
+        if not local_ip:
+            local_ip = "Unable to detect - check WiFi connection"
+    except Exception:
+        local_ip = "Unable to detect - check WiFi connection"
+    
+    print("=" * 70)
     print(f"🚀 DIPLOMA Project Server Starting...")
-    print("=" * 60)
+    print("=" * 70)
     print(f"\n📂 Serving directory: {os.getcwd()}")
-    print(f"🌐 Server running at: http://localhost:{PORT}/")
-    print(f"\n📄 Access pages:")
-    print(f"   • Student Page:  http://localhost:{PORT}/Student-page.html")
-    print(f"   • Index:         http://localhost:{PORT}/index.html")
-    print(f"   • Login:         http://localhost:{PORT}/login.html")
+    print(f"\n🖥️  LOCAL ACCESS (This Computer):")
+    print(f"   http://localhost:{PORT}/")
+    print(f"\n📱 MOBILE ACCESS (iPhone/iPad on same WiFi):")
+    print(f"   http://{local_ip}:{PORT}/")
+    print(f"\n✨ Access VID from iPhone:")
+    print(f"   http://{local_ip}:{PORT}/VID.html")
+    print(f"\n📄 Other pages:")
+    print(f"   • Student Page:  http://{local_ip}:{PORT}/Student-page.html")
+    print(f"   • Admin Hub:     http://{local_ip}:{PORT}/admin-hub.html")
+    print(f"   • Login:         http://{local_ip}:{PORT}/login.html")
     print(f"\n⚠️  Press Ctrl+C to stop the server")
-    print("=" * 60 + "\n")
+    print("=" * 70 + "\n")
     
     try:
         httpd.serve_forever()

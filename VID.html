@@ -1,0 +1,2010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VID - Student Intelligence Dashboard</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <style>
+    :root {
+      /* Premium Color Palette */
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --primary-light: #60a5fa;
+      --secondary: #8b5cf6;
+      --accent: #06b6d4;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      
+      /* Sophisticated Neutrals */
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-tertiary: #1f2937;
+      --bg-elevated: #1e293b;
+      --bg-hover: #2d3748;
+      
+      /* Text Hierarchy */
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-tertiary: #94a3b8;
+      --text-muted: #64748b;
+      
+      /* Borders & Dividers */
+      --border-subtle: rgba(148, 163, 184, 0.08);
+      --border-medium: rgba(148, 163, 184, 0.15);
+      --border-strong: rgba(148, 163, 184, 0.25);
+      
+      /* Shadows */
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+      --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+      
+      /* Transitions */
+      --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+      --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0a0e1a 0%, #111827 50%, #1f2937 100%);
+      background-attachment: fixed;
+      color: var(--text-primary);
+      min-height: 100vh;
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      /* Performance optimizations */
+      will-change: scroll-position;
+    }
+
+    /* Premium Container */
+    .container {
+      max-width: 1920px;
+      margin: 0 auto;
+      padding: 0 32px;
+      /* Hardware acceleration */
+      transform: translateZ(0);
+    }
+
+    /* Top Navigation Bar */
+    .top-nav {
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+      background: rgba(17, 24, 39, 0.8);
+      backdrop-filter: blur(20px) saturate(180%);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 16px 0;
+    }
+
+    .nav-content {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 900;
+      color: white;
+      box-shadow: var(--shadow-md);
+    }
+
+    .brand-text h1 {
+      font-size: 18px;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--primary-light), var(--secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: -0.5px;
+    }
+
+    .brand-text p {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .nav-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .nav-btn {
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      border: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .nav-btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .nav-btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .nav-btn-secondary {
+      background: var(--bg-tertiary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-medium);
+    }
+
+    .nav-btn-secondary:hover {
+      background: var(--bg-hover);
+      border-color: var(--border-strong);
+    }
+
+    /* Main Content Area */
+    .main-content {
+      padding: 32px 0 64px;
+    }
+
+    /* Control Panel */
+    .control-panel {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .control-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .control-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .control-title h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .control-title .badge {
+      padding: 4px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .badge-primary {
+      background: rgba(59, 130, 246, 0.15);
+      color: var(--primary-light);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Advanced Search Bar */
+    .search-section {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .search-wrapper {
+      flex: 1;
+      min-width: 300px;
+      position: relative;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 14px 16px 14px 48px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 500;
+      transition: all var(--transition-base);
+      font-family: 'Inter', sans-serif;
+    }
+
+    .search-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      background: var(--bg-elevated);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 18px;
+      opacity: 0.5;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--bg-hover);
+      border: none;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+    }
+
+    .search-clear:hover {
+      background: var(--danger);
+      color: white;
+    }
+
+    /* Filter Bar */
+    .filter-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .filter-btn {
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .filter-btn:hover {
+      background: var(--bg-hover);
+      border-color: var(--primary);
+      color: var(--primary-light);
+    }
+
+    .filter-btn.active {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: white;
+    }
+
+    .filter-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border-medium);
+    }
+
+    /* View Toggle */
+    .view-toggle {
+      display: flex;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-medium);
+      border-radius: 8px;
+      padding: 4px;
+    }
+
+    .view-btn {
+      padding: 6px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      transition: all var(--transition-fast);
+      font-size: 16px;
+    }
+
+    .view-btn:hover {
+      color: var(--text-secondary);
+    }
+
+    .view-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      padding: 20px 0;
+      border-top: 1px solid var(--border-subtle);
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .stat-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+    }
+
+    .stat-icon.primary {
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    .stat-icon.success {
+      background: rgba(16, 185, 129, 0.15);
+    }
+
+    .stat-icon.warning {
+      background: rgba(245, 158, 11, 0.15);
+    }
+
+    .stat-details h3 {
+      font-size: 24px;
+      font-weight: 800;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+
+    .stat-details p {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-weight: 500;
+      margin-top: 4px;
+    }
+
+    /* Students Grid */
+    .students-container {
+      min-height: 400px;
+    }
+
+    .students-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 20px;
+    }
+
+    /* Premium Student Card - Optimized for performance */
+    .student-card {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      position: relative;
+      overflow: hidden;
+      /* Performance optimizations */
+      will-change: transform, border-color;
+      transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+    }
+
+    .student-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--primary), var(--secondary));
+      opacity: 0;
+      transition: opacity var(--transition-base);
+    }
+
+    .student-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-xl);
+    }
+
+    .student-card:hover::before {
+      opacity: 1;
+    }
+
+    .student-card.has-notes .card-badge {
+      display: flex;
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      background: linear-gradient(135deg, var(--warning), #fb923c);
+      color: white;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: none;
+      align-items: center;
+      gap: 4px;
+      box-shadow: var(--shadow-md);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: start;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+
+    .student-avatar {
+      width: 56px;
+      height: 56px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: 800;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .student-header-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .student-name {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .student-id {
+      font-size: 12px;
+      color: var(--primary-light);
+      font-weight: 600;
+      font-family: 'Courier New', monospace;
+      letter-spacing: 0.5px;
+    }
+
+    .card-body {
+      display: grid;
+      gap: 10px;
+    }
+
+    .info-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+    }
+
+    .info-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--bg-tertiary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .info-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .info-label {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .info-value {
+      color: var(--text-secondary);
+      font-weight: 500;
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-footer {
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      gap: 8px;
+    }
+
+    .status-badge {
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .status-active {
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--success);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .status-inactive {
+      background: rgba(148, 163, 184, 0.15);
+      color: var(--text-tertiary);
+      border: 1px solid var(--border-medium);
+    }
+
+    /* Premium Modal */
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fadeIn var(--transition-base);
+    }
+
+    .modal.active {
+      display: flex;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }
+
+    .modal-dialog {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-medium);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 900px;
+      max-height: 90vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow: var(--shadow-xl);
+      animation: slideUp var(--transition-slow);
+    }
+
+    @keyframes slideUp {
+      from {
+        transform: translateY(30px);
+        opacity: 0;
+      }
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      padding: 24px 28px;
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      background: var(--bg-tertiary);
+    }
+
+    .modal-header-content {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .modal-avatar {
+      width: 64px;
+      height: 64px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 900;
+      color: white;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .modal-title-section {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .modal-title-section h2 {
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .modal-title-section p {
+      font-size: 13px;
+      color: var(--text-tertiary);
+      font-family: 'Courier New', monospace;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-medium);
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--text-tertiary);
+      transition: all var(--transition-base);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .modal-close:hover {
+      background: var(--danger);
+      border-color: var(--danger);
+      color: white;
+      transform: scale(1.05);
+    }
+
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px;
+    }
+
+    /* Student Details Grid */
+    .details-section {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .details-section h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .detail-label {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .detail-value {
+      font-size: 15px;
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    /* Premium Notes Editor */
+    .notes-editor {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .notes-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .notes-header h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .notes-badge {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--danger);
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .notes-textarea {
+      width: 100%;
+      min-height: 220px;
+      padding: 16px;
+      background: var(--bg-primary);
+      border: 1px solid var(--border-medium);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      line-height: 1.6;
+      resize: vertical;
+      transition: all var(--transition-base);
+    }
+
+    .notes-textarea:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .notes-textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .modal-footer {
+      padding: 20px 28px;
+      border-top: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-tertiary);
+      gap: 16px;
+    }
+
+    .notes-meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      font-style: italic;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition-base);
+      border: none;
+      font-family: 'Inter', sans-serif;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      white-space: nowrap;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-dark);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .btn-secondary {
+      background: var(--bg-hover);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-medium);
+    }
+
+    .btn-secondary:hover {
+      background: var(--bg-elevated);
+      border-color: var(--border-strong);
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    /* Loading State */
+    .loading-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 400px;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .spinner {
+      width: 56px;
+      height: 56px;
+      border: 4px solid var(--border-medium);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      font-size: 15px;
+      color: var(--text-tertiary);
+      font-weight: 500;
+    }
+
+    /* Empty State */
+    .empty-state {
+      text-align: center;
+      padding: 80px 20px;
+    }
+
+    .empty-icon {
+      font-size: 64px;
+      margin-bottom: 16px;
+      opacity: 0.3;
+    }
+
+    .empty-state h3 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .empty-state p {
+      color: var(--text-tertiary);
+      font-size: 15px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .container {
+        padding: 0 16px;
+      }
+
+      .nav-content {
+        flex-wrap: wrap;
+      }
+
+      .brand-text h1 {
+        font-size: 16px;
+      }
+
+      .students-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .control-header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .filter-bar {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+      }
+
+      .modal-dialog {
+        max-width: 100%;
+        margin: 0;
+        border-radius: 0;
+        max-height: 100vh;
+      }
+
+      .details-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Smooth Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-hover);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+
+    /* Premium Toast Notifications */
+    .toast-container {
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      z-index: 3000;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-medium);
+      border-radius: 12px;
+      padding: 16px 20px;
+      min-width: 320px;
+      max-width: 400px;
+      box-shadow: var(--shadow-xl);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      pointer-events: auto;
+      animation: slideInRight var(--transition-slow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .toast::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+    }
+
+    .toast.success::before {
+      background: var(--success);
+    }
+
+    .toast.error::before {
+      background: var(--danger);
+    }
+
+    .toast.warning::before {
+      background: var(--warning);
+    }
+
+    .toast.info::before {
+      background: var(--primary);
+    }
+
+    @keyframes slideInRight {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .toast.success .toast-icon {
+      background: rgba(16, 185, 129, 0.15);
+    }
+
+    .toast.error .toast-icon {
+      background: rgba(239, 68, 68, 0.15);
+    }
+
+    .toast.warning .toast-icon {
+      background: rgba(245, 158, 11, 0.15);
+    }
+
+    .toast.info .toast-icon {
+      background: rgba(59, 130, 246, 0.15);
+    }
+
+    .toast-content {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .toast-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .toast-message {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .toast-close {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--bg-hover);
+      border: none;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all var(--transition-fast);
+      flex-shrink: 0;
+    }
+
+    .toast-close:hover {
+      background: var(--danger);
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="container">
+      <div class="nav-content">
+        <div class="brand">
+          <div class="brand-logo">V</div>
+          <div class="brand-text">
+            <h1>Student Intelligence Dashboard</h1>
+            <p>Premium Academic Management System</p>
+          </div>
+        </div>
+        <div class="nav-actions">
+          <button class="nav-btn nav-btn-primary" onclick="exportData()">
+            <span>📊</span>
+            Export Data
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="container">
+    <main class="main-content">
+      <!-- Control Panel -->
+      <div class="control-panel">
+        <div class="control-header">
+          <div class="control-title">
+            <h2>Student Registry</h2>
+            <span class="badge badge-primary" id="totalBadge">Loading...</span>
+          </div>
+          <div class="view-toggle">
+            <button class="view-btn active" title="Grid View">📊</button>
+            <button class="view-btn" title="List View">📋</button>
+          </div>
+        </div>
+
+        <!-- Advanced Search -->
+        <div class="search-section">
+          <div class="search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input 
+              type="text" 
+              id="searchInput" 
+              class="search-input"
+              placeholder="Search by name, ID, email, phone, or program..."
+              autocomplete="off"
+            >
+            <button class="search-clear" id="clearSearch">✕</button>
+          </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+          <button class="filter-btn active" data-filter="all">
+            <span>📚</span> All Students
+          </button>
+          <button class="filter-btn" data-filter="active">
+            <span>✅</span> Active
+          </button>
+          <button class="filter-btn" data-filter="inactive">
+            <span>⏸️</span> Inactive
+          </button>
+          <div class="filter-divider"></div>
+          <button class="filter-btn" data-filter="has-notes">
+            <span>📝</span> With Notes
+          </button>
+          <button class="filter-btn" data-filter="no-notes">
+            <span>📭</span> No Notes
+          </button>
+        </div>
+
+        <!-- Statistics -->
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-icon primary">📚</div>
+            <div class="stat-details">
+              <h3 id="totalStudents">0</h3>
+              <p>Total Students</p>
+            </div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-icon success">📝</div>
+            <div class="stat-details">
+              <h3 id="notesCount">0</h3>
+              <p>With Notes</p>
+            </div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-icon warning">🎯</div>
+            <div class="stat-details">
+              <h3 id="filteredCount">0</h3>
+              <p>Showing</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Students Grid -->
+      <div class="students-container">
+        <div id="studentsGrid" class="students-grid">
+          <div class="loading-container">
+            <div class="spinner"></div>
+            <p class="loading-text">Loading student data...</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Student Details Modal -->
+  <div id="studentModal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-header-content">
+          <div class="modal-avatar" id="modalAvatar">?</div>
+          <div class="modal-title-section">
+            <h2 id="modalStudentName">Loading...</h2>
+            <p id="modalStudentId">---</p>
+          </div>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Student Details -->
+        <div class="details-section">
+          <h3>📋 Student Information</h3>
+          <div class="details-grid" id="studentDetailsGrid">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <!-- Notes Editor -->
+        <div class="notes-editor">
+          <div class="notes-header">
+            <h3>📝 Private Notes</h3>
+            <span class="notes-badge">CONFIDENTIAL</span>
+          </div>
+          <textarea 
+            id="notesTextarea" 
+            class="notes-textarea" 
+            placeholder="Add your private notes about this student...&#10;&#10;• Academic performance observations&#10;• Behavioral notes&#10;• Special considerations&#10;• Follow-up reminders&#10;&#10;These notes are private and only visible to you."
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="notes-meta" id="notesMeta"></div>
+        <div class="modal-actions">
+          <button class="btn btn-secondary" onclick="closeModal()">
+            <span>✓</span> Done
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // Configuration
+    const AUTHORIZED_EMAIL = 'hrachfilm@gmail.com';
+    const STUDENTS_PER_PAGE = 100;
+    const RENDER_BATCH_SIZE = 50;
+    
+    let vidSupabase = null;
+    let currentStudent = null;
+    let allStudents = [];
+    let studentsWithNotes = new Set();
+    let currentFilter = 'all';
+    let searchDebounceTimer = null;
+    let lastRenderedHTML = '';
+    let currentPage = 0;
+    let hasMoreStudents = true;
+    let isLoadingMore = false;
+
+    // Premium Toast Notification System
+    function showToast(type, title, message, duration = 4000) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      
+      const icons = {
+        success: '✓',
+        error: '✕',
+        warning: '⚠',
+        info: 'ℹ'
+      };
+      
+      toast.innerHTML = `
+        <div class="toast-icon">${icons[type] || 'ℹ'}</div>
+        <div class="toast-content">
+          <div class="toast-title">${title}</div>
+          <div class="toast-message">${message}</div>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+      `;
+      
+      container.appendChild(toast);
+      
+      // Auto remove after duration
+      setTimeout(() => {
+        toast.style.animation = 'slideInRight var(--transition-slow) reverse';
+        setTimeout(() => toast.remove(), 350);
+      }, duration);
+    }
+
+    // Initialize - Enhanced for mobile compatibility
+    async function init() {
+      try {
+        // Log device/browser info for debugging
+        console.log('🔧 VID Initialization Started');
+        console.log('📱 Device Info:', {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          language: navigator.language,
+          online: navigator.onLine,
+          connection: navigator.connection?.effectiveType || 'unknown',
+          viewport: `${window.innerWidth}x${window.innerHeight}`
+        });
+
+        // Check if we're online
+        if (!navigator.onLine) {
+          throw new Error('No internet connection detected. Please connect to WiFi or cellular data.');
+        }
+
+        // Show loading state
+        const grid = document.getElementById('studentsGrid');
+        if (grid) {
+          grid.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon">⏳</div>
+              <h3>Loading Students...</h3>
+              <p>Please wait while we fetch your data</p>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin-top: 8px;">
+                Connection: ${navigator.connection?.effectiveType || 'unknown'}
+              </p>
+            </div>
+          `;
+        }
+
+        console.log('🔧 Initializing Supabase client...');
+
+        // Initialize Supabase with retry for mobile networks
+        let retries = 0;
+        const maxRetries = 3;
+        
+        while (retries < maxRetries) {
+          try {
+            vidSupabase = initSupabase();
+            if (vidSupabase) {
+              console.log(`✅ Supabase client created (attempt ${retries + 1})`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`⚠️ Supabase init attempt ${retries + 1} failed:`, e);
+            retries++;
+            if (retries < maxRetries) {
+              console.log(`⏳ Waiting ${retries} seconds before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 1000 * retries));
+            }
+          }
+        }
+
+        if (!vidSupabase) {
+          throw new Error('Failed to initialize database connection after ' + maxRetries + ' attempts. This could be due to CORS restrictions on your network.');
+        }
+
+        console.log('🔧 Testing database connection...');
+
+        // Test connection with a simple query
+        const { error: testError } = await vidSupabase
+          .from('students')
+          .select('student_id')
+          .limit(1);
+
+        if (testError) {
+          console.error('❌ Database test query failed:', testError);
+          throw new Error(`Database connection test failed: ${testError.message}`);
+        }
+
+        console.log('✅ Database connection test passed');
+        console.log('🔧 Loading students data...');
+
+        // Load data
+        await loadStudents();
+        setupEventListeners();
+
+        console.log('✅ VID initialized successfully');
+      } catch (error) {
+        console.error('❌ VID initialization failed:', error);
+        
+        const grid = document.getElementById('studentsGrid');
+        if (grid) {
+          grid.innerHTML = `
+            <div class="empty-state">
+              <div class="empty-icon" style="font-size: 48px;">⚠️</div>
+              <h3>Connection Error</h3>
+              <p style="color: var(--danger); margin-bottom: 16px;">${error.message}</p>
+              <p style="font-size: 14px; color: var(--text-tertiary); margin-bottom: 24px;">
+                This could be due to:<br>
+                • Slow internet connection<br>
+                • Database server is down<br>
+                • Browser blocking the connection<br>
+                • CORS restrictions on cellular network
+              </p>
+              <div style="background: var(--bg-tertiary); padding: 16px; border-radius: 8px; margin-bottom: 24px; font-size: 12px; font-family: monospace; text-align: left; max-width: 400px; margin-left: auto; margin-right: auto;">
+                <strong>Debug Info:</strong><br>
+                Online: ${navigator.onLine ? 'Yes' : 'No'}<br>
+                Connection: ${navigator.connection?.effectiveType || 'unknown'}<br>
+                User Agent: ${navigator.userAgent.substring(0, 50)}...
+              </div>
+              <button onclick="location.reload()" class="btn-primary" style="padding: 12px 24px; border-radius: 8px; border: none; background: var(--primary); color: white; cursor: pointer; font-weight: 600;">
+                🔄 Retry
+              </button>
+            </div>
+          `;
+        }
+        
+        showToast('error', 'Connection Error', error.message);
+      }
+    }
+
+    // Setup Event Listeners
+    function setupEventListeners() {
+      // Search with debounce for better performance
+      const searchInput = document.getElementById('searchInput');
+      const clearSearch = document.getElementById('clearSearch');
+      
+      searchInput.addEventListener('input', () => {
+        clearSearch.style.display = searchInput.value ? 'flex' : 'none';
+        
+        // Debounce search for performance
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          filterAndRenderStudents();
+        }, 150);
+      });
+
+      clearSearch.addEventListener('click', () => {
+        searchInput.value = '';
+        clearSearch.style.display = 'none';
+        filterAndRenderStudents();
+      });
+
+      // Filter buttons
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentFilter = btn.dataset.filter;
+          filterAndRenderStudents();
+        });
+      });
+
+      // Modal close on background click - auto-save notes
+      document.getElementById('studentModal').addEventListener('click', async (e) => {
+        if (e.target.id === 'studentModal') {
+          await autoSaveAndClose();
+        }
+      });
+
+      // ESC key to close modal - auto-save notes
+      document.addEventListener('keydown', async (e) => {
+        if (e.key === 'Escape' && document.getElementById('studentModal').classList.contains('active')) {
+          await autoSaveAndClose();
+        }
+      });
+    }
+
+    // Load Students - Optimized with pagination and timeout
+    async function loadStudents(append = false) {
+      if (isLoadingMore) return;
+      isLoadingMore = true;
+
+      // Add timeout for mobile networks (30 seconds)
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timed out after 30 seconds')), 30000)
+      );
+
+      try {
+        const startRange = currentPage * STUDENTS_PER_PAGE;
+        const endRange = startRange + STUDENTS_PER_PAGE - 1;
+
+        // Load students and notes in parallel for better performance
+        const dataPromise = Promise.allSettled([
+          vidSupabase
+            .from('students')
+            .select('student_id, full_name, email, phone, program, status, date_of_birth, start_term, created_at')
+            .order('created_at', { ascending: false })
+            .range(startRange, endRange),
+          vidSupabase
+            .from('admin_private_notes')
+            .select('student_id, notes')
+            .eq('admin_email', AUTHORIZED_EMAIL)
+        ]);
+
+        // Race between data fetch and timeout
+        const [studentsResult, notesResult] = await Promise.race([
+          dataPromise,
+          timeoutPromise
+        ]);
+
+        // Process students
+        if (studentsResult.status === 'fulfilled' && !studentsResult.value.error) {
+          const newStudents = studentsResult.value.data || [];
+          
+          if (append) {
+            allStudents = [...allStudents, ...newStudents];
+          } else {
+            allStudents = newStudents;
+          }
+
+          // Check if there are more students to load
+          hasMoreStudents = newStudents.length === STUDENTS_PER_PAGE;
+          if (hasMoreStudents) {
+            currentPage++;
+          }
+        } else {
+          throw studentsResult.value?.error || new Error('Failed to load students');
+        }
+
+        // Process notes (only on first load)
+        if (!append && notesResult.status === 'fulfilled' && !notesResult.value.error && notesResult.value.data) {
+          studentsWithNotes = new Set(
+            notesResult.value.data
+              .filter(n => n.notes && n.notes.trim().length > 0)
+              .map(n => n.student_id)
+          );
+        } else if (!append && notesResult.status === 'rejected') {
+          console.warn('Notes table not found. Run VID-SETUP.sql to create it.');
+        }
+
+        updateStats();
+        filterAndRenderStudents();
+        
+        console.log(`✅ Loaded ${allStudents.length} students`);
+      } catch (error) {
+        console.error('❌ Error loading students:', error);
+        
+        const errorMessage = error.message.includes('timed out') 
+          ? 'Connection is too slow. Please check your internet and try again.'
+          : `Failed to load students: ${error.message}`;
+        
+        showToast('error', 'Loading Error', errorMessage);
+        
+        document.getElementById('studentsGrid').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon" style="font-size: 48px;">⚠️</div>
+            <h3>Error Loading Data</h3>
+            <p style="color: var(--danger); margin-bottom: 16px;">${errorMessage}</p>
+            <button onclick="location.reload()" class="btn-primary" style="padding: 12px 24px; border-radius: 8px; border: none; background: var(--primary); color: white; cursor: pointer; font-weight: 600;">
+              🔄 Reload Page
+            </button>
+          </div>
+        `;
+      } finally {
+        isLoadingMore = false;
+      }
+    }
+
+    // Load More Students
+    async function loadMoreStudents() {
+      if (!hasMoreStudents || isLoadingMore) return;
+      await loadStudents(true);
+    }
+
+    // Update Statistics - Batch DOM updates
+    function updateStats() {
+      // Batch DOM updates for better performance
+      requestAnimationFrame(() => {
+        document.getElementById('totalStudents').textContent = allStudents.length;
+        document.getElementById('notesCount').textContent = studentsWithNotes.size;
+        document.getElementById('totalBadge').textContent = `${allStudents.length} Students`;
+      });
+    }
+
+    // Filter and Render - Optimized
+    function filterAndRenderStudents() {
+      const query = document.getElementById('searchInput').value.toLowerCase().trim();
+      
+      // Early return if no filter change
+      const cacheKey = `${query}_${currentFilter}`;
+      
+      let filtered = allStudents.filter(student => {
+        // Search filter - optimized with early returns
+        if (query) {
+          const searchFields = [
+            student.full_name,
+            student.student_id,
+            student.email,
+            student.phone,
+            student.program
+          ].filter(Boolean).join(' ').toLowerCase();
+          
+          if (!searchFields.includes(query)) return false;
+        }
+
+        // Category filter
+        switch(currentFilter) {
+          case 'active':
+            return student.status === 'active';
+          case 'inactive':
+            return student.status !== 'active';
+          case 'has-notes':
+            return studentsWithNotes.has(student.student_id);
+          case 'no-notes':
+            return !studentsWithNotes.has(student.student_id);
+          default:
+            return true;
+        }
+      });
+
+      document.getElementById('filteredCount').textContent = filtered.length;
+      renderStudents(filtered);
+    }
+
+    // Render Students - Highly optimized with event delegation
+    function renderStudents(students) {
+      const grid = document.getElementById('studentsGrid');
+      
+      if (students.length === 0) {
+        grid.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🔍</div>
+            <h3>No Students Found</h3>
+            <p>Try adjusting your search or filter criteria</p>
+          </div>
+        `;
+        return;
+      }
+
+      // Build HTML string for better performance than createElement
+      const htmlParts = students.map(student => {
+        const hasNotes = studentsWithNotes.has(student.student_id);
+        const initials = (student.full_name || 'N/A').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        const statusClass = student.status === 'active' ? 'status-active' : 'status-inactive';
+        
+        return `
+          <div class="student-card ${hasNotes ? 'has-notes' : ''}" data-student-id="${student.student_id}">
+            ${hasNotes ? '<div class="card-badge">📝 Has Notes</div>' : ''}
+            <div class="card-header">
+              <div class="student-avatar">${initials}</div>
+              <div class="student-header-info">
+                <div class="student-name">${student.full_name || 'No Name'}</div>
+                <div class="student-id">${student.student_id || 'N/A'}</div>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="info-row">
+                <div class="info-icon">📧</div>
+                <div class="info-content">
+                  <div class="info-label">Email</div>
+                  <div class="info-value">${student.email || 'N/A'}</div>
+                </div>
+              </div>
+              <div class="info-row">
+                <div class="info-icon">📱</div>
+                <div class="info-content">
+                  <div class="info-label">Phone</div>
+                  <div class="info-value">${student.phone || 'N/A'}</div>
+                </div>
+              </div>
+              <div class="info-row">
+                <div class="info-icon">🎓</div>
+                <div class="info-content">
+                  <div class="info-label">Program</div>
+                  <div class="info-value">${student.program || 'N/A'}</div>
+                </div>
+              </div>
+            </div>
+            <div class="card-footer">
+              <span class="status-badge ${statusClass}">${student.status || 'Unknown'}</span>
+            </div>
+          </div>
+        `;
+      });
+
+      const newHTML = htmlParts.join('');
+      
+      // Add load more button if there are more students
+      const loadMoreButton = hasMoreStudents ? `
+        <div style="grid-column: 1 / -1; text-align: center; padding: 20px;">
+          <button class="btn btn-primary" id="loadMoreBtn" style="padding: 14px 32px; font-size: 15px;">
+            <span>⬇️</span> Load More Students
+          </button>
+        </div>
+      ` : '';
+      
+      // Only update DOM if content changed
+      const finalHTML = newHTML + loadMoreButton;
+      if (finalHTML !== lastRenderedHTML) {
+        lastRenderedHTML = finalHTML;
+        grid.innerHTML = finalHTML;
+        
+        // Add event delegation for student cards
+        grid.removeEventListener('click', handleGridClick);
+        grid.addEventListener('click', handleGridClick);
+      }
+    }
+
+    // Event delegation handler for grid clicks
+    function handleGridClick(e) {
+      // Handle student card clicks
+      const card = e.target.closest('.student-card');
+      if (card) {
+        const studentId = card.dataset.studentId;
+        if (studentId) {
+          openStudentModal(studentId);
+        }
+        return;
+      }
+
+      // Handle load more button
+      if (e.target.id === 'loadMoreBtn' || e.target.closest('#loadMoreBtn')) {
+        const btn = e.target.closest('#loadMoreBtn') || e.target;
+        btn.disabled = true;
+        btn.innerHTML = '<span>⏳</span> Loading...';
+        loadMoreStudents();
+      }
+    }
+
+    // Open Modal - Optimized
+    async function openStudentModal(studentId) {
+      currentStudent = allStudents.find(s => s.student_id === studentId);
+      if (!currentStudent) return;
+
+      // Show modal immediately for instant feedback
+      document.getElementById('studentModal').classList.add('active');
+
+      // Update UI in batches using requestAnimationFrame
+      requestAnimationFrame(() => {
+        const initials = (currentStudent.full_name || 'N/A').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+        document.getElementById('modalAvatar').textContent = initials;
+        document.getElementById('modalStudentName').textContent = currentStudent.full_name || 'No Name';
+        document.getElementById('modalStudentId').textContent = currentStudent.student_id || 'N/A';
+
+        // Build details HTML once
+        const detailsGrid = document.getElementById('studentDetailsGrid');
+        detailsGrid.innerHTML = `
+          <div class="detail-item">
+            <div class="detail-label">Full Name</div>
+            <div class="detail-value">${currentStudent.full_name || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Student ID</div>
+            <div class="detail-value">${currentStudent.student_id || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Email Address</div>
+            <div class="detail-value">${currentStudent.email || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Phone Number</div>
+            <div class="detail-value">${currentStudent.phone || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Date of Birth</div>
+            <div class="detail-value">${currentStudent.date_of_birth || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Program</div>
+            <div class="detail-value">${currentStudent.program || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Start Term</div>
+            <div class="detail-value">${currentStudent.start_term || 'N/A'}</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Status</div>
+            <div class="detail-value">${currentStudent.status || 'N/A'}</div>
+          </div>
+        `;
+      });
+
+      // Load notes asynchronously without blocking UI
+      loadNotes(studentId);
+    }
+
+    // Load Notes
+    async function loadNotes(studentId) {
+      try {
+        const { data, error } = await vidSupabase
+          .from('admin_private_notes')
+          .select('*')
+          .eq('admin_email', AUTHORIZED_EMAIL)
+          .eq('student_id', studentId)
+          .single();
+
+        const textarea = document.getElementById('notesTextarea');
+        const metaDiv = document.getElementById('notesMeta');
+
+        if (error && error.code !== 'PGRST116') {
+          // If table doesn't exist (406 error), show helpful message
+          if (error.message.includes('does not exist') || error.code === '42P01') {
+            textarea.value = '';
+            metaDiv.innerHTML = '<span style="color: var(--warning)">⚠️ Notes table not created yet. Run VID-SETUP.sql first.</span>';
+            showToast('warning', 'Setup Required', 'Run VID-SETUP.sql in Supabase to enable notes functionality.', 6000);
+            return;
+          }
+          throw error;
+        }
+
+        if (data) {
+          textarea.value = data.notes || '';
+          const updated = new Date(data.updated_at).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          metaDiv.textContent = `Last updated: ${updated}`;
+        } else {
+          textarea.value = '';
+          metaDiv.textContent = 'No notes yet';
+        }
+      } catch (error) {
+        console.error('Error loading notes:', error);
+        showToast('error', 'Load Error', `Failed to load notes: ${error.message}`);
+      }
+    }
+
+    // Save Notes (silent auto-save) - Optimized with surgical DOM updates
+    async function saveNotes(showFeedback = false) {
+      if (!currentStudent) return false;
+
+      const notes = document.getElementById('notesTextarea').value.trim();
+      const studentId = currentStudent.student_id;
+
+      try {
+        const { error } = await vidSupabase
+          .from('admin_private_notes')
+          .upsert({
+            admin_email: AUTHORIZED_EMAIL,
+            student_id: studentId,
+            notes: notes,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'admin_email,student_id'
+          });
+
+        if (error) {
+          // Check if table doesn't exist
+          if (error.message.includes('does not exist') || error.code === '42P01') {
+            if (showFeedback) {
+              showToast('error', 'Setup Required', 'Notes table not found. Please run VID-SETUP.sql in Supabase SQL Editor first.', 6000);
+            }
+            return false;
+          }
+          throw error;
+        }
+
+        // Update notes tracking based on whether notes exist
+        const hadNotes = studentsWithNotes.has(studentId);
+        const hasNotes = notes.length > 0;
+        
+        if (hasNotes && !hadNotes) {
+          studentsWithNotes.add(studentId);
+        } else if (!hasNotes && hadNotes) {
+          studentsWithNotes.delete(studentId);
+        }
+
+        // Only update if notes status changed - use surgical DOM update
+        if (hadNotes !== hasNotes) {
+          updateStats();
+          
+          // Surgical update: only update the specific card instead of full re-render
+          const card = document.querySelector(`[data-student-id="${studentId}"]`);
+          if (card) {
+            if (hasNotes) {
+              card.classList.add('has-notes');
+              if (!card.querySelector('.card-badge')) {
+                const badge = document.createElement('div');
+                badge.className = 'card-badge';
+                badge.innerHTML = '📝 Has Notes';
+                card.insertBefore(badge, card.firstChild);
+              }
+            } else {
+              card.classList.remove('has-notes');
+              const badge = card.querySelector('.card-badge');
+              if (badge) badge.remove();
+            }
+          }
+        }
+
+        // Update metadata
+        const updated = new Date().toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+        document.getElementById('notesMeta').textContent = `Last updated: ${updated}`;
+
+        if (showFeedback) {
+          showToast('success', 'Notes Saved', 'Your private notes have been saved successfully.');
+        }
+
+        return true;
+
+      } catch (error) {
+        console.error('Error saving notes:', error);
+        if (showFeedback) {
+          showToast('error', 'Save Failed', `Failed to save notes: ${error.message}`);
+        }
+        return false;
+      }
+    }
+
+    // Auto-save and close modal - Non-blocking
+    async function autoSaveAndClose() {
+      // Close immediately for instant feedback
+      document.getElementById('studentModal').classList.remove('active');
+      
+      // Save in background
+      if (currentStudent) {
+        saveNotes(false).then(() => {
+          currentStudent = null;
+        });
+      } else {
+        currentStudent = null;
+      }
+    }
+
+    // Close Modal - Optimized
+    async function closeModal() {
+      await autoSaveAndClose();
+    }
+
+    // Export Data (placeholder)
+    function exportData() {
+      showToast('info', 'Coming Soon', 'Export functionality will be available in the next update.');
+    }
+
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
