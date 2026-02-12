@@ -1640,17 +1640,17 @@
         console.log('🔧 Testing database connection...');
 
         // Test connection with a simple query
-        const { error: testError } = await vidSupabase
+        const { data: testData, error: testError } = await vidSupabase
           .from('students')
           .select('student_id')
           .limit(1);
 
         if (testError) {
           console.error('❌ Database test query failed:', testError);
-          throw new Error(`Database connection test failed: ${testError.message}`);
+          throw new Error(`Database connection test failed: ${testError.message}. Check RLS policies!`);
         }
 
-        console.log('✅ Database connection test passed');
+        console.log('✅ Database connection test passed, found', testData?.length || 0, 'students');
         console.log('🔧 Loading students data...');
 
         // Load data
@@ -1750,8 +1750,12 @@
       );
 
       try {
+        console.log('🔧 Loading students - Page:', currentPage);
+        
         const startRange = currentPage * STUDENTS_PER_PAGE;
         const endRange = startRange + STUDENTS_PER_PAGE - 1;
+
+        console.log('🔧 Query range:', startRange, '-', endRange);
 
         // Load students and notes in parallel for better performance
         const dataPromise = Promise.allSettled([
@@ -1771,6 +1775,13 @@
           dataPromise,
           timeoutPromise
         ]);
+
+        console.log('🔧 Query results:', {
+          studentsStatus: studentsResult.status,
+          studentsError: studentsResult.value?.error?.message,
+          studentsCount: studentsResult.value?.data?.length,
+          notesStatus: notesResult.status
+        });
 
         // Process students
         if (studentsResult.status === 'fulfilled' && !studentsResult.value.error) {
