@@ -301,6 +301,39 @@
       transform: translateY(-2px);
     }
 
+    /* Inline Edit Dropdowns */
+    .inline-edit-select {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid transparent;
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      outline: none;
+      appearance: none;
+      background-image: none;
+    }
+
+    .inline-edit-select:hover {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.8), rgba(15, 23, 42, 0.9));
+      border-color: rgba(45, 212, 191, 0.3);
+    }
+
+    .inline-edit-select:focus {
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 1));
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.1);
+    }
+
+    .inline-edit-select option {
+      background: var(--bg-card);
+      color: var(--text);
+      padding: 8px;
+    }
+
     /* Loading & Empty States */
     .loading, .empty-state {
       text-align: center;
@@ -741,8 +774,23 @@
               <td>${escapeHtml(student.full_name || 'N/A')}</td>
               <td>${escapeHtml(student.email || 'N/A')}</td>
               <td>${formatPhoneNumber(student.phone)}</td>
-              <td>${shortenProgram(student.program)}</td>
-              <td>${shortenStartTerm(student.start_term)}</td>
+              <td onclick="event.stopPropagation()">
+                <select class="inline-edit-select" onchange="updateStudentField('${student.id}', 'program', this.value, this)" onclick="event.stopPropagation()">
+                  <option value="Associate Degree in Nursing (ADN)" ${student.program === 'Associate Degree in Nursing (ADN)' ? 'selected' : ''}>ADN</option>
+                  <option value="Bachelor of Science in Nursing (BSN)" ${student.program === 'Bachelor of Science in Nursing (BSN)' ? 'selected' : ''}>BSN</option>
+                  <option value="RN Bridge Program" ${student.program === 'RN Bridge Program' ? 'selected' : ''}>RN Bridge</option>
+                </select>
+              </td>
+              <td onclick="event.stopPropagation()">
+                <select class="inline-edit-select" onchange="updateStudentField('${student.id}', 'start_term', this.value, this)" onclick="event.stopPropagation()">
+                  <option value="Spring Semester 2026" ${student.start_term === 'Spring Semester 2026' ? 'selected' : ''}>Spring 2026</option>
+                  <option value="Fall Semester 2026" ${student.start_term === 'Fall Semester 2026' ? 'selected' : ''}>Fall 2026</option>
+                  <option value="Spring Semester 2027" ${student.start_term === 'Spring Semester 2027' ? 'selected' : ''}>Spring 2027</option>
+                  <option value="Fall Semester 2027" ${student.start_term === 'Fall Semester 2027' ? 'selected' : ''}>Fall 2027</option>
+                  <option value="Spring Semester 2028" ${student.start_term === 'Spring Semester 2028' ? 'selected' : ''}>Spring 2028</option>
+                  <option value="Fall Semester 2028" ${student.start_term === 'Fall Semester 2028' ? 'selected' : ''}>Fall 2028</option>
+                </select>
+              </td>
               <td><span class="status-badge status-${statusValue}">${statusValue.toUpperCase()}</span></td>
               <td onclick="event.stopPropagation()">
                 <div class="actions">
@@ -952,6 +1000,62 @@
       div.textContent = text;
       return div.innerHTML;
     }
+
+    async function updateStudentField(studentId, field, newValue, selectElement) {
+      try {
+        const supabase = initSupabase();
+        if (!supabase) {
+          throw new Error('Failed to initialize Supabase');
+        }
+
+        // Update students table
+        const { error: studentError } = await supabase
+          .from('students')
+          .update({ 
+            [field]: newValue,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', studentId);
+
+        if (studentError) throw studentError;
+
+        // Find student and update applications table too
+        const student = allStudents.find(s => s.id === studentId);
+        if (student && student.application_id) {
+          const { error: appError } = await supabase
+            .from('applications')
+            .update({ [field]: newValue })
+            .eq('id', student.application_id);
+          
+          if (appError) console.warn('Failed to update application:', appError);
+        }
+
+        // Update local data
+        if (student) {
+          student[field] = newValue;
+        }
+
+        // Visual feedback - flash green
+        if (selectElement) {
+          selectElement.style.background = 'rgba(16, 185, 129, 0.2)';
+          selectElement.style.borderColor = '#10b981';
+          setTimeout(() => {
+            selectElement.style.background = '';
+            selectElement.style.borderColor = '';
+          }, 1000);
+        }
+
+        console.log(`✅ Updated ${field} to "${newValue}" for student ${studentId}`);
+      } catch (error) {
+        console.error(`❌ Failed to update ${field}:`, error);
+        alert('Failed to update field. Please try again.');
+        // Reload to restore original value
+        loadStudents();
+      }
+    }
+
+    // Expose globally for onclick handlers
+    window.updateStudentField = updateStudentField;
 
     function showSuccess(message) {
       showNotification(message, false);

@@ -1816,6 +1816,38 @@ function getStoredStudentId() {
 
     <article class="portal-panel" id="financial" role="tabpanel" aria-labelledby="tab-financial">
       <div class="financial-grid" id="financialSummary"></div>
+      
+      <!-- Upload Button Section -->
+      <div style="margin: 20px 0; text-align: center;">
+        <button 
+          onclick="openUploadModal()" 
+          style="
+            background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+          "
+          onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(45, 212, 191, 0.4)'"
+          onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 12px rgba(45, 212, 191, 0.3)'"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="flex-shrink: 0;">
+            <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M17 8L12 3L7 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M12 3V15" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span>Upload Document</span>
+        </button>
+      </div>
+      
       <div class="financial-warning" id="financialHoldNotice" style="display:none"></div>
       <div class="table-wrap history-table" id="paymentHistoryTable"></div>
     </article>
@@ -2472,11 +2504,255 @@ function getStoredStudentId() {
 </div>
 </div>
 
-<script src="js/html2pdf.bundle.min.js"></script>
+<!-- DOCUMENT UPLOAD MODAL -->
+<div id="uploadModal" style="
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 10000;
+  justify-content: center;
+  align-items: center;
+  animation: fadeIn 0.3s ease;
+">
+  <div style="
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 25px 80px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(45, 212, 191, 0.1);
+    animation: slideUp 0.3s ease;
+    border: 1px solid rgba(45, 212, 191, 0.2);
+  ">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px;">
+      <h2 style="margin: 0; color: #ffffff; font-size: 26px; font-weight: 700; display: flex; align-items: center; gap: 12px;">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: #2dd4bf;">
+          <path d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M17 8L12 3L7 8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M12 3V15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Upload Document</span>
+      </h2>
+      <button onclick="closeUploadModal()" style="
+        background: rgba(45, 212, 191, 0.1);
+        border: 1px solid rgba(45, 212, 191, 0.2);
+        font-size: 24px;
+        color: #94a3b8;
+        cursor: pointer;
+        line-height: 1;
+        padding: 8px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        transition: all 0.2s;
+      " onmouseover="this.style.background='rgba(239, 68, 68, 0.2)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'; this.style.color='#ef4444'" onmouseout="this.style.background='rgba(45, 212, 191, 0.1)'; this.style.borderColor='rgba(45, 212, 191, 0.2)'; this.style.color='#94a3b8'">
+        ×
+      </button>
+    </div>
+
+    <form id="uploadForm" onsubmit="handleUpload(event)">
+      <!-- Document Type Selection -->
+      <div style="margin-bottom: 24px;">
+        <label for="documentType" style="
+          display: block;
+          margin-bottom: 10px;
+          color: #cbd5e1;
+          font-weight: 600;
+          font-size: 14px;
+          letter-spacing: 0.3px;
+        ">
+          Document Type <span style="color: #f87171;">*</span>
+        </label>
+        <select id="documentType" required style="
+          width: 100%;
+          padding: 14px 16px;
+          border: 2px solid rgba(45, 212, 191, 0.2);
+          background: rgba(30, 41, 59, 0.5);
+          border-radius: 12px;
+          font-size: 15px;
+          color: #e2e8f0;
+          cursor: pointer;
+          transition: all 0.2s;
+          font-weight: 500;
+        " onfocus="this.style.borderColor='#2dd4bf'; this.style.background='rgba(30, 41, 59, 0.8)'" onblur="this.style.borderColor='rgba(45, 212, 191, 0.2)'; this.style.background='rgba(30, 41, 59, 0.5)'">
+          <option value="Invoice Payment Receipt" style="background: #1e293b; color: #e2e8f0;">Invoice Payment Receipt</option>
+          <option value="Transcript" style="background: #1e293b; color: #e2e8f0;">Transcript</option>
+          <option value="ID Document" style="background: #1e293b; color: #e2e8f0;">ID Document</option>
+          <option value="Medical Certificate" style="background: #1e293b; color: #e2e8f0;">Medical Certificate</option>
+          <option value="Recommendation Letter" style="background: #1e293b; color: #e2e8f0;">Recommendation Letter</option>
+          <option value="Proof of Address" style="background: #1e293b; color: #e2e8f0;">Proof of Address</option>
+          <option value="Bank Statement" style="background: #1e293b; color: #e2e8f0;">Bank Statement</option>
+          <option value="Other Document" style="background: #1e293b; color: #e2e8f0;">Other Document</option>
+        </select>
+      </div>
+
+      <!-- File Upload -->
+      <div style="margin-bottom: 24px;">
+        <label for="fileInput" style="
+          display: block;
+          margin-bottom: 10px;
+          color: #cbd5e1;
+          font-weight: 600;
+          font-size: 14px;
+          letter-spacing: 0.3px;
+        ">
+          Select File <span style="color: #f87171;">*</span>
+        </label>
+        <input 
+          type="file" 
+          id="fileInput" 
+          required
+          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+          style="
+            width: 100%;
+            padding: 14px;
+            border: 2px dashed rgba(45, 212, 191, 0.3);
+            background: rgba(30, 41, 59, 0.3);
+            border-radius: 12px;
+            font-size: 14px;
+            color: #cbd5e1;
+            cursor: pointer;
+            transition: all 0.2s;
+          "
+          onchange="updateFileName(this)"
+          onfocus="this.style.borderColor='#2dd4bf'; this.style.background='rgba(30, 41, 59, 0.6)'"
+          onblur="this.style.borderColor='rgba(45, 212, 191, 0.3)'; this.style.background='rgba(30, 41, 59, 0.3)'"
+        />
+        <p style="margin: 10px 0 0 0; font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 6px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="opacity: 0.7;">
+            <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
+            <path d="M12 16V12M12 8H12.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span>Accepted: PDF, JPG, PNG, DOC, DOCX (Max 10MB)</span>
+        </p>
+      </div>
+
+      <!-- Optional Notes -->
+      <div style="margin-bottom: 28px;">
+        <label for="documentNotes" style="
+          display: block;
+          margin-bottom: 10px;
+          color: #cbd5e1;
+          font-weight: 600;
+          font-size: 14px;
+          letter-spacing: 0.3px;
+        ">
+          Notes (Optional)
+        </label>
+        <textarea 
+          id="documentNotes" 
+          rows="3"
+          placeholder="Add any additional notes about this document..."
+          style="
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid rgba(45, 212, 191, 0.2);
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 12px;
+            font-size: 14px;
+            color: #e2e8f0;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.2s;
+          "
+          onfocus="this.style.borderColor='#2dd4bf'; this.style.background='rgba(30, 41, 59, 0.8)'" 
+          onblur="this.style.borderColor='rgba(45, 212, 191, 0.2)'; this.style.background='rgba(30, 41, 59, 0.5)'"
+        ></textarea>
+      </div>
+
+      <!-- Progress Bar (hidden by default) -->
+      <div id="uploadProgress" style="display: none; margin-bottom: 24px;">
+        <div style="
+          background: rgba(30, 41, 59, 0.6);
+          border-radius: 12px;
+          height: 10px;
+          overflow: hidden;
+          border: 1px solid rgba(45, 212, 191, 0.2);
+        ">
+          <div id="progressBar" style="
+            background: linear-gradient(90deg, #2dd4bf, #14b8a6);
+            height: 100%;
+            width: 0%;
+            transition: width 0.3s ease;
+            box-shadow: 0 0 20px rgba(45, 212, 191, 0.5);
+          "></div>
+        </div>
+        <p id="progressText" style="
+          margin: 12px 0 0 0;
+          font-size: 13px;
+          color: #94a3b8;
+          text-align: center;
+          font-weight: 500;
+        ">Uploading...</p>
+      </div>
+
+      <!-- Buttons -->
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 32px;">
+        <button type="button" onclick="closeUploadModal()" style="
+          padding: 14px 28px;
+          background: rgba(100, 116, 139, 0.2);
+          color: #cbd5e1;
+          border: 1px solid rgba(100, 116, 139, 0.3);
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(100, 116, 139, 0.3)'; this.style.borderColor='rgba(100, 116, 139, 0.4)'" onmouseout="this.style.background='rgba(100, 116, 139, 0.2)'; this.style.borderColor='rgba(100, 116, 139, 0.3)'">
+          Cancel
+        </button>
+        <button type="submit" id="uploadButton" style="
+          padding: 14px 36px;
+          background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
+          color: white;
+          border: none;
+          border-radius: 12px;
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 16px rgba(45, 212, 191, 0.4);
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 24px rgba(45, 212, 191, 0.5)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 16px rgba(45, 212, 191, 0.4)'">
+          Upload
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>
+
+<script defer src="js/html2pdf.bundle.min.js"></script>
 <!-- Supabase Client Library -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <!-- Supabase Configuration -->
-<script src="js/supabase-config.js"></script>
+<script defer src="js/supabase-config.js"></script>
+<!-- Alert System -->
+<script defer src="js/alerts.js"></script>
 <!-- Activity Logger -->
 <script src="js/activity-logger.js"></script>
 <!-- Transcript Verification Service -->
@@ -5644,6 +5920,174 @@ async function openStudentHub() {
   
   logPortalActivity('navigate', 'student', 'Opened Student Hub', { studentId: studentProfile.student_id });
 }
+
+// ==========================================
+// DOCUMENT UPLOAD FUNCTIONALITY
+// ==========================================
+
+function openUploadModal() {
+  document.getElementById('uploadModal').style.display = 'flex';
+  document.getElementById('uploadForm').reset();
+  document.getElementById('uploadProgress').style.display = 'none';
+}
+
+function closeUploadModal() {
+  document.getElementById('uploadModal').style.display = 'none';
+  document.getElementById('uploadForm').reset();
+  document.getElementById('uploadProgress').style.display = 'none';
+}
+
+function updateFileName(input) {
+  if (input.files && input.files[0]) {
+    const file = input.files[0];
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    
+    if (file.size > maxSize) {
+      alert('File is too large! Maximum size is 10MB.');
+      input.value = '';
+      return;
+    }
+    
+    console.log('📎 File selected:', file.name, `(${(file.size / 1024).toFixed(2)} KB)`);
+  }
+}
+
+async function handleUpload(event) {
+  event.preventDefault();
+  
+  const documentType = document.getElementById('documentType').value;
+  const fileInput = document.getElementById('fileInput');
+  const notes = document.getElementById('documentNotes').value;
+  const uploadButton = document.getElementById('uploadButton');
+  const progressDiv = document.getElementById('uploadProgress');
+  const progressBar = document.getElementById('progressBar');
+  const progressText = document.getElementById('progressText');
+  
+  if (!fileInput.files || !fileInput.files[0]) {
+    alert('Please select a file to upload');
+    return;
+  }
+  
+  const file = fileInput.files[0];
+  
+  try {
+    // Disable form
+    uploadButton.disabled = true;
+    uploadButton.textContent = 'Uploading...';
+    progressDiv.style.display = 'block';
+    progressBar.style.width = '10%';
+    progressText.textContent = 'Preparing upload...';
+    
+    // Get student profile
+    const studentProfile = dataset.profile;
+    if (!studentProfile || !studentProfile.application_id) {
+      throw new Error('Student application ID not found. Cannot upload document.');
+    }
+    
+    console.log('📤 Starting upload for application:', studentProfile.application_id);
+    
+    // Initialize Supabase
+    const supabase = initSupabase();
+    
+    // Create unique filename
+    const timestamp = Date.now();
+    const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storagePath = `documents/${studentProfile.application_id}/${timestamp}_${cleanFileName}`;
+    
+    progressBar.style.width = '30%';
+    progressText.textContent = 'Uploading to server...';
+    
+    // Upload to Supabase Storage
+    const { data: uploadData, error: uploadError } = await supabase
+      .storage
+      .from('application-documents')
+      .upload(storagePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+    
+    if (uploadError) throw uploadError;
+    
+    progressBar.style.width = '60%';
+    progressText.textContent = 'Getting file URL...';
+    
+    // Get public URL
+    const { data: urlData } = supabase
+      .storage
+      .from('application-documents')
+      .getPublicUrl(storagePath);
+    
+    const publicUrl = urlData.publicUrl;
+    
+    progressBar.style.width = '80%';
+    progressText.textContent = 'Saving to database...';
+    
+    // Create document record
+    const documentRecord = {
+      doc_name: documentType,
+      filename: file.name,
+      public_url: publicUrl,
+      size: file.size,
+      uploaded_at: new Date().toISOString(),
+      notes: notes || null,
+      uploaded_by: 'student'
+    };
+    
+    // Get current uploaded_documents array
+    const { data: currentApp, error: fetchError } = await supabase
+      .from('applications')
+      .select('uploaded_documents')
+      .eq('id', studentProfile.application_id)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    const currentDocs = currentApp.uploaded_documents || [];
+    const updatedDocs = [...currentDocs, documentRecord];
+    
+    // Update application with new document
+    const { error: updateError } = await supabase
+      .from('applications')
+      .update({ uploaded_documents: updatedDocs })
+      .eq('id', studentProfile.application_id);
+    
+    if (updateError) throw updateError;
+    
+    progressBar.style.width = '100%';
+    progressText.textContent = 'Upload complete!';
+    
+    console.log('✅ Document uploaded successfully:', documentRecord);
+    
+    // Success notification
+    setTimeout(() => {
+      alert(`✅ Success!\n\nYour ${documentType} has been uploaded successfully.\n\nAdministrators will review your document shortly.`);
+      closeUploadModal();
+      uploadButton.disabled = false;
+      uploadButton.textContent = 'Upload';
+    }, 500);
+    
+  } catch (error) {
+    console.error('❌ Upload error:', error);
+    alert(`Upload failed: ${error.message}\n\nPlease try again or contact support if the issue persists.`);
+    
+    uploadButton.disabled = false;
+    uploadButton.textContent = 'Upload';
+    progressDiv.style.display = 'none';
+  }
+}
+
+// Close modal on background click
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('uploadModal');
+  if (modal) {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        closeUploadModal();
+      }
+    });
+  }
+});
+
 </script>
 
 </body>
