@@ -12,12 +12,12 @@ WHERE id = '5afc4def-0dd9-438f-9200-5f9cfee78106';
 -- Check each document in the array
 SELECT 
   '2. APPLICATIONS - Individual Documents' as step,
-  ordinality - 1 as array_index,
-  doc->>'doc_name' as document_type,
-  doc->>'filename' as filename,
-  left(doc->>'public_url', 80) as url_preview
+  (ordinality - 1)::text as array_index,
+  elem->>'doc_name' as document_type,
+  elem->>'filename' as filename,
+  left(elem->>'public_url', 80) as url_preview
 FROM applications,
-jsonb_array_elements(uploaded_documents) WITH ORDINALITY AS doc
+jsonb_array_elements(uploaded_documents) WITH ORDINALITY AS elem(doc, ordinality)
 WHERE id = '5afc4def-0dd9-438f-9200-5f9cfee78106'
 ORDER BY ordinality;
 
