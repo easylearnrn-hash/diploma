@@ -318,6 +318,35 @@
       border-bottom: none;
     }
 
+    .payment-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .payment-status.paid {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+
+    .payment-status.pending {
+      background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(100, 116, 139, 0.3);
+    }
+
+    .payment-status.partial {
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      color: white;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    }
+
     .totals-section {
       display: flex;
       justify-content: flex-end;
@@ -652,6 +681,7 @@
                   <th>UNIT PRICE</th>
                   <th>DISCOUNT</th>
                   <th>TOTAL</th>
+                  <th>STATUS</th>
                 </tr>
               </thead>
               <tbody id="itemsTableBody">
@@ -796,6 +826,30 @@
         const itemsBody = document.getElementById('itemsTableBody');
         let calculatedSubtotal = 0;
         
+        // Parse payment history from notes with amounts
+        const paymentMap = new Map(); // Map of item name -> total amount paid
+        let totalPaid = 0;
+        
+        if (invoice.notes) {
+          const paymentSections = invoice.notes.split('--- PARTIAL PAYMENT RECORDED ---');
+          paymentSections.forEach(section => {
+            const amountMatch = section.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+            const appliedToMatch = section.match(/Applied To:\s*(.+?)(?=\n|$)/);
+            
+            if (amountMatch && appliedToMatch) {
+              const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
+              const appliedTo = appliedToMatch[1].trim();
+              
+              // Add to total paid
+              totalPaid += amount;
+              
+              // Track payment by item
+              const currentAmount = paymentMap.get(appliedTo) || 0;
+              paymentMap.set(appliedTo, currentAmount + amount);
+            }
+          });
+        }
+        
         if (invoice.items && invoice.items.length > 0) {
           itemsBody.innerHTML = invoice.items.map(item => {
             const qty = item.qty || item.quantity || 1;
@@ -808,13 +862,47 @@
             // Add to calculated subtotal
             calculatedSubtotal += lineTotal;
             
+            // Determine payment status
+            const itemDescription = item.description || 'Untitled Item';
+            let statusHTML = '';
+            
+            // Check if this item has been paid (flexible matching)
+            let paidAmount = 0;
+            
+            // Try exact match first
+            if (paymentMap.has(itemDescription)) {
+              paidAmount = paymentMap.get(itemDescription);
+            } else {
+              // Try partial matching - check if payment name is contained in item description
+              for (const [paymentName, amount] of paymentMap.entries()) {
+                // Check if item description starts with payment name
+                // e.g., "February Tuition" matches "February Tuition - Bachelor of Science in Nursing"
+                if (itemDescription.toLowerCase().startsWith(paymentName.toLowerCase()) ||
+                    itemDescription.toLowerCase().includes(paymentName.toLowerCase())) {
+                  paidAmount += amount;
+                }
+              }
+            }
+            
+            if (paidAmount >= lineTotal) {
+              statusHTML = '<span class="payment-status paid">✓ Fully Paid</span>';
+            } else if (paidAmount > 0 && paidAmount < lineTotal) {
+              const remaining = lineTotal - paidAmount;
+              statusHTML = `<span class="payment-status partial">⚡ Partial ($${paidAmount.toFixed(2)} / $${lineTotal.toFixed(2)})</span>`;
+            } else if (invoice.status === 'paid') {
+              statusHTML = '<span class="payment-status paid">✓ Fully Paid</span>';
+            } else {
+              statusHTML = '<span class="payment-status pending">⏳ Pending</span>';
+            }
+            
             return `
             <tr>
-              <td>${item.description || 'Untitled Item'}</td>
+              <td>${itemDescription}</td>
               <td>${qty}</td>
               <td>${formatMoney(price)}</td>
               <td>${discountPercent > 0 ? `-${discountPercent}% (${formatMoney(discountAmount)})` : '—'}</td>
               <td>${formatMoney(lineTotal)}</td>
+              <td>${statusHTML}</td>
             </tr>
           `;
           }).join('');
@@ -825,12 +913,35 @@
         const taxRate = invoice.tax_rate || 0;
         const taxAmount = invoice.tax_amount && invoice.tax_amount > 0 ? invoice.tax_amount : (subtotal * taxRate / 100);
         const total = invoice.total && invoice.total > 0 ? invoice.total : (subtotal + taxAmount);
+        const remainingBalance = total - totalPaid;
         
         // Populate totals
         document.getElementById('subtotal').textContent = formatMoney(subtotal);
         document.getElementById('taxRate').textContent = taxRate;
         document.getElementById('taxAmount').textContent = formatMoney(taxAmount);
         document.getElementById('total').textContent = formatMoney(total);
+        
+        // Add Amount Paid and Remaining Balance if there are partial payments
+        if (totalPaid > 0) {
+          const totalsTable = document.querySelector('.totals-table');
+          const totalRow = totalsTable.querySelector('tr:last-child');
+          
+          // Insert Amount Paid row before Total
+          const paidRow = document.createElement('tr');
+          paidRow.innerHTML = `
+            <td class="label" style="color: #10b981; font-weight: 600;">Amount Paid</td>
+            <td class="amount" style="color: #10b981; font-weight: 600;">-${formatMoney(totalPaid)}</td>
+          `;
+          totalRow.parentNode.insertBefore(paidRow, totalRow);
+          
+          // Add Remaining Balance row after Total
+          const remainingRow = document.createElement('tr');
+          remainingRow.innerHTML = `
+            <td class="label" style="color: ${remainingBalance > 0 ? '#64748b' : '#10b981'}; font-weight: 700; font-size: 18px;">Remaining Balance</td>
+            <td class="amount" style="color: ${remainingBalance > 0 ? '#64748b' : '#10b981'}; font-weight: 700; font-size: 18px;">${formatMoney(remainingBalance)}</td>
+          `;
+          totalRow.parentNode.insertBefore(remainingRow, totalRow.nextSibling);
+        }
 
         // Populate notes
         if (invoice.notes && invoice.notes.trim()) {
