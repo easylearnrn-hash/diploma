@@ -2246,6 +2246,15 @@
         const yesCount = responses?.filter(r => r.answer === 'yes').length || 0;
         const noCount = responses?.filter(r => r.answer === 'no').length || 0;
 
+        // Get impressions with student details
+        const { data: impressions, error: impressionsError } = await db
+          .from('portal_alert_impressions')
+          .select('*, students(full_name, student_id, email)')
+          .eq('alert_id', alertId)
+          .order('viewed_at', { ascending: false });
+
+        if (impressionsError) console.error('Error loading impressions:', impressionsError);
+
         // Render analytics
         let html = `
           <div class="card">
@@ -2254,19 +2263,19 @@
             </div>
             
             <div class="stats-grid">
-              <div class="stat-card">
+              <div class="stat-card clickable-stat" data-stat-type="views" style="cursor: pointer; transition: all 0.2s;">
                 <div class="stat-value">${impressionsCount || 0}</div>
                 <div class="stat-label">Total Views</div>
               </div>
-              <div class="stat-card">
+              <div class="stat-card clickable-stat" data-stat-type="yes" style="cursor: pointer; transition: all 0.2s;">
                 <div class="stat-value">${yesCount}</div>
                 <div class="stat-label">Yes Responses</div>
               </div>
-              <div class="stat-card">
+              <div class="stat-card clickable-stat" data-stat-type="no" style="cursor: pointer; transition: all 0.2s;">
                 <div class="stat-value">${noCount}</div>
                 <div class="stat-label">No Responses</div>
               </div>
-              <div class="stat-card">
+              <div class="stat-card clickable-stat" data-stat-type="all-responses" style="cursor: pointer; transition: all 0.2s;">
                 <div class="stat-value">${(responses?.length || 0)}</div>
                 <div class="stat-label">Total Responses</div>
               </div>
@@ -2301,10 +2310,229 @@
         html += '</div>';
         container.innerHTML = html;
 
+        // Add click handlers to stat cards
+        const statCards = container.querySelectorAll('.clickable-stat');
+        statCards.forEach(card => {
+          const statType = card.dataset.statType;
+          
+          // Add hover effect
+          card.addEventListener('mouseenter', () => {
+            card.style.transform = 'translateY(-2px)';
+            card.style.boxShadow = '0 8px 20px rgba(0, 0, 0, 0.4)';
+          });
+          card.addEventListener('mouseleave', () => {
+            card.style.transform = 'translateY(0)';
+            card.style.boxShadow = '';
+          });
+
+          // Add click handler
+          card.addEventListener('click', () => {
+            if (statType === 'views') {
+              showStudentListModal('Students Who Viewed', impressions || [], 'viewed_at');
+            } else if (statType === 'yes') {
+              const yesResponses = responses?.filter(r => r.answer === 'yes') || [];
+              showStudentListModal('Students Who Answered Yes', yesResponses, 'answered_at');
+            } else if (statType === 'no') {
+              const noResponses = responses?.filter(r => r.answer === 'no') || [];
+              showStudentListModal('Students Who Answered No', noResponses, 'answered_at');
+            } else if (statType === 'all-responses') {
+              showStudentListModal('All Student Responses', responses || [], 'answered_at');
+            }
+          });
+        });
+
       } catch (error) {
         console.error('Error loading analytics:', error);
         document.getElementById('analytics-container').innerHTML = 
           '<div class="empty-state"><p>Error loading analytics. Please try again.</p></div>';
+      }
+    }
+
+    // ==========================================
+    // STUDENT LIST MODAL
+    // ==========================================
+    function showStudentListModal(title, studentList, dateField) {
+      // Remove existing modal if any
+      const existingModal = document.getElementById('student-list-modal');
+      if (existingModal) existingModal.remove();
+
+      // Create modal
+      const modal = document.createElement('div');
+      modal.id = 'student-list-modal';
+      modal.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        padding: 40px 20px;
+        animation: fadeIn 0.2s ease-out;
+      `;
+
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+        border-radius: 16px;
+        max-width: 800px;
+        width: 100%;
+        max-height: 80vh;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        animation: slideUp 0.3s ease-out;
+      `;
+
+      // Generate student list HTML
+      let studentsHTML = '';
+      if (studentList.length === 0) {
+        studentsHTML = `
+          <div style="
+            padding: 40px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 15px;
+          ">
+            <span style="font-size: 48px; display: block; margin-bottom: 16px; opacity: 0.5;">📭</span>
+            No students to display
+          </div>
+        `;
+      } else {
+        studentsHTML = '<div style="overflow-y: auto; max-height: 60vh;">';
+        studentsHTML += '<table style="width: 100%; border-collapse: collapse;">';
+        studentsHTML += `
+          <thead style="
+            position: sticky;
+            top: 0;
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            z-index: 1;
+            border-bottom: 2px solid rgba(45, 212, 191, 0.3);
+          ">
+            <tr>
+              <th style="padding: 16px; text-align: left; color: #2dd4bf; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">#</th>
+              <th style="padding: 16px; text-align: left; color: #2dd4bf; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Student Name</th>
+              <th style="padding: 16px; text-align: left; color: #2dd4bf; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Student ID</th>
+              <th style="padding: 16px; text-align: left; color: #2dd4bf; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Email</th>
+              <th style="padding: 16px; text-align: left; color: #2dd4bf; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px;">Date/Time</th>
+            </tr>
+          </thead>
+          <tbody>
+        `;
+
+        studentList.forEach((record, index) => {
+          const student = record.students || {};
+          const date = record[dateField] ? new Date(record[dateField]).toLocaleString() : 'N/A';
+          const rowBg = index % 2 === 0 ? 'rgba(255, 255, 255, 0.02)' : 'transparent';
+          
+          studentsHTML += `
+            <tr style="
+              background: ${rowBg};
+              border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+              transition: background 0.2s;
+            " onmouseenter="this.style.background='rgba(45, 212, 191, 0.08)'" onmouseleave="this.style.background='${rowBg}'">
+              <td style="padding: 14px 16px; color: #94a3b8; font-size: 14px;">${index + 1}</td>
+              <td style="padding: 14px 16px; color: #e2e8f0; font-size: 14px; font-weight: 500;">${escapeHtml(student.full_name || 'N/A')}</td>
+              <td style="padding: 14px 16px; color: #cbd5e1; font-size: 14px; font-family: 'Monaco', monospace;">${escapeHtml(student.student_id || 'N/A')}</td>
+              <td style="padding: 14px 16px; color: #94a3b8; font-size: 13px;">${escapeHtml(student.email || 'N/A')}</td>
+              <td style="padding: 14px 16px; color: #94a3b8; font-size: 13px;">${date}</td>
+            </tr>
+          `;
+        });
+
+        studentsHTML += '</tbody></table></div>';
+      }
+
+      modalContent.innerHTML = `
+        <div style="
+          padding: 28px 32px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        ">
+          <div>
+            <h3 style="
+              margin: 0 0 4px 0;
+              font-size: 22px;
+              font-weight: 700;
+              color: #e2e8f0;
+            ">${escapeHtml(title)}</h3>
+            <p style="
+              margin: 0;
+              color: #94a3b8;
+              font-size: 14px;
+            ">${studentList.length} student${studentList.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button class="close-modal-btn" style="
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+            font-size: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          " title="Close">×</button>
+        </div>
+        ${studentsHTML}
+      `;
+
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+
+      // Close button handler
+      const closeBtn = modalContent.querySelector('.close-modal-btn');
+      closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.background = 'rgba(239, 68, 68, 0.25)';
+        closeBtn.style.transform = 'scale(1.05)';
+      });
+      closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.background = 'rgba(239, 68, 68, 0.15)';
+        closeBtn.style.transform = 'scale(1)';
+      });
+      closeBtn.addEventListener('click', () => modal.remove());
+
+      // Click outside to close
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+
+      // ESC key to close
+      const escHandler = (e) => {
+        if (e.key === 'Escape') {
+          modal.remove();
+          document.removeEventListener('keydown', escHandler);
+        }
+      };
+      document.addEventListener('keydown', escHandler);
+
+      // Add animations to head if not already present
+      if (!document.getElementById('modal-animations')) {
+        const style = document.createElement('style');
+        style.id = 'modal-animations';
+        style.textContent = `
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+          @keyframes slideUp {
+            from {
+              opacity: 0;
+              transform: translateY(20px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+        `;
+        document.head.appendChild(style);
       }
     }
 
