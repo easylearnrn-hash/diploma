@@ -2835,7 +2835,7 @@ Payment must be made to the following account:
               <button class="secondary" onclick="window.open('${invoiceUrl}', '_blank')">🔗 View Invoice</button>
               <button class="secondary" onclick="copyInvoiceUrl('${invoiceUrl}')">📋 Copy URL</button>
               <button class="secondary" onclick="sendInvoiceEmail('${invoice.id}', '${invoice.student_name}', '${invoiceUrl}')">📧 Send Invoice</button>
-              ${invoice.payment_receipts && invoice.payment_receipts.length > 0 ? `<button class="secondary" onclick="viewReceipts('${invoice.id}', ${JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;')})">📄 View Receipt${invoice.payment_receipts.length > 1 ? 's' : ''}</button>` : ''}
+              ${invoice.payment_receipts && invoice.payment_receipts.length > 0 ? `<button class="secondary" onclick="viewReceipts('${invoice.id}', ${JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;')})" style="position: relative;">📄 View Receipts <span style="position: absolute; top: -8px; right: -8px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: white; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);">${invoice.payment_receipts.length}</span></button>` : ''}
               <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
               ${paymentButtons}
               <button class="danger" onclick="deleteInvoice('${invoice.id}')">Delete</button>
@@ -2906,6 +2906,40 @@ Payment must be made to the following account:
       try {
         // If status is 'partial', show detailed payment modal
         if (newStatus === 'partial') {
+          // First, load the invoice data to get the monthly fee
+          const { data: invoice, error: fetchError } = await invoiceSupabase
+            .from('invoices')
+            .select('*')
+            .eq('id', invoiceId)
+            .single();
+          
+          if (fetchError) throw fetchError;
+          
+          // Calculate monthly tuition from items
+          let monthlyTuition = 0;
+          if (invoice.items && invoice.items.length > 0) {
+            // Find tuition items (excluding down payment)
+            const tuitionItems = invoice.items.filter(item => 
+              item.description && 
+              item.description.toLowerCase().includes('tuition') &&
+              !item.description.toLowerCase().includes('down payment') &&
+              !item.description.toLowerCase().includes('enrollment')
+            );
+            
+            if (tuitionItems.length > 0) {
+              // Calculate the monthly rate
+              const totalTuition = tuitionItems.reduce((sum, item) => {
+                const qty = item.qty || item.quantity || 1;
+                const price = item.price || 0;
+                return sum + (qty * price);
+              }, 0);
+              
+              // Divide by number of months (usually in quantity)
+              const totalMonths = tuitionItems.reduce((sum, item) => sum + (item.qty || item.quantity || 1), 0);
+              monthlyTuition = totalMonths > 0 ? totalTuition / totalMonths : 0;
+            }
+          }
+          
           // Create modal for partial payment details
           const modal = document.createElement('div');
           modal.style.cssText = `
@@ -3013,6 +3047,20 @@ Payment must be made to the following account:
           
           modal.appendChild(modalContent);
           document.body.appendChild(modal);
+          
+          // Auto-fill amount when month is selected
+          const paymentForSelect = document.getElementById('partialPaymentFor');
+          const amountInput = document.getElementById('partialAmount');
+          
+          paymentForSelect.addEventListener('change', (e) => {
+            const selectedValue = e.target.value;
+            
+            // If a month tuition is selected and monthly tuition is calculated
+            if (selectedValue && selectedValue.includes('Tuition') && monthlyTuition > 0) {
+              amountInput.value = monthlyTuition.toFixed(2);
+              amountInput.focus();
+            }
+          });
           
           document.getElementById('partialAmount').focus();
           
@@ -3525,7 +3573,7 @@ Payment must be made to the following account:
             z-index: 1;
           ">
             <h3 style="margin: 0; color: #e2e8f0; font-size: 22px; font-weight: 700;">
-              📄 Payment Receipt${receiptsArray.length > 1 ? 's' : ''}
+              📄 Payment Receipts
             </h3>
             <button onclick="this.closest('[style*=fixed]').remove()" style="
               background: rgba(239, 68, 68, 0.15);
