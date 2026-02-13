@@ -2835,6 +2835,7 @@ Payment must be made to the following account:
               <button class="secondary" onclick="window.open('${invoiceUrl}', '_blank')">🔗 View Invoice</button>
               <button class="secondary" onclick="copyInvoiceUrl('${invoiceUrl}')">📋 Copy URL</button>
               <button class="secondary" onclick="sendInvoiceEmail('${invoice.id}', '${invoice.student_name}', '${invoiceUrl}')">📧 Send Invoice</button>
+              ${invoice.payment_receipts && invoice.payment_receipts.length > 0 ? `<button class="secondary" onclick="viewReceipts('${invoice.id}', ${JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;')})">📄 View Receipt${invoice.payment_receipts.length > 1 ? 's' : ''}</button>` : ''}
               <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
               ${paymentButtons}
               <button class="danger" onclick="deleteInvoice('${invoice.id}')">Delete</button>
@@ -3457,6 +3458,106 @@ Payment must be made to the following account:
       }
     };
 
+    // View payment receipts
+    function viewReceipts(invoiceId, receipts) {
+      const receiptsArray = typeof receipts === 'string' ? JSON.parse(receipts) : receipts;
+      
+      let receiptHTML = receiptsArray.map((receipt, index) => {
+        const fileType = receipt.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+        const uploadDate = new Date(receipt.uploaded_at).toLocaleString();
+        const fileSize = ((receipt.size || 0) / 1024).toFixed(2) + ' KB';
+        
+        return `
+          <div style="margin-bottom: 20px; padding: 16px; background: rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.3); border-radius: 8px;">
+            <div style="margin-bottom: 12px;">
+              <strong style="color: #2dd4bf;">Receipt ${index + 1}:</strong> ${receipt.filename}
+            </div>
+            <div style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">
+              <div>📅 Uploaded: ${uploadDate}</div>
+              <div>📦 Size: ${fileSize}</div>
+            </div>
+            ${fileType === 'pdf' ? 
+              `<iframe src="${receipt.public_url}" style="width: 100%; height: 500px; border: none; border-radius: 4px; background: white;"></iframe>` :
+              `<img src="${receipt.public_url}" style="max-width: 100%; height: auto; border-radius: 4px; display: block;" />`
+            }
+            <div style="margin-top: 12px;">
+              <button onclick="window.open('${receipt.public_url}', '_blank')" style="padding: 8px 16px; background: #14b8a6; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">
+                Open in New Tab
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      
+      const modal = document.createElement('div');
+      modal.style.cssText = `
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10000;
+        padding: 20px;
+      `;
+      
+      modal.innerHTML = `
+        <div style="
+          background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+          border-radius: 16px;
+          max-width: 900px;
+          width: 100%;
+          max-height: 90vh;
+          overflow-y: auto;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+          border: 1px solid rgba(45, 212, 191, 0.2);
+        ">
+          <div style="
+            padding: 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+            z-index: 1;
+          ">
+            <h3 style="margin: 0; color: #e2e8f0; font-size: 22px; font-weight: 700;">
+              📄 Payment Receipt${receiptsArray.length > 1 ? 's' : ''}
+            </h3>
+            <button onclick="this.closest('[style*=fixed]').remove()" style="
+              background: rgba(239, 68, 68, 0.15);
+              border: 1px solid rgba(239, 68, 68, 0.3);
+              color: #ef4444;
+              font-size: 24px;
+              cursor: pointer;
+              width: 36px;
+              height: 36px;
+              border-radius: 8px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              transition: all 0.2s;
+            " onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.15)'">
+              ×
+            </button>
+          </div>
+          <div style="padding: 24px;">
+            ${receiptHTML}
+          </div>
+        </div>
+      `;
+      
+      document.body.appendChild(modal);
+      modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+      });
+    }
+
+    // Make viewReceipts globally accessible
+    window.viewReceipts = viewReceipts;
 
     // Live update on all inputs
     ['studentName', 'studentId', 'program', 'notes'].forEach((id) => {

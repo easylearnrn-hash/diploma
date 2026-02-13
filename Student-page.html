@@ -1976,11 +1976,11 @@ function getStoredStudentId() {
       <!-- File Upload -->
       <div class="modal-form-group">
         <label>Upload Supporting Documents (Optional)</label>
-        <div class="file-upload-zone" onclick="document.getElementById('fileInput').click()" ondragover="event.preventDefault(); this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleFileDrop(event)">
+        <div class="file-upload-zone" onclick="document.getElementById('profileUpdateFileInput').click()" ondragover="event.preventDefault(); this.classList.add('drag-over')" ondragleave="this.classList.remove('drag-over')" ondrop="handleFileDrop(event)">
           <div class="file-upload-icon">📎</div>
           <div style="font-weight:600;color:#0f172a;margin-bottom:4px">Click to upload or drag and drop</div>
           <div style="font-size:13px;color:#64748b">PDF, JPG, PNG (max 5MB per file)</div>
-          <input type="file" id="fileInput" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="handleFileSelect(event)">
+          <input type="file" id="profileUpdateFileInput" multiple accept=".pdf,.jpg,.jpeg,.png" onchange="handleFileSelect(event)">
         </div>
         <div id="uploadedFilesList" class="uploaded-files-list"></div>
         <small>Upload scanned copies of your supporting documents. Maximum 5 files, 5MB each.</small>
@@ -2596,7 +2596,7 @@ function getStoredStudentId() {
 
       <!-- File Upload -->
       <div style="margin-bottom: 24px;">
-        <label for="fileInput" style="
+        <label for="financialDocFileInput" style="
           display: block;
           margin-bottom: 10px;
           color: #cbd5e1;
@@ -2608,7 +2608,7 @@ function getStoredStudentId() {
         </label>
         <input 
           type="file" 
-          id="fileInput" 
+          id="financialDocFileInput" 
           required
           accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
           style="
@@ -5429,7 +5429,8 @@ function processFiles(files) {
   });
   
   // Reset file input
-  document.getElementById('fileInput').value = '';
+  const profileUpdateInput = document.getElementById('profileUpdateFileInput');
+  if (profileUpdateInput) profileUpdateInput.value = '';
 }
 
 // Render uploaded files list
@@ -5937,6 +5938,111 @@ function closeUploadModal() {
   document.getElementById('uploadProgress').style.display = 'none';
 }
 
+function showSuccessModal(documentType) {
+  const modal = document.createElement('div');
+  modal.style.cssText = `
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100000;
+    animation: fadeIn 0.2s ease-out;
+  `;
+  
+  modal.innerHTML = `
+    <div style="
+      background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+      border-radius: 16px;
+      padding: 0;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      border: 2px solid rgba(45, 212, 191, 0.3);
+      animation: slideUp 0.3s ease-out;
+      overflow: hidden;
+    ">
+      <div style="
+        background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+        padding: 32px 28px;
+        text-align: center;
+      ">
+        <div style="
+          width: 80px;
+          height: 80px;
+          background: rgba(255, 255, 255, 0.2);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 16px;
+          font-size: 48px;
+        ">✓</div>
+        <h2 style="
+          margin: 0;
+          color: white;
+          font-size: 28px;
+          font-weight: 800;
+          letter-spacing: -0.5px;
+        ">Success!</h2>
+      </div>
+      
+      <div style="padding: 32px 28px;">
+        <p style="
+          margin: 0 0 20px 0;
+          color: #e2e8f0;
+          font-size: 16px;
+          line-height: 1.6;
+          text-align: center;
+        ">
+          Your <strong style="color: #2dd4bf;">${documentType}</strong> has been uploaded successfully.
+        </p>
+        <p style="
+          margin: 0;
+          color: #94a3b8;
+          font-size: 14px;
+          text-align: center;
+          line-height: 1.5;
+        ">
+          Administrators will review your document shortly.
+        </p>
+      </div>
+      
+      <div style="padding: 0 28px 28px;">
+        <button onclick="this.closest('[style*=fixed]').remove()" style="
+          width: 100%;
+          padding: 14px;
+          background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-size: 16px;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s;
+          box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);
+        " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(20, 184, 166, 0.4)'" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(20, 184, 166, 0.3)'">
+          Got it!
+        </button>
+      </div>
+    </div>
+  `;
+  
+  document.body.appendChild(modal);
+  
+  // Auto-dismiss after 5 seconds
+  setTimeout(() => {
+    if (modal.parentNode) modal.remove();
+  }, 5000);
+  
+  // Click outside to close
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.remove();
+  });
+}
+
 function updateFileName(input) {
   if (input.files && input.files[0]) {
     const file = input.files[0];
@@ -5956,14 +6062,14 @@ async function handleUpload(event) {
   event.preventDefault();
   
   const documentType = document.getElementById('documentType').value;
-  const fileInput = document.getElementById('fileInput');
+  const fileInput = document.getElementById('financialDocFileInput');
   const notes = document.getElementById('documentNotes').value;
   const uploadButton = document.getElementById('uploadButton');
   const progressDiv = document.getElementById('uploadProgress');
   const progressBar = document.getElementById('progressBar');
   const progressText = document.getElementById('progressText');
   
-  if (!fileInput.files || !fileInput.files[0]) {
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
     alert('Please select a file to upload');
     return;
   }
@@ -5978,8 +6084,8 @@ async function handleUpload(event) {
     progressBar.style.width = '10%';
     progressText.textContent = 'Preparing upload...';
     
-    // Get student profile
-    const studentProfile = dataset.profile;
+    // Get student profile from portalState
+    const studentProfile = portalState.profile;
     if (!studentProfile || !studentProfile.application_id) {
       throw new Error('Student application ID not found. Cannot upload document.');
     }
@@ -6042,7 +6148,22 @@ async function handleUpload(event) {
     
     if (fetchError) throw fetchError;
     
-    const currentDocs = currentApp.uploaded_documents || [];
+    // Ensure currentDocs is always an array
+    let currentDocs = [];
+    if (currentApp && currentApp.uploaded_documents) {
+      if (Array.isArray(currentApp.uploaded_documents)) {
+        currentDocs = currentApp.uploaded_documents;
+      } else if (typeof currentApp.uploaded_documents === 'string') {
+        try {
+          currentDocs = JSON.parse(currentApp.uploaded_documents);
+          if (!Array.isArray(currentDocs)) currentDocs = [];
+        } catch (e) {
+          console.warn('Could not parse uploaded_documents:', e);
+          currentDocs = [];
+        }
+      }
+    }
+    
     const updatedDocs = [...currentDocs, documentRecord];
     
     // Update application with new document
@@ -6053,14 +6174,43 @@ async function handleUpload(event) {
     
     if (updateError) throw updateError;
     
+    // If this is an invoice payment receipt, link it to the student's unpaid invoices
+    if (documentType === 'Invoice Payment Receipt') {
+      const { data: invoices, error: invoiceError } = await supabase
+        .from('invoices')
+        .select('id, invoice_number, payment_receipts')
+        .eq('student_id', studentProfile.student_id)
+        .eq('status', 'unpaid')
+        .order('created_at', { ascending: false })
+        .limit(1);
+      
+      if (!invoiceError && invoices && invoices.length > 0) {
+        const invoice = invoices[0];
+        const currentReceipts = Array.isArray(invoice.payment_receipts) ? invoice.payment_receipts : [];
+        const updatedReceipts = [...currentReceipts, {
+          filename: file.name,
+          public_url: publicUrl,
+          uploaded_at: new Date().toISOString(),
+          size: file.size
+        }];
+        
+        await supabase
+          .from('invoices')
+          .update({ payment_receipts: updatedReceipts })
+          .eq('id', invoice.id);
+        
+        console.log('✅ Receipt linked to invoice:', invoice.invoice_number);
+      }
+    }
+    
     progressBar.style.width = '100%';
     progressText.textContent = 'Upload complete!';
     
     console.log('✅ Document uploaded successfully:', documentRecord);
     
-    // Success notification
+    // Success notification with styled modal
     setTimeout(() => {
-      alert(`✅ Success!\n\nYour ${documentType} has been uploaded successfully.\n\nAdministrators will review your document shortly.`);
+      showSuccessModal(documentType);
       closeUploadModal();
       uploadButton.disabled = false;
       uploadButton.textContent = 'Upload';
