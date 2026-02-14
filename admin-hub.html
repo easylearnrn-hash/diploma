@@ -1623,6 +1623,74 @@
     </div>
   </div>
 
+  <!-- Group Course Schedule Modal -->
+  <div class="modal" id="groupScheduleModal">
+    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:800px">
+      <div class="modal-head" style="background:linear-gradient(135deg,#2dd4bf,#14b8a6)">
+        <h3 id="scheduleModalTitle" style="color:#fff;margin:0;font-size:18px;font-weight:700">📅 Course Schedule</h3>
+        <button onclick="closeScheduleModal()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700">Close</button>
+      </div>
+      <div class="modal-body" style="padding:24px">
+        <div id="scheduleList" style="margin-bottom:20px"></div>
+        
+        <div style="border-top:1px solid #e5e7eb;padding-top:20px">
+          <h4 style="margin:0 0 16px 0;font-size:16px;color:#1f2937">Add Course Schedule</h4>
+          
+          <div style="display:grid;gap:16px">
+            <div>
+              <label style="display:block;margin-bottom:8px;font-weight:600;color:#374151">Course</label>
+              <select id="scheduleCoursePicker" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px;font-size:14px">
+                <option value="">Select a course...</option>
+              </select>
+            </div>
+            
+            <div>
+              <label style="display:block;margin-bottom:8px;font-weight:600;color:#374151">Class Days</label>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_monday" value="monday"> Mon
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_tuesday" value="tuesday"> Tue
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_wednesday" value="wednesday"> Wed
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_thursday" value="thursday"> Thu
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_friday" value="friday"> Fri
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_saturday" value="saturday"> Sat
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;cursor:pointer">
+                  <input type="checkbox" id="day_sunday" value="sunday"> Sun
+                </label>
+              </div>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+              <div>
+                <label style="display:block;margin-bottom:8px;font-weight:600;color:#374151">Start Time (Optional)</label>
+                <input type="time" id="scheduleStartTime" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px">
+              </div>
+              <div>
+                <label style="display:block;margin-bottom:8px;font-weight:600;color:#374151">End Time (Optional)</label>
+                <input type="time" id="scheduleEndTime" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:8px">
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot" style="padding:20px;border-top:1px solid #e5e7eb;display:flex;gap:12px;justify-content:flex-end">
+        <button class="btn ghost" onclick="closeScheduleModal()">Cancel</button>
+        <button class="btn primary" onclick="saveGroupSchedule()">Save Schedule</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Success Notification Modal -->
   <div class="modal" id="successModal">
     <div class="modal-card" role="dialog" aria-modal="true" style="max-width:500px;text-align:center">
@@ -3320,6 +3388,9 @@
               <button class="btn-icon" onclick="manageCourses('${group.id}')" title="Manage Courses">
                 📚
               </button>
+              <button class="btn-icon" onclick="manageGroupSchedule('${group.id}', '${group.name}')" title="Course Schedule">
+                📅
+              </button>
               <button class="btn-icon" onclick="deleteGroup('${group.id}')" title="Delete Group" style="color:#ef4444">
                 🗑️
               </button>
@@ -3664,6 +3735,175 @@
       // Otherwise, just save normally
       originalSaveCourseChanges();
     };
+
+    // ============================================
+    // GROUP COURSE SCHEDULE MANAGEMENT
+    // ============================================
+    let currentScheduleGroupId = null;
+    let currentScheduleGroupName = null;
+
+    async function manageGroupSchedule(groupId, groupName) {
+      currentScheduleGroupId = groupId;
+      currentScheduleGroupName = groupName;
+      
+      document.getElementById('scheduleModalTitle').textContent = `📅 ${groupName} - Course Schedule`;
+      
+      // Load courses for the dropdown
+      await loadCoursesForSchedule();
+      
+      // Load existing schedules
+      await loadGroupSchedules(groupId);
+      
+      document.getElementById('groupScheduleModal').classList.add('open');
+    }
+
+    function closeScheduleModal() {
+      document.getElementById('groupScheduleModal').classList.remove('open');
+      // Reset form
+      document.getElementById('scheduleCoursePicker').value = '';
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+        document.getElementById(`day_${day}`).checked = false;
+      });
+      document.getElementById('scheduleStartTime').value = '';
+      document.getElementById('scheduleEndTime').value = '';
+    }
+
+    async function loadCoursesForSchedule() {
+      try {
+        const { data: courses, error } = await db.from('courses').select('*').eq('status', 'active').order('semester', { ascending: true });
+        
+        if (error) throw error;
+        
+        const picker = document.getElementById('scheduleCoursePicker');
+        picker.innerHTML = '<option value="">Select a course...</option>';
+        
+        courses.forEach(course => {
+          const option = document.createElement('option');
+          option.value = JSON.stringify({ code: course.code, name: course.name, semester: course.semester });
+          option.textContent = `${course.code} - ${course.name} (${course.semester})`;
+          picker.appendChild(option);
+        });
+      } catch (error) {
+        console.error('Error loading courses:', error);
+      }
+    }
+
+    async function loadGroupSchedules(groupId) {
+      try {
+        const { data: schedules, error } = await db.from('group_course_schedule').select('*').eq('group_id', groupId);
+        
+        if (error) throw error;
+        
+        const listEl = document.getElementById('scheduleList');
+        
+        if (!schedules || schedules.length === 0) {
+          listEl.innerHTML = '<p style="color:#6b7280;font-style:italic">No course schedules configured yet.</p>';
+          return;
+        }
+        
+        listEl.innerHTML = schedules.map(schedule => {
+          const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+            .filter(day => schedule[day])
+            .map(day => day.slice(0, 3).toUpperCase())
+            .join(', ');
+          
+          const timeInfo = schedule.start_time && schedule.end_time 
+            ? `<span style="color:#6b7280;margin-left:8px">${schedule.start_time} - ${schedule.end_time}</span>`
+            : '';
+          
+          return `
+            <div style="padding:12px;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+              <div>
+                <strong style="color:#1f2937">${schedule.course_code} - ${schedule.course_name}</strong>
+                <div style="font-size:13px;color:#6b7280;margin-top:4px">
+                  📅 ${days}${timeInfo}
+                </div>
+              </div>
+              <button onclick="deleteSchedule('${schedule.id}')" style="background:#ef4444;color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;font-size:13px">Delete</button>
+            </div>
+          `;
+        }).join('');
+        
+      } catch (error) {
+        console.error('Error loading schedules:', error);
+      }
+    }
+
+    async function saveGroupSchedule() {
+      const coursePicker = document.getElementById('scheduleCoursePicker');
+      if (!coursePicker.value) {
+        alert('Please select a course');
+        return;
+      }
+      
+      const courseData = JSON.parse(coursePicker.value);
+      
+      // Get selected days
+      const days = {};
+      ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+        days[day] = document.getElementById(`day_${day}`).checked;
+      });
+      
+      // Check if at least one day is selected
+      if (!Object.values(days).some(v => v)) {
+        alert('Please select at least one class day');
+        return;
+      }
+      
+      const startTime = document.getElementById('scheduleStartTime').value || null;
+      const endTime = document.getElementById('scheduleEndTime').value || null;
+      
+      try {
+        const { data, error } = await db.from('group_course_schedule').insert({
+          group_id: currentScheduleGroupId,
+          course_code: courseData.code,
+          course_name: courseData.name,
+          semester: courseData.semester,
+          ...days,
+          start_time: startTime,
+          end_time: endTime,
+          created_by: 'admin'
+        });
+        
+        if (error) throw error;
+        
+        alert('✅ Schedule saved successfully!');
+        await loadGroupSchedules(currentScheduleGroupId);
+        
+        // Reset form
+        document.getElementById('scheduleCoursePicker').value = '';
+        ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+          document.getElementById(`day_${day}`).checked = false;
+        });
+        document.getElementById('scheduleStartTime').value = '';
+        document.getElementById('scheduleEndTime').value = '';
+        
+      } catch (error) {
+        console.error('Error saving schedule:', error);
+        if (error.code === '23505') {
+          alert('⚠️ This course already has a schedule for this group. Delete the existing one first.');
+        } else {
+          alert('❌ Error saving schedule: ' + error.message);
+        }
+      }
+    }
+
+    async function deleteSchedule(scheduleId) {
+      if (!confirm('Delete this course schedule?')) return;
+      
+      try {
+        const { error } = await db.from('group_course_schedule').delete().eq('id', scheduleId);
+        
+        if (error) throw error;
+        
+        alert('✅ Schedule deleted');
+        await loadGroupSchedules(currentScheduleGroupId);
+        
+      } catch (error) {
+        console.error('Error deleting schedule:', error);
+        alert('❌ Error deleting schedule: ' + error.message);
+      }
+    }
 
     // ============================================
     // END STUDENT GROUPS MANAGEMENT
