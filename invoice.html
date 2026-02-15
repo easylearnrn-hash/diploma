@@ -1390,13 +1390,16 @@ Payment must be made to the following account:
       }
     });
 
-    // Check if already authenticated in this session (prevent re-login during same session)
+    // Check if already authenticated in this session (auto-login if valid session exists)
     const alreadyAuthenticated = sessionStorage.getItem('isAdmin') === 'true' && 
                                   sessionStorage.getItem('userEmail') === ADMIN_EMAIL;
     
     if (alreadyAuthenticated) {
-      // Still show modal but with different message
-      showAuthAlert('Session found. Please re-authenticate to continue.', 'error');
+      // Auto-login with existing session
+      console.log('✅ Valid session found, auto-logging in...');
+      document.getElementById('authOverlay').style.display = 'none';
+      document.body.classList.remove('locked');
+      initializeInvoiceGenerator();
     }
 
     // Main initialization function (runs after authentication)
@@ -3942,7 +3945,7 @@ Payment must be made to the following account:
     };
 
     // Show monthly breakdown modal
-    window.showMonthlyBreakdown = function() {
+    window.showMonthlyBreakdown = async function() {
       try {
         if (!window.currentInvoices || window.currentInvoices.length === 0) {
           showNotification('No invoices to show breakdown', 'warning');
@@ -4052,12 +4055,22 @@ Payment must be made to the following account:
           flex: 1;
         `;
         
-        // Get stored expenses from localStorage
-        const storedExpenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
+        // Get stored expenses from Supabase
+        const { data: storedExpenses, error: expensesError } = await invoiceSupabase
+          .from('monthly_expenses')
+          .select('*')
+          .order('created_at', { ascending: true });
+        
+        if (expensesError) {
+          console.error('Error loading expenses:', expensesError);
+          showNotification('Failed to load expenses', 'error');
+        }
+        
+        const expenses = storedExpenses || [];
         
         // Calculate total monthly expenses
         let totalMonthlyExpenses = 0;
-        storedExpenses.forEach(expense => {
+        expenses.forEach(expense => {
           totalMonthlyExpenses += parseFloat(expense.amount) || 0;
         });
         
@@ -4131,12 +4144,12 @@ Payment must be made to the following account:
             </div>
             
             <div id="expensesList" style="display: grid; gap: 10px;">
-              ${storedExpenses.length === 0 ? `
+              ${expenses.length === 0 ? `
                 <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.4); font-size: 14px;">
                   No recurring expenses added yet.<br>
                   Click "Add Expense" to add salaries or other monthly costs.
                 </div>
-              ` : storedExpenses.map((expense, idx) => `
+              ` : expenses.map((expense) => `
                 <div style="
                   background: rgba(0,0,0,0.3);
                   border: 1px solid rgba(255,255,255,0.1);
@@ -4150,7 +4163,7 @@ Payment must be made to the following account:
                     <div style="font-size: 14px; font-weight: 600; color: white; margin-bottom: 4px;">${expense.name}</div>
                     <div style="font-size: 12px; color: rgba(255,255,255,0.5);">$${parseFloat(expense.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per month × ${numberOfMonths} months = $${(parseFloat(expense.amount) * numberOfMonths).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
                   </div>
-                  <button onclick="removeExpense(${idx})" style="
+                  <button onclick="removeExpense('${expense.id}')" style="
                     background: transparent;
                     border: 1px solid #ef4444;
                     color: #ef4444;
@@ -4354,7 +4367,7 @@ Payment must be made to the following account:
       modal.appendChild(modalContent);
       document.body.appendChild(modal);
       
-      document.getElementById('saveExpense').onclick = () => {
+      document.getElementById('saveExpense').onclick = async () => {
         const name = document.getElementById('expenseName').value.trim();
         const amount = document.getElementById('expenseAmount').value;
         
@@ -4363,15 +4376,35 @@ Payment must be made to the following account:
           return;
         }
         
-        const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-        expenses.push({ name, amount: parseFloat(amount) });
-        localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
+        const saveBtn = document.getElementById('saveExpense');
+        saveBtn.disabled = true;
+        saveBtn.textContent = '💾 Saving...';
         
-        modal.remove();
-        showNotification('✅ Expense added successfully', 'success');
-        
-        // Refresh the breakdown modal
-        showMonthlyBreakdown();
+        try {
+          // Insert into Supabase
+          const { error } = await invoiceSupabase
+            .from('monthly_expenses')
+            .insert([
+              { 
+                name, 
+                amount: parseFloat(amount),
+                created_by: sessionStorage.getItem('userEmail')
+              }
+            ]);
+          
+          if (error) throw error;
+          
+          modal.remove();
+          showNotification('✅ Expense added successfully', 'success');
+          
+          // Refresh the breakdown modal
+          showMonthlyBreakdown();
+        } catch (error) {
+          console.error('Error saving expense:', error);
+          alert('Failed to save expense: ' + error.message);
+          saveBtn.disabled = false;
+          saveBtn.textContent = '💾 Save Expense';
+        }
       };
       
       document.getElementById('cancelExpense').onclick = () => modal.remove();
@@ -4382,19 +4415,28 @@ Payment must be made to the following account:
     };
 
     // Remove expense function
-    window.removeExpense = function(index) {
+    window.removeExpense = async function(expenseId) {
       if (!confirm('Are you sure you want to remove this expense?')) {
         return;
       }
       
-      const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-      expenses.splice(index, 1);
-      localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
-      
-      showNotification('✅ Expense removed', 'success');
-      
-      // Refresh the breakdown modal
-      showMonthlyBreakdown();
+      try {
+        // Delete from Supabase
+        const { error } = await invoiceSupabase
+          .from('monthly_expenses')
+          .delete()
+          .eq('id', expenseId);
+        
+        if (error) throw error;
+        
+        showNotification('✅ Expense removed', 'success');
+        
+        // Refresh the breakdown modal
+        showMonthlyBreakdown();
+      } catch (error) {
+        console.error('Error removing expense:', error);
+        showNotification('Failed to remove expense', 'error');
+      }
     };
 
     // Copy invoice URL to clipboard
