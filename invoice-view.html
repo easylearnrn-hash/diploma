@@ -760,6 +760,26 @@
   <script>
     const invoiceSupabase = initSupabase();
 
+    // ==========================================
+    // CRITICAL SECURITY: STUDENT-ONLY ACCESS
+    // ==========================================
+    // Each student should ONLY see their own invoice
+    // Check authentication before loading any data
+    const loggedInStudentId = sessionStorage.getItem('studentId');
+    const loggedInEmail = sessionStorage.getItem('userEmail');
+    const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+    
+    // Admin can view any invoice
+    const ADMIN_EMAIL = 'hrachfilm@gmail.com';
+    const isAuthorizedAdmin = isAdmin && loggedInEmail === ADMIN_EMAIL;
+
+    if (!isAuthorizedAdmin && !loggedInStudentId) {
+      alert('⛔ UNAUTHORIZED ACCESS\n\nYou must be logged in to view this invoice.\n\nYou will be redirected to the login page.');
+      window.location.href = 'login.html';
+      throw new Error('Unauthorized: Not logged in');
+    }
+    // ==========================================
+
     // Load seal watermark and logo
     console.log('Checking for seal...');
     
@@ -809,6 +829,21 @@
           showError('Invoice not found.');
           return;
         }
+
+        // ==========================================
+        // VERIFY: Student can ONLY view their own invoice
+        // ==========================================
+        if (!isAuthorizedAdmin) {
+          // Students must match their student_id with the invoice
+          const invoiceStudentId = invoice.student_id;
+          
+          if (loggedInStudentId !== invoiceStudentId) {
+            alert('⛔ ACCESS DENIED\n\nThis invoice does not belong to you.\n\nYou can only view your own invoices.');
+            window.location.href = 'login.html';
+            return;
+          }
+        }
+        // ==========================================
 
         // Update page title
         document.title = `Invoice ${invoice.invoice_number} - ACNHS`;
