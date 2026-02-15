@@ -2906,7 +2906,7 @@ Payment must be made to the following account:
       try {
         // If status is 'partial', show detailed payment modal
         if (newStatus === 'partial') {
-          // First, load the invoice data to get the monthly fee
+          // First, load the invoice data to get the line items with their actual amounts
           const { data: invoice, error: fetchError } = await invoiceSupabase
             .from('invoices')
             .select('*')
@@ -2915,29 +2915,25 @@ Payment must be made to the following account:
           
           if (fetchError) throw fetchError;
           
-          // Calculate monthly tuition from items
-          let monthlyTuition = 0;
+          // Build payment dropdown options from actual invoice items
+          let paymentOptions = '<option value="">Select...</option>';
+          const itemAmounts = {}; // Store item name -> amount mapping
+          
           if (invoice.items && invoice.items.length > 0) {
-            // Find tuition items (excluding down payment)
-            const tuitionItems = invoice.items.filter(item => 
-              item.description && 
-              item.description.toLowerCase().includes('tuition') &&
-              !item.description.toLowerCase().includes('down payment') &&
-              !item.description.toLowerCase().includes('enrollment')
-            );
-            
-            if (tuitionItems.length > 0) {
-              // Calculate the monthly rate
-              const totalTuition = tuitionItems.reduce((sum, item) => {
-                const qty = item.qty || item.quantity || 1;
-                const price = item.price || 0;
-                return sum + (qty * price);
-              }, 0);
+            invoice.items.forEach(item => {
+              const qty = item.qty || item.quantity || 1;
+              const price = item.price || 0;
+              const discountPercent = item.discount || 0;
+              const lineSubtotal = qty * price;
+              const discountAmount = lineSubtotal * (discountPercent / 100);
+              const lineTotal = lineSubtotal - discountAmount;
               
-              // Divide by number of months (usually in quantity)
-              const totalMonths = tuitionItems.reduce((sum, item) => sum + (item.qty || item.quantity || 1), 0);
-              monthlyTuition = totalMonths > 0 ? totalTuition / totalMonths : 0;
-            }
+              const itemName = item.description || 'Untitled Item';
+              itemAmounts[itemName] = lineTotal;
+              
+              const formattedAmount = lineTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              paymentOptions += `<option value="${itemName}" data-amount="${lineTotal}">${itemName} ($${formattedAmount})</option>`;
+            });
           }
           
           // Create modal for partial payment details
@@ -2969,6 +2965,26 @@ Payment must be made to the following account:
             <h3 style="margin: 0 0 20px 0; color: var(--teal); font-size: 18px; font-weight: 700;">💰 Record Partial Payment</h3>
             
             <div style="margin-bottom: 16px;">
+              <label style="display: block; margin-bottom: 6px; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;">Payment Applied To</label>
+              <select 
+                id="partialPaymentFor"
+                style="
+                  width: 100%;
+                  padding: 12px;
+                  background: rgba(255, 255, 255, 0.05);
+                  border: 1px solid rgba(255, 255, 255, 0.1);
+                  border-radius: 6px;
+                  color: var(--text-light);
+                  font-size: 14px;
+                  font-family: inherit;
+                "
+              >
+                ${paymentOptions}
+              </select>
+              <div id="itemAmountHint" style="margin-top: 6px; font-size: 12px; color: rgba(255,255,255,0.5);"></div>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
               <label style="display: block; margin-bottom: 6px; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;">Amount Paid</label>
               <input 
                 type="number" 
@@ -2987,38 +3003,6 @@ Payment must be made to the following account:
                   font-family: inherit;
                 "
               />
-            </div>
-            
-            <div style="margin-bottom: 20px;">
-              <label style="display: block; margin-bottom: 6px; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;">Payment Applied To</label>
-              <select 
-                id="partialPaymentFor"
-                style="
-                  width: 100%;
-                  padding: 12px;
-                  background: rgba(255, 255, 255, 0.05);
-                  border: 1px solid rgba(255, 255, 255, 0.1);
-                  border-radius: 6px;
-                  color: var(--text-light);
-                  font-size: 14px;
-                  font-family: inherit;
-                "
-              >
-                <option value="">Select...</option>
-                <option value="Enrollment Down Payment">Enrollment Down Payment</option>
-                <option value="January Tuition">January Tuition</option>
-                <option value="February Tuition">February Tuition</option>
-                <option value="March Tuition">March Tuition</option>
-                <option value="April Tuition">April Tuition</option>
-                <option value="May Tuition">May Tuition</option>
-                <option value="June Tuition">June Tuition</option>
-                <option value="July Tuition">July Tuition</option>
-                <option value="August Tuition">August Tuition</option>
-                <option value="September Tuition">September Tuition</option>
-                <option value="October Tuition">October Tuition</option>
-                <option value="November Tuition">November Tuition</option>
-                <option value="December Tuition">December Tuition</option>
-              </select>
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: flex-end;">
@@ -3048,17 +3032,22 @@ Payment must be made to the following account:
           modal.appendChild(modalContent);
           document.body.appendChild(modal);
           
-          // Auto-fill amount when month is selected
+          // Auto-fill amount when item is selected
           const paymentForSelect = document.getElementById('partialPaymentFor');
           const amountInput = document.getElementById('partialAmount');
+          const itemHint = document.getElementById('itemAmountHint');
           
           paymentForSelect.addEventListener('change', (e) => {
-            const selectedValue = e.target.value;
+            const selectedOption = e.target.options[e.target.selectedIndex];
+            const amount = selectedOption.dataset.amount;
             
-            // If a month tuition is selected and monthly tuition is calculated
-            if (selectedValue && selectedValue.includes('Tuition') && monthlyTuition > 0) {
-              amountInput.value = monthlyTuition.toFixed(2);
+            if (amount) {
+              amountInput.value = parseFloat(amount).toFixed(2);
               amountInput.focus();
+              const formattedAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              itemHint.textContent = `Total amount for this item: $${formattedAmount}`;
+            } else {
+              itemHint.textContent = '';
             }
           });
           
@@ -3154,12 +3143,12 @@ Payment must be made to the following account:
       }
     };
 
-    // Show payment history for partial payment invoices
+    // Show payment history for partial payment invoices with edit/delete
     window.showPaymentHistory = async function(invoiceId, studentName) {
       try {
         const { data: invoice, error } = await invoiceSupabase
           .from('invoices')
-          .select('notes, total')
+          .select('notes, total, items')
           .eq('id', invoiceId)
           .single();
 
@@ -3172,26 +3161,28 @@ Payment must be made to the following account:
           paymentRecords.forEach((record, index) => {
             if (index === 0 && !record.includes('Date:')) return; // Skip initial notes
             
-            const dateMatch = record.match(/Date:\s*(.+)/);
+            const dateMatch = record.match(/Date:\s*(.+?)(?=\n|$)/);
             const amountMatch = record.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
-            const appliedToMatch = record.match(/Applied To:\s*(.+)/);
+            const appliedToMatch = record.match(/Applied To:\s*(.+?)(?=\n|$)/);
             
             if (dateMatch && amountMatch && appliedToMatch) {
               payments.push({
                 date: dateMatch[1].trim(),
                 amount: amountMatch[1].trim(),
-                appliedTo: appliedToMatch[1].trim()
+                appliedTo: appliedToMatch[1].trim(),
+                rawRecord: record
               });
             }
           });
         }
 
-        // Calculate total paid
+        // Calculate total paid and per-item paid amounts
         const totalPaid = payments.reduce((sum, p) => sum + parseFloat(p.amount.replace(/,/g, '')), 0);
         const remaining = invoice.total - totalPaid;
 
         // Create modal
         const modal = document.createElement('div');
+        modal.id = 'paymentHistoryModal';
         modal.style.cssText = `
           position: fixed;
           inset: 0;
@@ -3261,7 +3252,7 @@ Payment must be made to the following account:
           </div>
         `;
         
-        // Payment records
+        // Payment records with edit/delete buttons
         const paymentsList = payments.length > 0 
           ? payments.map((payment, index) => {
               const formattedAmount = parseFloat(payment.amount.replace(/,/g, '')).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3269,7 +3260,21 @@ Payment must be made to the following account:
               <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; padding: 14px; margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
                   <div style="font-size: 16px; font-weight: 600; color: var(--teal);">$${formattedAmount}</div>
-                  <div style="font-size: 12px; color: rgba(255,255,255,0.5);">#${payments.length - index}</div>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.5);">#${payments.length - index}</div>
+                    <button 
+                      onclick="editPayment(${index}, '${payment.date}', '${payment.amount}', '${payment.appliedTo}', '${invoiceId}')"
+                      style="background: rgba(59, 130, 246, 0.2); border: 1px solid rgba(59, 130, 246, 0.3); color: #60a5fa; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;"
+                      title="Edit payment">
+                      ✏️ Edit
+                    </button>
+                    <button 
+                      onclick="deletePayment(${index}, '${invoiceId}')"
+                      style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: 600;"
+                      title="Delete payment">
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
                 <div style="font-size: 13px; color: rgba(255,255,255,0.8); margin-bottom: 4px;">
                   <strong>Applied To:</strong> ${payment.appliedTo}
@@ -3296,6 +3301,289 @@ Payment must be made to the following account:
       } catch (error) {
         console.error('Error loading payment history:', error);
         showNotification('Failed to load payment history.', 'error');
+      }
+    };
+
+    // Edit payment function
+    window.editPayment = async function(paymentIndex, currentDate, currentAmount, currentAppliedTo, invoiceId) {
+      try {
+        // Close existing modal
+        document.getElementById('paymentHistoryModal')?.remove();
+
+        // Get invoice data
+        const { data: invoice, error: fetchError } = await invoiceSupabase
+          .from('invoices')
+          .select('notes, items')
+          .eq('id', invoiceId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Calculate monthly tuition for auto-fill
+        let monthlyTuition = 0;
+        if (invoice.items && invoice.items.length > 0) {
+          const tuitionItems = invoice.items.filter(item => 
+            item.description && 
+            item.description.toLowerCase().includes('tuition') &&
+            !item.description.toLowerCase().includes('down payment') &&
+            !item.description.toLowerCase().includes('enrollment')
+          );
+          
+          if (tuitionItems.length > 0) {
+            tuitionItems.forEach(item => {
+              const qty = item.qty || item.quantity || 1;
+              const price = item.price || 0;
+              const discountPercent = item.discount || 0;
+              const lineSubtotal = qty * price;
+              const discountAmount = lineSubtotal * (discountPercent / 100);
+              const lineTotal = lineSubtotal - discountAmount;
+              
+              // Use the first tuition item's monthly amount
+              if (monthlyTuition === 0) {
+                monthlyTuition = lineTotal;
+              }
+            });
+          }
+        }
+
+        // Create edit modal
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.8);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10001;
+          padding: 20px;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+          background: rgba(10, 37, 64, 0.98);
+          border: 1px solid rgba(59, 130, 246, 0.3);
+          border-radius: 12px;
+          max-width: 500px;
+          width: 100%;
+          padding: 24px;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        `;
+        
+        // Build select options from invoice items
+        let itemOptions = '<option value="">Select...</option>';
+        itemOptions += '<option value="Enrollment Down Payment">Enrollment Down Payment</option>';
+        
+        // Add month options
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        months.forEach(month => {
+          itemOptions += `<option value="${month} Tuition">${month} Tuition</option>`;
+        });
+        
+        modalContent.innerHTML = `
+          <h3 style="margin: 0 0 20px 0; color: #60a5fa; font-size: 18px; font-weight: 700;">✏️ Edit Payment #${paymentIndex + 1}</h3>
+          
+          <div style="margin-bottom: 16px;">
+            <label style="display: block; margin-bottom: 6px; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;">Amount Paid</label>
+            <input 
+              type="number" 
+              id="editAmount" 
+              step="0.01"
+              min="0"
+              value="${currentAmount.replace(/,/g, '')}"
+              style="
+                width: 100%;
+                padding: 12px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 6px;
+                color: var(--text-light);
+                font-size: 16px;
+                font-family: inherit;
+              "
+            />
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 6px; color: rgba(255,255,255,0.8); font-size: 13px; font-weight: 600;">Payment Applied To</label>
+            <select 
+              id="editAppliedTo"
+              style="
+                width: 100%;
+                padding: 12px;
+                background: rgba(255, 255, 255, 0.05);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 6px;
+                color: var(--text-light);
+                font-size: 14px;
+                font-family: inherit;
+              "
+            >
+              ${itemOptions}
+            </select>
+          </div>
+          
+          <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="cancelEdit" style="
+              padding: 10px 20px;
+              background: transparent;
+              border: 1px solid rgba(255, 255, 255, 0.2);
+              color: rgba(255, 255, 255, 0.7);
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: 500;
+            ">Cancel</button>
+            <button id="confirmEdit" style="
+              padding: 10px 20px;
+              background: #60a5fa;
+              border: 1px solid #60a5fa;
+              color: white;
+              border-radius: 6px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: 600;
+            ">Save Changes</button>
+          </div>
+        `;
+        
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        // Set current value in select
+        document.getElementById('editAppliedTo').value = currentAppliedTo;
+        
+        // Save changes handler
+        document.getElementById('confirmEdit').onclick = async () => {
+          const newAmount = document.getElementById('editAmount').value;
+          const newAppliedTo = document.getElementById('editAppliedTo').value;
+          
+          if (!newAmount || parseFloat(newAmount) <= 0) {
+            showNotification('Please enter a valid payment amount', 'warning');
+            return;
+          }
+          
+          if (!newAppliedTo) {
+            showNotification('Please select what this payment is for', 'warning');
+            return;
+          }
+          
+          // Parse all payments
+          const payments = [];
+          const paymentSections = invoice.notes.split('--- PARTIAL PAYMENT RECORDED ---');
+          paymentSections.forEach((section, idx) => {
+            if (idx === 0 && !section.includes('Date:')) {
+              payments.push(section); // Keep initial notes
+              return;
+            }
+            if (section.includes('Date:')) {
+              payments.push(section);
+            }
+          });
+          
+          // Update the specific payment
+          const formattedAmount = parseFloat(newAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          payments[paymentIndex + 1] = `\nDate: ${new Date().toLocaleDateString()}\nAmount: $${formattedAmount}\nApplied To: ${newAppliedTo}`;
+          
+          // Rebuild notes
+          const newNotes = payments[0] + '--- PARTIAL PAYMENT RECORDED ---' + payments.slice(1).join('--- PARTIAL PAYMENT RECORDED ---');
+          
+          // Update in database
+          const { error: updateError } = await invoiceSupabase
+            .from('invoices')
+            .update({ notes: newNotes })
+            .eq('id', invoiceId);
+          
+          if (updateError) throw updateError;
+          
+          modal.remove();
+          showNotification('Payment updated successfully', 'success');
+          
+          // Reload invoice list
+          const searchTerm = document.getElementById('searchInvoices').value;
+          const statusFilter = document.getElementById('filterStatus').value;
+          await loadAllInvoices(searchTerm, statusFilter);
+        };
+        
+        document.getElementById('cancelEdit').onclick = () => modal.remove();
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        
+      } catch (error) {
+        console.error('Error editing payment:', error);
+        showNotification('Failed to edit payment', 'error');
+      }
+    };
+
+    // Delete payment function
+    window.deletePayment = async function(paymentIndex, invoiceId) {
+      if (!confirm('Are you sure you want to delete this payment record? This cannot be undone.')) {
+        return;
+      }
+      
+      try {
+        // Close modal
+        document.getElementById('paymentHistoryModal')?.remove();
+
+        const { data: invoice, error: fetchError } = await invoiceSupabase
+          .from('invoices')
+          .select('notes')
+          .eq('id', invoiceId)
+          .single();
+
+        if (fetchError) throw fetchError;
+
+        // Parse all payments
+        const payments = [];
+        const paymentSections = invoice.notes.split('--- PARTIAL PAYMENT RECORDED ---');
+        paymentSections.forEach((section, idx) => {
+          if (idx === 0 && !section.includes('Date:')) {
+            payments.push(section); // Keep initial notes
+            return;
+          }
+          if (section.includes('Date:')) {
+            payments.push(section);
+          }
+        });
+        
+        // Remove the specific payment
+        payments.splice(paymentIndex + 1, 1);
+        
+        // Rebuild notes
+        let newNotes;
+        if (payments.length === 1) {
+          // Only initial notes left, no payments
+          newNotes = payments[0];
+        } else {
+          newNotes = payments[0] + '--- PARTIAL PAYMENT RECORDED ---' + payments.slice(1).join('--- PARTIAL PAYMENT RECORDED ---');
+        }
+        
+        // Check if there are any payments left to determine status
+        const hasPayments = payments.length > 1;
+        const newStatus = hasPayments ? 'partial' : 'unpaid';
+        
+        // Update in database
+        const { error: updateError } = await invoiceSupabase
+          .from('invoices')
+          .update({ 
+            notes: newNotes,
+            status: newStatus
+          })
+          .eq('id', invoiceId);
+        
+        if (updateError) throw updateError;
+        
+        showNotification('Payment deleted successfully', 'success');
+        
+        // Reload invoice list
+        const searchTerm = document.getElementById('searchInvoices').value;
+        const statusFilter = document.getElementById('filterStatus').value;
+        await loadAllInvoices(searchTerm, statusFilter);
+        
+      } catch (error) {
+        console.error('Error deleting payment:', error);
+        showNotification('Failed to delete payment', 'error');
       }
     };
 
