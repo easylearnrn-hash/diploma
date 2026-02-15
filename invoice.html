@@ -3721,37 +3721,47 @@ Payment must be made to the following account:
           </div>
         `;
         
-        // Monthly breakdown
+        // Monthly breakdown with expand/collapse
         let monthlyHTML = '<h4 style="margin: 0 0 16px 0; color: rgba(255,255,255,0.9); font-size: 16px; font-weight: 700;">📅 Month-by-Month Breakdown</h4>';
         
+        let monthIndex = 0;
         months.forEach(month => {
           if (monthlyData[month]) {
             const data = monthlyData[month];
             const formattedTotal = data.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const monthId = `month-${monthIndex}`;
             
             monthlyHTML += `
               <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px; margin-bottom: 14px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                  <div style="font-size: 16px; font-weight: 700; color: var(--teal);">${month}</div>
+                <div onclick="toggleMonth('${monthId}')" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;" title="Click to expand/collapse">
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <svg id="${monthId}-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" style="transition: transform 0.2s;">
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                    <div style="font-size: 16px; font-weight: 700; color: var(--teal);">${month}</div>
+                  </div>
                   <div style="font-size: 18px; font-weight: 700; color: white;">$${formattedTotal}</div>
                 </div>
-                <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px;">${data.count} payment(s)</div>
-                <div style="display: grid; gap: 8px;">
-                  ${data.items.map(item => {
-                    const itemAmount = item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    return `
-                      <div style="display: flex; justify-content: space-between; align-items: start; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                        <div style="flex: 1;">
-                          <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 3px;">${item.description}</div>
-                          <div style="font-size: 11px; color: rgba(255,255,255,0.5);">${item.studentName}</div>
+                <div id="${monthId}-content" style="display: none; margin-top: 12px;">
+                  <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px;">${data.count} payment(s)</div>
+                  <div style="display: grid; gap: 8px;">
+                    ${data.items.map(item => {
+                      const itemAmount = item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                      return `
+                        <div style="display: flex; justify-content: space-between; align-items: start; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                          <div style="flex: 1;">
+                            <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 3px;">${item.description}</div>
+                            <div style="font-size: 11px; color: rgba(255,255,255,0.5);">${item.studentName}</div>
+                          </div>
+                          <div style="font-size: 14px; font-weight: 600; color: var(--teal); white-space: nowrap; margin-left: 12px;">$${itemAmount}</div>
                         </div>
-                        <div style="font-size: 14px; font-weight: 600; color: var(--teal); white-space: nowrap; margin-left: 12px;">$${itemAmount}</div>
-                      </div>
-                    `;
-                  }).join('')}
+                      `;
+                    }).join('')}
+                  </div>
                 </div>
               </div>
             `;
+            monthIndex++;
           }
         });
         
@@ -3765,6 +3775,20 @@ Payment must be made to the following account:
         modalContent.appendChild(body);
         modal.appendChild(modalContent);
         document.body.appendChild(modal);
+        
+        // Add toggle function
+        window.toggleMonth = function(monthId) {
+          const content = document.getElementById(`${monthId}-content`);
+          const icon = document.getElementById(`${monthId}-icon`);
+          
+          if (content.style.display === 'none') {
+            content.style.display = 'block';
+            icon.style.transform = 'rotate(90deg)';
+          } else {
+            content.style.display = 'none';
+            icon.style.transform = 'rotate(0deg)';
+          }
+        };
         
         // Close handlers
         document.getElementById('closeBreakdownModal').onclick = () => modal.remove();
