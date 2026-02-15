@@ -1307,13 +1307,21 @@ Payment must be made to the following account:
         // Hash password for comparison
         const passwordHash = await hashPassword(password);
         
+        // Normalize email to lowercase for case-insensitive matching
+        const normalizedEmail = email.toLowerCase().trim();
+        
+        console.log('🔍 Attempting login with:', normalizedEmail);
+        console.log('🔑 Hashed password:', passwordHash);
+        
         // Query admin_users table
         const { data: adminUsers, error } = await invoiceSupabase
           .from('admin_users')
           .select('id, name, email, username, password_hash, role, permissions, status')
-          .or(`email.eq.${email},username.eq.${email}`)
+          .or(`email.eq.${normalizedEmail},username.eq.${normalizedEmail}`)
           .eq('status', 'active')
           .limit(1);
+        
+        console.log('📊 Query result:', { adminUsers, error });
         
         if (error) {
           console.error('Auth error:', error);
