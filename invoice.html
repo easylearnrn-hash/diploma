@@ -1035,6 +1035,7 @@ Payment must be made to the following account:
             <option value="">All Status</option>
             <option value="unpaid">Unpaid</option>
             <option value="paid">Paid</option>
+            <option value="partial">Partial</option>
             <option value="overdue">Overdue</option>
             <option value="cancelled">Cancelled</option>
           </select>
@@ -2771,12 +2772,16 @@ Payment must be made to the following account:
           totalSum += displayTotal || 0;
         });
 
-        // Update header with total sum
+        // Update header with total sum (make it clickable)
         const formattedTotal = totalSum.toLocaleString('en-US', {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         });
-        document.getElementById('invoicesHeader').textContent = `📋 All Invoices - ${formattedTotal} $`;
+        const headerElement = document.getElementById('invoicesHeader');
+        headerElement.innerHTML = `📋 All Invoices - <span id="totalAmountLink" style="cursor: pointer; color: var(--teal); text-decoration: underline; text-decoration-style: dotted;" onclick="showMonthlyBreakdown()" title="Click for monthly breakdown">${formattedTotal} $</span>`;
+        
+        // Store invoices globally for breakdown
+        window.currentInvoices = invoices;
 
         invoicesList.innerHTML = invoices.map(invoice => {
           const invoiceUrl = `${window.location.origin}${window.location.pathname.replace('invoice.html', 'invoice-view.html')}?id=${invoice.id}`;
@@ -3584,6 +3589,190 @@ Payment must be made to the following account:
       } catch (error) {
         console.error('Error deleting payment:', error);
         showNotification('Failed to delete payment', 'error');
+      }
+    };
+
+    // Show monthly breakdown modal
+    window.showMonthlyBreakdown = function() {
+      try {
+        if (!window.currentInvoices || window.currentInvoices.length === 0) {
+          showNotification('No invoices to show breakdown', 'warning');
+          return;
+        }
+
+        const invoices = window.currentInvoices;
+
+        // Group items by month and calculate totals
+        const monthlyData = {};
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        let totalDownPayments = 0;
+        let grandTotal = 0;
+
+        invoices.forEach(invoice => {
+          if (invoice.items && invoice.items.length > 0) {
+            invoice.items.forEach(item => {
+              const itemDesc = item.description || '';
+              const qty = item.qty || item.quantity || 1;
+              const price = item.price || 0;
+              const discountPercent = item.discount || 0;
+              const lineSubtotal = qty * price;
+              const discountAmount = lineSubtotal * (discountPercent / 100);
+              const lineTotal = lineSubtotal - discountAmount;
+
+              // Check if it's a down payment
+              if (itemDesc.toLowerCase().includes('down payment') || 
+                  itemDesc.toLowerCase().includes('enrollment')) {
+                totalDownPayments += lineTotal;
+              } else {
+                // Check which month it belongs to
+                months.forEach(month => {
+                  if (itemDesc.includes(month)) {
+                    if (!monthlyData[month]) {
+                      monthlyData[month] = {
+                        total: 0,
+                        count: 0,
+                        items: []
+                      };
+                    }
+                    monthlyData[month].total += lineTotal;
+                    monthlyData[month].count++;
+                    monthlyData[month].items.push({
+                      description: itemDesc,
+                      amount: lineTotal,
+                      studentName: invoice.student_name
+                    });
+                  }
+                });
+              }
+
+              grandTotal += lineTotal;
+            });
+          }
+        });
+
+        // Create modal
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.85);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 10001;
+          padding: 20px;
+        `;
+        
+        const modalContent = document.createElement('div');
+        modalContent.style.cssText = `
+          background: linear-gradient(135deg, #0a2540 0%, #1e293b 100%);
+          border: 2px solid rgba(20, 184, 166, 0.3);
+          border-radius: 16px;
+          max-width: 900px;
+          width: 100%;
+          max-height: 85vh;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        `;
+        
+        const header = document.createElement('div');
+        header.style.cssText = `
+          padding: 24px 28px;
+          border-bottom: 2px solid rgba(20, 184, 166, 0.2);
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        `;
+        header.innerHTML = `
+          <div>
+            <h3 style="margin: 0 0 6px 0; color: var(--teal); font-size: 22px; font-weight: 700;">📊 Monthly Revenue Breakdown</h3>
+            <p style="margin: 0; color: rgba(255,255,255,0.6); font-size: 14px;">Total from ${invoices.length} invoice(s)</p>
+          </div>
+          <button id="closeBreakdownModal" style="background: transparent; border: none; color: rgba(255,255,255,0.6); font-size: 28px; cursor: pointer; padding: 0; width: 32px; height: 32px; line-height: 1;">&times;</button>
+        `;
+        
+        const body = document.createElement('div');
+        body.style.cssText = `
+          padding: 24px 28px;
+          overflow-y: auto;
+          flex: 1;
+        `;
+        
+        // Summary cards
+        let summaryHTML = `
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px;">
+            <div style="background: rgba(20, 184, 166, 0.1); border: 2px solid rgba(20, 184, 166, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
+              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Down Payments</div>
+              <div style="font-size: 24px; font-weight: 700; color: var(--teal);">$${totalDownPayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div style="background: rgba(139, 92, 246, 0.1); border: 2px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
+              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Monthly Tuition</div>
+              <div style="font-size: 24px; font-weight: 700; color: #a78bfa;">$${(grandTotal - totalDownPayments).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+            <div style="background: rgba(34, 197, 94, 0.1); border: 2px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
+              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Grand Total</div>
+              <div style="font-size: 24px; font-weight: 700; color: #22c55e;">$${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+        `;
+        
+        // Monthly breakdown
+        let monthlyHTML = '<h4 style="margin: 0 0 16px 0; color: rgba(255,255,255,0.9); font-size: 16px; font-weight: 700;">📅 Month-by-Month Breakdown</h4>';
+        
+        months.forEach(month => {
+          if (monthlyData[month]) {
+            const data = monthlyData[month];
+            const formattedTotal = data.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            
+            monthlyHTML += `
+              <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <div style="font-size: 16px; font-weight: 700; color: var(--teal);">${month}</div>
+                  <div style="font-size: 18px; font-weight: 700; color: white;">$${formattedTotal}</div>
+                </div>
+                <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px;">${data.count} payment(s)</div>
+                <div style="display: grid; gap: 8px;">
+                  ${data.items.map(item => {
+                    const itemAmount = item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return `
+                      <div style="display: flex; justify-content: space-between; align-items: start; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
+                        <div style="flex: 1;">
+                          <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 3px;">${item.description}</div>
+                          <div style="font-size: 11px; color: rgba(255,255,255,0.5);">${item.studentName}</div>
+                        </div>
+                        <div style="font-size: 14px; font-weight: 600; color: var(--teal); white-space: nowrap; margin-left: 12px;">$${itemAmount}</div>
+                      </div>
+                    `;
+                  }).join('')}
+                </div>
+              </div>
+            `;
+          }
+        });
+        
+        if (Object.keys(monthlyData).length === 0) {
+          monthlyHTML += '<p style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No monthly tuition payments found.</p>';
+        }
+        
+        body.innerHTML = summaryHTML + monthlyHTML;
+        
+        modalContent.appendChild(header);
+        modalContent.appendChild(body);
+        modal.appendChild(modalContent);
+        document.body.appendChild(modal);
+        
+        // Close handlers
+        document.getElementById('closeBreakdownModal').onclick = () => modal.remove();
+        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+        
+      } catch (error) {
+        console.error('Error showing monthly breakdown:', error);
+        showNotification('Failed to show breakdown', 'error');
       }
     };
 
