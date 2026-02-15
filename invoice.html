@@ -1003,6 +1003,9 @@
     <div class="editor-header">
       <h1>Invoice Editor</h1>
       <span class="badge">Local Only</span>
+      <a id="allInvoicesHeaderLink" style="cursor: pointer; color: var(--teal); font-size: 13px; font-weight: 600; margin-left: auto; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+        All Invoices
+      </a>
     </div>
 
     <div class="local-warning" id="localWarning">
@@ -3073,6 +3076,13 @@ Payment must be made to the following account:
       await loadAllInvoices();
     });
 
+    // All Invoices Header Link (top of page)
+    document.getElementById('allInvoicesHeaderLink').addEventListener('click', async () => {
+      const modal = document.getElementById('invoicesModal');
+      modal.style.display = 'flex';
+      await loadAllInvoices();
+    });
+
     async function loadAllInvoices(searchTerm = '', statusFilter = '') {
       try {
         const invoicesList = document.getElementById('invoicesList');
@@ -4059,7 +4069,7 @@ Payment must be made to the following account:
         const { data: storedExpenses, error: expensesError } = await invoiceSupabase
           .from('monthly_expenses')
           .select('*')
-          .order('created_at', { ascending: true });
+          .order('amount', { ascending: true }); // Sort by amount (low to high)
         
         if (expensesError) {
           console.error('Error loading expenses:', expensesError);
@@ -4397,8 +4407,16 @@ Payment must be made to the following account:
           modal.remove();
           showNotification('✅ Expense added successfully', 'success');
           
-          // Refresh the breakdown modal
-          showMonthlyBreakdown();
+          // Close the breakdown modal first, then reopen it with updated data
+          const breakdownModal = document.querySelector('.modal-overlay');
+          if (breakdownModal) {
+            breakdownModal.remove();
+          }
+          
+          // Wait a moment, then refresh the breakdown modal
+          setTimeout(() => {
+            showMonthlyBreakdown();
+          }, 100);
         } catch (error) {
           console.error('Error saving expense:', error);
           alert('Failed to save expense: ' + error.message);
