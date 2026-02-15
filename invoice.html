@@ -4052,73 +4052,118 @@ Payment must be made to the following account:
           flex: 1;
         `;
         
-        // Summary cards
-        // Load expenses from localStorage
-        const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-        const totalExpenses = expenses.reduce((sum, exp) => sum + parseFloat(exp.amount || 0), 0);
-        const netMonthlyTuition = (grandTotal - totalDownPayments) - totalExpenses;
+        // Get stored expenses from localStorage
+        const storedExpenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
         
+        // Calculate total monthly expenses
+        let totalMonthlyExpenses = 0;
+        storedExpenses.forEach(expense => {
+          totalMonthlyExpenses += parseFloat(expense.amount) || 0;
+        });
+        
+        // Count unique months with tuition in invoices
+        const uniqueMonths = new Set();
+        invoices.forEach(invoice => {
+          if (invoice.items && invoice.items.length > 0) {
+            invoice.items.forEach(item => {
+              const itemDesc = item.description || '';
+              months.forEach(month => {
+                if (itemDesc.includes(month) && !itemDesc.toLowerCase().includes('down payment')) {
+                  uniqueMonths.add(month);
+                }
+              });
+            });
+          }
+        });
+        const numberOfMonths = uniqueMonths.size;
+        const totalExpensesForPeriod = totalMonthlyExpenses * numberOfMonths;
+        
+        // Calculate net tuition after expenses
+        const grossMonthlyTuition = grandTotal - totalDownPayments;
+        const netMonthlyTuition = grossMonthlyTuition - totalExpensesForPeriod;
+        
+        // Summary cards
         let summaryHTML = `
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px;">
             <div style="background: rgba(20, 184, 166, 0.1); border: 2px solid rgba(20, 184, 166, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
               <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Down Payments</div>
               <div style="font-size: 24px; font-weight: 700; color: var(--teal);">$${totalDownPayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
             </div>
-            <div style="background: rgba(139, 92, 246, 0.1); border: 2px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 18px; position: relative;">
-              <button 
-                onclick="event.stopPropagation(); showAddExpenseModal()" 
-                style="
-                  position: absolute;
-                  top: 12px;
-                  right: 12px;
-                  background: rgba(139, 92, 246, 0.3);
-                  border: 1px solid rgba(139, 92, 246, 0.5);
-                  color: #a78bfa;
-                  width: 28px;
-                  height: 28px;
-                  border-radius: 50%;
-                  cursor: pointer;
-                  font-size: 18px;
-                  font-weight: bold;
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  transition: all 0.2s;
-                  padding: 0;
-                  line-height: 1;
-                "
-                onmouseover="this.style.background='rgba(139, 92, 246, 0.5)'"
-                onmouseout="this.style.background='rgba(139, 92, 246, 0.3)'"
-                title="Add Expense"
-              >+</button>
-              <div style="text-align: center;">
-                <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Monthly Tuition</div>
-                <div style="font-size: 20px; font-weight: 700; color: #a78bfa; text-decoration: ${totalExpenses > 0 ? 'line-through' : 'none'}; opacity: ${totalExpenses > 0 ? '0.5' : '1'};">$${(grandTotal - totalDownPayments).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                ${totalExpenses > 0 ? `
-                  <div style="font-size: 12px; color: rgba(239, 68, 68, 0.8); margin-top: 4px;">- $${totalExpenses.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} expenses</div>
-                  <div style="font-size: 22px; font-weight: 700; color: #22c55e; margin-top: 6px;">$${netMonthlyTuition.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                  <button 
-                    onclick="event.stopPropagation(); showExpensesList()" 
-                    style="
-                      margin-top: 8px;
-                      background: transparent;
-                      border: 1px solid rgba(139, 92, 246, 0.3);
-                      color: #a78bfa;
-                      padding: 4px 10px;
-                      border-radius: 12px;
-                      cursor: pointer;
-                      font-size: 11px;
-                      transition: all 0.2s;
-                    "
-                    onmouseover="this.style.borderColor='rgba(139, 92, 246, 0.6)'"
-                    onmouseout="this.style.borderColor='rgba(139, 92, 246, 0.3)'"
-                  >View ${expenses.length} expense${expenses.length !== 1 ? 's' : ''}</button>
-                ` : ''}
-              </div>
+            <div style="background: rgba(139, 92, 246, 0.1); border: 2px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 18px; text-align: center; position: relative;">
+              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Monthly Tuition (Gross)</div>
+              <div style="font-size: 24px; font-weight: 700; color: #a78bfa;">$${grossMonthlyTuition.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              ${storedExpenses.length > 0 ? `
+                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
+                  <div style="font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Expenses (${numberOfMonths} months)</div>
+                  <div style="font-size: 16px; font-weight: 600; color: #ef4444;">- $${totalExpensesForPeriod.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 2px solid rgba(139, 92, 246, 0.5);">
+                  <div style="font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Net Tuition</div>
+                  <div style="font-size: 20px; font-weight: 700; color: #22c55e;">$${netMonthlyTuition.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                </div>
+              ` : ''}
             </div>
             <div style="background: rgba(34, 197, 94, 0.1); border: 2px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
               <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Grand Total</div>
               <div style="font-size: 24px; font-weight: 700; color: #22c55e;">$${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            </div>
+          </div>
+        `;
+        
+        // Expenses management section
+        summaryHTML += `
+          <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+              <h4 style="margin: 0; color: #fca5a5; font-size: 16px; font-weight: 700;">💰 Monthly Recurring Expenses</h4>
+              <button onclick="addExpense()" style="
+                background: #ef4444;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+              " onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
+                ➕ Add Expense
+              </button>
+            </div>
+            
+            <div id="expensesList" style="display: grid; gap: 10px;">
+              ${storedExpenses.length === 0 ? `
+                <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.4); font-size: 14px;">
+                  No recurring expenses added yet.<br>
+                  Click "Add Expense" to add salaries or other monthly costs.
+                </div>
+              ` : storedExpenses.map((expense, idx) => `
+                <div style="
+                  background: rgba(0,0,0,0.3);
+                  border: 1px solid rgba(255,255,255,0.1);
+                  border-radius: 8px;
+                  padding: 12px 16px;
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                ">
+                  <div>
+                    <div style="font-size: 14px; font-weight: 600; color: white; margin-bottom: 4px;">${expense.name}</div>
+                    <div style="font-size: 12px; color: rgba(255,255,255,0.5);">$${parseFloat(expense.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per month × ${numberOfMonths} months = $${(parseFloat(expense.amount) * numberOfMonths).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  </div>
+                  <button onclick="removeExpense(${idx})" style="
+                    background: transparent;
+                    border: 1px solid #ef4444;
+                    color: #ef4444;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                  " onmouseover="this.style.background='#ef4444'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#ef4444'">
+                    🗑️ Delete
+                  </button>
+                </div>
+              `).join('')}
             </div>
           </div>
         `;
@@ -4204,188 +4249,14 @@ Payment must be made to the following account:
       }
     };
 
-    // Show add expense modal
-    window.showAddExpenseModal = function() {
+    // Add expense function
+    window.addExpense = function() {
       const modal = document.createElement('div');
       modal.style.cssText = `
         position: fixed;
         inset: 0;
         background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(4px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10002;
-        padding: 20px;
-      `;
-      
-      const modalContent = document.createElement('div');
-      modalContent.style.cssText = `
-        background: linear-gradient(135deg, #0a2540 0%, #1e293b 100%);
-        border: 2px solid rgba(139, 92, 246, 0.3);
-        border-radius: 16px;
-        max-width: 500px;
-        width: 100%;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        overflow: hidden;
-      `;
-      
-      modalContent.innerHTML = `
-        <div style="padding: 24px 28px; border-bottom: 2px solid rgba(139, 92, 246, 0.2);">
-          <h3 style="margin: 0; color: #a78bfa; font-size: 22px; font-weight: 700;">➕ Add Expense</h3>
-          <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.6); font-size: 14px;">Record an expense to deduct from monthly tuition</p>
-        </div>
-        
-        <div style="padding: 28px;">
-          <div style="margin-bottom: 20px;">
-            <label style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 600;">Description</label>
-            <input 
-              type="text" 
-              id="expenseDescription" 
-              placeholder="e.g., Office supplies, Utilities, Salaries"
-              style="
-                width: 100%;
-                padding: 12px 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 2px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                color: var(--text-light);
-                font-size: 15px;
-              "
-            />
-          </div>
-          
-          <div style="margin-bottom: 20px;">
-            <label style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 600;">Amount ($)</label>
-            <input 
-              type="number" 
-              id="expenseAmount" 
-              placeholder="0.00"
-              step="0.01"
-              min="0"
-              style="
-                width: 100%;
-                padding: 12px 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 2px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                color: var(--text-light);
-                font-size: 15px;
-              "
-            />
-          </div>
-          
-          <div style="margin-bottom: 24px;">
-            <label style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 600;">Date</label>
-            <input 
-              type="date" 
-              id="expenseDate" 
-              value="${new Date().toISOString().split('T')[0]}"
-              style="
-                width: 100%;
-                padding: 12px 16px;
-                background: rgba(255, 255, 255, 0.05);
-                border: 2px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                color: var(--text-light);
-                font-size: 15px;
-              "
-            />
-          </div>
-          
-          <div style="display: flex; gap: 12px;">
-            <button 
-              onclick="saveExpense()" 
-              style="
-                flex: 1;
-                padding: 14px;
-                background: #a78bfa;
-                color: white;
-                border: none;
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: 700;
-                cursor: pointer;
-              "
-            >💾 Save Expense</button>
-            <button 
-              onclick="this.closest('[style*=\\'fixed\\']').remove()" 
-              style="
-                padding: 14px 24px;
-                background: transparent;
-                color: rgba(255,255,255,0.6);
-                border: 2px solid rgba(255,255,255,0.2);
-                border-radius: 8px;
-                font-size: 16px;
-                font-weight: 600;
-                cursor: pointer;
-              "
-            >Cancel</button>
-          </div>
-        </div>
-      `;
-      
-      modal.appendChild(modalContent);
-      document.body.appendChild(modal);
-      
-      // Focus first input
-      setTimeout(() => document.getElementById('expenseDescription').focus(), 100);
-    };
-
-    // Save expense
-    window.saveExpense = function() {
-      const description = document.getElementById('expenseDescription').value.trim();
-      const amount = parseFloat(document.getElementById('expenseAmount').value);
-      const date = document.getElementById('expenseDate').value;
-      
-      if (!description) {
-        alert('Please enter a description');
-        return;
-      }
-      
-      if (!amount || amount <= 0) {
-        alert('Please enter a valid amount');
-        return;
-      }
-      
-      // Get existing expenses
-      const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-      
-      // Add new expense
-      expenses.push({
-        id: Date.now(),
-        description,
-        amount,
-        date,
-        createdAt: new Date().toISOString()
-      });
-      
-      // Save to localStorage
-      localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
-      
-      // Close modal
-      document.querySelector('[style*="z-index: 10002"]').remove();
-      
-      // Refresh breakdown if open
-      const breakdownModal = document.querySelector('[style*="z-index: 10001"]');
-      if (breakdownModal) {
-        breakdownModal.remove();
-        showMonthlyBreakdown();
-      }
-      
-      showNotification('Expense added successfully', 'success');
-    };
-
-    // Show expenses list
-    window.showExpensesList = function() {
-      const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-      
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(4px);
+        backdrop-filter: blur(8px);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -4398,106 +4269,132 @@ Payment must be made to the following account:
         background: linear-gradient(135deg, #0a2540 0%, #1e293b 100%);
         border: 2px solid rgba(239, 68, 68, 0.3);
         border-radius: 16px;
-        max-width: 600px;
+        max-width: 500px;
         width: 100%;
-        max-height: 80vh;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        padding: 28px;
       `;
       
-      let expensesHTML = '';
-      let total = 0;
-      
-      expenses.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(exp => {
-        total += exp.amount;
-        expensesHTML += `
-          <div style="
-            background: rgba(239, 68, 68, 0.05);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            border-radius: 8px;
-            padding: 14px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-          ">
-            <div style="flex: 1;">
-              <div style="color: rgba(255,255,255,0.9); font-weight: 600; margin-bottom: 4px;">${exp.description}</div>
-              <div style="color: rgba(255,255,255,0.5); font-size: 13px;">${new Date(exp.date).toLocaleDateString()}</div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <div style="color: #ef4444; font-weight: 700; font-size: 18px;">-$${exp.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              <button 
-                onclick="deleteExpense(${exp.id})" 
-                style="
-                  background: rgba(239, 68, 68, 0.2);
-                  border: 1px solid rgba(239, 68, 68, 0.4);
-                  color: #ef4444;
-                  padding: 6px 10px;
-                  border-radius: 6px;
-                  cursor: pointer;
-                  font-size: 14px;
-                "
-              >🗑️</button>
-            </div>
-          </div>
-        `;
-      });
-      
       modalContent.innerHTML = `
-        <div style="padding: 24px 28px; border-bottom: 2px solid rgba(239, 68, 68, 0.2);">
-          <h3 style="margin: 0; color: #ef4444; font-size: 22px; font-weight: 700;">📊 Expenses List</h3>
-          <p style="margin: 8px 0 0 0; color: rgba(255,255,255,0.6); font-size: 14px;">Total: -$${total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-        </div>
+        <h3 style="margin: 0 0 24px 0; color: #fca5a5; font-size: 20px; font-weight: 700;">➕ Add Monthly Recurring Expense</h3>
         
-        <div style="padding: 24px 28px; overflow-y: auto; flex: 1;">
-          ${expensesHTML || '<p style="text-align: center; color: rgba(255,255,255,0.5); padding: 40px;">No expenses recorded</p>'}
-        </div>
-        
-        <div style="padding: 20px 28px; border-top: 2px solid rgba(239, 68, 68, 0.2);">
-          <button 
-            onclick="this.closest('[style*=\\'fixed\\']').remove()" 
+        <div style="margin-bottom: 20px;">
+          <label style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 600;">
+            Expense Name (e.g., "Mr. Smith Salary")
+          </label>
+          <input 
+            type="text" 
+            id="expenseName" 
+            placeholder="Enter expense name..."
             style="
               width: 100%;
               padding: 12px;
-              background: transparent;
-              color: rgba(255,255,255,0.8);
-              border: 2px solid rgba(255,255,255,0.2);
+              background: rgba(255, 255, 255, 0.05);
+              border: 2px solid rgba(255, 255, 255, 0.1);
               border-radius: 8px;
-              font-size: 16px;
-              font-weight: 600;
-              cursor: pointer;
+              color: white;
+              font-size: 15px;
             "
-          >Close</button>
+          />
+        </div>
+        
+        <div style="margin-bottom: 24px;">
+          <label style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.9); font-size: 14px; font-weight: 600;">
+            Monthly Amount ($)
+          </label>
+          <input 
+            type="number" 
+            id="expenseAmount" 
+            placeholder="1000.00"
+            step="0.01"
+            min="0"
+            style="
+              width: 100%;
+              padding: 12px;
+              background: rgba(255, 255, 255, 0.05);
+              border: 2px solid rgba(255, 255, 255, 0.1);
+              border-radius: 8px;
+              color: white;
+              font-size: 15px;
+            "
+          />
+        </div>
+        
+        <div style="display: flex; gap: 12px;">
+          <button id="saveExpense" style="
+            flex: 1;
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            💾 Save Expense
+          </button>
+          <button id="cancelExpense" style="
+            padding: 14px 24px;
+            background: transparent;
+            color: rgba(255,255,255,0.6);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">
+            Cancel
+          </button>
         </div>
       `;
       
       modal.appendChild(modalContent);
       document.body.appendChild(modal);
+      
+      document.getElementById('saveExpense').onclick = () => {
+        const name = document.getElementById('expenseName').value.trim();
+        const amount = document.getElementById('expenseAmount').value;
+        
+        if (!name || !amount || parseFloat(amount) <= 0) {
+          alert('Please enter a valid expense name and amount');
+          return;
+        }
+        
+        const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
+        expenses.push({ name, amount: parseFloat(amount) });
+        localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
+        
+        modal.remove();
+        showNotification('✅ Expense added successfully', 'success');
+        
+        // Refresh the breakdown modal
+        showMonthlyBreakdown();
+      };
+      
+      document.getElementById('cancelExpense').onclick = () => modal.remove();
+      modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
+      
+      // Focus on name input
+      setTimeout(() => document.getElementById('expenseName').focus(), 100);
     };
 
-    // Delete expense
-    window.deleteExpense = function(expenseId) {
-      if (!confirm('Delete this expense?')) return;
-      
-      let expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
-      expenses = expenses.filter(exp => exp.id !== expenseId);
-      localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
-      
-      // Close and reopen lists
-      document.querySelector('[style*="z-index: 10002"]').remove();
-      showExpensesList();
-      
-      // Refresh breakdown if open
-      const breakdownModal = document.querySelector('[style*="z-index: 10001"]');
-      if (breakdownModal) {
-        breakdownModal.remove();
-        showMonthlyBreakdown();
+    // Remove expense function
+    window.removeExpense = function(index) {
+      if (!confirm('Are you sure you want to remove this expense?')) {
+        return;
       }
       
-      showNotification('Expense deleted', 'success');
+      const expenses = JSON.parse(localStorage.getItem('monthlyExpenses') || '[]');
+      expenses.splice(index, 1);
+      localStorage.setItem('monthlyExpenses', JSON.stringify(expenses));
+      
+      showNotification('✅ Expense removed', 'success');
+      
+      // Refresh the breakdown modal
+      showMonthlyBreakdown();
     };
 
     // Copy invoice URL to clipboard
