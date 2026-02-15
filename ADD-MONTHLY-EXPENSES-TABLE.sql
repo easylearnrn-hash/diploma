@@ -36,4 +36,4 @@ CREATE INDEX IF NOT EXISTS idx_monthly_expenses_created_at
   ON monthly_expenses(created_at DESC);
 
 -- Verify table creation
-SELECT * FROM monthly_expenses;
+SELECT * FROM monthly_expe
