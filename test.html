@@ -5,6 +5,50 @@
 <title>ACNHS Testing Platform</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!--
+============================================
+TEACHER MODE - TWO-LAPTOP SYNC SYSTEM
+============================================
+
+QUICK START GUIDE:
+
+1. SETUP DATABASE:
+   - Run ADD-TEACHER-SESSIONS-TABLE.sql in Supabase SQL Editor
+   - This enables real-time synchronization between devices
+
+2. TEACHER LAPTOP (Laptop B - with answers):
+   - Open: test.html?session=YOUR_SESSION_ID&mode=teacher
+   - Example: test.html?session=class123&mode=teacher
+   - You will see:
+     * Correct answers highlighted
+     * Full rationale for each question
+     * Teacher control panel with student link
+   - You control all navigation (next/prev/jump)
+
+3. STUDENT LAPTOP (Laptop A - screen sharing):
+   - Open: test.html?session=YOUR_SESSION_ID
+   - Example: test.html?session=class123
+   - Students will see:
+     * Questions and options ONLY
+     * NO answers or rationales
+     * Synced navigation (follows teacher)
+   - Cannot navigate independently
+
+4. HOW IT WORKS:
+   - Both laptops stay perfectly synchronized
+   - Same question order (shuffle respected)
+   - Teacher navigates, student follows automatically
+   - Supabase Realtime broadcasts changes instantly
+   - Session persists on teacher reload
+
+5. TROUBLESHOOTING:
+   - Student sees "Waiting for teacher...": Teacher hasn't started yet
+   - Sync not working: Check Supabase Realtime is enabled
+   - Session lost: Teacher can reload - state is saved in database
+
+============================================
+-->
+
 <!-- Favicon -->
 <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
@@ -719,12 +763,12 @@ body{
 .stat-value {
   font-size: 40px;
   font-weight: 800;
-  color: white;
+  color: var(--bg-dark);
   margin-bottom: 8px;
 }
 
 .stat-label {
-  color: #cbd5e1;
+  color: #475569;
   font-size: 14px;
   font-weight: 600;
 }
@@ -1186,7 +1230,7 @@ body{
 <div class="start-screen" id="startScreen">
   <div class="start-content">
     <div class="logo-container">
-      <img id="startLogo" src="" alt="ACNHS Logo" style="max-width: 400px; height: auto; margin-bottom: 2rem;">
+      <img id="startLogo" src="" alt="ACNHS Logo" data-acnhs-logo style="max-width: 400px; height: auto; margin-bottom: 2rem;">
     </div>
     <h1>Testing Platform</h1>
     <p>Demonstrate your knowledge and skills in a professional examination environment. Review instructions carefully before beginning.</p>
@@ -1549,6 +1593,463 @@ function initializeSupabase() {
     showToast('Database connection failed', 'error');
     return false;
   }
+}
+
+// ============================================
+// TEACHER MODE - TWO-LAPTOP SYNC SYSTEM
+// ============================================
+// USAGE:
+// Student View: test.html?session=ABC123
+// Teacher View: test.html?session=ABC123&mode=teacher
+//
+// How it works:
+// 1. Teacher creates session with unique session ID
+// 2. Student joins same session (via URL parameter)
+// 3. Supabase Realtime keeps both devices in perfect sync
+// 4. Teacher controls navigation, student follows automatically
+// 5. Student NEVER sees answers/rationales (teacher-only)
+// ============================================
+
+const TEACHER_MODE = {
+  enabled: false,        // Is this device in teacher mode?
+  isStudent: false,      // Is this device in student mode?
+  sessionId: null,       // Shared session ID for sync
+  channel: null,         // Supabase Realtime channel
+  teacherEmail: null,    // Teacher identifier
+  syncActive: false,     // Is real-time sync connected?
+  heartbeatInterval: null // Keep-alive heartbeat
+};
+
+// Parse URL parameters for Teacher Mode
+function parseTeacherModeParams() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const sessionParam = urlParams.get('session');
+  const modeParam = urlParams.get('mode');
+  
+  if (sessionParam) {
+    TEACHER_MODE.sessionId = sessionParam;
+    TEACHER_MODE.isStudent = modeParam !== 'teacher';
+    TEACHER_MODE.enabled = modeParam === 'teacher';
+    
+    console.log(`🎓 Teacher Mode: ${TEACHER_MODE.enabled ? 'TEACHER VIEW' : 'STUDENT VIEW'}`);
+    console.log(`📡 Session ID: ${TEACHER_MODE.sessionId}`);
+  }
+}
+
+// Initialize Teacher Mode on page load
+parseTeacherModeParams();
+
+// ============================================
+// TEACHER MODE - REALTIME SYNC FUNCTIONS
+// ============================================
+
+// Generate a unique session ID
+function generateSessionId() {
+  return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+}
+
+// Create a new teacher session in database
+async function createTeacherSession(testId, questionOrder) {
+  if (!TEACHER_MODE.sessionId) {
+    TEACHER_MODE.sessionId = generateSessionId();
+  }
+  
+  try {
+    const sessionData = {
+      session_id: TEACHER_MODE.sessionId,
+      test_id: testId,
+      question_order: questionOrder,
+      current_index: 0,
+      teacher_email: TEACHER_MODE.teacherEmail || 'teacher@acnhs.edu',
+      teacher_name: 'Teacher',
+      test_config: TEST_CONFIG,
+      total_questions: questionOrder.length,
+      is_active: true,
+      last_heartbeat: new Date().toISOString()
+    };
+    
+    const { data, error } = await db
+      .from('teacher_sessions')
+      .upsert(sessionData, { onConflict: 'session_id' })
+      .select()
+      .single();
+    
+    if (error) throw error;
+    
+    console.log('✅ Teacher session created:', data);
+    return data;
+  } catch (error) {
+    console.error('❌ Error creating teacher session:', error);
+    throw error;
+  }
+}
+
+// Subscribe to teacher session updates (for student view)
+async function subscribeToTeacherSession() {
+  if (!TEACHER_MODE.sessionId || TEACHER_MODE.enabled) return;
+  
+  console.log('📡 Subscribing to teacher session:', TEACHER_MODE.sessionId);
+  
+  try {
+    // Create a channel for this session
+    const channel = db.channel(`teacher_session_${TEACHER_MODE.sessionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'teacher_sessions',
+          filter: `session_id=eq.${TEACHER_MODE.sessionId}`
+        },
+        (payload) => {
+          console.log('📥 Teacher session update received:', payload);
+          handleTeacherSessionUpdate(payload.new);
+        }
+      )
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Subscribed to teacher session');
+          TEACHER_MODE.syncActive = true;
+          TEACHER_MODE.channel = channel;
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('❌ Channel subscription error');
+          TEACHER_MODE.syncActive = false;
+          // Attempt reconnection after 3 seconds
+          setTimeout(() => subscribeToTeacherSession(), 3000);
+        } else if (status === 'TIMED_OUT') {
+          console.error('⏱️ Channel subscription timed out');
+          setTimeout(() => subscribeToTeacherSession(), 3000);
+        }
+      });
+    
+    // Load initial session state
+    await loadTeacherSessionState();
+    
+  } catch (error) {
+    console.error('❌ Error subscribing to teacher session:', error);
+  }
+}
+
+// Load current session state from database
+async function loadTeacherSessionState() {
+  try {
+    const { data, error } = await db
+      .from('teacher_sessions')
+      .select('*')
+      .eq('session_id', TEACHER_MODE.sessionId)
+      .single();
+    
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Session doesn't exist yet - show waiting message
+        showWaitingForTeacher();
+      } else {
+        throw error;
+      }
+      return;
+    }
+    
+    console.log('📖 Loaded teacher session state:', data);
+    
+    // Apply the session state
+    if (data.question_order && data.question_order.length > 0) {
+      testState.questions = data.question_order;
+      testState.currentIndex = data.current_index || 0;
+      
+      // If test is already started, sync to current question
+      if (document.getElementById('testContainer').style.display !== 'none') {
+        renderQuestion();
+      }
+      
+      hideWaitingForTeacher();
+    }
+    
+  } catch (error) {
+    console.error('❌ Error loading teacher session state:', error);
+  }
+}
+
+// Handle incoming teacher session updates
+function handleTeacherSessionUpdate(sessionData) {
+  console.log('🔄 Syncing with teacher:', sessionData);
+  
+  // Update question order if changed
+  if (sessionData.question_order) {
+    testState.questions = sessionData.question_order;
+  }
+  
+  // Sync to current question index
+  if (sessionData.current_index !== undefined && sessionData.current_index !== testState.currentIndex) {
+    testState.currentIndex = sessionData.current_index;
+    renderQuestion();
+    console.log(`📍 Synced to question ${testState.currentIndex + 1}`);
+  }
+}
+
+// Broadcast session state update (teacher only)
+async function broadcastSessionUpdate() {
+  if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
+  
+  try {
+    const { error } = await db
+      .from('teacher_sessions')
+      .update({
+        current_index: testState.currentIndex,
+        question_order: testState.questions,
+        last_heartbeat: new Date().toISOString()
+      })
+      .eq('session_id', TEACHER_MODE.sessionId);
+    
+    if (error) throw error;
+    
+    console.log('📤 Broadcast update: Question', testState.currentIndex + 1);
+  } catch (error) {
+    console.error('❌ Error broadcasting session update:', error);
+  }
+}
+
+// Send heartbeat to keep session alive
+async function sendSessionHeartbeat() {
+  if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
+  
+  try {
+    await db
+      .from('teacher_sessions')
+      .update({ last_heartbeat: new Date().toISOString() })
+      .eq('session_id', TEACHER_MODE.sessionId);
+  } catch (error) {
+    console.error('❌ Heartbeat error:', error);
+  }
+}
+
+// Start heartbeat interval (teacher only)
+function startSessionHeartbeat() {
+  if (!TEACHER_MODE.enabled) return;
+  
+  TEACHER_MODE.heartbeatInterval = setInterval(() => {
+    sendSessionHeartbeat();
+  }, 30000); // Every 30 seconds
+  
+  console.log('💓 Session heartbeat started');
+}
+
+// Cleanup session on disconnect
+async function endTeacherSession() {
+  if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
+  
+  try {
+    await db
+      .from('teacher_sessions')
+      .update({ is_active: false })
+      .eq('session_id', TEACHER_MODE.sessionId);
+    
+    if (TEACHER_MODE.heartbeatInterval) {
+      clearInterval(TEACHER_MODE.heartbeatInterval);
+    }
+    
+    if (TEACHER_MODE.channel) {
+      await db.removeChannel(TEACHER_MODE.channel);
+    }
+    
+    console.log('👋 Teacher session ended');
+  } catch (error) {
+    console.error('❌ Error ending session:', error);
+  }
+}
+
+// Show "Waiting for teacher..." message
+function showWaitingForTeacher() {
+  const container = document.getElementById('testContainer');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div style="text-align: center; padding: 60px 20px; max-width: 600px; margin: 0 auto;">
+      <div style="font-size: 64px; margin-bottom: 24px; animation: pulse 2s infinite;">⏳</div>
+      <h2 style="color: var(--accent); margin-bottom: 16px; font-size: 28px;">Waiting for Teacher...</h2>
+      <p style="color: var(--text-muted); font-size: 16px; line-height: 1.6;">
+        Your teacher will start the session shortly.<br>
+        Session ID: <strong style="color: white;">${TEACHER_MODE.sessionId}</strong>
+      </p>
+      <div style="margin-top: 32px;">
+        <div style="display: inline-block; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; margin: 0 6px; animation: bounce 1.4s infinite ease-in-out both; animation-delay: -0.32s;"></div>
+        <div style="display: inline-block; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; margin: 0 6px; animation: bounce 1.4s infinite ease-in-out both; animation-delay: -0.16s;"></div>
+        <div style="display: inline-block; width: 12px; height: 12px; background: var(--accent); border-radius: 50%; margin: 0 6px; animation: bounce 1.4s infinite ease-in-out both;"></div>
+      </div>
+    </div>
+    <style>
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.05); }
+      }
+      @keyframes bounce {
+        0%, 80%, 100% { transform: scale(0); }
+        40% { transform: scale(1); }
+      }
+    </style>
+  `;
+}
+
+function hideWaitingForTeacher() {
+  // Will be cleared when displayQuestion() renders the question
+}
+
+// Show Teacher Answer Panel with correct answer highlighted
+function showTeacherAnswerPanel() {
+  if (!TEACHER_MODE.enabled) return;
+  
+  const question = testState.questions[testState.currentIndex];
+  if (!question) return;
+  
+  let teacherPanel = document.getElementById('teacherAnswerPanel');
+  
+  if (!teacherPanel) {
+    teacherPanel = document.createElement('div');
+    teacherPanel.id = 'teacherAnswerPanel';
+    teacherPanel.style.cssText = `
+      position: fixed;
+      top: 80px;
+      right: 20px;
+      width: 380px;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      background: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+      border: 2px solid var(--accent);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      z-index: 9999;
+    `;
+    document.body.appendChild(teacherPanel);
+  }
+  
+  // Get correct option texts
+  const correctOptions = question.options.filter(opt => 
+    question.correct.map(String).includes(String(opt.id))
+  );
+  const correctTexts = correctOptions.map(opt => opt.text).join(', ');
+  
+  teacherPanel.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 2px solid rgba(45, 212, 191, 0.3);">
+      <div style="font-size: 32px;">🎓</div>
+      <div>
+        <div style="color: var(--accent); font-weight: 800; font-size: 18px;">Teacher View</div>
+        <div style="color: var(--text-muted); font-size: 12px;">Q${testState.currentIndex + 1} of ${testState.questions.length}</div>
+      </div>
+    </div>
+    
+    <div style="margin-bottom: 20px;">
+      <div style="color: var(--success); font-weight: 700; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        CORRECT ANSWER${correctOptions.length > 1 ? 'S' : ''}:
+      </div>
+      <div style="background: rgba(34, 197, 94, 0.15); border: 2px solid var(--success); border-radius: 12px; padding: 16px; color: #86efac; font-size: 15px; line-height: 1.6;">
+        ${correctTexts}
+      </div>
+    </div>
+    
+    ${question.rationale ? `
+      <div>
+        <div style="color: #fbbf24; font-weight: 700; font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          RATIONALE:
+        </div>
+        <div style="background: rgba(251, 191, 36, 0.1); border: 2px solid rgba(251, 191, 36, 0.3); border-radius: 12px; padding: 16px; color: #e2e8f0; font-size: 14px; line-height: 1.7;">
+          ${question.rationale}
+        </div>
+      </div>
+    ` : ''}
+    
+    ${question.key_point ? `
+      <div style="margin-top: 16px; padding: 12px; background: rgba(147, 51, 234, 0.1); border-left: 4px solid #9333ea; border-radius: 8px; color: #c4b5fd; font-size: 13px;">
+        <strong style="color: #a78bfa;">Key Point:</strong> ${question.key_point}
+      </div>
+    ` : ''}
+  `;
+}
+
+// Show Teacher Control Panel with session link
+function showTeacherPanel() {
+  if (!TEACHER_MODE.enabled) return;
+  
+  const panel = document.createElement('div');
+  panel.id = 'teacherControlPanel';
+  panel.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 10px 40px rgba(20, 184, 166, 0.4);
+    z-index: 10000;
+    min-width: 320px;
+  `;
+  
+  const studentUrl = `${window.location.origin}${window.location.pathname}?session=${TEACHER_MODE.sessionId}`;
+  
+  panel.innerHTML = `
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+      <div style="font-size: 28px;">🎓</div>
+      <div>
+        <div style="color: white; font-weight: 800; font-size: 16px;">Teacher Mode Active</div>
+        <div style="color: rgba(255,255,255,0.8); font-size: 12px;">Session: ${TEACHER_MODE.sessionId}</div>
+      </div>
+    </div>
+    
+    <div style="background: rgba(255,255,255,0.2); border-radius: 8px; padding: 12px; margin-bottom: 12px;">
+      <div style="color: rgba(255,255,255,0.9); font-size: 11px; font-weight: 600; margin-bottom: 6px;">STUDENT VIEW URL:</div>
+      <input type="text" value="${studentUrl}" readonly 
+        style="width: 100%; padding: 8px; border: none; border-radius: 6px; font-size: 12px; background: white; font-family: monospace;"
+        onclick="this.select()">
+    </div>
+    
+    <button onclick="copyStudentUrl()" style="
+      width: 100%;
+      padding: 10px;
+      background: white;
+      color: #0d9488;
+      border: none;
+      border-radius: 8px;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+      📋 Copy Student Link
+    </button>
+    
+    <button onclick="endTeacherSession(); this.closest('#teacherControlPanel').remove();" style="
+      width: 100%;
+      padding: 8px;
+      background: rgba(239, 68, 68, 0.2);
+      color: white;
+      border: 1px solid rgba(239, 68, 68, 0.5);
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      margin-top: 8px;
+    ">
+      🛑 End Session
+    </button>
+  `;
+  
+  document.body.appendChild(panel);
+}
+
+// Copy student URL to clipboard
+function copyStudentUrl() {
+  const url = `${window.location.origin}${window.location.pathname}?session=${TEACHER_MODE.sessionId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('Student link copied to clipboard!', 'success');
+  }).catch(err => {
+    console.error('Failed to copy:', err);
+    showToast('Failed to copy link', 'error');
+  });
 }
 
 // ============================================
@@ -2151,8 +2652,8 @@ function closeSubjectModal() {
 function closeTopicModal() {
   document.getElementById('topicModal').classList.add('hidden');
   selectedTopics.clear();
-  // Show subject modal again with selections preserved
-  showSubjectSelection();
+  // Show subject modal again with selections preserved (don't reload)
+  document.getElementById('subjectModal').classList.remove('hidden');
 }
 
 function toggleMixQA() {
@@ -2396,6 +2897,22 @@ async function initializeNewTest() {
     }));
   }
   
+  // ============================================
+  // TEACHER MODE: Create session if teacher
+  // ============================================
+  if (TEACHER_MODE.enabled && TEACHER_MODE.sessionId) {
+    console.log('🎓 Creating teacher session...');
+    await createTeacherSession(TEST_CONFIG.testId, testState.questions);
+    startSessionHeartbeat();
+    showTeacherPanel();
+  }
+  
+  // TEACHER MODE: Subscribe if student
+  if (TEACHER_MODE.isStudent && TEACHER_MODE.sessionId) {
+    console.log('👨‍🎓 Joining as student...');
+    await subscribeToTeacherSession();
+  }
+  
   // Initialize UI
   document.getElementById('testTitle').textContent = TEST_CONFIG.testTitle;
   initializeTimer();
@@ -2573,16 +3090,16 @@ function renderQuestion() {
     const input = document.createElement('input');
     input.type = inputType;
     input.name = inputName;
-    input.value = option.id;
+    input.value = String(option.id); // Ensure string type for consistent comparison
     input.id = `option_${question.id}_${option.id}`;
     
     // Check if this option was previously selected
     const savedAnswer = testState.answers[question.id];
     if (savedAnswer) {
       if (Array.isArray(savedAnswer)) {
-        input.checked = savedAnswer.includes(option.id);
+        input.checked = savedAnswer.includes(String(option.id));
       } else {
-        input.checked = savedAnswer === option.id;
+        input.checked = String(savedAnswer) === String(option.id);
       }
       if (input.checked) div.classList.add('selected');
     }
@@ -2622,10 +3139,20 @@ function renderQuestion() {
   document.getElementById('answerFeedback').style.display = 'none';
   document.getElementById('checkAnswerBtn').style.display = 'none';
   
-  // Show check answer button if question is answered
-  const savedAnswer = testState.answers[question.id];
-  if (savedAnswer && (Array.isArray(savedAnswer) ? savedAnswer.length > 0 : true)) {
-    document.getElementById('checkAnswerBtn').style.display = 'inline-flex';
+  // STUDENT VIEW: Hide check answer button completely
+  if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
+    document.getElementById('checkAnswerBtn').style.display = 'none';
+  } else {
+    // Show check answer button if question is answered
+    const savedAnswer = testState.answers[question.id];
+    if (savedAnswer && (Array.isArray(savedAnswer) ? savedAnswer.length > 0 : true)) {
+      document.getElementById('checkAnswerBtn').style.display = 'inline-flex';
+    }
+  }
+  
+  // TEACHER VIEW: Auto-show answer and rationale
+  if (TEACHER_MODE.enabled) {
+    setTimeout(() => showTeacherAnswerPanel(), 100);
   }
   
   renderQuestionNavigator();
@@ -2671,6 +3198,12 @@ function handleAnswerChange(questionId, isMulti) {
 }
 
 function checkAnswer() {
+  // STUDENT VIEW: Prevent checking answers
+  if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
+    showToast('Answers not available in Student View', 'warning');
+    return;
+  }
+  
   const question = testState.questions[testState.currentIndex];
   const userAnswer = testState.answers[question.id];
   
@@ -2683,13 +3216,13 @@ function checkAnswer() {
   let isCorrect = false;
   if (question.multi) {
     // Multiple choice: must select ALL correct answers and NO incorrect ones
-    const correctSet = new Set(question.correct);
-    const userSet = new Set(userAnswer);
+    const correctSet = new Set(question.correct.map(String)); // Convert to strings
+    const userSet = new Set(Array.isArray(userAnswer) ? userAnswer.map(String) : [String(userAnswer)]);
     isCorrect = correctSet.size === userSet.size && 
                 [...correctSet].every(id => userSet.has(id));
   } else {
     // Single choice: must match the correct answer
-    isCorrect = question.correct.includes(userAnswer);
+    isCorrect = question.correct.map(String).includes(String(userAnswer));
   }
   
   // Show feedback
@@ -2731,7 +3264,7 @@ function checkAnswer() {
   // Highlight correct and incorrect options
   document.querySelectorAll('.option').forEach(opt => {
     const input = opt.querySelector('input');
-    const optionId = input.value;
+    const optionId = String(input.value);
     
     // Disable further changes
     opt.classList.add('disabled');
@@ -2741,7 +3274,7 @@ function checkAnswer() {
     opt.classList.remove('selected');
     
     // Add correct/incorrect classes
-    if (question.correct.includes(optionId)) {
+    if (question.correct.map(String).includes(optionId)) {
       opt.classList.add('correct');
     } else if (input.checked) {
       opt.classList.add('incorrect');
@@ -2760,21 +3293,54 @@ function checkAnswer() {
 // ============================================
 
 function goToQuestion(index) {
+  // Prevent student from navigating independently
+  if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
+    showToast('Navigation controlled by teacher', 'warning');
+    return;
+  }
+  
   testState.currentIndex = index;
   renderQuestion();
+  
+  // Broadcast to students if teacher
+  if (TEACHER_MODE.enabled) {
+    broadcastSessionUpdate();
+  }
 }
 
 function nextQuestion() {
+  // Prevent student from navigating independently
+  if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
+    showToast('Navigation controlled by teacher', 'warning');
+    return;
+  }
+  
   if (testState.currentIndex < testState.questions.length - 1) {
     testState.currentIndex++;
     renderQuestion();
+    
+    // Broadcast to students if teacher
+    if (TEACHER_MODE.enabled) {
+      broadcastSessionUpdate();
+    }
   }
 }
 
 function previousQuestion() {
+  // Prevent student from navigating independently
+  if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
+    showToast('Navigation controlled by teacher', 'warning');
+    return;
+  }
+  
   if (testState.currentIndex > 0) {
     testState.currentIndex--;
     renderQuestion();
+    
+    // Broadcast to students if teacher
+    if (TEACHER_MODE.enabled) {
+      broadcastSessionUpdate();
+    }
   }
 }
 
@@ -2870,13 +3436,13 @@ async function saveTestSession() {
       flagged_questions: Array.from(testState.flagged),
       questions: testState.questions,
       test_config: TEST_CONFIG,
-      start_time: testState.startTime,
+      start_time: new Date(testState.startTime).toISOString(), // Convert timestamp to ISO string
       total_questions: totalQuestions,
       answered_questions: answeredCount,
       progress_percent: progressPercent
     };
     
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from('saved_test_sessions')
       .insert([sessionData])
       .select();
@@ -2903,7 +3469,7 @@ async function saveTestSession() {
 
 async function loadSavedSessions() {
   try {
-    const { data: savedSessions, error } = await supabase
+    const { data: savedSessions, error } = await db
       .from('saved_test_sessions')
       .select('*')
       .order('created_at', { ascending: false });
@@ -2981,7 +3547,7 @@ async function loadSavedSessions() {
 
 async function loadSavedSession(sessionId) {
   try {
-    const { data: session, error } = await supabase
+    const { data: session, error } = await db
       .from('saved_test_sessions')
       .select('*')
       .eq('id', sessionId)
@@ -3035,7 +3601,7 @@ async function deleteSavedSession(sessionId, event) {
   }
   
   try {
-    const { error } = await supabase
+    const { error } = await db
       .from('saved_test_sessions')
       .delete()
       .eq('id', sessionId);
@@ -3069,7 +3635,14 @@ function closeSavedTestsModal() {
 
 async function loadSavedTestsInModal() {
   try {
-    const { data: savedSessions, error } = await supabase
+    // Initialize Supabase if not already done
+    if (!db) {
+      if (!initializeSupabase()) {
+        throw new Error('Cannot connect to database');
+      }
+    }
+    
+    const { data: savedSessions, error } = await db
       .from('saved_test_sessions')
       .select('*')
       .order('created_at', { ascending: false });
@@ -3077,12 +3650,16 @@ async function loadSavedTestsInModal() {
     if (error) {
       console.error('Error loading sessions:', error);
       showToast('Failed to load saved tests', 'error');
-      return;
     }
     
     const listContainer = document.getElementById('savedTestsList');
     
-    if (!savedSessions || savedSessions.length === 0) {
+    // Check for ongoing test in localStorage
+    const ongoingTest = loadFromLocalStorage();
+    const hasOngoing = ongoingTest && ongoingTest.sessionId;
+    const hasSaved = savedSessions && savedSessions.length > 0;
+    
+    if (!hasOngoing && !hasSaved) {
       listContainer.innerHTML = `
         <div style="text-align:center;padding:60px 20px;min-height:300px;display:flex;flex-direction:column;justify-content:center;align-items:center">
           <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="#cbd5e1" stroke-width="1.5" style="margin-bottom:24px">
@@ -3099,59 +3676,204 @@ async function loadSavedTestsInModal() {
     
     listContainer.innerHTML = '';
     
-    savedSessions.forEach((session) => {
-      const savedDate = new Date(session.saved_at);
-      const progress = session.progress_percent || 0;
+    // Show ongoing test first if it exists
+    if (hasOngoing) {
+      const answeredCount = Object.keys(ongoingTest.answers || {}).length;
+      const totalQuestions = ongoingTest.questionIds ? ongoingTest.questionIds.length : 0;
+      const progress = totalQuestions > 0 ? Math.round((answeredCount / totalQuestions) * 100) : 0;
+      const testName = TEST_CONFIG.testTitle || 'Ongoing Test';
       
-      const card = document.createElement('div');
-      card.style.cssText = 'background:white;border:2px solid #e2e8f0;border-radius:16px;padding:20px;margin-bottom:16px;transition:all 0.15s;box-shadow:0 2px 8px rgba(0,0,0,0.06)';
-      card.onmouseenter = () => {
-        card.style.borderColor = '#2dd4bf';
-        card.style.boxShadow = '0 8px 24px rgba(45,212,191,0.15)';
-        card.style.transform = 'translateY(-2px)';
+      const ongoingCard = document.createElement('div');
+      ongoingCard.style.cssText = 'background:linear-gradient(135deg, rgba(45,212,191,0.15) 0%, rgba(20,184,166,0.08) 100%);border:2px solid #2dd4bf;border-radius:16px;padding:20px;margin-bottom:20px;transition:all 0.15s;box-shadow:0 4px 12px rgba(45,212,191,0.2)';
+      ongoingCard.onmouseenter = () => {
+        ongoingCard.style.borderColor = '#14b8a6';
+        ongoingCard.style.boxShadow = '0 8px 24px rgba(45,212,191,0.3)';
+        ongoingCard.style.transform = 'translateY(-2px)';
       };
-      card.onmouseleave = () => {
-        card.style.borderColor = '#e2e8f0';
-        card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
-        card.style.transform = 'translateY(0)';
+      ongoingCard.onmouseleave = () => {
+        ongoingCard.style.borderColor = '#2dd4bf';
+        ongoingCard.style.boxShadow = '0 4px 12px rgba(45,212,191,0.2)';
+        ongoingCard.style.transform = 'translateY(0)';
       };
       
-      card.innerHTML = `
-        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
-          <div style="flex:1">
-            <h4 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 6px 0">${session.session_name}</h4>
-            <p style="font-size:12px;color:#64748b;margin:0">Saved ${savedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${savedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+      ongoingCard.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+          <div style="width:36px;height:36px;background:linear-gradient(135deg,#2dd4bf,#14b8a6);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(45,212,191,0.3)">
+            ⚡
           </div>
-          <button onclick="deleteSavedSession('${session.id}', event)" 
-            style="background:rgba(239,68,68,0.08);border:1.5px solid rgba(239,68,68,0.2);color:#dc2626;padding:6px 12px;border-radius:8px;font-weight:600;font-size:11px;cursor:pointer;transition:all 0.15s;flex-shrink:0"
-            onmouseover="this.style.background='rgba(239,68,68,0.12)';this.style.borderColor='#dc2626'"
-            onmouseout="this.style.background='rgba(239,68,68,0.08)';this.style.borderColor='rgba(239,68,68,0.2)'">
-            Delete
-          </button>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <h4 style="font-size:16px;font-weight:800;color:#0f172a;margin:0">${testName}</h4>
+              <span style="background:#2dd4bf;color:#022c22;font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:0.5px">Ongoing</span>
+            </div>
+            <p style="font-size:12px;color:#0d9488;font-weight:600;margin:4px 0 0 0">${totalQuestions} Questions</p>
+          </div>
         </div>
         <div style="margin-bottom:14px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-            <span style="font-size:12px;color:#64748b;font-weight:500">Progress</span>
-            <span style="font-size:13px;font-weight:700;color:#2dd4bf">${session.answered_questions}/${session.total_questions} (${progress}%)</span>
+            <span style="font-size:12px;color:#0d9488;font-weight:600">Progress</span>
+            <span style="font-size:13px;font-weight:700;color:#0f172a">${answeredCount}/${totalQuestions} (${progress}%)</span>
           </div>
-          <div style="background:#e2e8f0;border-radius:8px;height:8px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.05)">
-            <div style="background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);height:100%;width:${progress}%;transition:width 0.4s ease;border-radius:8px"></div>
+          <div style="background:#cbd5e1;border-radius:8px;height:8px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.1)">
+            <div style="background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);height:100%;width:${progress}%;transition:width 0.4s ease;border-radius:8px;box-shadow:0 0 8px rgba(45,212,191,0.5)"></div>
           </div>
         </div>
-        <button onclick="loadSavedSessionFromModal('${session.id}')" 
-          style="width:100%;background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);color:#022c22;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;transition:all 0.15s;box-shadow:0 2px 8px rgba(45,212,191,0.2)"
-          onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(45,212,191,0.3)'"
-          onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(45,212,191,0.2)'">
-          Continue Test
+        <button onclick="handleResumeOngoingTest()" 
+          style="width:100%;background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);color:#022c22;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;transition:all 0.15s;box-shadow:0 2px 8px rgba(45,212,191,0.3)"
+          onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(45,212,191,0.4)'"
+          onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(45,212,191,0.3)'">
+          ▶ Continue Ongoing Test
         </button>
       `;
       
-      listContainer.appendChild(card);
-    });
+      listContainer.appendChild(ongoingCard);
+    }
+    
+    // Show saved database sessions
+    if (hasSaved) {
+      savedSessions.forEach((session) => {
+        const savedDate = new Date(session.saved_at);
+        const progress = session.progress_percent || 0;
+        
+        const card = document.createElement('div');
+        card.style.cssText = 'background:white;border:2px solid #e2e8f0;border-radius:16px;padding:20px;margin-bottom:16px;transition:all 0.15s;box-shadow:0 2px 8px rgba(0,0,0,0.06)';
+        card.onmouseenter = () => {
+          card.style.borderColor = '#2dd4bf';
+          card.style.boxShadow = '0 8px 24px rgba(45,212,191,0.15)';
+          card.style.transform = 'translateY(-2px)';
+        };
+        card.onmouseleave = () => {
+          card.style.borderColor = '#e2e8f0';
+          card.style.boxShadow = '0 2px 8px rgba(0,0,0,0.06)';
+          card.style.transform = 'translateY(0)';
+        };
+        
+        card.innerHTML = `
+          <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+            <div style="flex:1">
+              <h4 style="font-size:16px;font-weight:700;color:#0f172a;margin:0 0 6px 0">${session.session_name}</h4>
+              <p style="font-size:12px;color:#64748b;margin:0">Saved ${savedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at ${savedDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+            </div>
+            <button onclick="deleteSavedSession('${session.id}', event)" 
+              style="background:rgba(239,68,68,0.08);border:1.5px solid rgba(239,68,68,0.2);color:#dc2626;padding:6px 12px;border-radius:8px;font-weight:600;font-size:11px;cursor:pointer;transition:all 0.15s;flex-shrink:0"
+              onmouseover="this.style.background='rgba(239,68,68,0.12)';this.style.borderColor='#dc2626'"
+              onmouseout="this.style.background='rgba(239,68,68,0.08)';this.style.borderColor='rgba(239,68,68,0.2)'">
+              Delete
+            </button>
+          </div>
+          <div style="margin-bottom:14px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <span style="font-size:12px;color:#64748b;font-weight:500">Progress</span>
+              <span style="font-size:13px;font-weight:700;color:#2dd4bf">${session.answered_questions}/${session.total_questions} (${progress}%)</span>
+            </div>
+            <div style="background:#e2e8f0;border-radius:8px;height:8px;overflow:hidden;box-shadow:inset 0 1px 2px rgba(0,0,0,0.05)">
+              <div style="background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);height:100%;width:${progress}%;transition:width 0.4s ease;border-radius:8px"></div>
+            </div>
+          </div>
+          <button onclick="loadSavedSessionFromModal('${session.id}')" 
+            style="width:100%;background:linear-gradient(135deg,#2dd4bf 0%,#14b8a6 100%);color:#022c22;border:none;padding:12px;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px;transition:all 0.15s;box-shadow:0 2px 8px rgba(45,212,191,0.2)"
+            onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 4px 12px rgba(45,212,191,0.3)'"
+            onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 8px rgba(45,212,191,0.2)'">
+            Continue Test
+          </button>
+        `;
+        
+        listContainer.appendChild(card);
+      });
+    }
     
   } catch (error) {
     console.error('Error loading saved sessions in modal:', error);
     showToast('Failed to load saved tests', 'error');
+  }
+}
+
+async function resumeOngoingTest() {
+  try {
+    console.log('📂 Resuming ongoing test...');
+    
+    // Close modals
+    closeSavedTestsModal();
+    const subjectModal = document.getElementById('subjectModal');
+    if (subjectModal) {
+      subjectModal.classList.add('hidden');
+    }
+    
+    // Get the saved test from localStorage
+    const saved = loadFromLocalStorage();
+    if (!saved) {
+      console.error('❌ No saved test found in localStorage');
+      showToast('No ongoing test found', 'error');
+      return;
+    }
+    
+    console.log('✓ Found saved test:', saved);
+    
+    // Initialize Supabase if needed
+    if (!db) {
+      console.log('🔌 Initializing Supabase...');
+      if (!initializeSupabase()) {
+        showToast('Cannot connect to database', 'error');
+        return;
+      }
+    }
+    
+    // Show loading
+    document.getElementById('startScreen').innerHTML = `
+      <div class="start-content">
+        <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
+        <p style="color:#cbd5e1;font-size:18px">Resuming your test...</p>
+      </div>
+    `;
+    
+    // Load test configuration
+    TEST_CONFIG.testId = saved.testId;
+    console.log('📖 Loading test configuration for:', saved.testId);
+    await loadTestConfiguration(saved.testId);
+    
+    // Resume the test state
+    console.log('🔄 Restoring test state...');
+    await resumeTest(saved);
+    
+    // Hide start screen, show test container
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('testContainer').style.display = 'block';
+    
+    // Prevent accidental page leave
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    console.log('✅ Test resumed successfully');
+    showToast('Resumed ongoing test', 'success');
+    
+  } catch (error) {
+    console.error('❌ Failed to resume test:', error);
+    showToast('Failed to resume test: ' + error.message, 'error');
+    
+    // Show error on start screen
+    document.getElementById('startScreen').innerHTML = `
+      <div class="start-content">
+        <h1 style="color:white;margin-bottom:16px">❌ Error</h1>
+        <p style="color:#cbd5e1;font-size:18px;margin-bottom:32px">${error.message || 'Failed to resume test'}</p>
+        <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
+      </div>
+    `;
+    document.getElementById('startScreen').style.display = 'block';
+    document.getElementById('testContainer').style.display = 'none';
+  }
+}
+
+// Wrapper function to handle async onclick
+function handleResumeOngoingTest() {
+  resumeOngoingTest().catch(error => {
+    console.error('❌ Error in handleResumeOngoingTest:', error);
+    showToast('Failed to resume test', 'error');
+  });
+}
+
+function closeSubjectModal() {
+  const modal = document.getElementById('subjectModal');
+  if (modal) {
+    modal.classList.add('hidden');
   }
 }
 
@@ -3387,10 +4109,15 @@ function downloadResults() {
 
 // Load saved sessions on page load
 document.addEventListener('DOMContentLoaded', () => {
-  // Set logo from base64
-  const startLogo = document.getElementById('startLogo');
-  if (startLogo && typeof ACNHS_LOGO_DATA_URL !== 'undefined') {
-    startLogo.src = ACNHS_LOGO_DATA_URL;
+  // Initialize Supabase first
+  initializeSupabase();
+  
+  // Apply logo using centralized function
+  if (typeof window.applyAcnshLogo === 'function') {
+    window.applyAcnshLogo();
+    console.log('✅ Logo applied via applyAcnshLogo()');
+  } else {
+    console.warn('⚠️ applyAcnshLogo() not available');
   }
   
   loadSavedSessions();

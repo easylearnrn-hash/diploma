@@ -23,6 +23,13 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8000
 
 class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/favicon.ico':
+            self.send_response(204)
+            self.end_headers()
+            return
+        super().do_GET()
+
     def end_headers(self):
         # Add CORS headers to allow cross-origin requests
         self.send_header('Access-Control-Allow-Origin', '*')

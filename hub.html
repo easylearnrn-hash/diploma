@@ -1174,6 +1174,44 @@
             </div>
           </div>
 
+          <!-- JOIN CLASS BANNER (Only shows if active link exists) -->
+          <div id="hubJoinClassBanner" style="
+            display:none;
+            background:linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.05));
+            border:1.5px solid rgba(34,197,94,0.35);
+            border-radius:var(--radius-xl);
+            padding:18px 20px;
+            box-shadow:0 8px 24px rgba(34,197,94,0.12);
+          ">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px">
+              <div>
+                <div style="font-size:14px;font-weight:900;color:#16a34a;letter-spacing:-0.2px">🟢 Live Class Available</div>
+                <p style="margin-top:4px;font-size:12.5px;color:#15803d;font-weight:600">Your instructor has posted a class link. Click to join now.</p>
+              </div>
+              <button 
+                onclick="hubJoinActiveClass()" 
+                style="
+                  padding:12px 28px;
+                  background:linear-gradient(135deg,#22c55e,#16a34a);
+                  border:none;
+                  border-radius:14px;
+                  color:white;
+                  font-weight:800;
+                  cursor:pointer;
+                  font-size:13px;
+                  transition:all 0.3s;
+                  box-shadow:0 4px 16px rgba(34,197,94,0.4);
+                  white-space:nowrap;
+                  letter-spacing:0.2px;
+                " 
+                onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(34,197,94,0.5)'" 
+                onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(34,197,94,0.4)'"
+              >
+                🟢 Join Class
+              </button>
+            </div>
+          </div>
+
           <!-- MODULES -->
           <div class="card">
             <div class="card-header">
@@ -1365,6 +1403,31 @@
               <strong>Current Semester</strong>
               <span id="currentSemester">—</span>
             </div>
+            <!-- Join Class Button (Only shows if active link exists for student's group) -->
+            <button 
+              id="hubJoinClassButton" 
+              onclick="hubJoinActiveClass()" 
+              style="
+                display:none;
+                margin-top:10px;
+                padding:12px 20px;
+                background:linear-gradient(135deg,#22c55e,#16a34a);
+                border:none;
+                border-radius:12px;
+                color:white;
+                font-weight:800;
+                cursor:pointer;
+                font-size:13px;
+                transition:all 0.3s;
+                box-shadow:0 4px 16px rgba(34,197,94,0.4);
+                width:100%;
+                letter-spacing:0.2px;
+              " 
+              onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(34,197,94,0.5)'" 
+              onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(34,197,94,0.4)'"
+            >
+              🟢 Join Class
+            </button>
             <div class="line">
               <strong>Enrollment Status</strong>
               <span id="enrollmentStatus">—</span>
@@ -2288,6 +2351,161 @@
     console.log('✅ Modern Notes Library System initialized');
     console.log(`👤 User role: ${isAdmin ? 'Admin' : 'Student'}`);
     console.log(`📚 Total notes available: ${HARDCODED_NOTES.length}`);
+
+    // ============================================
+    // JOIN CLASS LINK FUNCTIONALITY (Hub Side)
+    // ============================================
+    
+    let hubActiveClassLink = null;
+    let hubLinkCheckInterval = null;
+
+    // Resolve student group from hubStudentData or sessionStorage
+    function getHubStudentGroup() {
+      // From hub student data passed by portal
+      if (studentData && studentData.group) {
+        console.log('🔗 Hub: Student group from hubData:', studentData.group);
+        return studentData.group;
+      }
+      // From sessionStorage/localStorage
+      const stored = sessionStorage.getItem('studentGroup') || localStorage.getItem('studentGroup');
+      if (stored) {
+        console.log('🔗 Hub: Student group from storage:', stored);
+        return stored;
+      }
+      console.log('🔗 Hub: No student group found, matching "all" links only');
+      return null;
+    }
+
+    async function initHubClassLinkChecker() {
+      try {
+        console.log('🔗 Hub: Initializing Join Class link checker...');
+        await checkHubActiveClassLink();
+        
+        // Set up realtime subscription for instant updates
+        if (db) {
+          const channel = db
+            .channel('class-join-links-hub')
+            .on('postgres_changes', 
+              { event: '*', schema: 'public', table: 'class_join_links' },
+              (payload) => {
+                console.log('🔗 Hub: Realtime class link update received:', payload);
+                checkHubActiveClassLink();
+              }
+            )
+            .subscribe((status) => {
+              console.log('🔗 Hub: Realtime subscription status:', status);
+            });
+        }
+        
+        // Also check every 30 seconds as backup
+        hubLinkCheckInterval = setInterval(checkHubActiveClassLink, 30000);
+      } catch (error) {
+        console.error('🔗 Hub: Error initializing class link checker:', error);
+      }
+    }
+
+    async function checkHubActiveClassLink() {
+      try {
+        if (!db) {
+          console.warn('🔗 Hub: Supabase not available');
+          return;
+        }
+
+        const studentGroup = getHubStudentGroup();
+        
+        // Query ALL active links, then filter client-side for reliability
+        const { data, error } = await db
+          .from('class_join_links')
+          .select('*')
+          .is('ended_at', null)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (error) {
+          console.error('🔗 Hub: Error checking class link:', error);
+          return;
+        }
+        
+        console.log('🔗 Hub: Active class links found:', data?.length || 0, data);
+
+        const joinButton = document.getElementById('hubJoinClassButton');
+        const joinBanner = document.getElementById('hubJoinClassBanner');
+        if (!joinButton && !joinBanner) {
+          console.warn('🔗 Hub: Join Class elements not found in DOM');
+          return;
+        }
+
+        // Filter links matching this student's group or "all"
+        const matchingLinks = (data || []).filter(link => {
+          if (link.group_id === 'all') return true;
+          if (studentGroup && link.group_id === studentGroup) return true;
+          return false;
+        });
+        
+        console.log('🔗 Hub: Matching links for group "' + studentGroup + '":', matchingLinks.length);
+
+        if (matchingLinks.length > 0) {
+          hubActiveClassLink = matchingLinks[0];
+          
+          // Check expiration
+          if (hubActiveClassLink.expires_at) {
+            const now = new Date();
+            const expiresAt = new Date(hubActiveClassLink.expires_at);
+            if (now >= expiresAt) {
+              console.log('🔗 Hub: Link expired at', expiresAt);
+              if (joinButton) joinButton.style.display = 'none';
+              if (joinBanner) joinBanner.style.display = 'none';
+              hubActiveClassLink = null;
+              return;
+            }
+          }
+          
+          // Show BOTH the button and the banner!
+          if (joinButton) joinButton.style.display = 'block';
+          if (joinBanner) joinBanner.style.display = 'block';
+          console.log('🔗 Hub: ✅ Join Class button + banner are NOW VISIBLE! URL:', hubActiveClassLink.url);
+        } else {
+          if (joinButton) joinButton.style.display = 'none';
+          if (joinBanner) joinBanner.style.display = 'none';
+          hubActiveClassLink = null;
+          console.log('🔗 Hub: No matching active links. Button hidden.');
+        }
+      } catch (error) {
+        console.error('🔗 Hub: Error checking for active class link:', error);
+      }
+    }
+
+    function hubJoinActiveClass() {
+      if (!hubActiveClassLink || !hubActiveClassLink.url) {
+        alert('❌ No active class link available');
+        return;
+      }
+      window.open(hubActiveClassLink.url, '_blank', 'noopener,noreferrer');
+      console.log('🔗 Hub: Student joined class:', {
+        url: hubActiveClassLink.url,
+        group: hubActiveClassLink.group_id,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // Make globally available
+    window.hubJoinActiveClass = hubJoinActiveClass;
+
+    // Initialize the class link checker
+    console.log('🔗 Hub: Starting Join Class Link initialization...');
+    console.log('🔗 Hub: Button element:', document.getElementById('hubJoinClassButton'));
+    console.log('🔗 Hub: Banner element:', document.getElementById('hubJoinClassBanner'));
+    console.log('🔗 Hub: Student data group:', studentData?.group);
+    initHubClassLinkChecker();
+    console.log('🔗 Hub: Join Class Link system loaded');
+
+    // Manual test function
+    window.testHubClassLinkChecker = async function() {
+      console.log('🔗 HUB MANUAL TEST: Checking for active class links...');
+      console.log('🔗 Hub student group:', getHubStudentGroup());
+      await checkHubActiveClassLink();
+    };
   </script>
 </body>
 </html>

@@ -1495,6 +1495,18 @@
           <div class="stat-icon">⏳</div>
         </div>
       </div>
+
+      <!-- Class Link Status Card - RED when no active link -->
+      <div class="stat-card" id="classLinkStatusCard" onclick="openJoinClassModal()" style="cursor:pointer;transition:all 0.3s" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow=''">
+        <div class="stat-header">
+          <div>
+            <div class="stat-label">Class Link Status</div>
+            <div class="stat-value" id="classLinkStatus" style="font-size:18px;color:#ef4444">NO ACTIVE LINK</div>
+            <div class="stat-change" id="classLinkInfo">Click to post a link</div>
+          </div>
+          <div class="stat-icon" style="font-size:48px" id="classLinkIcon">🔴</div>
+        </div>
+      </div>
     </div>
 
     <!-- QUICK ACTIONS -->
@@ -1523,6 +1535,17 @@
           <div class="action-icon">✅</div>
           <h3 class="action-title">Verify Transcripts</h3>
           <p class="action-desc">Validate official transcripts using QR codes and verification</p>
+        </a>
+
+        <a href="#" class="action-card" onclick="event.preventDefault(); openJoinClassModal();">
+          <div class="action-icon" style="background: linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.05));">🔗</div>
+          <h3 class="action-title" style="color: #22c55e;">Post Join Class Link</h3>
+          <p class="action-desc">Share 1-hour expiring link for students to join live class</p>
+          <div id="activeLinkStatus" style="margin-top: 12px; display: none;">
+            <div style="padding: 8px 12px; background: rgba(34,197,94,0.15); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; font-size: 12px; font-weight: 600; color: #22c55e;">
+              🟢 ACTIVE LINK
+            </div>
+          </div>
         </a>
       </div>
     </div>
@@ -2781,6 +2804,396 @@
     // Load stats and tasks on page load
     loadStats();
     loadTasks();
+
+    // ============================================
+    // JOIN CLASS LINK FUNCTIONALITY
+    // ============================================
+
+    let activeLinkData = null;
+    let countdownInterval = null;
+
+    // Initialize Join Class Link system
+    async function initializeJoinClassLink() {
+      try {
+        await checkActiveLink();
+        
+        // Set up realtime subscription for instant updates
+        const channel = db
+          .channel('class-join-links-admin')
+          .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'class_join_links' },
+            () => checkActiveLink()
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('Error initializing join class link:', error);
+      }
+    }
+
+    async function checkActiveLink() {
+      try {
+        const { data, error} = await db
+          .from('class_join_links')
+          .select('*')
+          .is('ended_at', null)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) throw error;
+
+        // Filter out expired links (if expires_at is set)
+        if (data && data.length > 0) {
+          const link = data[0];
+          if (!link.expires_at || new Date(link.expires_at) > new Date()) {
+            activeLinkData = link;
+            updateActiveLinkStatus(true);
+          } else {
+            activeLinkData = null;
+            updateActiveLinkStatus(false);
+          }
+        } else {
+          activeLinkData = null;
+          updateActiveLinkStatus(false);
+        }
+      } catch (error) {
+        console.error('Error checking active link:', error);
+      }
+    }
+
+    function updateActiveLinkStatus(hasActiveLink) {
+      // Update Quick Actions badge
+      const statusBadge = document.getElementById('activeLinkStatus');
+      if (statusBadge) {
+        statusBadge.style.display = hasActiveLink ? 'block' : 'none';
+      }
+      
+      // Update RED/GREEN status card
+      const statusCard = document.getElementById('classLinkStatusCard');
+      const statusText = document.getElementById('classLinkStatus');
+      const statusInfo = document.getElementById('classLinkInfo');
+      const statusIcon = document.getElementById('classLinkIcon');
+      
+      if (statusCard && statusText && statusInfo && statusIcon) {
+        if (hasActiveLink && activeLinkData) {
+          // GREEN - Active link exists
+          statusCard.style.background = 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05))';
+          statusCard.style.borderColor = 'rgba(34,197,94,0.3)';
+          statusText.textContent = 'ACTIVE LINK';
+          statusText.style.color = '#22c55e';
+          statusInfo.textContent = `For ${activeLinkData.group_id === 'all' ? 'All Students' : activeLinkData.group_id}`;
+          statusIcon.textContent = '🟢';
+        } else {
+          // RED - No active link
+          statusCard.style.background = '';
+          statusCard.style.borderColor = '';
+          statusText.textContent = 'NO ACTIVE LINK';
+          statusText.style.color = '#ef4444';
+          statusInfo.textContent = 'Click to post a link';
+          statusIcon.textContent = '🔴';
+        }
+      }
+    }
+
+    async function loadStudentGroups() {
+      try {
+        const { data, error } = await db
+          .from('students')
+          .select('group')
+          .not('group', 'is', null);
+        
+        if (error) throw error;
+        
+        // Get unique groups
+        const uniqueGroups = [...new Set(data.map(s => s.group).filter(Boolean))];
+        
+        const groupSelect = document.getElementById('classLinkGroup');
+        if (groupSelect && uniqueGroups.length > 0) {
+          // Keep "All Students" option
+          uniqueGroups.sort().forEach(group => {
+            const option = document.createElement('option');
+            option.value = group;
+            option.textContent = group;
+            groupSelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading student groups:', error);
+      }
+    }
+
+    function openJoinClassModal() {
+      document.getElementById('joinClassModalOverlay').style.display = 'flex';
+      
+      // Load groups when modal opens
+      loadStudentGroups();
+      
+      if (activeLinkData) {
+        document.getElementById('activeLinkDisplay').style.display = 'block';
+        document.getElementById('newLinkForm').style.display = 'none';
+        document.getElementById('activeLinkUrl').textContent = activeLinkData.url;
+        startCountdown();
+      } else {
+        document.getElementById('activeLinkDisplay').style.display = 'none';
+        document.getElementById('newLinkForm').style.display = 'block';
+      }
+    }
+
+    function closeJoinClassModal() {
+      document.getElementById('joinClassModalOverlay').style.display = 'none';
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+    }
+
+    function startCountdown() {
+      if (countdownInterval) clearInterval(countdownInterval);
+      
+      const updateCountdown = () => {
+        if (!activeLinkData) {
+          clearInterval(countdownInterval);
+          return;
+        }
+
+        const now = new Date();
+        const expiresAt = new Date(activeLinkData.expires_at);
+        const diff = expiresAt - now;
+
+        if (diff <= 0) {
+          clearInterval(countdownInterval);
+          document.getElementById('linkCountdown').textContent = 'EXPIRED';
+          checkActiveLink(); // Refresh to remove expired link
+          return;
+        }
+
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        document.getElementById('linkCountdown').textContent = 
+          `${minutes}:${seconds.toString().padStart(2, '0')} remaining`;
+      };
+
+      updateCountdown();
+      countdownInterval = setInterval(updateCountdown, 1000);
+    }
+
+    async function publishClassLink() {
+      const urlInput = document.getElementById('classLinkUrl');
+      const groupSelect = document.getElementById('classLinkGroup');
+      const url = urlInput.value.trim();
+      const selectedGroup = groupSelect.value;
+
+      // Validation
+      if (!url) {
+        alert('Please enter a class link URL');
+        urlInput.focus();
+        return;
+      }
+
+      if (!/^https?:\/\/.+/.test(url)) {
+        alert('Please enter a valid URL starting with http:// or https://');
+        urlInput.focus();
+        return;
+      }
+
+      if (!selectedGroup) {
+        alert('Please select which group should see the link');
+        groupSelect.focus();
+        return;
+      }
+
+      try {
+        // First, deactivate any existing active links for this group
+        await db
+          .from('class_join_links')
+          .update({ is_active: false, ended_at: new Date().toISOString() })
+          .eq('group_id', selectedGroup)
+          .eq('is_active', true);
+
+        const { data, error } = await db
+          .from('class_join_links')
+          .insert([{
+            url: url,
+            group_id: selectedGroup,
+            created_by: userEmail,
+            expires_at: null, // No expiration - link stays active until manually ended
+            is_active: true
+          }])
+          .select();
+
+        if (error) throw error;
+
+        activeLinkData = data[0];
+        
+        // Send email to students in the selected group
+        await sendClassLinkEmail(url, selectedGroup);
+        
+        // Show success message
+        alert('✅ Class link published successfully!\n\n' +
+              `Students in ${selectedGroup === 'all' ? 'all groups' : selectedGroup} will now see the "Join Class" button.\n\n` +
+              'Emails have been sent to all students in the selected group.\n\n' +
+              'The link will remain active until you manually end it.');
+        
+        // Reset form
+        urlInput.value = '';
+        groupSelect.value = '';
+        
+        // Update UI
+        await checkActiveLink();
+        closeJoinClassModal();
+      } catch (error) {
+        console.error('Error publishing class link:', error);
+        alert('❌ Failed to publish class link. Please try again.\n\nError: ' + error.message);
+      }
+    }
+
+    async function sendClassLinkEmail(classUrl, targetGroup) {
+      try {
+        // Get students in the selected group
+        let query = db.from('students').select('full_name, email, group');
+        
+        if (targetGroup !== 'all') {
+          query = query.eq('group', targetGroup);
+        }
+        
+        const { data: students, error } = await query;
+        if (error) throw error;
+
+        if (!students || students.length === 0) {
+          console.warn('No students found for group:', targetGroup);
+          return;
+        }
+
+        console.log(`Sending emails to ${students.length} students in group: ${targetGroup}`);
+
+        // Send email to each student
+        for (const student of students) {
+          if (!student.email) continue;
+
+          const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Class Link - ACNHS</title>
+</head>
+<body style="margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;background:#f8fafc">
+  <div style="max-width:600px;margin:40px auto;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 12px rgba(0,0,0,0.1)">
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#0a2540,#0f172a);padding:32px 24px;text-align:center">
+      <h1 style="margin:0;color:#ffffff;font-size:28px;font-weight:800">Class Link Available</h1>
+      <p style="margin:8px 0 0 0;color:#94a3b8;font-size:14px">Armenian College of Nursing & Health Sciences</p>
+    </div>
+    
+    <!-- Content -->
+    <div style="padding:32px 24px">
+      <p style="margin:0 0 16px 0;color:#0f172a;font-size:16px;line-height:1.6">
+        Dear ${student.full_name},
+      </p>
+      
+      <p style="margin:0 0 24px 0;color:#475569;font-size:15px;line-height:1.6">
+        Your instructor has posted a link for you to join the live class. Click the button below to join now.
+      </p>
+      
+      <!-- Join Button -->
+      <div style="text-align:center;margin:32px 0">
+        <a href="${classUrl}" style="display:inline-block;padding:16px 48px;background:linear-gradient(135deg,#22c55e,#16a34a);color:#ffffff;text-decoration:none;border-radius:12px;font-weight:700;font-size:18px;box-shadow:0 6px 20px rgba(34,197,94,0.4)">
+          🟢 Join Class
+        </a>
+      </div>
+      
+      <p style="margin:24px 0 0 0;color:#64748b;font-size:13px;line-height:1.6">
+        <strong>Note:</strong> If you can't click the button, copy and paste this link into your browser:<br>
+        <a href="${classUrl}" style="color:#2dd4bf;word-break:break-all">${classUrl}</a>
+      </p>
+    </div>
+    
+    <!-- Footer -->
+    <div style="background:#f1f5f9;padding:24px;text-align:center;border-top:1px solid #e2e8f0">
+      <p style="margin:0;color:#64748b;font-size:12px">
+        Armenian College of Nursing & Health Sciences<br>
+        Yerevan, Armenia<br>
+        <a href="mailto:hub@acnhs.am" style="color:#2dd4bf;text-decoration:none">hub@acnhs.am</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+          `.trim();
+
+          // Call Supabase Edge Function to send email
+          const { error: emailError } = await db.functions.invoke('send-email', {
+            body: {
+              to: student.email,
+              from: 'hub@acnhs.am',
+              subject: '🟢 Class Link Available - Join Now',
+              html: emailHtml
+            }
+          });
+
+          if (emailError) {
+            console.error(`Failed to send email to ${student.email}:`, emailError);
+          } else {
+            console.log(`Email sent to ${student.email}`);
+          }
+        }
+      } catch (error) {
+        console.error('Error sending class link emails:', error);
+        // Don't throw - email failure shouldn't block the link posting
+      }
+    }
+
+    function copyActiveLink() {
+      if (!activeLinkData) return;
+      
+      navigator.clipboard.writeText(activeLinkData.url)
+        .then(() => {
+          alert('📋 Link copied to clipboard!');
+        })
+        .catch(err => {
+          console.error('Failed to copy:', err);
+          alert('Failed to copy link. Please copy manually:\n\n' + activeLinkData.url);
+        });
+    }
+
+    async function endLinkEarly() {
+      if (!activeLinkData) return;
+      
+      if (!confirm('Are you sure you want to end this link early?\n\nStudents will no longer see the JOIN THE CLASS button.')) {
+        return;
+      }
+
+      try {
+        const { error } = await db
+          .from('class_join_links')
+          .update({
+            ended_at: new Date().toISOString(),
+            is_active: false
+          })
+          .eq('id', activeLinkData.id);
+
+        if (error) throw error;
+
+        alert('✅ Link ended successfully!');
+        activeLinkData = null;
+        await checkActiveLink();
+        closeJoinClassModal();
+      } catch (error) {
+        console.error('Error ending link:', error);
+        alert('❌ Failed to end link. Please try again.\n\nError: ' + error.message);
+      }
+    }
+
+    // Make functions globally available
+    window.openJoinClassModal = openJoinClassModal;
+    window.closeJoinClassModal = closeJoinClassModal;
+    window.publishClassLink = publishClassLink;
+    window.copyActiveLink = copyActiveLink;
+    window.endLinkEarly = endLinkEarly;
+
+    // Initialize on page load
+    initializeJoinClassLink();
   </script>
 
   <!-- Comment Modal -->
@@ -2809,6 +3222,160 @@
       <div class="task-detail-meta" id="taskDetailMeta">
         <!-- Priority, Due Date, Assigned By will be inserted here -->
       </div>
+
+      <div class="task-detail-description" id="taskDetailDescription">
+        <!-- Description will be inserted here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Class Link Modal -->
+  <div class="modal-overlay" id="joinClassModalOverlay" style="display: none;">
+    <div class="modal-container" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: var(--text);">
+          🔗 Post Join Class Link
+        </h2>
+        <button class="modal-close" onclick="closeJoinClassModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 32px;">
+        <!-- Active Link Display -->
+        <div id="activeLinkDisplay" style="display: none; margin-bottom: 24px; padding: 20px; background: rgba(34,197,94,0.1); border: 2px solid rgba(34,197,94,0.3); border-radius: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 20px;">🟢</span>
+              <span style="font-weight: 700; color: #22c55e; font-size: 16px;">ACTIVE LINK</span>
+            </div>
+            <div id="linkCountdown" style="font-weight: 600; color: #22c55e; font-size: 14px;">
+              59:59 remaining
+            </div>
+          </div>
+          <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; word-break: break-all;" id="activeLinkUrl">
+            <!-- URL will be inserted here -->
+          </div>
+          <div style="display: flex; gap: 12px;">
+            <button onclick="copyActiveLink()" style="flex: 1; padding: 10px; background: rgba(45,212,191,0.15); border: 1px solid var(--primary); border-radius: 8px; color: var(--primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+              📋 Copy Link
+            </button>
+            <button onclick="endLinkEarly()" style="flex: 1; padding: 10px; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; border-radius: 8px; color: #ef4444; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+              🛑 End Now
+            </button>
+          </div>
+        </div>
+
+        <!-- New Link Form -->
+        <div id="newLinkForm">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text); font-size: 14px;">
+              Class Link URL <span style="color: #ef4444;">*</span>
+            </label>
+            <input 
+              type="url" 
+              id="classLinkUrl" 
+              placeholder="https://zoom.us/j/123456789 or https://meet.google.com/abc-def-ghi"
+              style="width: 100%; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; transition: all 0.2s;"
+              onfocus="this.style.borderColor='var(--primary)'"
+              onblur="this.style.borderColor='var(--border)'"
+            >
+            <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+              💡 Tip: Enter your Zoom, Google Meet, or Microsoft Teams link
+            </div>
+          </div>
+
+          <div style="margin-bottom: 24px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: var(--text); font-size: 14px;">
+              Which group should see the link? <span style="color: #ef4444;">*</span>
+            </label>
+            <select 
+              id="classLinkGroup"
+              style="width: 100%; padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; cursor: pointer;"
+            >
+              <option value="">-- Select Group --</option>
+              <option value="all">All Students</option>
+              <!-- Dynamic groups will be loaded here -->
+            </select>
+            <div style="margin-top: 6px; font-size: 12px; color: var(--text-muted);">
+              📢 Only students in the selected group will see the Join Class button and receive the email
+            </div>
+          </div>
+
+          <div style="padding: 16px; background: rgba(45,212,191,0.08); border: 1px solid rgba(45,212,191,0.2); border-radius: 8px; margin-bottom: 24px;">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <span style="font-size: 20px;">📢</span>
+              <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">
+                Students in the selected group will see a <strong style="color: var(--primary);">green "Join Class" button</strong> below their "Current Semester" section. The link will <strong>remain active</strong> until you manually end it using the "End Now" button.
+              </div>
+            </div>
+          </div>
+
+          <button 
+            onclick="publishClassLink()" 
+            style="width: 100%; padding: 14px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; border-radius: 10px; color: white; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 12px rgba(34,197,94,0.3);"
+            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(34,197,94,0.4)'"
+            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(34,197,94,0.3)'"
+          >
+            � Post Link & Send Emails
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.85);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      backdrop-filter: blur(8px);
+    }
+
+    .modal-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-close {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      font-size: 32px;
+      cursor: pointer;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+
+    .modal-close:hover {
+      background: rgba(239,68,68,0.15);
+      color: #ef4444;
+    }
+  </style>
+
       
       <div class="task-detail-section">
         <div class="task-detail-section-title">Description</div>

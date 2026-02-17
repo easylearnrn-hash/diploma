@@ -8,6 +8,7 @@
   <!-- Supabase Client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/acnhs-logo-base64.js"></script>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
 
@@ -746,6 +747,15 @@
             <div class="stat-card">
               <strong id="graduatedStudents">0</strong>
               <span>Graduated</span>
+            </div>
+
+            <!-- Class Link Status Card - RED when no active link -->
+            <div class="stat-card" id="classLinkStatusCard" onclick="openJoinClassModal()" style="cursor:pointer;transition:all 0.3s" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(0,0,0,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow=''">
+              <strong id="classLinkStatus" style="font-size:18px;color:#ef4444">NO ACTIVE LINK</strong>
+              <span style="display:flex;align-items:center;gap:8px">
+                <span id="classLinkInfo">Click to post a link</span>
+                <span id="classLinkIcon" style="font-size:24px">🔴</span>
+              </span>
             </div>
           </div>
         </div>
@@ -1791,6 +1801,19 @@
   </div>
 
   <script>
+    // Force cache-bust for file:// usage so updated JS loads
+    (function enforceCacheBust() {
+      try {
+        if (window.location.protocol === 'file:' && !/[?&]v=/.test(window.location.search)) {
+          const url = new URL(window.location.href);
+          url.searchParams.set('v', Date.now().toString());
+          window.location.replace(url.toString());
+        }
+      } catch (error) {
+        console.warn('Cache-bust check skipped:', error);
+      }
+    })();
+
     // Initialize Supabase client (use 'db' to avoid conflict with global supabaseClient)
     const db = initSupabase();
     
@@ -1987,8 +2010,15 @@
       });
     }
 
-    function switchView(viewName) {
+    async function switchView(viewName) {
       console.log('🔄 Switching to view:', viewName);
+
+      // Persist view for reloads
+      try {
+        sessionStorage.setItem('adminHubView', viewName);
+      } catch (error) {
+        console.warn('Unable to persist adminHubView:', error);
+      }
       
       // Update nav active state
       document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
@@ -2045,7 +2075,7 @@
         loadGradesView();
       } else if (viewName === 'groups') {
         console.log('👨‍👩‍👧‍👦 Loading groups view');
-        loadGroups();
+        await loadGroups();
       } else if (viewName === 'courses') {
         console.log('📚 Loading course catalog view');
         loadCourseCatalog();
@@ -3490,28 +3520,137 @@
     let studentGroups = [];
     let currentEditingGroup = null;
 
+    function withTimeout(promise, ms, label) {
+      let timer;
+      const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label || 'Operation'} timed out after ${ms}ms`)), ms);
+      });
+      return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+    }
+
+    async function buildGroupsFromStudents() {
+      if (!allStudents.length) {
+        try {
+          await withTimeout(loadAllStudents(), 8000, 'Load students');
+        } catch (error) {
+          console.warn('⚠️ Unable to load students for group fallback:', error);
+        }
+      }
+
+      if (!allStudents.length) {
+        studentGroups = [];
+        return [];
+      }
+
+      const groupMap = new Map();
+      allStudents.forEach(student => {
+        const groupName = student.group;
+        if (!groupName) return;
+        if (!groupMap.has(groupName)) {
+          const slug = groupName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, '');
+          groupMap.set(groupName, {
+            id: slug || groupName,
+            name: groupName,
+            semester: '—',
+            studentIds: []
+          });
+        }
+        groupMap.get(groupName).studentIds.push(student.id);
+      });
+
+      studentGroups = Array.from(groupMap.values());
+      console.log(`✅ Built ${studentGroups.length} groups from allStudents fallback`);
+      return studentGroups;
+    }
+
     // Load groups from Supabase
     async function loadStudentGroups() {
+      console.log('🔵 loadStudentGroups() CALLED');
       try {
-        const { data, error } = await db
+        // STEP 1: Get groups from student_groups table (has semester, created_at)
+        console.log('🔵 Step 1: Querying student_groups table...');
+        const { data: groupsTableData, error: groupsError } = await db
           .from('student_groups')
           .select('*')
           .order('created_at', { ascending: false });
 
-        if (error) throw error;
+        console.log('student_groups result:', { error: groupsError, data: groupsTableData });
 
-        // Map student_ids (database column) to studentIds (code expects)
-        studentGroups = (data || []).map(group => ({
-          ...group,
-          studentIds: group.student_ids || []
-        }));
+        // STEP 2: Get students with group assignments
+        console.log('🔵 Step 2: Querying students.group field...');
+        const { data: studentsData, error: studentsError } = await db
+          .from('students')
+          .select('id, full_name, group')
+          .not('group', 'is', null);
 
-        console.log(`✅ Loaded ${studentGroups.length} student groups from Supabase`);
+        if (studentsError) {
+          console.error('❌ students query error:', studentsError);
+          throw studentsError;
+        }
+
+        console.log(`✅ Found ${studentsData.length} students with groups:`, studentsData);
+
+        // STEP 3: Build groups from students, merge with student_groups table data
+        const groupMap = new Map();
+        
+        // First, add all groups from student_groups table (has proper metadata)
+        if (groupsTableData && !groupsError) {
+          groupsTableData.forEach(group => {
+            groupMap.set(group.name, {
+              id: group.id,
+              name: group.name,
+              semester: group.semester || 'Spring 2026',
+              studentIds: group.student_ids || [],
+              created_at: group.created_at
+            });
+          });
+        }
+
+        // Then, build groups from students (has accurate student lists)
+        (studentsData || []).forEach(student => {
+          const groupName = student.group;
+          if (!groupName) return;
+          
+          if (!groupMap.has(groupName)) {
+            // Group not in student_groups table, create new one
+            const slug = groupName
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .replace(/(^-|-$)/g, '');
+            groupMap.set(groupName, {
+              id: slug || groupName,
+              name: groupName,
+              semester: 'Spring 2026',
+              studentIds: [],
+              created_at: new Date().toISOString()
+            });
+          }
+          
+          // Add student to group (overwrite student_ids from table with actual data)
+          const group = groupMap.get(groupName);
+          if (!group.studentIds.includes(student.id)) {
+            group.studentIds.push(student.id);
+          }
+        });
+
+        studentGroups = Array.from(groupMap.values());
+        console.log(`✅ Built ${studentGroups.length} groups (merged):`, studentGroups);
+
+        // Save to localStorage for caching
+        if (studentGroups.length > 0) {
+          localStorage.setItem('studentGroups', JSON.stringify(studentGroups));
+        }
+
         return studentGroups;
       } catch (error) {
         console.error('❌ Error loading student groups:', error);
+        
+        // Return empty array on error (don't rely on allStudents fallback)
         studentGroups = [];
-        return [];
+        return studentGroups;
       }
     }
 
@@ -3523,16 +3662,37 @@
     }
 
     // Load and render groups view
+    function renderGroupsLoading() {
+      const container = document.getElementById('groupsTableContainer');
+      if (!container) return;
+      container.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading groups...</p></div>';
+    }
+
     async function loadGroups() {
-      await loadStudentGroups();
-      renderGroupsTable();
+      console.log('🔵 loadGroups() CALLED');
+      renderGroupsLoading();
+
+      try {
+        // WAIT for data to load completely
+        await loadStudentGroups();
+        console.log('✅ loadStudentGroups() completed, studentGroups:', studentGroups);
+        renderGroupsTable();
+      } catch (error) {
+        console.error('❌ loadGroups failed:', error);
+        renderGroupsTable(); // Show empty state
+      }
     }
 
     // Render groups table
     function renderGroupsTable() {
+      console.log('🔵 renderGroupsTable() CALLED');
+      console.log('🔵 studentGroups:', studentGroups);
+      console.log('🔵 studentGroups.length:', studentGroups ? studentGroups.length : 'NULL');
+      
       const container = document.getElementById('groupsTableContainer');
       
       if (!studentGroups || studentGroups.length === 0) {
+        console.log('🔴 No groups found, showing empty state');
         container.innerHTML = `
           <div style="text-align:center;padding:60px 20px;color:#64748b">
             <div style="font-size:48px;margin-bottom:16px">👨‍👩‍👧‍👦</div>
@@ -6840,6 +7000,832 @@
       }
     }
 
+    // ============================================
+    // JOIN CLASS LINK FUNCTIONALITY
+    // ============================================
+
+    let activeLinkData = null;
+    let countdownInterval = null;
+
+    // Initialize Join Class Link system
+    async function initializeJoinClassLink() {
+      try {
+        await checkActiveLink();
+        
+        // Set up realtime subscription for instant updates
+        const channel = db
+          .channel('class-join-links-admin')
+          .on('postgres_changes', 
+            { event: '*', schema: 'public', table: 'class_join_links' },
+            () => checkActiveLink()
+          )
+          .subscribe();
+      } catch (error) {
+        console.error('Error initializing join class link:', error);
+      }
+    }
+
+    async function checkActiveLink() {
+      try {
+        const { data, error} = await db
+          .from('class_join_links')
+          .select('*')
+          .is('ended_at', null)
+          .eq('is_active', true)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) throw error;
+
+        // Filter out expired links (if expires_at is set)
+        if (data && data.length > 0) {
+          const link = data[0];
+          if (!link.expires_at || new Date(link.expires_at) > new Date()) {
+            activeLinkData = link;
+            updateActiveLinkStatus(true);
+          } else {
+            activeLinkData = null;
+            updateActiveLinkStatus(false);
+          }
+        } else {
+          activeLinkData = null;
+          updateActiveLinkStatus(false);
+        }
+      } catch (error) {
+        console.error('Error checking active link:', error);
+      }
+    }
+
+    function updateActiveLinkStatus(hasActiveLink) {
+      // Update RED/GREEN status card
+      const statusCard = document.getElementById('classLinkStatusCard');
+      const statusText = document.getElementById('classLinkStatus');
+      const statusInfo = document.getElementById('classLinkInfo');
+      const statusIcon = document.getElementById('classLinkIcon');
+      
+      if (statusCard && statusText && statusInfo && statusIcon) {
+        if (hasActiveLink && activeLinkData) {
+          // GREEN - Active link exists
+          statusCard.style.background = 'linear-gradient(135deg, rgba(34,197,94,0.1), rgba(34,197,94,0.05))';
+          statusCard.style.borderColor = 'rgba(34,197,94,0.3)';
+          statusText.textContent = 'ACTIVE LINK';
+          statusText.style.color = '#22c55e';
+          statusInfo.textContent = `For ${activeLinkData.group_id === 'all' ? 'All Students' : activeLinkData.group_id}`;
+          statusIcon.textContent = '🟢';
+        } else {
+          // RED - No active link
+          statusCard.style.background = '';
+          statusCard.style.borderColor = '';
+          statusText.textContent = 'NO ACTIVE LINK';
+          statusText.style.color = '#ef4444';
+          statusInfo.textContent = 'Click to post a link';
+          statusIcon.textContent = '🔴';
+        }
+      }
+    }
+
+    // NOTE: This is ONLY for the "Post / Join Class" modal dropdown.
+    // It must NOT share the same name as the Student Groups view loader.
+    async function loadClassLinkGroupOptions() {
+      try {
+        const { data, error } = await db
+          .from('students')
+          .select('group')
+          .not('group', 'is', null);
+        
+        if (error) throw error;
+        
+        // Get unique groups
+        const uniqueGroups = [...new Set(data.map(s => s.group).filter(Boolean))];
+        
+        const groupSelect = document.getElementById('classLinkGroup');
+        if (groupSelect && uniqueGroups.length > 0) {
+          // Keep "All Students" option
+          uniqueGroups.sort().forEach(group => {
+            const option = document.createElement('option');
+            option.value = group;
+            option.textContent = group;
+            groupSelect.appendChild(option);
+          });
+        }
+      } catch (error) {
+        console.error('Error loading student groups:', error);
+      }
+    }
+
+    function openJoinClassModal() {
+      document.getElementById('joinClassModalOverlay').style.display = 'flex';
+      
+      // Load groups when modal opens
+      loadClassLinkGroupOptions();
+      
+      if (activeLinkData) {
+        document.getElementById('activeLinkDisplay').style.display = 'block';
+        document.getElementById('newLinkForm').style.display = 'none';
+        document.getElementById('activeLinkUrl').textContent = activeLinkData.url;
+        startCountdown();
+      } else {
+        document.getElementById('activeLinkDisplay').style.display = 'none';
+        document.getElementById('newLinkForm').style.display = 'block';
+      }
+    }
+
+    function closeJoinClassModal() {
+      document.getElementById('joinClassModalOverlay').style.display = 'none';
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+    }
+
+    function startCountdown() {
+      if (countdownInterval) clearInterval(countdownInterval);
+      
+      const updateCountdown = () => {
+        if (!activeLinkData || !activeLinkData.expires_at) {
+          document.getElementById('linkCountdown').textContent = 'No expiration';
+          return;
+        }
+
+        const now = new Date();
+        const expiresAt = new Date(activeLinkData.expires_at);
+        const diff = expiresAt - now;
+
+        if (diff <= 0) {
+          clearInterval(countdownInterval);
+          document.getElementById('linkCountdown').textContent = 'EXPIRED';
+          checkActiveLink(); // Refresh to remove expired link
+          return;
+        }
+
+        const minutes = Math.floor(diff / 60000);
+        const seconds = Math.floor((diff % 60000) / 1000);
+        document.getElementById('linkCountdown').textContent = 
+          `${minutes}:${seconds.toString().padStart(2, '0')} remaining`;
+      };
+
+      updateCountdown();
+      countdownInterval = setInterval(updateCountdown, 1000);
+    }
+
+    async function publishClassLink() {
+      const urlInput = document.getElementById('classLinkUrl');
+      const groupSelect = document.getElementById('classLinkGroup');
+      const url = urlInput.value.trim();
+      const selectedGroup = groupSelect.value;
+
+      // Validation
+      if (!url) {
+        showCustomAlert('⚠️ Missing URL', 'Please enter a class link URL', 'error');
+        urlInput.focus();
+        return;
+      }
+
+      if (!/^https?:\/\/.+/.test(url)) {
+        showCustomAlert('⚠️ Invalid URL', 'Please enter a valid URL starting with http:// or https://', 'error');
+        urlInput.focus();
+        return;
+      }
+
+      if (!selectedGroup) {
+        showCustomAlert('⚠️ No Group Selected', 'Please select which group should see the link', 'error');
+        groupSelect.focus();
+        return;
+      }
+
+      try {
+        // Get admin email from session
+        const userEmail = sessionStorage.getItem('userEmail') || 'admin@acnhs.am';
+
+        // Expire links automatically in 2 hours
+        const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+        // First, deactivate any existing active links for this group
+        await db
+          .from('class_join_links')
+          .update({ is_active: false, ended_at: new Date().toISOString() })
+          .eq('group_id', selectedGroup)
+          .eq('is_active', true);
+
+        const { data, error } = await db
+          .from('class_join_links')
+          .insert([{
+            url: url,
+            group_id: selectedGroup,
+            created_by: userEmail,
+            expires_at: expiresAt,
+            is_active: true
+          }])
+          .select();
+
+        if (error) throw error;
+
+        activeLinkData = data[0];
+        
+        // Send email to students in the selected group
+        await sendClassLinkEmail(url, selectedGroup);
+        
+        // Show success message
+        showCustomAlert(
+          '✅ Class link published successfully!',
+          `Students in ${selectedGroup === 'all' ? 'all groups' : selectedGroup} will now see the "Join Class" button.\n\nEmails have been sent to all students in the selected group.\n\nThis link will expire automatically in 2 hours.`,
+          'success'
+        );
+        
+        // Reset form
+        urlInput.value = '';
+        groupSelect.value = '';
+        
+        // Update UI
+        await checkActiveLink();
+        closeJoinClassModal();
+      } catch (error) {
+        console.error('Error publishing class link:', error);
+        showCustomAlert(
+          '❌ Failed to publish class link',
+          'Please try again.\n\nError: ' + error.message,
+          'error'
+        );
+      }
+    }
+
+    async function sendClassLinkEmail(classUrl, targetGroup) {
+      try {
+        // Get students in the selected group
+        let query = db.from('students').select('id, full_name, email, group, enrollment_status');
+        
+        if (targetGroup !== 'all') {
+          query = query.eq('group', targetGroup);
+        }
+        
+  const { data: students, error } = await query;
+        if (error) throw error;
+
+        if (!students || students.length === 0) {
+          console.warn('No students found for group:', targetGroup);
+          return;
+        }
+
+        // Only email active/enrolled students (prevents emailing test/inactive records)
+        const recipients = (students || []).filter(s => !s.enrollment_status || s.enrollment_status === 'active');
+
+        const missingEmail = recipients.filter(s => !s.email);
+        const validRecipients = recipients
+          .map(s => ({ ...s, email: (s.email || '').trim() }))
+          .filter(s => !!s.email);
+
+        console.log(`📧 Class link email: group="${targetGroup}" total=${students?.length || 0} active=${recipients.length} validEmails=${validRecipients.length} missingEmail=${missingEmail.length}`);
+
+        if (missingEmail.length) {
+          console.warn('⚠️ Students missing email (will be skipped):', missingEmail.map(s => ({ id: s.id, name: s.full_name, group: s.group })));
+        }
+
+        if (validRecipients.length === 0) {
+          console.warn('No students with valid emails found for group:', targetGroup);
+          return;
+        }
+
+        // Send email to each student (sequential to avoid edge-function rate spikes)
+        // If you ever need speed, we can switch to small concurrency batches.
+        let sentCount = 0;
+        let failedCount = 0;
+        const failures = [];
+
+        for (const student of validRecipients) {
+
+          const emailSubject = '🟢 Class Link Available - Join Now';
+          const emailTitle = 'Class Link Available';
+          const emailDate = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+          // Use ACNHS_LOGO_BASE64 specifically (requested) so the logo is embedded directly in the email.
+          // Sometimes the logo script may load slightly after this handler; wait briefly before giving up.
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          const getInlineLogo = () => {
+            // Prefer base64 (raw), but accept the data url if that's what is available.
+            if (typeof window !== 'undefined') {
+              if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+              if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+            }
+            if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+            return null;
+          };
+
+          let inlineLogo = getInlineLogo();
+          if (!inlineLogo) {
+            await sleep(150);
+            inlineLogo = getInlineLogo();
+          }
+
+          const toDataUrl = (value) => {
+            if (!value || typeof value !== 'string') return null;
+            if (value.startsWith('data:image')) return value;
+            const isJpeg = value.startsWith('/9j');
+            const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+            return `data:${mimeType};base64,${value}`;
+          };
+
+          // If no logo is available, we'll remove the <img> blocks entirely (some clients show broken-image icons).
+          const logoSource = toDataUrl(inlineLogo) || '';
+
+          const headerLogoHtml = logoSource
+            ? `<img src="${logoSource}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">`
+            : '';
+
+          const signatureLogoHtml = logoSource
+            ? `<img src="${logoSource}" width="70" height="70" alt="ACNHS Seal" style="display:block;border:none;">`
+            : '';
+
+          const bodyContent = `
+Your instructor has posted a link for you to join the live class. Please use the button below to join now.
+
+<div style="text-align:center;margin:24px 0;">
+  <a href="${classUrl}" style="display:inline-block;background:linear-gradient(135deg,#2dd4bf 0%,#0d9488 100%);color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-weight:700;font-size:14px;box-shadow:0 4px 12px rgba(45,212,191,0.30);">
+    <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;">
+      <tr>
+        <td style="font-size:18px;padding:0 8px 0 0;color:#ffffff;white-space:nowrap;">🟢</td>
+        <td style="font-size:14px;font-weight:700;color:#ffffff;white-space:nowrap;">Join Class</td>
+      </tr>
+    </table>
+  </a>
+</div>
+
+<div style="background:#f8fafc;padding:14px;border-radius:8px;margin-top:20px;border:1px solid #e2e8f0;">
+  <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:6px;">IF THE BUTTON DOESN'T WORK</div>
+  <div style="font-size:13px;color:#475569;line-height:20px;">Copy and paste this link into your browser:</div>
+  <div style="margin-top:8px;"><a class="u-link" href="${classUrl}" style="color:#2dd4bf;text-decoration:underline;word-break:break-all;">${classUrl}</a></div>
+</div>
+          `.trim();
+
+          // Real ACNHS email template (header + signature) with placeholders.
+          // Kept inline here so emails render consistently across clients.
+          const emailHtml = `<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{SUBJECT}}</title>
+  <style>
+    html,body{margin:0!important;padding:0!important;height:100%!important;width:100%!important}
+    *{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}
+    table,td{mso-table-lspace:0pt!important;mso-table-rspace:0pt!important;border-collapse:collapse!important}
+    img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none;display:block}
+    a{color:inherit;text-decoration:none}
+    .u-link{color:#2dd4bf!important;text-decoration:underline!important}
+    @media (max-width: 620px){
+      .container{width:100%!important}
+      .px{padding-left:18px!important;padding-right:18px!important}
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#f8fafc;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc;">
+    <tr>
+      <td align="center" style="padding:24px 10px;">
+        <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
+          <tr>
+            <td style="background:#0a2540;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);border-radius:14px 14px 0 0;padding:20px 26px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="68" valign="middle">
+                    {{HEADER_LOGO}}
+                  </td>
+                  <td valign="middle" style="padding-left:14px;">
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#ffffff;font-weight:700;opacity:0.96;">&amp; Health Sciences</div>
+                    <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#cbd5e1;font-weight:600;margin-top:6px;">Yerevan, Armenia</div>
+                  </td>
+                  <td valign="top" align="right" style="padding-left:14px;">
+                    {{STUDENT_INFO}}
+                  </td>
+                </tr>
+              </table>
+              <div style="height:1px;background:rgba(255,255,255,0.10);margin:16px 0;"></div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:26px;color:#ffffff;font-weight:900;letter-spacing:-0.4px;">{{EMAIL_TITLE}}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:13px;color:#94a3b8;font-weight:600;margin-top:6px;">{{DATE}}</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;border-left:1px solid rgba(2,6,23,0.08);border-right:1px solid rgba(2,6,23,0.08);padding:26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:17px;color:#0f172a;font-weight:800;">Dear {{APPLICANT_NAME}},</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:23px;color:#334155;margin-top:12px;">{{BODY_CONTENT}}</div>
+              <div style="font-family:Inter,Arial,sans-serif;font-size:15px;color:#0f172a;font-weight:800;margin-top:24px;">Respectfully,</div>
+              <div style="margin-top:12px;">
+                <table style="border:none;padding:0;margin:0;line-height:1.3;font-family:Arial,sans-serif;">
+                  <tr>
+                    <td style="padding:2px 8px 2px 2px;vertical-align:middle;">
+                      {{SIGNATURE_LOGO}}
+                    </td>
+                    <td style="padding:2px;vertical-align:middle;">
+                      <div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">Student Hub Team</div>
+                      <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:4px;">Student Portal / Hub</div>
+                      <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>
+                      <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Yerevan, Armenia</div>
+                      <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;padding:0;">
+                        <tr>
+                          <td style="font-size:11px;color:#64748b;padding:0 6px 4px 0;white-space:nowrap;">📞</td>
+                          <td style="font-size:11px;color:#64748b;padding:0 0 4px 0;white-space:nowrap;">+374 93 798879</td>
+                        </tr>
+                        <tr>
+                          <td style="font-size:11px;color:#2563eb;padding:0 6px 4px 0;white-space:nowrap;">📧</td>
+                          <td style="font-size:11px;color:#2563eb;padding:0 0 4px 0;white-space:nowrap;">hub@acnhs.am</td>
+                        </tr>
+                        <tr>
+                          <td style="font-size:11px;color:#2563eb;padding:0 6px 0 0;white-space:nowrap;">🌐</td>
+                          <td style="font-size:11px;color:#2563eb;padding:0;white-space:nowrap;">www.acnhs.am</td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#020617;border-radius:0 0 14px 14px;padding:16px 26px;">
+              <div style="font-family:Inter,Arial,sans-serif;font-size:12px;color:#94a3b8;">© {{YEAR}} Armenian College of Nursing &amp; Health Sciences</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+            .replace(/{{SUBJECT}}/g, emailSubject)
+            .replace(/{{EMAIL_TITLE}}/g, emailTitle)
+            .replace(/{{DATE}}/g, emailDate)
+            .replace(/{{APPLICANT_NAME}}/g, student.full_name || 'Student')
+            .replace(/{{BODY_CONTENT}}/g, bodyContent)
+            .replace(/{{STUDENT_INFO}}/g, '')
+            .replace(/{{YEAR}}/g, String(new Date().getFullYear()))
+            .replace(/{{HEADER_LOGO}}/g, headerLogoHtml)
+            .replace(/{{SIGNATURE_LOGO}}/g, signatureLogoHtml);
+
+          // Call Supabase Edge Function to send email
+          const { error: emailError } = await db.functions.invoke('send-email', {
+            body: {
+              to: student.email,
+              from: 'hub@acnhs.am',
+              subject: emailSubject,
+              html: emailHtml
+            }
+          });
+
+          if (emailError) {
+            console.error(`Failed to send email to ${student.email}:`, emailError);
+            failedCount++;
+            failures.push({ email: student.email, error: emailError });
+          } else {
+            console.log(`Email sent to ${student.email}`);
+            sentCount++;
+          }
+        }
+
+        console.log(`✅ Email send summary for group="${targetGroup}": sent=${sentCount}, failed=${failedCount}, skipped_missing_email=${missingEmail.length}`);
+
+        if (failures.length) {
+          console.warn('❌ Email failures:', failures);
+        }
+      } catch (error) {
+        console.error('Error sending class link emails:', error);
+        // Don't throw - email failure shouldn't block the link posting
+      }
+    }
+
+    function copyActiveLink() {
+      if (!activeLinkData) return;
+      
+      navigator.clipboard.writeText(activeLinkData.url)
+        .then(() => {
+          showCustomAlert('📋 Link Copied!', 'The class link has been copied to your clipboard.', 'success');
+        })
+        .catch(err => {
+          console.error('Failed to copy:', err);
+          showCustomAlert('❌ Copy Failed', 'Please copy manually:\n\n' + activeLinkData.url, 'error');
+        });
+    }
+
+    async function endLinkEarly() {
+      if (!activeLinkData) return;
+      
+      if (!confirm('Are you sure you want to end this link early?\n\nStudents will no longer see the JOIN THE CLASS button.')) {
+        return;
+      }
+
+      try {
+        const { error } = await db
+          .from('class_join_links')
+          .update({
+            ended_at: new Date().toISOString(),
+            is_active: false
+          })
+          .eq('id', activeLinkData.id);
+
+        if (error) throw error;
+
+        showCustomAlert('✅ Link ended successfully!', '', 'success');
+        activeLinkData = null;
+        await checkActiveLink();
+        closeJoinClassModal();
+      } catch (error) {
+        console.error('Error ending link:', error);
+        showCustomAlert('❌ Failed to end link', 'Please try again.\n\nError: ' + error.message, 'error');
+      }
+    }
+
+    // Custom Alert Function
+    function showCustomAlert(title, message, type = 'success') {
+      const alertModal = document.getElementById('customAlertModal');
+      const alertIcon = document.getElementById('customAlertIcon');
+      const alertTitle = document.getElementById('customAlertTitle');
+      const alertMessage = document.getElementById('customAlertMessage');
+      
+      // Set icon based on type
+      if (type === 'success') {
+        alertIcon.textContent = '✅';
+        alertIcon.style.color = '#22c55e';
+      } else if (type === 'error') {
+        alertIcon.textContent = '❌';
+        alertIcon.style.color = '#ef4444';
+      }
+      
+      // Set content
+      alertTitle.textContent = title;
+      alertMessage.textContent = message;
+      
+      // Show modal
+      alertModal.style.display = 'flex';
+    }
+
+    function closeCustomAlert() {
+      document.getElementById('customAlertModal').style.display = 'none';
+    }
+
+    // Make functions globally available
+    window.openJoinClassModal = openJoinClassModal;
+    window.closeJoinClassModal = closeJoinClassModal;
+    window.publishClassLink = publishClassLink;
+    window.copyActiveLink = copyActiveLink;
+    window.endLinkEarly = endLinkEarly;
+    window.closeCustomAlert = closeCustomAlert;
+
+    // Initialize on page load
+    initializeJoinClassLink();
+
   </script>
+
+  <!-- Join Class Modal -->
+  <div class="modal-overlay" id="joinClassModalOverlay" style="display: none;">
+    <div class="modal-container" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 style="margin: 0; font-size: 24px; font-weight: 800; color: #f1f5f9;">
+          🔗 Post Join Class Link
+        </h2>
+        <button class="modal-close" onclick="closeJoinClassModal()">&times;</button>
+      </div>
+
+      <div class="modal-body" style="padding: 32px;">
+        <!-- Active Link Display -->
+        <div id="activeLinkDisplay" style="display: none; margin-bottom: 24px; padding: 20px; background: rgba(34,197,94,0.1); border: 2px solid rgba(34,197,94,0.3); border-radius: 12px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 20px;">🟢</span>
+              <span style="font-weight: 700; color: #22c55e; font-size: 16px;">ACTIVE LINK</span>
+            </div>
+            <div id="linkCountdown" style="font-weight: 600; color: #22c55e; font-size: 14px;">
+              No expiration
+            </div>
+          </div>
+          <div style="font-size: 13px; color: #cbd5e1; margin-bottom: 12px; word-break: break-all;" id="activeLinkUrl">
+            <!-- URL will be inserted here -->
+          </div>
+          <div style="display: flex; gap: 12px;">
+            <button onclick="copyActiveLink()" style="flex: 1; padding: 10px; background: rgba(45,212,191,0.15); border: 1px solid #2dd4bf; border-radius: 8px; color: #2dd4bf; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+              📋 Copy Link
+            </button>
+            <button onclick="endLinkEarly()" style="flex: 1; padding: 10px; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; border-radius: 8px; color: #ef4444; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+              🛑 End Now
+            </button>
+          </div>
+        </div>
+
+        <!-- New Link Form -->
+        <div id="newLinkForm">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #f1f5f9; font-size: 14px;">
+              Class Link URL <span style="color: #fca5a5;">*</span>
+            </label>
+            <input 
+              type="url" 
+              id="classLinkUrl" 
+              placeholder="https://meet.google.com/abc-def-ghi"
+              style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f1f5f9; font-size: 14px; transition: all 0.2s;"
+              onfocus="this.style.borderColor='#2dd4bf'; this.style.background='#1e293b'"
+              onblur="this.style.borderColor='#334155'; this.style.background='#0f172a'"
+            >
+            <div style="margin-top: 6px; font-size: 12px; color: #94a3b8;">
+              💡 Tip: Enter your Google Meet, Zoom, or Microsoft Teams link
+            </div>
+          </div>
+
+          <div style="margin-bottom: 24px;">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #f1f5f9; font-size: 14px;">
+              Which group should see the link? <span style="color: #fca5a5;">*</span>
+            </label>
+            <select 
+              id="classLinkGroup"
+              style="width: 100%; padding: 12px 16px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #f1f5f9; font-size: 14px; cursor: pointer;"
+            >
+              <option value="">-- Select Group --</option>
+              <option value="all">All Students</option>
+              <!-- Dynamic groups will be loaded here -->
+            </select>
+            <div style="margin-top: 6px; font-size: 12px; color: #94a3b8;">
+              📢 Only students in the selected group will see the Join Class button and receive the email
+            </div>
+          </div>
+
+          <div style="padding: 16px; background: rgba(45,212,191,0.1); border: 1px solid rgba(45,212,191,0.3); border-radius: 8px; margin-bottom: 24px;">
+            <div style="display: flex; align-items: start; gap: 12px;">
+              <span style="font-size: 20px;">📢</span>
+              <div style="font-size: 13px; color: #cbd5e1; line-height: 1.6;">
+                Students in the selected group will see a <strong style="color: #2dd4bf;">green "Join Class" button</strong> below their "Current Semester" section. The link will <strong style="color: #f1f5f9;">remain active</strong> until you manually end it using the "End Now" button.
+              </div>
+            </div>
+          </div>
+
+          <button 
+            onclick="publishClassLink()" 
+            style="width: 100%; padding: 14px; background: linear-gradient(135deg, #22c55e, #16a34a); border: none; border-radius: 10px; color: white; font-weight: 700; font-size: 16px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 12px rgba(34,197,94,0.3);"
+            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 16px rgba(34,197,94,0.4)'"
+            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(34,197,94,0.3)'"
+          >
+            📤 Post Link & Send Emails
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <style>
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10000;
+      padding: 20px;
+    }
+
+    .modal-container {
+      background: #1e293b;
+      border-radius: 16px;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+      max-width: 90vw;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalSlideIn 0.3s ease-out;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px) scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .modal-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.5);
+    }
+
+    .modal-close {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      font-size: 24px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-close:hover {
+      background: rgba(239, 68, 68, 0.2);
+      transform: scale(1.1);
+    }
+
+    /* Custom Alert Modal */
+    #customAlertModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 20000;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .custom-alert-container {
+      background: #1e293b;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      animation: slideUp 0.3s ease-out;
+      text-align: center;
+    }
+
+    @keyframes slideUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .custom-alert-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .custom-alert-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #f1f5f9;
+      margin-bottom: 12px;
+    }
+
+    .custom-alert-message {
+      font-size: 14px;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 24px;
+      white-space: pre-line;
+    }
+
+    .custom-alert-button {
+      padding: 12px 32px;
+      background: linear-gradient(135deg, #2dd4bf, #14b8a6);
+      border: none;
+      border-radius: 10px;
+      color: white;
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
+    }
+
+    .custom-alert-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(45, 212, 191, 0.4);
+    }
+  </style>
+
+  <!-- Custom Alert Modal -->
+  <div id="customAlertModal" style="display: none;">
+    <div class="custom-alert-container">
+      <div class="custom-alert-icon" id="customAlertIcon">✅</div>
+      <div class="custom-alert-title" id="customAlertTitle">Success</div>
+      <div class="custom-alert-message" id="customAlertMessage">Operation completed successfully!</div>
+      <button class="custom-alert-button" onclick="closeCustomAlert()">Close</button>
+    </div>
+  </div>
+
 </body>
 </html>
