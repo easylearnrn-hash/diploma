@@ -2,7 +2,7 @@
 // This file contains the public configuration for client-side Supabase access
 
 const SUPABASE_CONFIG = {
-  // Your Supabase project URL - MIGRATED TO NEW PROJECT
+  // Your Supabase project URL
   url: 'https://eyhksbiceueoiamwnqpr.supabase.co',
   
   // Your Supabase anonymous (public) key - safe for client-side use
