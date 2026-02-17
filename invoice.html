@@ -1126,7 +1126,7 @@ Payment must be made to the following account:
 
       <div class="invoice-content">
         <div class="invoice-header">
-          <img id="invoiceLogo" src="" alt="ACNHS Logo" class="college-logo" />
+          <img id="invoiceLogo" src="" alt="ACNHS Logo" class="college-logo" data-acnhs-logo />
           <div class="college-info">
             <h2>Armenian College of Nursing<br>& Health Sciences</h2>
             <p>
@@ -1256,13 +1256,40 @@ Payment must be made to the following account:
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabase-config.js"></script>
-  <script src="./js/acnhs-logo-base64.js"></script>
+  <script src="./js/acnhs-logo-base64.js?v=20260215"></script>
   <script>
-    // Set logo on page load
+    // Set logo on page load using centralized function
     document.addEventListener('DOMContentLoaded', function() {
-      const invoiceLogo = document.getElementById('invoiceLogo');
-      if (invoiceLogo && typeof ACNHS_LOGO_DATA_URL !== 'undefined') {
-        invoiceLogo.src = ACNHS_LOGO_DATA_URL;
+      // Apply logo using centralized function
+      if (typeof window.applyAcnshLogo === 'function') {
+        window.applyAcnshLogo();
+        console.log('✅ Invoice logo applied via applyAcnshLogo()');
+      } else {
+        console.error('❌ window.applyAcnshLogo is not available');
+        
+        // Fallback: Manual logo application
+        const invoiceLogo = document.getElementById('invoiceLogo');
+        if (invoiceLogo && window.ACNHS_LOGO_DATA_URL) {
+          if (window.ACNHS_LOGO_DATA_URL.startsWith('data:image')) {
+            invoiceLogo.src = window.ACNHS_LOGO_DATA_URL;
+            console.log('✅ Invoice logo set via fallback method');
+          } else {
+            console.error('❌ Invalid ACNHS_LOGO_DATA_URL format:', window.ACNHS_LOGO_DATA_URL?.substring(0, 50));
+          }
+        } else {
+          console.error('❌ Logo element or data URL missing:', {
+            element: !!invoiceLogo,
+            dataUrl: !!window.ACNHS_LOGO_DATA_URL
+          });
+        }
+      }
+
+      const sealImage = document.getElementById('sealImage');
+      if (sealImage && window.ACNHS_LOGO_DATA_URL) {
+        if (window.ACNHS_LOGO_DATA_URL.startsWith('data:image')) {
+          sealImage.src = window.ACNHS_LOGO_DATA_URL;
+          console.log('✅ Seal image set successfully');
+        }
       }
     });
     
@@ -1427,8 +1454,9 @@ Payment must be made to the following account:
     }
 
     // Load seal watermark
-    if (typeof sealBase64 !== 'undefined') {
-      document.getElementById('sealImage').src = sealBase64;
+    if (typeof sealBase64 !== 'undefined' && typeof sealBase64 === 'string') {
+      const sealDataUrl = sealBase64.startsWith('data:image') ? sealBase64 : `data:image/png;base64,${sealBase64}`;
+      document.getElementById('sealImage').src = sealDataUrl;
     }
 
     // Fetch approved students from database

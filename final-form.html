@@ -8,7 +8,7 @@
   <!-- Favicon -->
   <link rel="icon" type="image/png" sizes="32x32" href="assets/images/favicon-32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="assets/images/favicon-16.png">
-  <link rel="apple-touch-icon" sizes="180x180" href="assets/images/Seal.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==">
   
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   
@@ -858,7 +858,7 @@
 </head>
 <body>
   <div class="form-header">
-    <img class="logo" id="acnhsLogo" alt="ACNHS Logo">
+    <img class="logo" id="acnhsLogo" data-acnhs-logo alt="ACNHS Logo">
     <h1>Armenian College of Nursing & Health Sciences</h1>
     <p>Personal & Residency Timeline Questionnaire</p>
   </div>
@@ -1112,8 +1112,35 @@
     // Load ACNHS logo from base64 and auto-populate control number from URL
     document.addEventListener('DOMContentLoaded', function() {
       const logoImg = document.getElementById('acnhsLogo');
-      if (typeof ACNHS_LOGO_BASE64 !== 'undefined') {
-        logoImg.src = 'data:image/png;base64,' + ACNHS_LOGO_BASE64;
+      
+      // Get logo data URL - prefer the pre-formatted version from acnhs-logo-base64.js
+      let logoDataUrl = '';
+      if (typeof window.ACNHS_LOGO_DATA_URL !== 'undefined' && window.ACNHS_LOGO_DATA_URL) {
+        logoDataUrl = window.ACNHS_LOGO_DATA_URL;
+        console.log('✓ Using ACNHS_LOGO_DATA_URL from acnhs-logo-base64.js');
+      } else if (typeof window.ACNHS_LOGO_BASE64 !== 'undefined' && window.ACNHS_LOGO_BASE64) {
+        // Fallback: construct data URL from base64 (ensure it has proper prefix)
+        const base64 = window.ACNHS_LOGO_BASE64;
+        // Only add prefix if not already present
+        if (base64.startsWith('data:')) {
+          logoDataUrl = base64;
+          console.log('✓ Using ACNHS_LOGO_BASE64 (already formatted as data URL)');
+        } else {
+          logoDataUrl = `data:image/png;base64,${base64}`;
+          console.log('✓ Constructed data URL from ACNHS_LOGO_BASE64');
+        }
+      } else {
+        console.error('❌ No logo data found! Check if acnhs-logo-base64.js loaded properly.');
+      }
+
+      if (logoDataUrl && logoImg) {
+        // Validate that it's a proper data URL before setting
+        if (logoDataUrl.startsWith('data:image/')) {
+          logoImg.src = logoDataUrl;
+          console.log('✓ Logo set successfully');
+        } else {
+          console.error('❌ Invalid logo data URL format:', logoDataUrl.substring(0, 100));
+        }
       }
 
       const emergencyAddressInput = document.getElementById('emergencyAddress');

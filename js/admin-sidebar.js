@@ -146,6 +146,10 @@
         </a>
       `).join('');
 
+    const logoSrc = window.ACNHS_LOGO_DATA_URL
+      || window.ACNHS_LOGO_EMAIL_URL
+      || (window.ACNHS_LOGO_BASE64 ? `data:image/png;base64,${window.ACNHS_LOGO_BASE64}` : '');
+
     const sidebarHTML = `
       <!-- Mobile Menu Button -->
       <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
@@ -158,7 +162,7 @@
         <button class="sidebar-toggle" id="sidebarToggle">◀</button>
         
         <div class="sidebar-logo">
-          <img src="assets/images/Seal.png" alt="ACNHS Logo">
+          <img src="${logoSrc}" alt="ACNHS Logo" data-acnhs-logo>
           <h2>ACNHS Admin</h2>
         </div>
         

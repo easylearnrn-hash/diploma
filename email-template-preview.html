@@ -196,12 +196,21 @@
       .replace(/{{YEAR}}/g, sampleData.year);
 
     // Replace the logo placeholder with hosted URL (preferred) or base64 fallback
+    const toDataUrl = (value) => {
+      if (!value || typeof value !== 'string') return null;
+      if (value.startsWith('data:image')) return value;
+      const isJpeg = value.startsWith('/9j');
+      const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+      return `data:${mimeType};base64,${value}`;
+    };
+
     const hostedLogo = (typeof ACNHS_LOGO_EMAIL_URL !== 'undefined' && ACNHS_LOGO_EMAIL_URL) ? ACNHS_LOGO_EMAIL_URL : null;
-    const inlineLogo = (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) ? ACNHS_LOGO_BASE64 : null;
-    const logoSource = hostedLogo || inlineLogo || '';
+    const dataUrlLogo = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL) ? ACNHS_LOGO_DATA_URL : null;
+    const inlineLogo = (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) ? toDataUrl(ACNHS_LOGO_BASE64) : null;
+    const logoSource = hostedLogo || dataUrlLogo || inlineLogo || '';
 
     if (logoSource) {
-      html = html.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
+  html = html.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
     } else {
       console.warn('⚠️ ACNHS logo not available for preview');
       html = html.replace(/{{ACNHS_SEAL_BASE64}}/g, '');

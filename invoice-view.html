@@ -650,7 +650,7 @@
               </div>
 
               <div class="logo-center">
-                <img id="logoImage" src="" alt="College Logo">
+                <img id="logoImage" data-acnhs-logo src="" alt="College Logo">
               </div>
 
               <div class="invoice-meta">
@@ -763,9 +763,13 @@
     // ==========================================
     // CRITICAL SECURITY: STUDENT-ONLY ACCESS
     // ==========================================
-    // Each student should ONLY see their own invoice
-    // Check authentication before loading any data
-    const loggedInStudentId = sessionStorage.getItem('studentId');
+    // Check for student_id in URL FIRST (for iframe embedding)
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlStudentId = urlParams.get('student_id');
+    const invoiceId = urlParams.get('id');
+    
+    // Then check session storage
+    let loggedInStudentId = sessionStorage.getItem('studentId') || urlStudentId;
     const loggedInEmail = sessionStorage.getItem('userEmail');
     const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
     
@@ -774,37 +778,86 @@
     const isAuthorizedAdmin = isAdmin && loggedInEmail === ADMIN_EMAIL;
 
     if (!isAuthorizedAdmin && !loggedInStudentId) {
-      alert('⛔ UNAUTHORIZED ACCESS\n\nYou must be logged in to view this invoice.\n\nYou will be redirected to the login page.');
-      window.location.href = 'login.html';
+      // Silent redirect without alert (iframes can't show alerts)
+      console.error('⛔ Unauthorized: Not logged in');
+      if (window.parent === window) {
+        // Not in iframe - show message and redirect
+        document.body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;background:#f1f5f9;">
+            <div style="text-align:center;padding:32px;background:white;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1);max-width:400px;">
+              <div style="font-size:48px;margin-bottom:16px;">🔒</div>
+              <h2 style="margin:0 0 8px 0;color:#0f172a;">Unauthorized Access</h2>
+              <p style="margin:0 0 24px 0;color:#64748b;">You must be logged in to view this invoice.</p>
+              <a href="login.html" style="display:inline-block;padding:12px 24px;background:#2dd4bf;color:white;text-decoration:none;border-radius:8px;font-weight:600;">Go to Login</a>
+            </div>
+          </div>
+        `;
+      } else {
+        // In iframe - show error message
+        document.body.innerHTML = `
+          <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui;background:#fef2f2;">
+            <div style="text-align:center;padding:24px;">
+              <div style="font-size:36px;margin-bottom:12px;">⚠️</div>
+              <h3 style="margin:0 0 8px 0;color:#dc2626;">Authentication Error</h3>
+              <p style="margin:0;color:#991b1b;font-size:14px;">Unable to load invoice. Please refresh the page.</p>
+            </div>
+          </div>
+        `;
+      }
       throw new Error('Unauthorized: Not logged in');
     }
+    
+    console.log('✓ Invoice auth successful:', { loggedInStudentId, isAuthorizedAdmin });
     // ==========================================
 
     // Load seal watermark and logo
-    console.log('Checking for seal...');
+    console.log('Checking for ACNHS logo...');
     
     const logoImg = document.getElementById('logoImage');
     const sealImg = document.getElementById('sealImage');
     
-    if (typeof sealBase64 !== 'undefined' && sealBase64) {
-      console.log('Loading seal from base64...');
-      logoImg.src = sealBase64;
-      sealImg.src = sealBase64;
+    // Get logo data URL - prefer the pre-formatted version from acnhs-logo-base64.js
+    let logoDataUrl = '';
+    if (typeof window.ACNHS_LOGO_DATA_URL !== 'undefined' && window.ACNHS_LOGO_DATA_URL) {
+      logoDataUrl = window.ACNHS_LOGO_DATA_URL;
+      console.log('✓ Using ACNHS_LOGO_DATA_URL from acnhs-logo-base64.js');
+    } else if (typeof window.ACNHS_LOGO_BASE64 !== 'undefined' && window.ACNHS_LOGO_BASE64) {
+      const base64 = window.ACNHS_LOGO_BASE64;
+      if (base64.startsWith('data:')) {
+        logoDataUrl = base64;
+        console.log('✓ Using ACNHS_LOGO_BASE64 (already formatted as data URL)');
+      } else {
+        logoDataUrl = `data:image/png;base64,${base64}`;
+        console.log('✓ Constructed data URL from ACNHS_LOGO_BASE64');
+      }
     } else {
-      console.warn('acnhs-logo-base64.js not loaded properly');
+      console.error('❌ No logo data found! Check if acnhs-logo-base64.js loaded properly.');
+    }
+
+    if (logoDataUrl && logoImg) {
+      // Validate that it's a proper data URL before setting
+      if (logoDataUrl.startsWith('data:image/')) {
+        logoImg.src = logoDataUrl;
+        if (sealImg) sealImg.src = logoDataUrl;
+        console.log('✓ Logo set successfully');
+      } else {
+        console.error('❌ Invalid logo data URL format:', logoDataUrl.substring(0, 100));
+      }
     }
     
     // Add error handlers
-    logoImg.onerror = function() {
-      console.error('Logo image failed to load');
-    };
-    sealImg.onerror = function() {
-      console.error('Watermark seal failed to load');
-    };
+    if (logoImg) {
+      logoImg.onerror = function() {
+        console.error('❌ Logo image failed to load');
+      };
+    }
+    if (sealImg) {
+      sealImg.onerror = function() {
+        console.error('❌ Watermark seal failed to load');
+      };
+    }
 
-    // Get invoice ID from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const invoiceId = urlParams.get('id');
+    // Invoice ID already retrieved above - no need to redeclare
 
     if (!invoiceId) {
       showError('No invoice ID provided in URL.');

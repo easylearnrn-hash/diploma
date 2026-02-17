@@ -3325,15 +3325,15 @@
         let template = await templateResponse.text();
         console.log('✅ Loaded fresh acceptance letter template for PDF generation');
 
-        // Fetch Final-ACNHS-Logo.js script
+        // Fetch acnhs-logo-base64.js script
         let sealScript = '';
         try {
-          const sealResponse = await fetch(`Final-ACNHS-Logo.js?cache=${Date.now()}`);
+          const sealResponse = await fetch(`js/acnhs-logo-base64.js?cache=${Date.now()}`);
           if (sealResponse.ok) {
             sealScript = await sealResponse.text();
           }
         } catch (e) {
-          console.warn('Could not load Final-ACNHS-Logo.js, will use fallback URL');
+          console.warn('Could not load acnhs-logo-base64.js, will use fallback URL');
         }
 
         // Prepare the data injection script
@@ -3348,8 +3348,8 @@
         }
         injectScripts += scriptOpen + 'window.ACCEPTANCE_LETTER_DATA = ' + safeData + ';' + scriptClose + '\n';
 
-        // Replace the Final-ACNHS-Logo.js script tag reference with inline content + data
-        const sealScriptTag = '<scr' + 'ipt src="./Final-ACNHS-Logo.js"><' + '/script>';
+  // Replace the acnhs-logo-base64.js script tag reference with inline content + data
+  const sealScriptTag = '<scr' + 'ipt src="./js/acnhs-logo-base64.js"><' + '/script>';
         if (template.includes(sealScriptTag)) {
           template = template.replace(sealScriptTag, injectScripts);
         } else if (template.includes('</head>')) {
@@ -3777,6 +3777,9 @@
         const safeSubject = escapeHtml(subject);
         const safeBody = body.replace(/\n/g, '<br>');
         const safeStudentId = escapeHtml(currentStudent.student_id || 'N/A');
+        const logoForEmail = window.ACNHS_LOGO_DATA_URL
+          || window.ACNHS_LOGO_EMAIL_URL
+          || (window.ACNHS_LOGO_BASE64 ? `data:image/png;base64,${window.ACNHS_LOGO_BASE64}` : '');
         
         // Generate HTML email using official ACNHS template
         const emailTemplate = `<!doctype html>
@@ -3808,7 +3811,7 @@
               <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td width="68" valign="middle">
-                    <img src="https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/images/Seal.png" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
+                    <img src="${logoForEmail}" width="54" height="54" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.10);padding:6px;">
                   </td>
                   <td valign="middle" style="padding-left:14px;">
                     <div style="font-family:Inter,Arial,sans-serif;font-size:16px;color:#ffffff;font-weight:800;">Armenian College of Nursing</div>
@@ -4639,7 +4642,7 @@
 
   const portalEmail = app.payload?.institutionalEmail || app.payload?.studentPortal?.institutionalEmail || app.institutional_email || `${username}@acnhs.am`;
         
-        // Use the official ACNHS logo from Final-ACNHS-Logo.js
+  // Use the official ACNHS logo from acnhs-logo-base64.js
         const logoForEmail = typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? ACNHS_LOGO_DATA_URL : 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png';
         
         // Official ACNHS Email Template with credentials content
@@ -5118,6 +5121,6 @@
     window.saveTransferCredit = saveTransferCredit;
     window.deleteTransferCredit = deleteTransferCredit;
   </script>
-  <script src="./Final-ACNHS-Logo.js"></script>
+  <script src="./js/acnhs-logo-base64.js"></script>
 </body>
 </html>
