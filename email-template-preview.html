@@ -204,16 +204,24 @@
       return `data:${mimeType};base64,${value}`;
     };
 
-    const hostedLogo = (typeof ACNHS_LOGO_EMAIL_URL !== 'undefined' && ACNHS_LOGO_EMAIL_URL) ? ACNHS_LOGO_EMAIL_URL : null;
-    const dataUrlLogo = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL) ? ACNHS_LOGO_DATA_URL : null;
-    const inlineLogo = (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) ? toDataUrl(ACNHS_LOGO_BASE64) : null;
-    const logoSource = hostedLogo || dataUrlLogo || inlineLogo || '';
+    // CRITICAL: Use ONLY inline base64 for preview consistency with real emails
+    const getInlineLogo = () => {
+      if (typeof window !== 'undefined') {
+        if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+        if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+      }
+      if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+      return null;
+    };
+
+    const inlineLogo = getInlineLogo();
+    const logoSource = toDataUrl(inlineLogo) || '';
 
     if (logoSource) {
   html = html.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
     } else {
       console.warn('⚠️ ACNHS logo not available for preview');
-      html = html.replace(/{{ACNHS_SEAL_BASE64}}/g, '');
+      html = html.replace(/<img[^>]*{{ACNHS_SEAL_BASE64}}[^>]*>/g, '');
     }
 
     // Display the email

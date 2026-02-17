@@ -154,16 +154,15 @@ serve(async (req: Request) => {
     // CRITICAL: Send both html and text versions for better email client compatibility
     const strippedHtml = html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
     
-    // NOTE: Keep base64 images inline instead of converting to CID attachments
-    // This ensures better compatibility with email signature logos
-    const processedHtml = html
-    const extractedImages: Array<{filename: string, content: string, type: string, cid: string}> = []
+    // CRITICAL: Use ONLY inline base64 images - never extract to CID/attachments
+    // This prevents logos from appearing as attachments to recipients
+    // All email templates MUST embed images as data:image/... URLs
     
     const emailPayload: any = {
       from: `${senderName} <${senderEmail}>`,
       to: [to],
       subject: subject,
-      html: processedHtml, // Use original HTML with base64 images
+      html: html, // Use original HTML with inline base64 - no processing
       text: (text?.trim() || strippedHtml)
     }
 
@@ -186,33 +185,15 @@ serve(async (req: Request) => {
       emailPayload.reply_to = replyToEmail
     }
 
-    // Merge extracted images with provided attachments
-    const allAttachments: Array<any> = [...extractedImages]
+    // Add attachments ONLY if explicitly provided (e.g., PDFs, documents)
+    // NEVER extract images from HTML - they must be inline base64
     if (attachments && attachments.length > 0) {
-      // Add provided attachments (they don't need CIDs as they're not inline)
-      allAttachments.push(...attachments.map((att: any) => ({
+      emailPayload.attachments = attachments.map((att: any) => ({
         filename: att.filename,
         content: att.content,
         type: att.type
-      })))
-    }
-    
-    // Add attachments if any exist
-    if (allAttachments.length > 0) {
-      emailPayload.attachments = allAttachments.map((att: any, idx: number) => {
-        const attachment: any = {
-          filename: att.filename,
-          content: att.content
-        }
-        
-        // Add content_id for inline images (extracted from HTML)
-        if (att.cid) {
-          attachment.content_id = att.cid
-        }
-        
-        return attachment
-      })
-      console.log(`Adding ${allAttachments.length} attachment(s) to email (${extractedImages.length} inline images, ${attachments?.length || 0} regular attachments)`)
+      }))
+      console.log(`Adding ${attachments.length} document attachment(s) (PDFs, etc.) - NOT extracting images from HTML`)
     }
     
     console.log('Sending email with payload:', {

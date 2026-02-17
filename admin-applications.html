@@ -2789,16 +2789,26 @@
           ...(existingMetadata.portal || {}),
           institutional_email: institutionalEmail,
           provisioned_at: provisionedAt,
-          username: institutionalEmail // Use institutional email as username
+          username: institutionalEmail, // Use institutional email as username
+          personal_email: payload.email || app.email // CRITICAL: Preserve personal email for notifications
         }
       };
 
-      // Update student record with institutional email
+      // CRITICAL: Keep personal email in 'email' field for notifications (class links, etc.)
+      // Store institutional email in metadata
+      const personalEmail = payload.email || app.email || studentRecord.email;
+      const updatedMetadataWithEmails = {
+        ...mergedMetadata,
+        institutional_email: institutionalEmail,
+        personal_email: personalEmail
+      };
+
+      // Update student record - KEEP personal email in email field!
       const { error: studentUpdateError } = await supabase
         .from('students')
         .update({
-          email: institutionalEmail,
-          metadata: mergedMetadata
+          email: personalEmail, // KEEP personal email for class link notifications
+          metadata: updatedMetadataWithEmails
         })
         .eq('id', studentRecord.id);
 
@@ -2835,7 +2845,7 @@
       }
 
       return {
-        studentRecord: { ...studentRecord, email: institutionalEmail, metadata: mergedMetadata },
+        studentRecord: { ...studentRecord, email: personalEmail, metadata: updatedMetadataWithEmails },
         payload: updatedPayload,
         institutionalEmail
       };
@@ -5896,25 +5906,40 @@
         return `data:${mimeType};base64,${value}`;
       };
 
-      const hostedLogo = (typeof ACNHS_LOGO_EMAIL_URL !== 'undefined' && ACNHS_LOGO_EMAIL_URL) ? ACNHS_LOGO_EMAIL_URL : null;
-      const dataUrlLogo = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL) ? ACNHS_LOGO_DATA_URL : null;
-      const inlineLogo = (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) ? toDataUrl(ACNHS_LOGO_BASE64) : null;
-      const logoSource = hostedLogo || dataUrlLogo || inlineLogo;
+      // CRITICAL: Use ONLY inline base64 - NEVER external URLs
+      const getInlineLogo = () => {
+        if (typeof window !== 'undefined') {
+          if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+          if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+        }
+        if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+        return null;
+      };
+
+      const toDataUrl = (value) => {
+        if (!value || typeof value !== 'string') return null;
+        if (value.startsWith('data:image')) return value;
+        const isJpeg = value.startsWith('/9j');
+        const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${value}`;
+      };
+
+      const inlineLogo = getInlineLogo();
+      const logoSource = toDataUrl(inlineLogo);
 
       console.log('🔍 Password Reset Email - Logo sources:', {
-        hasHostedLogo: !!hostedLogo,
         hasInlineLogo: !!inlineLogo,
-        sourceUsed: hostedLogo ? 'hosted-url' : (inlineLogo ? 'base64' : 'none')
+        sourceUsed: logoSource ? 'inline-base64' : 'none'
       });
       console.log('🔍 Placeholders in template BEFORE replacement:', (emailHtml.match(/{{ACNHS_SEAL_BASE64}}/g) || []).length);
       
       if (logoSource) {
         emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
-        console.log('✅ Logo replaced in password reset email template');
+        console.log('✅ Logo replaced in password reset email template with inline base64');
         console.log('🔍 Placeholders remaining AFTER replacement:', (emailHtml.match(/{{ACNHS_SEAL_BASE64}}/g) || []).length);
       } else {
-        console.error('❌ No ACNHS logo source available - logo will not display in password reset email');
-        emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, '');
+        console.error('❌ No ACNHS logo source available - removing <img> tags');
+        emailHtml = emailHtml.replace(/<img[^>]*{{ACNHS_SEAL_BASE64}}[^>]*>/g, '');
       }
 
       try {
@@ -7174,9 +7199,33 @@
 </body>
 </html>`;
             
-            // Replace logo placeholder with base64 seal
-            const logoSource = typeof ACNHS_SEAL_BASE64 !== 'undefined' ? `data:image/png;base64,${ACNHS_SEAL_BASE64}` : ACNHS_LOGO_EMAIL_URL || '';
-            emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
+            // CRITICAL: Use ONLY inline base64 - NEVER external URLs
+            const getInlineLogo = () => {
+              if (typeof window !== 'undefined') {
+                if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+                if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+              }
+              if (typeof ACNHS_SEAL_BASE64 !== 'undefined' && ACNHS_SEAL_BASE64) return ACNHS_SEAL_BASE64;
+              if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+              return null;
+            };
+
+            const toDataUrlQuestionnaire = (value) => {
+              if (!value || typeof value !== 'string') return null;
+              if (value.startsWith('data:image')) return value;
+              const isJpeg = value.startsWith('/9j');
+              const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+              return `data:${mimeType};base64,${value}`;
+            };
+
+            const inlineLogo = getInlineLogo();
+            const logoSource = toDataUrlQuestionnaire(inlineLogo) || '';
+            
+            if (logoSource) {
+              emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
+            } else {
+              emailHtml = emailHtml.replace(/<img[^>]*{{ACNHS_SEAL_BASE64}}[^>]*>/g, '');
+            }
             
             const response = await fetch('https://eyhksbiceueoiamwnqpr.supabase.co/functions/v1/send-email', {
               method: 'POST',
@@ -7967,25 +8016,43 @@
 </body>
 </html>`;
 
-  // Use the official ACNHS logo from acnhs-logo-base64.js
-      const logoSource = typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? ACNHS_LOGO_DATA_URL : (typeof ACNHS_LOGO_BASE64 !== 'undefined' ? `data:image/png;base64,${ACNHS_LOGO_BASE64}` : 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png');
+  // CRITICAL: Use ONLY inline base64 - NEVER external URLs to prevent attachment display
+      const getInlineLogo = () => {
+        if (typeof window !== 'undefined') {
+          if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+          if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+        }
+        if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+        return null;
+      };
+
+      const toDataUrl = (value) => {
+        if (!value || typeof value !== 'string') return null;
+        if (value.startsWith('data:image')) return value;
+        const isJpeg = value.startsWith('/9j');
+        const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+        return `data:${mimeType};base64,${value}`;
+      };
+
+      const inlineLogo = getInlineLogo();
+      const logoSource = toDataUrl(inlineLogo);
       
       console.log('🔍 Email logo source preference:', {
         hasDataURL: typeof ACNHS_LOGO_DATA_URL !== 'undefined',
         hasBase64: typeof ACNHS_LOGO_BASE64 !== 'undefined',
-        sourceUsed: typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? 'data-url' : (typeof ACNHS_LOGO_BASE64 !== 'undefined' ? 'base64' : 'fallback-url')
+        sourceUsed: logoSource ? 'inline-base64' : 'none'
       });
       console.log('🔍 Logo preview:', logoSource ? logoSource.substring(0, 80) : 'N/A');
       console.log('🔍 Placeholders in template BEFORE replacement:', (emailHtml.match(/{{ACNHS_SEAL_BASE64}}/g) || []).length);
       
       if (logoSource) {
         emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoSource);
-        console.log('✅ Logo replaced in email template');
+        console.log('✅ Logo replaced in email template with inline base64');
         console.log('🔍 Placeholders remaining AFTER replacement:', (emailHtml.match(/{{ACNHS_SEAL_BASE64}}/g) || []).length);
         console.log('🔍 First 500 chars of email HTML:', emailHtml.substring(0, 500));
       } else {
-        console.error('❌ No ACNHS logo source available - logo will not display in email');
-        emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, '');
+        console.error('❌ No ACNHS logo source available - removing <img> tags to prevent broken images');
+        emailHtml = emailHtml.replace(/<img[^>]*{{ACNHS_SEAL_BASE64}}[^>]*>/g, '');
       }
 
       try {

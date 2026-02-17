@@ -2532,9 +2532,33 @@ async function sendApplicationSubmittedEmail(applicationData, username, password
 </html>`;
 
   // Replace logo placeholder with hosted URL (same as admin-applications.html)
-  // Use the official ACNHS logo from acnhs-logo-base64.js
-  const logoForEmail = typeof ACNHS_LOGO_DATA_URL !== 'undefined' ? ACNHS_LOGO_DATA_URL : 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png';
-  emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoForEmail);
+  // CRITICAL: Use ONLY inline base64 - NEVER external URLs to prevent attachment display
+  const getInlineLogo = () => {
+    if (typeof window !== 'undefined') {
+      if (window.ACNHS_LOGO_BASE64) return window.ACNHS_LOGO_BASE64;
+      if (window.ACNHS_LOGO_DATA_URL) return window.ACNHS_LOGO_DATA_URL;
+    }
+    if (typeof ACNHS_LOGO_BASE64 !== 'undefined' && ACNHS_LOGO_BASE64) return ACNHS_LOGO_BASE64;
+    return null;
+  };
+
+  const toDataUrl = (value) => {
+    if (!value || typeof value !== 'string') return null;
+    if (value.startsWith('data:image')) return value;
+    const isJpeg = value.startsWith('/9j');
+    const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
+    return `data:${mimeType};base64,${value}`;
+  };
+
+  const inlineLogo = getInlineLogo();
+  const logoForEmail = toDataUrl(inlineLogo) || '';
+  
+  // If no base64 logo available, remove <img> tags entirely (prevent broken images)
+  if (logoForEmail) {
+    emailHtml = emailHtml.replace(/{{ACNHS_SEAL_BASE64}}/g, logoForEmail);
+  } else {
+    emailHtml = emailHtml.replace(/<img[^>]*{{ACNHS_SEAL_BASE64}}[^>]*>/g, '');
+  }
 
   // Get BCC recipients for application submissions
   const bccEmails = window.BccUtils ? window.BccUtils.getBccEmailsByType('applicationSubmission') : null;
