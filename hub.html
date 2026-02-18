@@ -299,6 +299,7 @@
       background:rgba(4,17,31,0.7);
       border:1px solid var(--border-gold);
       box-shadow:0 10px 24px rgba(0,0,0,.20);
+      position:relative;
     }
     .search input{
       flex:1;
@@ -311,6 +312,78 @@
     }
     .search input::placeholder{
       color:var(--text-muted);
+    }
+
+    /* Universal search dropdown */
+    #searchDropdown{
+      display:none;
+      position:absolute;
+      top:calc(100% + 10px);
+      left:0;
+      right:0;
+      background:rgba(7,27,48,0.98);
+      border:1px solid var(--border-gold);
+      border-radius:18px;
+      box-shadow:0 24px 60px rgba(0,0,0,.55);
+      z-index:9000;
+      overflow:hidden;
+      backdrop-filter:blur(20px);
+      max-height:480px;
+      overflow-y:auto;
+    }
+    #searchDropdown.open{ display:block; }
+    .search-section-label{
+      padding:10px 16px 6px;
+      font-size:10px;
+      font-weight:800;
+      letter-spacing:.8px;
+      text-transform:uppercase;
+      color:var(--gold-500);
+      border-top:1px solid rgba(201,168,76,0.12);
+    }
+    .search-section-label:first-child{ border-top:none; }
+    .search-result-item{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:10px 16px;
+      cursor:pointer;
+      transition:.12s ease;
+      border-bottom:1px solid rgba(255,255,255,.04);
+    }
+    .search-result-item:last-child{ border-bottom:none; }
+    .search-result-item:hover{
+      background:rgba(201,168,76,.08);
+    }
+    .sri-icon{
+      width:32px;height:32px;border-radius:10px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:15px;flex-shrink:0;
+      background:rgba(201,168,76,.10);
+      border:1px solid rgba(201,168,76,.18);
+    }
+    .sri-text strong{
+      display:block;
+      font-size:13px;font-weight:800;
+      color:var(--text-primary);
+      line-height:1.25;
+    }
+    .sri-text span{
+      font-size:11px;font-weight:600;
+      color:var(--text-muted);
+    }
+    .sri-text em{
+      font-style:normal;
+      background:rgba(201,168,76,.22);
+      color:var(--gold-300);
+      border-radius:4px;
+      padding:0 3px;
+    }
+    .search-no-results{
+      padding:28px 16px;
+      text-align:center;
+      color:var(--text-muted);
+      font-size:13px;
     }
     .pill{
       padding:9px 12px;
@@ -1639,7 +1712,8 @@
         <div class="top-right">
           <div class="search">
             <span style="font-weight:700;color:var(--text-muted);font-size:12px;letter-spacing:.4px;text-transform:uppercase;">Search</span>
-            <input id="searchInput" placeholder="Search notes, modules, topics (e.g., CHF, ABGs, Neuro)..." />
+            <input id="searchInput" placeholder="Search notes, videos, modules, topics…" autocomplete="off" />
+            <div id="searchDropdown"></div>
           </div>
           <button class="pill primary" onclick="alert('Open announcements (connect later)')">Announcements</button>
           <button class="pill" onclick="alert('Open notifications (connect later)')">Notifications</button>
@@ -2385,51 +2459,86 @@
       window.close();
     }
 
-    // Filters
-    const filterSystem = document.getElementById("filterSystem");
-    const filterType = document.getElementById("filterType");
+    // ==================== UNIVERSAL SEARCH ENGINE ====================
     const searchInput = document.getElementById("searchInput");
-    const notesGrid = document.getElementById("notesGrid");
+    const searchDropdown = document.getElementById("searchDropdown");
 
-    function applyFilters(){
-      if (!notesGrid) return;
-      
-      const sys = filterSystem ? filterSystem.value : 'all';
-      const type = filterType ? filterType.value : 'all';
-      const q = searchInput ? (searchInput.value || "").trim().toLowerCase() : '';
-
-      [...notesGrid.querySelectorAll(".note")].forEach(n => {
-        const ns = n.dataset.system;
-        const nt = n.dataset.type;
-        const title = (n.querySelector(".title")?.textContent || "").toLowerCase();
-        const meta = (n.querySelector(".meta")?.textContent || "").toLowerCase();
-
-        const okSys = (sys === "all") || (ns === sys);
-        const okType = (type === "all") || (nt === type);
-        const okQ = !q || title.includes(q) || meta.includes(q);
-
-        n.style.display = (okSys && okType && okQ) ? "" : "none";
-      });
+    // Highlight matching text
+    function highlight(text, q) {
+      if (!q) return escapeHtml(text);
+      const idx = text.toLowerCase().indexOf(q.toLowerCase());
+      if (idx === -1) return escapeHtml(text);
+      return escapeHtml(text.slice(0, idx))
+        + '<em>' + escapeHtml(text.slice(idx, idx + q.length)) + '</em>'
+        + escapeHtml(text.slice(idx + q.length));
     }
 
-    if (filterSystem) filterSystem.addEventListener("change", applyFilters);
-    if (filterType) filterType.addEventListener("change", applyFilters);
-    if (searchInput) searchInput.addEventListener("input", applyFilters);
+    function buildSearchIndex() {
+      const index = [];
 
-    // Nav view switch (UI only for now)
-    document.getElementById("nav").addEventListener("click", (e) => {
-      const a = e.target.closest("a[data-view]");
-      if(!a) return;
-      e.preventDefault();
+      // 1. NOTES — from HARDCODED_NOTES
+      HARDCODED_NOTES.forEach(note => {
+        index.push({
+          type: 'note',
+          icon: '📄',
+          label: 'Note',
+          title: note.title,
+          sub: note.category,
+          action: () => {
+            switchView('notes');
+            // Wait for notes view to render, then open the note's category
+            setTimeout(() => openCategory(note.category), 150);
+          }
+        });
+      });
 
+      // 2. VIDEOS — from allVideos (populated after loadStudentVideos())
+      allVideos.forEach(video => {
+        index.push({
+          type: 'video',
+          icon: '▶',
+          label: 'Video',
+          title: video.title,
+          sub: video.category || 'Video Library',
+          action: () => {
+            switchView('videos');
+            setTimeout(() => openVideoPlayer(video.id), 400);
+          }
+        });
+      });
+
+      // 3. NAV SECTIONS
+      const sections = [
+        { title: 'Dashboard',     sub: 'Overview, KPIs, progress',                 view: 'dashboard', icon: '🏠' },
+        { title: 'Notes Library', sub: 'Study notes by category',                  view: 'notes',     icon: '📚' },
+        { title: 'Video Library', sub: 'Clinical demos & lectures',                view: 'videos',    icon: '🎥' },
+        { title: 'Modules',       sub: 'Weekly curriculum & courses',              view: 'modules',   icon: '📦' },
+        { title: 'Assignments',   sub: 'Due dates & submission status',            view: 'assignments',icon: '✏️' },
+        { title: 'Calendar',      sub: 'Classes, exams & simulations',             view: 'calendar',  icon: '📅' },
+        { title: 'Grades',        sub: 'GPA, gradebook & transcripts',             view: 'grades',    icon: '🎓' },
+        { title: 'Downloads',     sub: 'Official PDFs & course files',             view: 'downloads', icon: '⬇️' },
+        { title: 'Support',       sub: 'Technical, academic & admin help',         view: 'support',   icon: '🆘' },
+      ];
+      sections.forEach(s => {
+        index.push({
+          type: 'section',
+          icon: s.icon,
+          label: 'Section',
+          title: s.title,
+          sub: s.sub,
+          action: () => switchView(s.view)
+        });
+      });
+
+      return index;
+    }
+
+    // Switch view programmatically (same logic as nav click)
+    function switchView(view) {
       document.querySelectorAll(".nav a").forEach(x => x.classList.remove("active"));
-      a.classList.add("active");
-
-      const view = a.dataset.view;
-      
-      // Toggle view class on body for styling
+      const navLink = document.querySelector(`.nav a[data-view="${view}"]`);
+      if (navLink) navLink.classList.add("active");
       document.body.className = `view-${view}`;
-      
       const titleMap = {
         dashboard: ["Dashboard", "Everything you need — notes, modules, schedule, grades, and announcements."],
         notes: ["Notes Library", "Search, filter, and open official notes in a clean study view."],
@@ -2441,15 +2550,114 @@
         downloads: ["Downloads", "Official documents and course files in PDF."],
         support: ["Support", "Get help fast — technical, academic, and administrative."]
       };
-
       const [t, s] = titleMap[view] || ["Student Hub", "Learning platform"];
       document.getElementById("viewTitle").textContent = t;
       document.getElementById("viewSubtitle").textContent = s;
+      if (view === 'videos') loadStudentVideos();
+    }
 
-      // Load videos when switching to videos view
-      if (view === 'videos') {
-        loadStudentVideos();
+    function runSearch(q) {
+      const dropdown = searchDropdown;
+      if (!q || q.length < 2) {
+        dropdown.classList.remove('open');
+        dropdown.innerHTML = '';
+        return;
       }
+      const ql = q.toLowerCase();
+      const index = buildSearchIndex();
+
+      const notes   = index.filter(r => r.type === 'note'    && (r.title.toLowerCase().includes(ql) || r.sub.toLowerCase().includes(ql)));
+      const videos  = index.filter(r => r.type === 'video'   && (r.title.toLowerCase().includes(ql) || r.sub.toLowerCase().includes(ql)));
+      const sections= index.filter(r => r.type === 'section' && (r.title.toLowerCase().includes(ql) || r.sub.toLowerCase().includes(ql)));
+
+      const total = notes.length + videos.length + sections.length;
+
+      if (total === 0) {
+        dropdown.innerHTML = `<div class="search-no-results">No results for "<strong>${escapeHtml(q)}</strong>"</div>`;
+        dropdown.classList.add('open');
+        return;
+      }
+
+      const renderGroup = (label, items) => {
+        if (!items.length) return '';
+        const rows = items.slice(0, 6).map((r, i) => `
+          <div class="search-result-item" data-idx="${label}-${i}">
+            <div class="sri-icon">${r.icon}</div>
+            <div class="sri-text">
+              <strong>${highlight(r.title, q)}</strong>
+              <span>${escapeHtml(r.sub)}</span>
+            </div>
+          </div>`).join('');
+        return `<div class="search-section-label">${label}${items.length > 6 ? ` <span style="font-weight:600;opacity:.6">(${items.length} results)</span>` : ''}</div>${rows}`;
+      };
+
+      dropdown.innerHTML =
+        renderGroup('Notes', notes) +
+        renderGroup('Videos', videos) +
+        renderGroup('Sections', sections);
+
+      // Attach click actions
+      let allItems = [...notes.slice(0,6), ...videos.slice(0,6), ...sections.slice(0,6)];
+      let rendered = dropdown.querySelectorAll('.search-result-item');
+      let flatItems = [
+        ...notes.slice(0,6),
+        ...videos.slice(0,6),
+        ...sections.slice(0,6)
+      ];
+      rendered.forEach((el, i) => {
+        el.addEventListener('mousedown', (e) => {
+          e.preventDefault(); // prevent input blur before click fires
+          flatItems[i]?.action();
+          closeSearch();
+        });
+      });
+
+      dropdown.classList.add('open');
+    }
+
+    function closeSearch() {
+      searchDropdown.classList.remove('open');
+      searchDropdown.innerHTML = '';
+      searchInput.value = '';
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => runSearch(e.target.value.trim()));
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeSearch();
+        if (e.key === 'Enter') {
+          const first = searchDropdown.querySelector('.search-result-item');
+          if (first) first.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+        }
+      });
+      searchInput.addEventListener('blur', () => {
+        // Small delay so mousedown on result fires first
+        setTimeout(() => closeSearch(), 150);
+      });
+      searchInput.addEventListener('focus', (e) => {
+        if (e.target.value.trim().length >= 2) runSearch(e.target.value.trim());
+      });
+    }
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.search')) closeSearch();
+    });
+
+    // Legacy filter stubs (no-op — kept so no reference errors)
+    const filterSystem = document.getElementById("filterSystem");
+    const filterType = document.getElementById("filterType");
+    const notesGrid = document.getElementById("notesGrid");
+    function applyFilters(){}
+    if (filterSystem) filterSystem.addEventListener("change", applyFilters);
+    if (filterType) filterType.addEventListener("change", applyFilters);
+
+    // Nav view switch
+    document.getElementById("nav").addEventListener("click", (e) => {
+      const a = e.target.closest("a[data-view]");
+      if(!a) return;
+      e.preventDefault();
+      switchView(a.dataset.view);
     });
 
     // ==================== VIDEO LIBRARY SYSTEM ====================
