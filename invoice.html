@@ -785,12 +785,43 @@
       gap: 8px;
       padding-top: 12px;
       border-top: 1px solid var(--border);
+      flex-wrap: wrap;
     }
 
     .invoice-card-actions button {
       padding: 6px 12px;
       font-size: 12px;
       border-radius: 4px;
+    }
+
+    /* ── New Receipt Badge ── */
+    .new-receipt-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ef4444, #f97316);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.3px;
+      white-space: nowrap;
+      box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
+      animation: receipt-pulse 1.8s infinite;
+      pointer-events: none;
+      user-select: none;
+      align-self: center;
+    }
+    @keyframes receipt-pulse {
+      0%   { box-shadow: 0 0 0 0   rgba(239,68,68,0.55); }
+      60%  { box-shadow: 0 0 0 7px rgba(239,68,68,0); }
+      100% { box-shadow: 0 0 0 0   rgba(239,68,68,0); }
+    }
+    .receipt-btn-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
 
     /* ==========================================
@@ -3218,6 +3249,14 @@ Payment must be made to the following account:
             `;
           }
           
+          // Badge logic: show when receipts exist AND never viewed,
+          // OR when a new receipt was uploaded after the last view
+          const hasReceipts = invoice.payment_receipts && invoice.payment_receipts.length > 0;
+          const viewedAt   = invoice.receipts_viewed_at   ? new Date(invoice.receipts_viewed_at)   : null;
+          const uploadedAt = invoice.receipts_last_uploaded_at ? new Date(invoice.receipts_last_uploaded_at) : null;
+          const isUnopened = hasReceipts && (!viewedAt || (uploadedAt && uploadedAt > viewedAt));
+          const receiptsEncoded = hasReceipts ? JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;') : '';
+
           return `
           <div class="invoice-card" onclick="loadInvoiceFromDB('${invoice.id}')" style="opacity: 1;">
             <div class="invoice-card-header">
@@ -3238,7 +3277,14 @@ Payment must be made to the following account:
               <button class="secondary" onclick="window.open('${invoiceUrl}', '_blank')">🔗 View Invoice</button>
               <button class="secondary" onclick="copyInvoiceUrl('${invoiceUrl}')">📋 Copy URL</button>
               <button class="secondary" onclick="sendInvoiceEmail('${invoice.id}', '${invoice.student_name}', '${invoiceUrl}')">📧 Send Invoice</button>
-              ${invoice.payment_receipts && invoice.payment_receipts.length > 0 ? `<button class="secondary" onclick="viewReceipts('${invoice.id}', ${JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;')})">📄 View Receipts (${invoice.payment_receipts.length})</button>` : ''}
+              ${hasReceipts ? `
+                <span class="receipt-btn-wrap" id="receipt-wrap-${invoice.id}">
+                  <button class="secondary" onclick="viewReceipts('${invoice.id}', ${receiptsEncoded})">
+                    📄 View Receipts (${invoice.payment_receipts.length})
+                  </button>
+                  ${isUnopened ? `<span class="new-receipt-badge" id="receipt-badge-${invoice.id}">🔴 New Receipt</span>` : ''}
+                </span>
+              ` : ''}
               <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
               ${paymentButtons}
               <button class="danger" onclick="deleteInvoice('${invoice.id}')">Delete</button>
@@ -4700,8 +4746,75 @@ Payment must be made to the following account:
       }
     };
 
+    // Delete a single receipt from an invoice
+    async function deleteReceipt(invoiceId, receiptIndex, modalEl) {
+      const confirmed = confirm('Delete this receipt? This cannot be undone.');
+      if (!confirmed) return;
+
+      try {
+        // Fetch current receipts from DB (source of truth)
+        const { data: inv, error: fetchErr } = await invoiceSupabase
+          .from('invoices')
+          .select('payment_receipts')
+          .eq('id', invoiceId)
+          .single();
+
+        if (fetchErr) throw fetchErr;
+
+        const current = Array.isArray(inv.payment_receipts) ? inv.payment_receipts : [];
+        const updated = current.filter((_, i) => i !== receiptIndex);
+
+        const { error: updateErr } = await invoiceSupabase
+          .from('invoices')
+          .update({ payment_receipts: updated })
+          .eq('id', invoiceId);
+
+        if (updateErr) throw updateErr;
+
+        // Update in-memory allInvoices so the card refreshes
+        const inv2 = allInvoices.find(iv => iv.id === invoiceId);
+        if (inv2) inv2.payment_receipts = updated;
+
+        // Close current modal and reopen with updated list (or close if empty)
+        modalEl.remove();
+        if (updated.length > 0) {
+          viewReceipts(invoiceId, updated);
+        }
+
+        // Refresh the invoice list card count badge
+        renderInvoices(allInvoices);
+
+      } catch (err) {
+        console.error('Failed to delete receipt:', err);
+        alert('Error deleting receipt: ' + (err.message || err));
+      }
+    }
+
+    // Mark all receipts for an invoice as viewed (persisted to Supabase)
+    async function markReceiptsViewed(invoiceId) {
+      const now = new Date().toISOString();
+      try {
+        await invoiceSupabase
+          .from('invoices')
+          .update({ receipts_viewed_at: now })
+          .eq('id', invoiceId);
+      } catch (err) {
+        console.warn('markReceiptsViewed error (non-fatal):', err);
+      }
+
+      // Instantly remove the badge from the DOM (no reload needed)
+      const badge = document.getElementById(`receipt-badge-${invoiceId}`);
+      if (badge) badge.remove();
+
+      // Also update in-memory so re-renders don't re-add the badge
+      const inv = window.currentInvoices?.find(iv => iv.id === invoiceId);
+      if (inv) inv.receipts_viewed_at = now;
+    }
+
     // View payment receipts
     function viewReceipts(invoiceId, receipts) {
+      // ✅ Mark as viewed immediately on open
+      markReceiptsViewed(invoiceId);
       const receiptsArray = typeof receipts === 'string' ? JSON.parse(receipts) : receipts;
       
       let receiptHTML = receiptsArray.map((receipt, index) => {
@@ -4710,9 +4823,28 @@ Payment must be made to the following account:
         const fileSize = ((receipt.size || 0) / 1024).toFixed(2) + ' KB';
         
         return `
-          <div style="margin-bottom: 20px; padding: 16px; background: rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.3); border-radius: 8px;">
-            <div style="margin-bottom: 12px;">
-              <strong style="color: #2dd4bf;">Receipt ${index + 1}:</strong> ${receipt.filename}
+          <div style="margin-bottom: 20px; padding: 16px; background: rgba(20, 184, 166, 0.1); border: 1px solid rgba(20, 184, 166, 0.3); border-radius: 8px; position: relative;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+              <strong style="color: #2dd4bf;">Receipt ${index + 1}:</strong>&nbsp;<span style="color:#e2e8f0;">${receipt.filename}</span>
+              <button
+                onclick="deleteReceipt('${invoiceId}', ${index}, this.closest('[style*=fixed]'))"
+                title="Delete this receipt"
+                style="
+                  margin-left: 12px;
+                  flex-shrink: 0;
+                  padding: 6px 12px;
+                  background: rgba(239,68,68,0.12);
+                  border: 1px solid rgba(239,68,68,0.35);
+                  color: #ef4444;
+                  border-radius: 7px;
+                  font-size: 12px;
+                  font-weight: 700;
+                  cursor: pointer;
+                  transition: background 0.2s;
+                "
+                onmouseover="this.style.background='rgba(239,68,68,0.25)'"
+                onmouseout="this.style.background='rgba(239,68,68,0.12)'"
+              >🗑 Delete</button>
             </div>
             <div style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">
               <div>📅 Uploaded: ${uploadDate}</div>
@@ -4798,8 +4930,9 @@ Payment must be made to the following account:
       });
     }
 
-    // Make viewReceipts globally accessible
+    // Make viewReceipts and deleteReceipt globally accessible
     window.viewReceipts = viewReceipts;
+    window.deleteReceipt = deleteReceipt;
 
     // Live update on all inputs
     ['studentName', 'studentId', 'program', 'notes'].forEach((id) => {
