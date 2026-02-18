@@ -252,7 +252,7 @@
     /* Main */
     .main{
       border-radius:var(--radius-xl);
-      overflow:hidden;
+      overflow: visible;
       border:1px solid var(--border-gold);
       background:rgba(7,27,48,0.6);
       backdrop-filter: blur(10px);
@@ -314,18 +314,15 @@
       color:var(--text-muted);
     }
 
-    /* Universal search dropdown */
+    /* Universal search dropdown — body-level portal, escapes all stacking contexts */
     #searchDropdown{
       display:none;
-      position:absolute;
-      top:calc(100% + 10px);
-      left:0;
-      right:0;
+      position:fixed;
       background:rgba(7,27,48,0.98);
       border:1px solid var(--border-gold);
       border-radius:18px;
-      box-shadow:0 24px 60px rgba(0,0,0,.55);
-      z-index:9000;
+      box-shadow:0 24px 60px rgba(0,0,0,.70);
+      z-index:99999;
       overflow:hidden;
       backdrop-filter:blur(20px);
       max-height:480px;
@@ -1710,10 +1707,9 @@
         </div>
 
         <div class="top-right">
-          <div class="search">
+          <div class="search" id="searchWrapper">
             <span style="font-weight:700;color:var(--text-muted);font-size:12px;letter-spacing:.4px;text-transform:uppercase;">Search</span>
             <input id="searchInput" placeholder="Search notes, videos, modules, topics…" autocomplete="off" />
-            <div id="searchDropdown"></div>
           </div>
           <button class="pill primary" onclick="alert('Open announcements (connect later)')">Announcements</button>
           <button class="pill" onclick="alert('Open notifications (connect later)')">Notifications</button>
@@ -2463,6 +2459,20 @@
     const searchInput = document.getElementById("searchInput");
     const searchDropdown = document.getElementById("searchDropdown");
 
+    // Position the portal dropdown below the search bar
+    function positionDropdown() {
+      const wrapper = document.getElementById('searchWrapper');
+      if (!wrapper) return;
+      const rect = wrapper.getBoundingClientRect();
+      searchDropdown.style.top    = (rect.bottom + 10) + 'px';
+      searchDropdown.style.left   = rect.left + 'px';
+      searchDropdown.style.width  = Math.max(rect.width, 420) + 'px';
+    }
+
+    window.addEventListener('resize', () => {
+      if (searchDropdown.classList.contains('open')) positionDropdown();
+    });
+
     // Highlight matching text
     function highlight(text, q) {
       if (!q) return escapeHtml(text);
@@ -2612,6 +2622,7 @@
         });
       });
 
+      positionDropdown();
       dropdown.classList.add('open');
     }
 
@@ -2635,7 +2646,9 @@
         setTimeout(() => closeSearch(), 150);
       });
       searchInput.addEventListener('focus', (e) => {
-        if (e.target.value.trim().length >= 2) runSearch(e.target.value.trim());
+        if (e.target.value.trim().length >= 2) {
+          runSearch(e.target.value.trim());
+        }
       });
     }
 
@@ -3642,6 +3655,9 @@
 
   </script>
   
+  <!-- Search dropdown portal — lives at body level to escape all stacking contexts -->
+  <div id="searchDropdown"></div>
+
   <!-- Analytics & Cookie Consent -->
   <script src="js/analytics-config.js"></script>
   <script src="js/cookie-consent.js"></script>
