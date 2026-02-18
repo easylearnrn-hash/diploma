@@ -4771,9 +4771,11 @@ Payment must be made to the following account:
 
         if (updateErr) throw updateErr;
 
-        // Update in-memory allInvoices so the card refreshes
-        const inv2 = allInvoices.find(iv => iv.id === invoiceId);
-        if (inv2) inv2.payment_receipts = updated;
+        // Update in-memory currentInvoices so the card refreshes
+        if (Array.isArray(window.currentInvoices)) {
+          const inv2 = window.currentInvoices.find(iv => iv.id === invoiceId);
+          if (inv2) inv2.payment_receipts = updated;
+        }
 
         // Close current modal and reopen with updated list (or close if empty)
         modalEl.remove();
@@ -4781,8 +4783,10 @@ Payment must be made to the following account:
           viewReceipts(invoiceId, updated);
         }
 
-        // Refresh the invoice list card count badge
-        renderInvoices(allInvoices);
+        // Refresh the invoice cards
+        const searchTerm = document.getElementById('searchInvoices')?.value || '';
+        const statusFilter = document.getElementById('filterStatus')?.value || '';
+        await loadAllInvoices(searchTerm, statusFilter);
 
       } catch (err) {
         console.error('Failed to delete receipt:', err);
