@@ -187,7 +187,7 @@ const CookieConsent = {
     banner.innerHTML = `
       <div class="cookie-banner-content">
         <div class="cookie-banner-text">
-          <h3>🍪 We Use Cookies</h3>
+          <h3>We Use Cookies</h3>
           <p>We use cookies and similar technologies to improve your experience, analyze traffic, and personalize content. By clicking "Accept All," you consent to our use of cookies.</p>
           <a href="privacy-policy.html" target="_blank">Privacy Policy</a>
         </div>
