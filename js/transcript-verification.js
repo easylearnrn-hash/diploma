@@ -14,13 +14,13 @@ function generateVerificationCode(studentId) {
 
 /**
  * Generate a cryptographically secure random code
- * Alternative format using crypto API for better security
+ * Uses 8 hex chars (32-bit entropy) to make collisions astronomically unlikely.
  */
 function generateSecureVerificationCode(studentId) {
   const year = new Date().getFullYear();
   const array = new Uint8Array(4);
   crypto.getRandomValues(array);
-  const hash = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase().substring(0, 4);
+  const hash = Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase();
   return `TR-${year}-${studentId}-${hash}`;
 }
 
@@ -34,38 +34,44 @@ async function saveTranscriptToDatabase(transcriptData) {
   if (!client) {
     throw new Error('Supabase client not initialized');
   }
-  
-  // Generate unique verification code
-  const verificationCode = generateSecureVerificationCode(transcriptData.student_id);
-  
-  // Prepare data for database
-  const transcriptRecord = {
-    verification_code: verificationCode,
-    student_id: transcriptData.student_id,
-    student_name: transcriptData.student_name,
-    date_of_birth: transcriptData.date_of_birth,
-    program: transcriptData.program,
-    transcript_type: transcriptData.transcript_type || 'standard',
-    status: 'valid',
-    cumulative_gpa: transcriptData.cumulative_gpa,
-    total_credits: transcriptData.total_credits,
-    issue_date: new Date().toISOString().split('T')[0],
-    metadata: transcriptData.metadata || {}
-  };
-  
-  // Insert into database
-  const { data, error } = await client
-    .from('transcripts')
-    .insert([transcriptRecord])
-    .select()
-    .single();
-  
-  if (error) {
+
+  const MAX_RETRIES = 5;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    // Generate a fresh code on every attempt
+    const verificationCode = generateSecureVerificationCode(transcriptData.student_id);
+
+    const transcriptRecord = {
+      verification_code: verificationCode,
+      student_id: transcriptData.student_id,
+      student_name: transcriptData.student_name,
+      date_of_birth: transcriptData.date_of_birth,
+      program: transcriptData.program,
+      transcript_type: transcriptData.transcript_type || 'standard',
+      status: 'valid',
+      cumulative_gpa: transcriptData.cumulative_gpa,
+      total_credits: transcriptData.total_credits,
+      issue_date: new Date().toISOString().split('T')[0],
+      metadata: transcriptData.metadata || {}
+    };
+
+    const { data, error } = await client
+      .from('transcripts')
+      .insert([transcriptRecord])
+      .select()
+      .single();
+
+    if (!error) return data;
+
+    // Duplicate verification_code — retry with a new code
+    if (error.code === '23505' && attempt < MAX_RETRIES) {
+      console.warn(`Transcript verification code collision on attempt ${attempt}, retrying...`);
+      continue;
+    }
+
     console.error('Error saving transcript:', error);
     throw error;
   }
-  
-  return data;
 }
 
 /**
