@@ -955,7 +955,12 @@ tr:last-child td{border-bottom:none}
   font-size:14px;
   color:var(--text-primary);
 }
-.acknowledgment input{width:18px;height:18px}
+.acknowledgment input{width:18px;height:18px;cursor:pointer}
+.acknowledgment input:disabled{
+  cursor:default;
+  accent-color:#2dd4bf;
+  opacity:1;
+}
 .ack-timestamp{font-size:12px;color:var(--text-muted);margin-left:auto;font-weight:600}
 
 .graduation-locked{
@@ -4238,24 +4243,30 @@ function renderPolicyList(policies = []) {
     return;
   }
 
+  // Auto-date: always show 1st of the current month
+  const now = new Date();
+  const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+
   list.innerHTML = policies.map(policy => {
     const policyId = policy.id || policy.title || generateLocalId('policy');
     const timestamp = portalState.policyAcknowledgments[policyId];
-    const ackText = timestamp ? `Acknowledged ${formatDisplayDate(timestamp)}` : 'Pending acknowledgment';
+    const isLocked = !!timestamp;
+    const ackText = isLocked ? `✅ Signed ${formatDisplayDate(timestamp)}` : 'Pending acknowledgment';
+    const ackColor = isLocked ? 'color:#2dd4bf;font-weight:700' : 'color:var(--text-muted)';
     return `
       <div class="policy-item">
         <header>
           <h4 style="margin:0 0 6px 0;color:var(--text-primary)">${escapeHtml(policy.title || 'Policy')}</h4>
-          <p style="margin:0;color:var(--text-muted)">Updated ${escapeHtml(policy.updated ? formatDisplayDate(policy.updated) : TODAY_ISO)}</p>
+          <p style="margin:0;color:var(--text-muted)">Updated ${escapeHtml(formatDisplayDate(firstOfMonth))}</p>
         </header>
         <p style="margin:12px 0 6px 0;color:var(--text-secondary);font-size:13px;font-style:italic">${escapeHtml(policy.summary || '')}</p>
         ${policy.body ? `<p style="margin:10px 0 0 0;color:var(--text-secondary);font-size:14px;line-height:1.7;border-top:1px solid rgba(255,255,255,0.07);padding-top:12px">${escapeHtml(policy.body)}</p>` : ''}
         <footer>
-          <label class="acknowledgment">
-            <input type="checkbox" data-policy-id="${escapeHtml(policyId)}" ${timestamp ? 'checked' : ''}>
+          <label class="acknowledgment" style="${isLocked ? 'cursor:default;opacity:1' : ''}">
+            <input type="checkbox" data-policy-id="${escapeHtml(policyId)}" ${isLocked ? 'checked disabled' : ''}>
             I acknowledge this policy
           </label>
-          <span class="ack-timestamp" id="policy-ack-${escapeHtml(policyId)}">${escapeHtml(ackText)}</span>
+          <span class="ack-timestamp" id="policy-ack-${escapeHtml(policyId)}" style="${ackColor}">${escapeHtml(ackText)}</span>
         </footer>
       </div>
     `;
@@ -4434,17 +4445,33 @@ function wirePolicyListeners() {
 function handlePolicyAcknowledgment(policyId, acknowledged) {
   if (!policyId) return;
   portalState.policyAcknowledgments = portalState.policyAcknowledgments || loadPolicyAcknowledgments();
-  if (acknowledged) {
-    portalState.policyAcknowledgments[policyId] = new Date().toISOString();
-  } else {
-    delete portalState.policyAcknowledgments[policyId];
+
+  // Once acknowledged, it cannot be revoked — treat as a digital signature
+  if (!acknowledged) {
+    // Prevent unchecking: restore the checkbox to checked state
+    const cb = document.querySelector(`input[data-policy-id="${policyId}"]`);
+    if (cb) cb.checked = true;
+    return;
   }
+
+  portalState.policyAcknowledgments[policyId] = new Date().toISOString();
   savePolicyAcknowledgments(portalState.policyAcknowledgments);
+
+  // Lock the checkbox permanently
+  const cb = document.querySelector(`input[data-policy-id="${policyId}"]`);
+  if (cb) {
+    cb.disabled = true;
+    cb.parentElement.style.cursor = 'default';
+    cb.parentElement.style.opacity = '1';
+  }
+
   const stamp = document.getElementById(`policy-ack-${policyId}`);
   if (stamp) {
-    stamp.textContent = acknowledged ? `Acknowledged ${formatDisplayDate(portalState.policyAcknowledgments[policyId])}` : 'Pending acknowledgment';
+    stamp.textContent = `✅ Signed ${formatDisplayDate(portalState.policyAcknowledgments[policyId])}`;
+    stamp.style.color = '#2dd4bf';
+    stamp.style.fontWeight = '700';
   }
-  logPortalActivity('update', 'student', acknowledged ? `Acknowledged policy ${policyId}` : `Removed acknowledgment for policy ${policyId}`, { policyId, acknowledged });
+  logPortalActivity('update', 'student', `Acknowledged policy ${policyId}`, { policyId, acknowledged });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
