@@ -32,14 +32,14 @@ window.EMAIL_HTML_TEMPLATE = `<!doctype html>
     @media(max-width:620px){.container{width:100%!important}.px{padding-left:20px!important;padding-right:20px!important}}
   </style>
 </head>
-<body style="margin:0;padding:0;background-color:#fbf8f2;">
+<body style="margin:0;padding:0;background-color:#ffffff;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
-         style="background-color:#fbf8f2;">
+         style="background-color:#ffffff;">
     <tr>
       <td align="center" style="padding:32px 10px 48px;">
         <table role="presentation" width="600" class="container" cellpadding="0" cellspacing="0"
           style="width:600px;max-width:600px;border-radius:18px;overflow:hidden;
-            background-color:#fbf8f2;
+            background-color:#ffffff;
             box-shadow:0 8px 48px rgba(4,17,31,0.18),0 2px 8px rgba(201,168,76,0.10);">
 
           <!-- HEADER -->
