@@ -1937,8 +1937,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
     }
 
+    // Cache so repeated calls within the same page session don't hit the DB again
+    let _userInfoCache = null;
+
     // Fetch current user info including signature
     async function getCurrentUserInfo() {
+      if (_userInfoCache) return _userInfoCache;
       try {
         const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
         const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
@@ -1956,13 +1960,14 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows
         
         if (data) {
-          return data;
+          _userInfoCache = data;
+          return _userInfoCache;
         }
         
         // If not found in database, create a fallback object from session storage
         // This handles cases where admin user exists but not in admin_users table
         if (userName) {
-          return {
+          _userInfoCache = {
             name: userName,
             email: userEmail,
             role: userRole || 'Admin',
@@ -1970,6 +1975,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             phone_ext: userPhoneExt || '',
             signature: null // Will use generated signature
           };
+          return _userInfoCache;
         }
         
         return null;
@@ -1978,7 +1984,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // Return fallback from session if available
         const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
         if (userName) {
-          return {
+          _userInfoCache = {
             name: userName,
             email: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'),
             role: sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || 'Admin',
@@ -1986,6 +1992,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             phone_ext: sessionStorage.getItem('userPhoneExt') || localStorage.getItem('userPhoneExt') || '',
             signature: null
           };
+          return _userInfoCache;
         }
         return null;
       }
@@ -2239,7 +2246,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // ── Fire all independent network requests in parallel ─────────────────
       await Promise.all([
         loadEmailHistory(),
-        loadProgramsAndStatuses()
+        loadProgramsAndStatuses(),
+        getCurrentUserInfo() // warm the cache so Send Email is instant
       ]);
 
       // Check for URL parameters (from email template selection)
