@@ -1187,8 +1187,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // Load viewed emails from storage
       loadViewedEmails();
 
-  setupEventListeners();
-  scheduleInitialDataLoad();
+    setupEventListeners();
+    scheduleInitialDataLoad();
 
       // Check for URL parameters (from email template selection)
       const urlParams = new URLSearchParams(window.location.search);
@@ -1224,18 +1224,25 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }, 300000); // 5 minutes (300,000ms)
     });
 
+    let initialDataLoadStarted = false;
     function scheduleInitialDataLoad() {
+      if (initialDataLoadStarted) return;
+      initialDataLoadStarted = true;
+
       const run = async () => {
         await loadEmailHistory();
         await loadPrograms();
         await loadStatuses();
       };
 
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => run(), { timeout: 1200 });
-      } else {
-        setTimeout(run, 0);
-      }
+      // Delay initial Supabase calls to avoid auth lock contention with other scripts
+      setTimeout(() => {
+        if ('requestIdleCallback' in window) {
+          requestIdleCallback(() => run(), { timeout: 2000 });
+        } else {
+          run();
+        }
+      }, 1500);
     }
 
     function setupEventListeners() {
