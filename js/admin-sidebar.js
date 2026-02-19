@@ -186,23 +186,75 @@
       </aside>
       
       <!-- Logout Confirmation Modal -->
-      <div class="modal" id="logoutModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.7); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
-        <div class="modal-content" style="max-width: 420px; border-radius: 12px; overflow: hidden; background: #1e293b; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);">
-          <div class="modal-header" style="border: none; background: transparent; padding: 0; position: relative;">
-            <button class="close-btn" id="closeLogoutModal" style="position: absolute; top: 12px; right: 12px; z-index: 10; background: rgba(15, 23, 42, 0.5); width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 20px; line-height: 1; padding: 0; backdrop-filter: blur(10px); border: none; cursor: pointer; transition: all 0.2s;">×</button>
-            <div style="text-align: center; padding: 24px 28px 16px 28px; background: linear-gradient(135deg, rgba(251, 191, 36, 0.08), rgba(245, 158, 11, 0.05));">
-              <div style="width: 56px; height: 56px; background: linear-gradient(135deg, #fbbf24, #f59e0b); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; margin: 0 auto 12px auto; box-shadow: 0 6px 20px rgba(251, 191, 36, 0.3);">
-                🚪
-              </div>
-              <h2 style="font-size: 18px; font-weight: 600; color: #f1f5f9; margin: 0; letter-spacing: -0.02em;">Confirm Logout</h2>
-            </div>
+      <div class="modal" id="logoutModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(2,8,20,0.78); z-index: 10000; align-items: center; justify-content: center; backdrop-filter: blur(8px);">
+        <div style="
+          width: 100%; max-width: 400px;
+          border-radius: 20px;
+          background: linear-gradient(180deg, #071b30 0%, #04111f 100%);
+          border: 1px solid rgba(201,168,76,0.28);
+          box-shadow: 0 32px 80px rgba(0,0,0,0.60), 0 0 0 1px rgba(201,168,76,0.06) inset;
+          overflow: hidden;
+        ">
+          <!-- Gold accent bar -->
+          <div style="height: 3px; background: linear-gradient(90deg, transparent 0%, #c9a84c 40%, #d4b56a 60%, transparent 100%);"></div>
+
+          <!-- Header -->
+          <div style="padding: 32px 32px 24px; text-align: center; position: relative;">
+            <!-- Close button -->
+            <button class="close-btn" id="closeLogoutModal" style="
+              position: absolute; top: 16px; right: 16px;
+              width: 28px; height: 28px; border-radius: 8px;
+              background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.28);
+              color: #8a8070; font-size: 16px; line-height: 1;
+              cursor: pointer; display: flex; align-items: center; justify-content: center;
+              transition: all 0.2s; padding: 0;
+            ">×</button>
+
+            <!-- Icon -->
+            <div style="
+              width: 64px; height: 64px; margin: 0 auto 18px;
+              border-radius: 18px;
+              background: linear-gradient(145deg, rgba(201,168,76,0.18) 0%, rgba(201,168,76,0.06) 100%);
+              border: 1px solid rgba(201,168,76,0.28);
+              box-shadow: 0 8px 24px rgba(201,168,76,0.12), 0 0 0 6px rgba(201,168,76,0.05);
+              display: flex; align-items: center; justify-content: center;
+              font-size: 28px;
+            ">🚪</div>
+
+            <!-- Institution label -->
+            <div style="
+              font-size: 10px; font-weight: 800; letter-spacing: 0.12em;
+              text-transform: uppercase; color: #c9a84c;
+              margin-bottom: 8px;
+            ">ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES</div>
+
+            <!-- Title -->
+            <h2 style="font-size: 20px; font-weight: 900; letter-spacing: -0.03em; color: #f0ece3; margin: 0 0 10px;">Confirm Logout</h2>
+
+            <!-- Subtitle -->
+            <p style="font-size: 13px; color: #c8bfb2; line-height: 1.6; margin: 0;">You are about to end your session.<br>Any unsaved changes will be lost.</p>
           </div>
-          <div style="padding: 20px 28px; text-align: center; background: #1e293b;">
-            <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6; margin: 0;">Are you sure you want to logout?</p>
-          </div>
-          <div style="border: none; padding: 0 28px 24px 28px; background: #1e293b; display: flex; gap: 12px; justify-content: center;">
-            <button id="cancelLogoutBtn" style="flex: 1; height: 42px; font-size: 14px; font-weight: 600; border-radius: 10px; background: rgba(71, 85, 105, 0.3); color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.2); cursor: pointer; transition: all 0.2s ease;">Cancel</button>
-            <button id="confirmLogoutBtn" style="flex: 1; height: 42px; font-size: 14px; font-weight: 600; border-radius: 10px; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 4px 16px rgba(239, 68, 68, 0.3); transition: all 0.2s ease; border: none; cursor: pointer;">Logout</button>
+
+          <!-- Divider -->
+          <div style="height: 1px; margin: 0 32px; background: linear-gradient(90deg, transparent, rgba(201,168,76,0.28), transparent);"></div>
+
+          <!-- Buttons -->
+          <div style="padding: 20px 32px 28px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+            <button id="cancelLogoutBtn" style="
+              height: 44px; border-radius: 12px;
+              background: rgba(201,168,76,0.06); color: #c8bfb2;
+              border: 1px solid rgba(201,168,76,0.28);
+              font-size: 13.5px; font-weight: 700;
+              cursor: pointer; transition: all 0.2s ease;
+            ">Cancel</button>
+            <button id="confirmLogoutBtn" style="
+              height: 44px; border-radius: 12px;
+              background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+              color: #fff; border: none;
+              font-size: 13.5px; font-weight: 700;
+              cursor: pointer; transition: all 0.2s ease;
+              box-shadow: 0 4px 16px rgba(239,68,68,0.28);
+            ">Logout</button>
           </div>
         </div>
       </div>
@@ -376,12 +428,12 @@
     if (closeLogoutModal) {
       closeLogoutModal.addEventListener('click', hideModal);
       closeLogoutModal.addEventListener('mouseenter', function() {
-        this.style.transform = 'rotate(90deg)';
-        this.style.background = 'rgba(71, 85, 105, 0.5)';
+        this.style.background = 'rgba(201,168,76,0.18)';
+        this.style.color = '#e2cc92';
       });
       closeLogoutModal.addEventListener('mouseleave', function() {
-        this.style.transform = 'rotate(0deg)';
-        this.style.background = 'rgba(15, 23, 42, 0.5)';
+        this.style.background = 'rgba(201,168,76,0.08)';
+        this.style.color = '#8a8070';
       });
     }
     
@@ -389,11 +441,13 @@
     if (cancelLogoutBtn) {
       cancelLogoutBtn.addEventListener('click', hideModal);
       cancelLogoutBtn.addEventListener('mouseenter', function() {
-        this.style.background = 'rgba(71, 85, 105, 0.5)';
+        this.style.background = 'rgba(201,168,76,0.14)';
+        this.style.color = '#e2cc92';
         this.style.transform = 'translateY(-1px)';
       });
       cancelLogoutBtn.addEventListener('mouseleave', function() {
-        this.style.background = 'rgba(71, 85, 105, 0.3)';
+        this.style.background = 'rgba(201,168,76,0.06)';
+        this.style.color = '#c8bfb2';
         this.style.transform = 'translateY(0)';
       });
     }
@@ -410,11 +464,11 @@
       });
       confirmLogoutBtn.addEventListener('mouseenter', function() {
         this.style.transform = 'translateY(-2px)';
-        this.style.boxShadow = '0 8px 24px rgba(239, 68, 68, 0.4)';
+        this.style.boxShadow = '0 8px 28px rgba(239,68,68,0.42)';
       });
       confirmLogoutBtn.addEventListener('mouseleave', function() {
         this.style.transform = 'translateY(0)';
-        this.style.boxShadow = '0 4px 16px rgba(239, 68, 68, 0.3)';
+        this.style.boxShadow = '0 4px 16px rgba(239,68,68,0.28)';
       });
     }
     
