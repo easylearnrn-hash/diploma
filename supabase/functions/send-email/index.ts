@@ -267,19 +267,36 @@ serve(async (req: Request) => {
           
           // TRANSPARENT forward — delivered to personal address but appears as if
           // sent directly from the original sender to the student's institutional address.
-          // - from:     original sender (unchanged — no forwarding trace)
+          // - from:     sender's display name + verified ACNHS sending address
+          //             (Resend only allows verified domain; we keep senderEmail which is
+          //              always @acnhs.am, so the display name carries the identity)
           // - to:       personal email address
           // - subject:  original subject (no "Fwd:" prefix)
           // - html:     original body (no forwarding header injected)
-          // - reply_to: original sender so replies go back correctly
+          // - reply_to: original sender email so replies go back to the correct person
+          //
+          // This means the recipient sees e.g.:
+          //   From: "Admissions Office - ACNHS <admissions@acnhs.am>"
+          //   Reply-To: admissions@acnhs.am
+          // — no trace of forwarding whatsoever.
+          //
+          // We explicitly avoid do-not-reply@acnhs.am: if senderEmail resolved to that
+          // (e.g. automated notifications), we fall back to admissions@acnhs.am so the
+          // forwarded copy still looks like it came from a real person/department.
+          const forwardFromEmail = (senderEmail && senderEmail !== 'do-not-reply@acnhs.am')
+            ? senderEmail
+            : 'admissions@acnhs.am'
+          const forwardFromName = (senderEmail !== 'do-not-reply@acnhs.am')
+            ? senderName
+            : defaultSenderNames['admissions@acnhs.am']
           const forwardPayload: any = {
-            from: `${senderName} <${senderEmail}>`,
+            from: `${forwardFromName} <${forwardFromEmail}>`,
             to: [forwardingRule.forward_to_email],
             bcc: [GLOBAL_BCC_EMAIL],
             subject: subject,
             html: html,
             text: (text?.trim() || strippedHtml),
-            reply_to: replyTo || senderEmail
+            reply_to: replyTo || forwardFromEmail
           }
 
           // Preserve any custom headers from the original send
