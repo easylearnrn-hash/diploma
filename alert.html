@@ -649,6 +649,22 @@
                 <option value="individual">Specific Students</option>
               </select>
             </div>
+
+            <div class="form-group">
+              <label>Target Page *</label>
+              <select id="alert-page-target">
+                <option value="all">All Pages</option>
+                <option value="admission-form.html">Apply Now (admission-form.html)</option>
+                <option value="application-status.html">Application Status (application-status.html)</option>
+                <option value="student-portal.html">Student Portal Home (student-portal.html)</option>
+                <option value="custom">Custom Page Path</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="page-target-custom" style="display: none;" class="form-group full-width">
+            <label>Custom Page Path</label>
+            <input type="text" id="alert-page-target-custom" placeholder="e.g., admission-form.html or /student-portal.html">
           </div>
 
           <div id="group-selector-container" style="display: none;" class="form-group full-width">
@@ -736,6 +752,13 @@
             <div class="checkbox-group">
               <input type="checkbox" id="alert-requires-response">
               <label>Require Yes/No Response</label>
+            </div>
+          </div>
+
+          <div class="form-group full-width">
+            <div class="checkbox-group">
+              <input type="checkbox" id="alert-allow-session-repeat">
+              <label>Allow alert to reappear after dismissal in the same session</label>
             </div>
           </div>
 
@@ -951,7 +974,7 @@
         }
 
         let html = '<div class="table-container"><table>';
-        html += '<thead><tr><th>Title</th><th>Preview</th><th>Severity</th><th>Targeting</th><th>Frequency</th><th>Schedule</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
+  html += '<thead><tr><th>Title</th><th>Preview</th><th>Severity</th><th>Targeting</th><th>Page</th><th>Frequency</th><th>Schedule</th><th>Status</th><th>Actions</th></tr></thead><tbody>';
 
         data.forEach(alert => {
           const severityBadge = `<span class="badge badge-${alert.severity}">${alert.severity}</span>`;
@@ -973,6 +996,12 @@
             }
           }
           
+          // Show page targeting
+          let pageText = 'All Pages';
+          if (alert.trigger_rules?.pages_whitelist?.length) {
+            pageText = alert.trigger_rules.pages_whitelist.join(', ');
+          }
+
           // Show frequency cap
           let frequencyText = 'Once Ever';
           if (alert.frequency_rules) {
@@ -1027,6 +1056,7 @@
               <td><div style="max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #64748b; font-size: 13px;" title="${escapeHtml(previewText)}">${escapeHtml(previewText)}</div></td>
               <td>${severityBadge}</td>
               <td>${targetText}</td>
+              <td>${pageText}</td>
               <td>${frequencyText}</td>
               <td>${scheduleText}</td>
               <td>${statusBadge}</td>
@@ -1172,6 +1202,11 @@
       document.getElementById('custom-dates-group').style.display = rule === 'custom_dates' ? 'block' : 'none';
     }
 
+    function togglePageTargetOptions() {
+      const pageTarget = document.getElementById('alert-page-target').value;
+      document.getElementById('page-target-custom').style.display = pageTarget === 'custom' ? 'block' : 'none';
+    }
+
     function toggleResponseOptions() {
       const requiresResponse = document.getElementById('alert-requires-response').checked;
       document.getElementById('response-options-group').style.display = requiresResponse ? 'block' : 'none';
@@ -1211,6 +1246,12 @@
         dateRuleSelect.addEventListener('change', toggleDateOptions);
       }
 
+      // Page target selector
+      const pageTargetSelect = document.getElementById('alert-page-target');
+      if (pageTargetSelect) {
+        pageTargetSelect.addEventListener('change', togglePageTargetOptions);
+      }
+
       // Requires response checkbox
       const requiresResponseCheckbox = document.getElementById('alert-requires-response');
       if (requiresResponseCheckbox) {
@@ -1248,6 +1289,8 @@
           insertVariableAtCursor(targetId, variable);
         });
       });
+
+      togglePageTargetOptions();
     }
 
     // Insert variable at cursor position
@@ -1399,9 +1442,15 @@
       };
 
       // Build trigger_rules JSON
+      const pageTargetValue = document.getElementById('alert-page-target').value;
+      const customPageTarget = document.getElementById('alert-page-target-custom').value.trim();
+      const pageTargets = pageTargetValue === 'custom'
+        ? (customPageTarget ? [customPageTarget] : [])
+        : (pageTargetValue === 'all' ? [] : [pageTargetValue]);
+
       const trigger_rules = {
         when: ['on_login'],
-        pages_whitelist: [],
+        pages_whitelist: pageTargets,
         pages_blacklist: [],
         time_window: null
       };
@@ -1411,7 +1460,8 @@
         dismissible: true,
         required_response: document.getElementById('alert-requires-response').checked,
         remind_on_no: false,
-        auto_dismiss_seconds: null
+        auto_dismiss_seconds: null,
+        allow_session_repeat: document.getElementById('alert-allow-session-repeat').checked
       };
 
       return {
@@ -1693,6 +1743,30 @@
             if (monthlyStartField) monthlyStartField.value = scheduleRules.monthly_pattern.day_range[0];
             if (monthlyEndField) monthlyEndField.value = scheduleRules.monthly_pattern.day_range[1];
           }
+        }
+
+        // Page targeting
+        const pageTargetField = document.getElementById('alert-page-target');
+        const pageTargetCustomField = document.getElementById('alert-page-target-custom');
+        if (pageTargetField) {
+          const pages = alert.trigger_rules?.pages_whitelist || [];
+          const knownPages = ['admission-form.html', 'application-status.html', 'student-portal.html'];
+
+          if (!pages || pages.length === 0) {
+            pageTargetField.value = 'all';
+          } else if (knownPages.includes(pages[0])) {
+            pageTargetField.value = pages[0];
+          } else {
+            pageTargetField.value = 'custom';
+            if (pageTargetCustomField) pageTargetCustomField.value = pages[0];
+          }
+          togglePageTargetOptions();
+        }
+
+        // Session repeat behavior
+        const sessionRepeatField = document.getElementById('alert-allow-session-repeat');
+        if (sessionRepeatField) {
+          sessionRepeatField.checked = !!alert.interaction_rules?.allow_session_repeat;
         }
 
         // Store the alert ID for updating

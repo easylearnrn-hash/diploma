@@ -22,6 +22,8 @@
     timezone: 'Asia/Yerevan'
   };
 
+  const SESSION_DISMISS_PREFIX = 'acnhs_alert_dismissed_';
+
   // Global state
   let currentStudent = null;
   let alertQueue = [];
@@ -168,6 +170,17 @@
       const targetingRules = alert.targeting_rules || {};
       const triggerRules = alert.trigger_rules || {};
       const interactionRules = alert.interaction_rules || {};
+
+      // 0. Page-specific rules
+      if (!doesAlertMatchPage(triggerRules)) {
+        return false;
+      }
+
+      // 0b. Session dismissal rule
+      const allowSessionRepeat = interactionRules.allow_session_repeat === true;
+      if (!allowSessionRepeat && isDismissedThisSession(alert.id)) {
+        return false;
+      }
 
       // 1. Check schedule rules (date/time windows)
       if (!isWithinScheduleWindow(scheduleRules, alert)) {
@@ -446,13 +459,13 @@
     // Close button (X)
     const closeBtn = modal.querySelector('.acnhs-alert-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => dismissAlert(modal));
+      closeBtn.addEventListener('click', () => dismissAlert(modal, alert));
     }
 
     // Close button (footer)
     const closeBtnFooter = modal.querySelector('.acnhs-alert-btn-close');
     if (closeBtnFooter) {
-      closeBtnFooter.addEventListener('click', () => dismissAlert(modal));
+      closeBtnFooter.addEventListener('click', () => dismissAlert(modal, alert));
     }
 
     // Yes/No response buttons
@@ -463,14 +476,14 @@
       if (yesBtn) {
         yesBtn.addEventListener('click', async () => {
           await recordResponse(alertId, currentStudent.id, 'yes');
-          dismissAlert(modal);
+            dismissAlert(modal, alert);
         });
       }
 
       if (noBtn) {
         noBtn.addEventListener('click', async () => {
           await recordResponse(alertId, currentStudent.id, 'no');
-          dismissAlert(modal);
+            dismissAlert(modal, alert);
         });
       }
     }
@@ -479,18 +492,70 @@
     if (!needsResponse) {
       modal.addEventListener('click', (e) => {
         if (e.target === modal) {
-          dismissAlert(modal);
+          dismissAlert(modal, alert);
         }
       });
     }
   }
 
-  function dismissAlert(modal) {
+  function dismissAlert(modal, alert) {
+    if (alert && !alert.interaction_rules?.allow_session_repeat) {
+      markDismissedThisSession(alert.id);
+    }
     modal.classList.remove('show');
     setTimeout(() => {
       modal.remove();
       isShowingAlert = false;
     }, ALERT_CONFIG.animationDuration);
+  }
+
+  function normalizePageValue(value) {
+    return (value || '').trim().replace(/^\//, '');
+  }
+
+  function getCurrentPageVariants() {
+    const rawPath = window.location.pathname || '';
+    const normalizedPath = normalizePageValue(rawPath);
+    const fileName = normalizedPath.split('/').pop() || normalizedPath;
+    const variants = new Set();
+    if (normalizedPath) {
+      variants.add(normalizedPath);
+      variants.add(`/${normalizedPath}`);
+    }
+    if (fileName) {
+      variants.add(fileName);
+      variants.add(`/${fileName}`);
+    }
+    return variants;
+  }
+
+  function doesAlertMatchPage(triggerRules) {
+    const pages = triggerRules?.pages_whitelist || [];
+    if (!Array.isArray(pages) || pages.length === 0) {
+      return true;
+    }
+
+    const currentVariants = getCurrentPageVariants();
+    return pages.some((page) => {
+      const normalized = normalizePageValue(page);
+      return currentVariants.has(normalized) || currentVariants.has(`/${normalized}`);
+    });
+  }
+
+  function isDismissedThisSession(alertId) {
+    try {
+      return sessionStorage.getItem(`${SESSION_DISMISS_PREFIX}${alertId}`) === 'true';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function markDismissedThisSession(alertId) {
+    try {
+      sessionStorage.setItem(`${SESSION_DISMISS_PREFIX}${alertId}`, 'true');
+    } catch (error) {
+      console.warn('Unable to persist session dismissal state:', error);
+    }
   }
 
   // ==========================================

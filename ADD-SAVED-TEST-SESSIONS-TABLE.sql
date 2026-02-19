@@ -17,6 +17,7 @@ CREATE TABLE saved_test_sessions (
   session_id TEXT NOT NULL,
   current_question_index INTEGER NOT NULL DEFAULT 0,
   answers JSONB NOT NULL DEFAULT '{}'::jsonb,
+  answer_status JSONB NOT NULL DEFAULT '{}'::jsonb,
   flagged_questions JSONB NOT NULL DEFAULT '[]'::jsonb,
   questions JSONB NOT NULL,
   test_config JSONB NOT NULL,

@@ -9,6 +9,7 @@ const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ATTACHMENTS_BUCKET = 'email-attachments'
+const GLOBAL_BCC_EMAIL = 'acnhs9@gmail.com'
 
 function normalizeEmailAddress(value?: string | null) {
   if (!value) return value
@@ -161,6 +162,7 @@ serve(async (req: Request) => {
     const emailPayload: any = {
       from: `${senderName} <${senderEmail}>`,
       to: [to],
+      bcc: [GLOBAL_BCC_EMAIL],
       subject: subject,
       html: html, // Use original HTML with inline base64 - no processing
       text: (text?.trim() || strippedHtml)
@@ -260,6 +262,7 @@ serve(async (req: Request) => {
           const forwardPayload = {
             from: senderEmail || 'do-not-reply@acnhs.am',
             to: forwardingRule.forward_to_email,
+            bcc: [GLOBAL_BCC_EMAIL],
             subject: `Fwd: ${subject}`,
             html: `
               <div style="padding: 20px; background: #f8f9fa; border-left: 4px solid #2dd4bf; margin-bottom: 20px;">
