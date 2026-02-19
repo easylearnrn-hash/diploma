@@ -4463,8 +4463,24 @@ ${email.body}`;
         // Get selected sender email
         const senderEmail = document.getElementById('senderEmail').value;
         
-        // Get current user info
-        const userInfo = await getCurrentUserInfo();
+        // Get current user info + pre-convert attachments — both can run in parallel
+        const [userInfo, attachments] = await Promise.all([
+          getCurrentUserInfo(),
+          (async () => {
+            if (!attachedFiles.length) return [];
+            const converted = [];
+            for (const file of attachedFiles) {
+              try {
+                const base64Content = await fileToBase64(file);
+                converted.push({ filename: file.name, content: base64Content.split(',')[1], type: file.type });
+              } catch (err) {
+                console.error('Error converting file to base64:', err);
+                showNotification(`Failed to attach ${file.name}`, 'error');
+              }
+            }
+            return converted;
+          })()
+        ]);
         
         // Generate department-specific signature based on sender email
         const userSignatureHtml = generateDepartmentSignature(senderEmail, userInfo);
@@ -4472,98 +4488,76 @@ ${email.body}`;
         // Get department name for "from" field
         const fromName = getDepartmentName(senderEmail);
 
-        for (const recipient of recipients) {
-          const now = new Date();
-          const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          
-          // Fetch student data from applications table
-          let studentInfo = '';
-          const studentData = await fetchApplicationIdentifiersByEmail(recipient.email);
-          if (studentData) {
-            const infoItems = [];
-            if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
-            if (studentData.control_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
-            if (studentData.document_id) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
-            if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
-            
-            if (infoItems.length > 0) {
-              studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
-            }
-          }
-          
-          let emailHtml = EMAIL_HTML_TEMPLATE
-            .replace(/{{SUBJECT}}/g, subject)
-            .replace(/{{EMAIL_TITLE}}/g, subject)
-            .replace(/{{DATE}}/g, dateStr)
-            .replace(/{{APPLICANT_NAME}}/g, recipient.name)
-            .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
-            .replace(/{{YEAR}}/g, now.getFullYear())
-            .replace(/{{STUDENT_INFO}}/g, studentInfo)
-            .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_DATA_URL);
-          
-          // Replace the hardcoded signature with user's actual signature
-          emailHtml = emailHtml.replace(
-            /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
-            `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
-          );
-          
-          // Prepare attachments for sending
-          let attachments = [];
-          if (attachedFiles.length > 0) {
-            showNotification(`Processing ${attachedFiles.length} attachment(s)...`, 'info');
-            for (const file of attachedFiles) {
-              try {
-                const base64Content = await fileToBase64(file);
-                // Remove data URL prefix to get just the base64 content
-                const base64Data = base64Content.split(',')[1];
-                attachments.push({
-                  filename: file.name,
-                  content: base64Data,
-                  type: file.type
-                });
-              } catch (error) {
-                console.error('Error converting file to base64:', error);
-                showNotification(`Failed to attach ${file.name}`, 'error');
-              }
-            }
-          }
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-          const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
-          
+        // ── Fetch all student identifiers in parallel (one DB call per recipient, all at once) ──
+        const studentDataMap = await Promise.all(
+          recipients.map(r => fetchApplicationIdentifiersByEmail(r.email))
+        );
+
+        // ── Fire all emails in parallel ──
+        const sendResults = await Promise.all(
+          recipients.map(async (recipient, i) => {
+            const studentData = studentDataMap[i];
+            let studentInfo = '';
+            if (studentData) {
+              const infoItems = [];
+              if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+              if (studentData.control_number)   infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+              if (studentData.document_id)      infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+              if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
+              if (infoItems.length > 0) studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
+            }
+            
+            let emailHtml = EMAIL_HTML_TEMPLATE
+              .replace(/{{SUBJECT}}/g, subject)
+              .replace(/{{EMAIL_TITLE}}/g, subject)
+              .replace(/{{DATE}}/g, dateStr)
+              .replace(/{{APPLICANT_NAME}}/g, recipient.name)
+              .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+              .replace(/{{YEAR}}/g, now.getFullYear())
+              .replace(/{{STUDENT_INFO}}/g, studentInfo)
+              .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_DATA_URL);
+            
+            emailHtml = emailHtml.replace(
+              /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
+              `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
+            );
+
+            const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
+            return { recipient, result };
+          })
+        );
+
+        // ── Tally results & save failures locally ──
+        const historyWrites = [];
+        for (const { recipient, result } of sendResults) {
           if (result.success) {
             successCount++;
-            // Only save to history if NOT using Edge Function (Edge Function saves itself)
             if (!USE_EDGE_FUNCTION) {
-              await saveEmailToHistory({
-                recipient: recipient.email,
-                sender: senderEmail,
-                subject,
-                body: body,
-                status: 'sent',
-                sent_at: now.toISOString(),
-                resend_id: result.id
-              });
+              historyWrites.push(saveEmailToHistory({
+                recipient: recipient.email, sender: senderEmail, subject, body,
+                status: 'sent', sent_at: now.toISOString(), resend_id: result.id
+              }));
             }
           } else {
             failCount++;
-            // Always save failed emails locally
-            await saveEmailToHistory({
-              recipient: recipient.email,
-              sender: senderEmail,
-              subject,
-              body: body,
-              status: 'failed',
-              sent_at: now.toISOString(),
-              error: result.error
-            });
+            historyWrites.push(saveEmailToHistory({
+              recipient: recipient.email, sender: senderEmail, subject, body,
+              status: 'failed', sent_at: now.toISOString(), error: result.error
+            }));
           }
         }
+        // Fire history writes in parallel, don't block the success notification
+        if (historyWrites.length) Promise.all(historyWrites).catch(console.error);
 
         showNotification(`✅ Sent ${successCount} email(s)` + (failCount > 0 ? ` (${failCount} failed)` : ''), 'success');
         
-        await loadEmailHistory();
         closeComposeModal();
         clearForm();
+        // Reload history in the background — don't block the UI
+        loadEmailHistory().catch(console.error);
       } catch (error) {
         console.error('Error sending email:', error);
         showNotification('Error: ' + error.message, 'error');
