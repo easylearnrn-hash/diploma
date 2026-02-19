@@ -14,7 +14,11 @@ const SUPABASE_CONFIG = {
       persistSession: true,  // MUST be true to keep users logged in!
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storage: typeof window !== 'undefined' ? window.localStorage : undefined
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+      // Use a consistent storage key so all tabs share one lock instead of
+      // competing for separate locks — prevents LockManager timeout errors
+      // when multiple ACNHS admin tabs are open simultaneously.
+      storageKey: 'acnhs-admin-auth'
     }
   }
 };
