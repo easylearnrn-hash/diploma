@@ -2103,6 +2103,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">Chief Executive Officer</div>`,
           `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>`,
           `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>`,
+          `<div style="font-size:10px;color:#b0a070;margin-bottom:6px;font-style:italic;">Graduates Receive Lifetime ANA-US, Inc. Membership</div>`,
           row(phoneIcon, '+374 93 79 88 79'),
           row(phoneIcon, '+1 (707) 717-4440 ext. 109'),
           row(emailIcon, 'ceo@acnhs.am',          '#2563eb'),
@@ -2115,30 +2116,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       const officerTitle = officerTitles[senderEmail] || 'Officer';
       const deptName     = departmentNames[senderEmail] || '';
 
-      // Check if the logged-in user is personally assigned to this department email.
-      // userInfo.name is their real name; userEmailPermissions lists the dept emails they own.
-      let assignedUserName = null;
-      try {
-        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
-        if (emailPermsStr) {
-          const emailPerms = JSON.parse(emailPermsStr);
-          if (Array.isArray(emailPerms) && emailPerms.map(e => e.toLowerCase()).includes(senderEmail.toLowerCase())) {
-            // This user is the assigned officer for this dept email — use their real name
-            assignedUserName = userInfo?.name || sessionStorage.getItem('userName') || localStorage.getItem('userName') || null;
-          }
-        }
-      } catch (e) { /* silent — fall back to generic title */ }
-
-      // displayName: real name if user is assigned, otherwise generic role title
-      const displayName = assignedUserName || officerTitle;
-
       return [
-        `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${displayName}</div>`,
-        // Always show the officer title as the role subtitle
-        `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${officerTitle}</div>`,
-        deptName ? `<div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:3px;">${deptName}</div>` : '',
+        `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${officerTitle}</div>`,
+        deptName ? `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${deptName}</div>` : '',
         `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>`,
         `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>`,
+        `<div style="font-size:10px;color:#b0a070;margin-bottom:6px;font-style:italic;">Graduates Receive Lifetime ANA-US, Inc. Membership</div>`,
         row(phoneIcon, '+374 93 798879'),
         row(phoneIcon, '+1 (707) 717-4440'),
         row(emailIcon, senderEmail, '#2563eb'),
@@ -2944,6 +2927,29 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
     window.selectEmail = async function(emailId) {
       selectedEmail = emailHistory.find(e => e.id === emailId);
+
+      // If the email isn't in the current list (filters, race conditions), fetch it directly
+      if (!selectedEmail) {
+        try {
+          const { data: fallbackEmail, error: fallbackError } = await db
+            .from('email_history')
+            .select('id, sender, recipient, subject, body, html_body, attachments, status, sent_at')
+            .eq('id', emailId)
+            .maybeSingle();
+
+          if (!fallbackError && fallbackEmail) {
+            selectedEmail = { ...fallbackEmail, _bodyLoaded: true };
+            emailHistory.unshift(selectedEmail);
+          }
+        } catch (err) {
+          console.warn('Could not fetch email by id:', err);
+        }
+      }
+
+      if (!selectedEmail) {
+        showNotification('⚠️ Email not found. Please refresh the list.', 'error');
+        return;
+      }
       
       // Mark email as viewed to remove glow
       viewedEmails.add(emailId);

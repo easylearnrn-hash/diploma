@@ -648,15 +648,52 @@ serve(async (req: Request) => {
           console.log(`⤴️ Auto-forwarding enabled for ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
           
           // Forward the email via Resend API - preserving original sender identity
+          const forwardFromEmail = normalizedRecipient || 'admissions@acnhs.am'
+          const defaultSenderNames: Record<string, string> = {
+            'admissions@acnhs.am': 'Admissions Office - ACNHS',
+            'info@acnhs.am': 'Information Office - ACNHS',
+            'documents@acnhs.am': 'Records & Documentation - ACNHS',
+            'international@acnhs.am': 'International Relations - ACNHS',
+            'registrar@acnhs.am': 'Registrar Office - ACNHS',
+            'finance@acnhs.am': 'Finance Department - ACNHS',
+            'ceo@acnhs.am': 'Chief Executive Officer - ACNHS',
+            'dean@acnhs.am': 'Office of the Dean - ACNHS',
+            'academic@acnhs.am': 'Academic Affairs - ACNHS',
+            'student-services@acnhs.am': 'Student Services - ACNHS',
+            'legal@acnhs.am': 'Legal Affairs - ACNHS',
+            'hr@acnhs.am': 'Human Resources - ACNHS',
+            'it@acnhs.am': 'IT Support - ACNHS',
+            'library@acnhs.am': 'Library & Resources - ACNHS',
+            'alumni@acnhs.am': 'Alumni Relations - ACNHS',
+            'research@acnhs.am': 'Research Department - ACNHS',
+            'do-not-reply@acnhs.am': 'ACNHS Notifications'
+          }
+          const forwardFromName = defaultSenderNames[forwardFromEmail] || 'ACNHS'
+          const originalFromHeader = (typeof fromField === 'string' && fromField.trim().length > 0)
+            ? fromField.trim()
+            : actualSender
+          const originalFromAddress = normalizeEmailAddress(originalFromHeader) || actualSender
+          const originalFromForResend = originalFromHeader.includes('<')
+            ? originalFromHeader
+            : originalFromAddress
+
+          const rawDisplayName = originalFromHeader.includes('<')
+            ? originalFromHeader.split('<')[0].trim()
+            : ''
+          const cleanedDisplayName = rawDisplayName.replace(/^"|"$/g, '').trim()
+          const forwardFromDisplayName = cleanedDisplayName
+            ? `${cleanedDisplayName} (${originalFromAddress})`
+            : originalFromAddress
+
           const forwardPayload = {
-            from: `${actualSender.split('@')[0].split('<')[0].trim()} via ACNHS <do-not-reply@acnhs.am>`,
+            from: `${forwardFromDisplayName} <${forwardFromEmail}>`,
             to: forwardingRule.forward_to_email,
             subject: emailData.subject || '(No Subject)',
             html: fullHtml || emailBody.replace(/\n/g, '<br>'),
-            reply_to: replyToField || actualSender,
+            reply_to: originalFromAddress,
             headers: {
               'X-Forwarded-From': normalizedRecipient,
-              'X-Original-Sender': actualSender,
+              'X-Original-Sender': originalFromAddress,
               'X-Forwarded-To': recipientEmail
             }
           }
@@ -680,7 +717,7 @@ serve(async (req: Request) => {
               .from('email_history')
               .insert([{
                 recipient: forwardingRule.forward_to_email,
-                sender: 'do-not-reply@acnhs.am',
+                sender: originalFromAddress,
                 subject: `Fwd: ${emailData.subject || '(No Subject)'}`,
                 body: `Forwarded from ${normalizedRecipient}`,
                 status: 'sent',
