@@ -2112,12 +2112,31 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
 
       // ── All other department signatures ─────────────────────────────────────
-      const officerTitle  = officerTitles[senderEmail]  || 'Officer';
-      const deptName      = departmentNames[senderEmail] || '';
+      const officerTitle = officerTitles[senderEmail] || 'Officer';
+      const deptName     = departmentNames[senderEmail] || '';
+
+      // Check if the logged-in user is personally assigned to this department email.
+      // userInfo.name is their real name; userEmailPermissions lists the dept emails they own.
+      let assignedUserName = null;
+      try {
+        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
+        if (emailPermsStr) {
+          const emailPerms = JSON.parse(emailPermsStr);
+          if (Array.isArray(emailPerms) && emailPerms.map(e => e.toLowerCase()).includes(senderEmail.toLowerCase())) {
+            // This user is the assigned officer for this dept email — use their real name
+            assignedUserName = userInfo?.name || sessionStorage.getItem('userName') || localStorage.getItem('userName') || null;
+          }
+        }
+      } catch (e) { /* silent — fall back to generic title */ }
+
+      // displayName: real name if user is assigned, otherwise generic role title
+      const displayName = assignedUserName || officerTitle;
 
       return [
-        `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${officerTitle}</div>`,
-        deptName ? `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${deptName}</div>` : '',
+        `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${displayName}</div>`,
+        // Always show the officer title as the role subtitle
+        `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${officerTitle}</div>`,
+        deptName ? `<div style="font-size:12px;font-weight:600;color:#64748b;margin-bottom:3px;">${deptName}</div>` : '',
         `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>`,
         `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>`,
         row(phoneIcon, '+374 93 798879'),
