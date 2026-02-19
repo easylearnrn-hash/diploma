@@ -2798,7 +2798,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         showLoading(true);
 
         // Combine staff and student rules
-        const allRulesToSave = [
+        const allRulesToSaveRaw = [
           ...forwardingRulesData.map(rule => ({
             acnhs_email: rule.acnhs_email,
             forward_to_email: rule.enabled ? rule.forward_to_email : null,
@@ -2812,6 +2812,15 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             created_by: userEmail
           }))
         ];
+
+        // Deduplicate by acnhs_email to avoid ON CONFLICT updating the same row twice
+        const uniqueRuleMap = new Map();
+        for (const rule of allRulesToSaveRaw) {
+          const key = (rule.acnhs_email || '').toLowerCase().trim();
+          if (!key) continue;
+          uniqueRuleMap.set(key, { ...rule, acnhs_email: key });
+        }
+        const allRulesToSave = Array.from(uniqueRuleMap.values());
 
         // Get all ACNHS email addresses from staff rules only (for admin_users.email_permissions)
         const allStaffAcnhsEmails = forwardingRulesData.map(rule => rule.acnhs_email);
