@@ -2047,180 +2047,84 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     
     // Generate department-specific signature with user attention
     function generateDepartmentSignature(senderEmail, userInfo) {
-      const userName = userInfo?.name || sessionStorage.getItem('userName') || '';
-      const userEmail = userInfo?.email || sessionStorage.getItem('userEmail') || '';
-      const userPhoneExt = userInfo?.phone_ext || sessionStorage.getItem('userPhoneExt') || '';
-      
-      // Check if sender is main admin (Hrach)
-      const isMainAdmin = userEmail.toLowerCase() === 'hrachfilm@gmail.com';
-      
-      // Check if it's a personal email
-      const isPersonal = senderEmail.match(/^[a-z]\.[a-z]+@acnhs\.am$/i);
-      
-      // Officer titles for each department
-      const officerTitles = {
-        'admissions@acnhs.am': 'Admissions Officer',
-        'info@acnhs.am': 'Administrative Officer',
-        'documents@acnhs.am': 'Records & Documentation Officer',
-        'international@acnhs.am': 'International Relations Officer',
-        'registrar@acnhs.am': 'Registrar',
-        'finance@acnhs.am': 'Finance Officer',
-        'ceo@acnhs.am': 'Chief Executive Officer',
-        'dean@acnhs.am': 'Dean',
-        'academic@acnhs.am': 'Academic Affairs Officer',
-        'student-services@acnhs.am': 'Student Services Officer',
-        'legal@acnhs.am': 'Legal Affairs Officer',
-        'hr@acnhs.am': 'Human Resources Officer',
-        'it@acnhs.am': 'Information Technology Officer',
-        'library@acnhs.am': 'Library & Academic Resources Officer',
-        'alumni@acnhs.am': 'Alumni Relations Officer',
-        'research@acnhs.am': 'Research Affairs Officer',
-        'do-not-reply@acnhs.am': 'Automated Notification System'
-      };
-      
-      // Department names for signature
-      const departmentNames = {
-        'admissions@acnhs.am': 'Admissions Department',
-        'info@acnhs.am': 'Information Office',
-        'documents@acnhs.am': 'Records & Documentation',
-        'international@acnhs.am': 'International Relations',
-        'registrar@acnhs.am': 'Registrar Office',
-        'finance@acnhs.am': 'Finance Department',
-        'ceo@acnhs.am': 'Chief Executive Officer',
-        'dean@acnhs.am': 'Dean\'s Office',
-        'academic@acnhs.am': 'Academic Affairs',
-        'student-services@acnhs.am': 'Student Services',
-        'legal@acnhs.am': 'Legal Affairs',
-        'hr@acnhs.am': 'Human Resources',
-        'it@acnhs.am': 'Information Technology',
-        'library@acnhs.am': 'Library & Academic Resources',
-        'alumni@acnhs.am': 'Alumni Relations',
-        'research@acnhs.am': 'Research Department',
-        'do-not-reply@acnhs.am': 'Automated System'
-      };
-      
-      // Determine the display name and title
-      let displayName = userName;
-      let displayTitle = '';
-      let departmentName = departmentNames[senderEmail] || '';
-
-      if (isPersonal) {
-        // Personal email: always use the user's own name and title
-        displayTitle = userInfo?.title || '';
-      } else if (senderEmail === 'ceo@acnhs.am') {
-        // CEO email handled below — skip for now
-      } else {
-        // Departmental email: name is the logged-in user, title is the DEPARTMENT role
-        // (e.g. sending from admissions@ → "Admissions Officer", not "Executive Director")
-        displayTitle = officerTitles[senderEmail] || userInfo?.title || '';
-      }
-
-      // If no user name, use the officer title as the name for departmental emails
-      if (!displayName && officerTitles[senderEmail]) {
-        displayName = officerTitles[senderEmail];
-        displayTitle = departmentName; // Show department as subtitle
-        departmentName = ''; // Don't show department twice
-      } else if (!displayName) {
-        displayName = 'ACNHS Officer'; // Ultimate fallback
-      }
-
-      // Special handling for CEO email — always Hrachya regardless of who is logged in
-      if (senderEmail === 'ceo@acnhs.am') {
-        displayName = 'Hrachya Vardanyan';
-        displayTitle = 'Chief Executive Officer';
-      }
-
-      // For Dean - only show username if NOT sent by admin
-      if (senderEmail === 'dean@acnhs.am' && !isMainAdmin) {
-        displayTitle = userInfo?.title || 'Dean'; // Use user's title or fallback to Dean
-      }
-      
-      // Build signature HTML — text content only.
-      // The email template already provides the two-column layout:
-      //   left cell = ACNHS seal logo,  right cell = {{SIGNATURE}} (this output)
-      // So we must NOT wrap in another <table> with a logo here.
-      let signatureHtml = '';
-      
-      if (isPersonal) {
-        // Personal email signature
-        signatureHtml += `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${displayName}</div>`;
-        if (userInfo?.title) {
-          signatureHtml += `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${userInfo.title}</div>`;
-        }
-      } else {
-        // Departmental email signature
-        signatureHtml += `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${displayName}</div>`;
-        if (displayTitle) {
-          signatureHtml += `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${displayTitle}</div>`;
-        }
-        // Add department name below title
-        if (departmentName) {
-          signatureHtml += `<div style="font-size:11px;font-weight:600;color:#64748b;margin-bottom:4px;">${departmentName}</div>`;
-        }
-      }
-      
-      signatureHtml += '<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing & Health Sciences</div>';
-      signatureHtml += '<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>';
-      
-      // Contact info with elegant icons (same size, faded color, consistent style)
-      const iconStyle = 'width:11px;height:11px;opacity:0.6;vertical-align:middle;margin-right:6px;';
-      // CEO gets no ext on Armenian number; everyone else gets their ext appended if set
       const isCeo = senderEmail === 'ceo@acnhs.am';
-      const phoneDisplay = (!isCeo && userPhoneExt) ? `+374 93 798879 ext ${userPhoneExt}` : '+374 93 798879';
-      signatureHtml += `<div style="font-size:11px;color:#64748b;margin-bottom:2px;">
-        <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-        </svg>${phoneDisplay}</div>`;
-      // US number only appears on CEO signature
+
+      // ── Shared SVG icon snippets ────────────────────────────────────────────
+      const iconStyle = 'width:11px;height:11px;opacity:0.6;vertical-align:middle;margin-right:6px;';
+      const phoneIcon = `<svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>`;
+      const emailIcon = `<svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>`;
+      const webIcon  = `<svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>`;
+
+      const row = (icon, content, color = '#64748b') =>
+        `<div style="font-size:11px;color:${color};margin-bottom:2px;">${icon}${content}</div>`;
+
+      // ── Officer titles & department names ───────────────────────────────────
+      const officerTitles = {
+        'admissions@acnhs.am':      'Admissions Officer',
+        'info@acnhs.am':            'Administrative Officer',
+        'documents@acnhs.am':       'Records & Documentation Officer',
+        'international@acnhs.am':   'International Relations Officer',
+        'registrar@acnhs.am':       'Registrar',
+        'finance@acnhs.am':         'Finance Officer',
+        'dean@acnhs.am':            'Dean',
+        'academic@acnhs.am':        'Academic Affairs Officer',
+        'student-services@acnhs.am':'Student Services Officer',
+        'legal@acnhs.am':           'Legal Affairs Officer',
+        'hr@acnhs.am':              'Human Resources Officer',
+        'it@acnhs.am':              'Information Technology Officer',
+        'library@acnhs.am':         'Library & Academic Resources Officer',
+        'alumni@acnhs.am':          'Alumni Relations Officer',
+        'research@acnhs.am':        'Research Affairs Officer',
+        'do-not-reply@acnhs.am':    'Automated Notification System'
+      };
+      const departmentNames = {
+        'admissions@acnhs.am':      'Admissions Department',
+        'info@acnhs.am':            'Information Office',
+        'documents@acnhs.am':       'Records & Documentation',
+        'international@acnhs.am':   'International Relations',
+        'registrar@acnhs.am':       'Registrar Office',
+        'finance@acnhs.am':         'Finance Department',
+        'dean@acnhs.am':            "Dean's Office",
+        'academic@acnhs.am':        'Academic Affairs',
+        'student-services@acnhs.am':'Student Services',
+        'legal@acnhs.am':           'Legal Affairs',
+        'hr@acnhs.am':              'Human Resources',
+        'it@acnhs.am':              'Information Technology',
+        'library@acnhs.am':         'Library & Academic Resources',
+        'alumni@acnhs.am':          'Alumni Relations',
+        'research@acnhs.am':        'Research Department',
+        'do-not-reply@acnhs.am':    'Automated System'
+      };
+
+      // ── CEO signature ───────────────────────────────────────────────────────
       if (isCeo) {
-        signatureHtml += `<div style="font-size:11px;color:#64748b;margin-bottom:2px;">
-          <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-          </svg>+1 (707) 717-4440 ext. 109</div>`;
+        return [
+          `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">Hrachya Vardanyan</div>`,
+          `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">Chief Executive Officer</div>`,
+          `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>`,
+          `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>`,
+          row(phoneIcon, '+374 93 79 88 79'),
+          row(phoneIcon, '+1 (707) 717-4440 ext. 109'),
+          row(emailIcon, 'ceo@acnhs.am',          '#2563eb'),
+          row(emailIcon, 'h.vardanyan@acnhs.am',   '#2563eb'),
+          row(webIcon,   'www.acnhs.am',            '#2563eb'),
+        ].join('');
       }
-      
-      // Email(s)
-      if (isPersonal) {
-        signatureHtml += `<div style="font-size:11px;color:#2563eb;">
-          <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-            <polyline points="22,6 12,13 2,6"></polyline>
-          </svg>${senderEmail}</div>`;
-      } else {
-        // For departmental emails, show the departmental email with attention line
-        if (!isMainAdmin && userName) {
-          // Regular user: show departmental email with attention
-          signatureHtml += `<div style="font-size:11px;color:#2563eb;margin-bottom:1px;">
-            <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>${senderEmail}</div>`;
-          signatureHtml += `<div style="font-size:10px;font-style:italic;color:#64748b;margin-bottom:2px;margin-left:17px;">Attention: ${userName}</div>`;
-          // Then show personal email
-          const personalEmail = userName.split(' ').map((n, i) => i === 0 ? n.charAt(0).toLowerCase() : n.toLowerCase()).join('.') + '@acnhs.am';
-          signatureHtml += `<div style="font-size:11px;color:#2563eb;">
-            <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>${personalEmail} <span style="font-style:italic;color:#64748b;">(Personal)</span></div>`;
-        } else {
-          // Admin: just show departmental email
-          signatureHtml += `<div style="font-size:11px;color:#2563eb;">
-            <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-              <polyline points="22,6 12,13 2,6"></polyline>
-            </svg>${senderEmail}</div>`;
-        }
-      }
-      
-      signatureHtml += `<div style="font-size:11px;color:#2563eb;margin-top:2px;">
-        <svg style="${iconStyle}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="2" y1="12" x2="22" y2="12"></line>
-          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-        </svg>www.acnhs.am</div>`;
-      
-      return signatureHtml;
+
+      // ── All other department signatures ─────────────────────────────────────
+      const officerTitle  = officerTitles[senderEmail]  || 'Officer';
+      const deptName      = departmentNames[senderEmail] || '';
+
+      return [
+        `<div style="font-size:15px;font-weight:900;color:#0f172a;margin-bottom:2px;">${officerTitle}</div>`,
+        deptName ? `<div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:2px;">${deptName}</div>` : '',
+        `<div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:3px;">Armenian College of Nursing &amp; Health Sciences</div>`,
+        `<div style="font-size:11px;color:#94a3b8;margin-bottom:3px;">Yerevan, Armenia</div>`,
+        row(phoneIcon, '+374 93 798879'),
+        row(phoneIcon, '+1 (707) 717-4440'),
+        row(emailIcon, senderEmail, '#2563eb'),
+        row(webIcon,   'www.acnhs.am', '#2563eb'),
+      ].join('');
     }
 
     // Initialize
