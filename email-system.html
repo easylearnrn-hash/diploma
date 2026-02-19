@@ -2103,17 +2103,18 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       let displayName = userName;
       let displayTitle = '';
       let departmentName = departmentNames[senderEmail] || '';
-      
-      // IMPORTANT: Use the logged-in user's actual job title, not the email department's title
-      // This ensures that if Simona (Student Services Officer) sends from legal@acnhs.am,
-      // her signature still shows "Student Services Officer"
-      if (userInfo?.title) {
-        displayTitle = userInfo.title;
+
+      if (isPersonal) {
+        // Personal email: always use the user's own name and title
+        displayTitle = userInfo?.title || '';
+      } else if (senderEmail === 'ceo@acnhs.am') {
+        // CEO email handled below — skip for now
       } else {
-        // Fallback to department title only if user has no title set
-        displayTitle = officerTitles[senderEmail] || '';
+        // Departmental email: name is the logged-in user, title is the DEPARTMENT role
+        // (e.g. sending from admissions@ → "Admissions Officer", not "Executive Director")
+        displayTitle = officerTitles[senderEmail] || userInfo?.title || '';
       }
-      
+
       // If no user name, use the officer title as the name for departmental emails
       if (!displayName && officerTitles[senderEmail]) {
         displayName = officerTitles[senderEmail];
@@ -2122,21 +2123,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       } else if (!displayName) {
         displayName = 'ACNHS Officer'; // Ultimate fallback
       }
-      
-      // Special handling for CEO email
+
+      // Special handling for CEO email — always Hrachya regardless of who is logged in
       if (senderEmail === 'ceo@acnhs.am') {
-        if (isMainAdmin) {
-          // Only Hrachya Vardanyan can use CEO title
-          displayName = 'Hrachya Vardanyan';
-          displayTitle = 'Chief Executive Officer';
-        } else {
-          // Other users sending from CEO email keep their own title
-          // displayName already set to userName above
-          // displayTitle already set to userInfo.title above
-          // This ensures Simona shows "Student Services Officer" not "CEO"
-        }
+        displayName = 'Hrachya Vardanyan';
+        displayTitle = 'Chief Executive Officer';
       }
-      
+
       // For Dean - only show username if NOT sent by admin
       if (senderEmail === 'dean@acnhs.am' && !isMainAdmin) {
         displayTitle = userInfo?.title || 'Dean'; // Use user's title or fallback to Dean
