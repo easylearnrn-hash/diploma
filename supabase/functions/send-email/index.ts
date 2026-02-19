@@ -88,6 +88,13 @@ interface EmailRequest {
   headers?: Record<string, string>
 }
 
+// ── Strip inline base64 images before DB storage ────────────────────────
+// Base64 logo embeds make html ~150KB+ which breaks the 50KB limit.
+// Replace data URIs with a stable placeholder token; re-inject on display.
+function stripBase64ForStorage(rawHtml: string): string {
+  return rawHtml.replace(/data:image\/[^;]+;base64,[A-Za-z0-9+/=]+/g, '{{ACNHS_SEAL_BASE64}}')
+}
+
 serve(async (req: Request) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -364,7 +371,7 @@ serve(async (req: Request) => {
             sender: emailSender,
             subject: subject,
             body: textPreview,
-            html_body: html.substring(0, 50000),
+            html_body: stripBase64ForStorage(html),
             status: 'sent',
             sent_at: new Date().toISOString(),
             resend_id: resendData.id,
@@ -386,7 +393,7 @@ serve(async (req: Request) => {
             sender: emailSender,
             subject: subject,
             body: textPreview,
-            html_body: html.substring(0, 50000),
+            html_body: stripBase64ForStorage(html),
             status: 'received',
             sent_at: new Date().toISOString(),
             resend_id: resendData.id,
@@ -460,7 +467,7 @@ serve(async (req: Request) => {
           sender: emailSender,
           subject: subject,
           body: textPreview,
-          html_body: html.substring(0, 50000), // Store full HTML for display (limit 50KB)
+          html_body: stripBase64ForStorage(html), // Strip base64 logos before storage; re-injected on display
           status: emailStatus,
           sent_at: new Date().toISOString(),
           resend_id: resendData.id,
