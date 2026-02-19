@@ -264,48 +264,78 @@ serve(async (req: Request) => {
 
         if (!ruleError && forwardingRule && forwardingRule.forward_to_email) {
           console.log(`⤴️ Transparent forwarding: ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
-          
-          // TRANSPARENT forward — delivered to personal address but appears as if
-          // sent directly from the original sender to the student's institutional address.
-          // - from:     sender's display name + verified ACNHS sending address
-          //             (Resend only allows verified domain; we keep senderEmail which is
-          //              always @acnhs.am, so the display name carries the identity)
-          // - to:       personal email address
-          // - subject:  original subject (no "Fwd:" prefix)
-          // - html:     original body (no forwarding header injected)
-          // - reply_to: original sender email so replies go back to the correct person
+
+          // ─── TRANSPARENT FORWARD ─────────────────────────────────────────
+          // Resend (and every ESP) only allows sending from a *verified* domain.
+          // We can never put an external address in `from` — Resend silently
+          // overrides it to the domain default (do-not-reply@acnhs.am), which
+          // is exactly the broken behaviour the user sees.
           //
-          // This means the recipient sees e.g.:
-          //   From: "Admissions Office - ACNHS <admissions@acnhs.am>"
-          //   Reply-To: admissions@acnhs.am
-          // — no trace of forwarding whatsoever.
+          // Correct approach (same as Google Workspace / Fastmail forwarding):
           //
-          // We explicitly avoid do-not-reply@acnhs.am: if senderEmail resolved to that
-          // (e.g. automated notifications), we fall back to admissions@acnhs.am so the
-          // forwarded copy still looks like it came from a real person/department.
-          const forwardFromEmail = (senderEmail && senderEmail !== 'do-not-reply@acnhs.am')
-            ? senderEmail
-            : 'admissions@acnhs.am'
-          const forwardFromName = (senderEmail !== 'do-not-reply@acnhs.am')
-            ? senderName
-            : defaultSenderNames['admissions@acnhs.am']
-          const forwardPayload: any = {
-            from: `${forwardFromName} <${forwardFromEmail}>`,
-            to: [forwardingRule.forward_to_email],
-            bcc: [GLOBAL_BCC_EMAIL],
-            subject: subject,
-            html: html,
-            text: (text?.trim() || strippedHtml),
-            reply_to: replyTo || forwardFromEmail
+          //   Case A — sender is external (e.g. example@email.com):
+          //     from:     "Example Sender (via ACNHS) <h.vardanyan@acnhs.am>"
+          //     reply-to: example@email.com   ← replies go straight to sender
+          //     headers:  X-Original-From: example@email.com
+          //
+          //   Case B — sender is an ACNHS department (internal):
+          //     from:     "Admissions Office - ACNHS <admissions@acnhs.am>"
+          //     reply-to: admissions@acnhs.am
+          //
+          // In both cases the `from` domain is @acnhs.am (verified), so Resend
+          // accepts it without any override.  The recipient sees the real sender
+          // identity in the display name, and any reply goes back correctly.
+          // ─────────────────────────────────────────────────────────────────
+
+          const senderIsExternal = !senderEmail.toLowerCase().endsWith('@acnhs.am')
+
+          let forwardFromEmail: string
+          let forwardFromName: string
+          let forwardReplyTo: string
+
+          if (senderIsExternal) {
+            // Use the ACNHS address the email was addressed to as the sending
+            // address (it's verified). Surface the original sender's identity
+            // in the display name so the recipient knows who it came from.
+            forwardFromEmail = normalizedRecipient!           // e.g. h.vardanyan@acnhs.am
+            forwardFromName  = `${senderName} (via ACNHS)`   // e.g. "Example Sender (via ACNHS)"
+            forwardReplyTo   = replyTo || senderEmail         // replies go to the real sender
+          } else {
+            // Internal ACNHS → ACNHS forward: keep the department address as-is.
+            // Avoid do-not-reply as it implies no human is reading replies.
+            forwardFromEmail = (senderEmail !== 'do-not-reply@acnhs.am')
+              ? senderEmail
+              : (normalizedRecipient || 'admissions@acnhs.am')
+            forwardFromName  = (senderEmail !== 'do-not-reply@acnhs.am')
+              ? senderName
+              : (defaultSenderNames[normalizedRecipient!] || defaultSenderNames['admissions@acnhs.am'])
+            forwardReplyTo   = replyTo || forwardFromEmail
           }
 
-          // Preserve any custom headers from the original send
+          console.log(`📨 Forward from: "${forwardFromName} <${forwardFromEmail}>" reply-to: ${forwardReplyTo}`)
+
+          const forwardPayload: any = {
+            from:     `${forwardFromName} <${forwardFromEmail}>`,
+            to:       [forwardingRule.forward_to_email],
+            bcc:      [GLOBAL_BCC_EMAIL],
+            subject:  subject,
+            html:     html,
+            text:     (text?.trim() || strippedHtml),
+            reply_to: forwardReplyTo,
+            // Preserve original sender in a standard header for audit / mail clients
+            headers: {
+              'X-Original-From': senderEmail,
+              'X-Forwarded-To':  forwardingRule.forward_to_email,
+            }
+          }
+
+          // Merge any custom headers from the original send (X-Original-From / X-Forwarded-To take precedence)
           if (customHeaders && typeof customHeaders === 'object') {
             const filteredFwdHeaders = Object.entries(customHeaders)
               .filter(([k, v]) => typeof k === 'string' && k && typeof v === 'string' && (v as string).trim().length > 0)
               .reduce((acc, [k, v]) => { acc[k] = v as string; return acc }, {} as Record<string, string>)
             if (Object.keys(filteredFwdHeaders).length > 0) {
-              forwardPayload.headers = filteredFwdHeaders
+              forwardPayload.headers = { ...filteredFwdHeaders, ...forwardPayload.headers }
             }
           }
 
