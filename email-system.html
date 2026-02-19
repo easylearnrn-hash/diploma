@@ -3479,6 +3479,39 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
         console.log(`📚 Found ${students.length} students with @acnhs.am emails via ${sourceTable}`);
 
+        // ── Batch-fetch personal emails from applications in ONE query ─────────
+        // Strategy: join via application_id (UUID FK on students → applications.id)
+        // Falls back to matching applications.email against student name / ID if needed.
+        const personalEmailMap = {}; // key: acnhs_email (lowercase) → value: personal email string
+
+        const appIds = students
+          .map(s => s.application_id)
+          .filter(Boolean);
+
+        if (appIds.length > 0) {
+          const { data: appRows, error: appErr } = await db
+            .from('applications')
+            .select('id, email')
+            .in('id', appIds);
+
+          if (!appErr && appRows) {
+            // Build map: application_id → personal email
+            const appIdToPersonal = {};
+            for (const row of appRows) {
+              if (row.id && row.email) appIdToPersonal[row.id] = row.email.trim().toLowerCase();
+            }
+            // Now map each student's @acnhs.am address → their personal email
+            for (const s of students) {
+              if (s.application_id && appIdToPersonal[s.application_id] && s.email) {
+                personalEmailMap[s.email.toLowerCase().trim()] = appIdToPersonal[s.application_id];
+              }
+            }
+          } else if (appErr) {
+            console.warn('Could not fetch personal emails from applications:', appErr.message);
+          }
+        }
+        console.log(`📧 Personal email lookup resolved ${Object.keys(personalEmailMap).length} of ${students.length} students`);
+
         // Get all student email addresses (filter to ensure they're @acnhs.am)
         const studentEmails = (students || [])
           .filter(s => s.email && s.email.toLowerCase().endsWith('@acnhs.am'))
@@ -3507,9 +3540,16 @@ We're here to support you every step of the way. Welcome to ACNHS!`
               ? student.metadata
               : {};
             const derivedStatus = student.status || student.enrollment_status || metadata.status || metadata.enrollment_status || 'unknown';
+            const personalEmail = personalEmailMap[emailKey] || '';
+
+            // Auto-fill: use saved rule value if it exists, otherwise pre-fill with personal email
+            const forwardToEmail = existingRule?.forward_to_email || personalEmail;
+
             return {
               acnhs_email: emailKey,
-              forward_to_email: existingRule?.forward_to_email || '',
+              forward_to_email: forwardToEmail,
+              personal_email: personalEmail,          // always the source-of-truth from applications
+              has_saved_rule: Boolean(existingRule),  // was this previously saved to DB?
               enabled: existingRule?.enabled || false,
               id: existingRule?.id || null,
               student_name: student.full_name || 'Unknown',
@@ -3579,7 +3619,21 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         return;
       }
 
-      container.innerHTML = studentForwardingRulesData.map((rule, index) => `
+      container.innerHTML = studentForwardingRulesData.map((rule, index) => {
+        const hasPersonal = Boolean(rule.personal_email);
+        const hasSavedRule = rule.has_saved_rule;
+        // If saved rule differs from the on-file personal email, show the hint
+        const showOnFileHint = hasSavedRule && hasPersonal && rule.forward_to_email !== rule.personal_email;
+        // Warning: enabled but no email at all
+        const isMissingEmail = rule.enabled && !rule.forward_to_email;
+
+        const inputBorder = isMissingEmail
+          ? '1px solid rgba(239,68,68,0.6)'
+          : hasPersonal && !hasSavedRule
+            ? '1px solid rgba(201,168,76,0.4)'   // pre-filled from applications → gold
+            : '1px solid rgba(139,92,246,0.25)';  // saved rule → purple
+
+        return `
         <div class="forwarding-rule-item student-rule" data-email="${rule.acnhs_email.toLowerCase()}" style="padding: 16px; background: rgba(2,6,23,0.5); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 8px;">
           <div style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px;">
             <input 
@@ -3598,30 +3652,76 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             </div>
           </div>
           <div style="display: ${rule.enabled ? 'block' : 'none'};" id="student-rule-input-${index}">
-            <input 
-              type="email" 
-              class="form-input" 
-              id="student-rule-forward-to-${index}"
-              value="${rule.forward_to_email}"
-              placeholder="personal@gmail.com"
-              onchange="updateStudentForwardingRuleEmail(${index}, this.value)"
-              style="width: 100%; padding: 10px; background: rgba(2,6,23,0.7); border: 1px solid rgba(139,92,246,0.25); border-radius: 6px; color: #e8edf5; font-size: 14px;">
+            <div style="position: relative;">
+              <input 
+                type="email" 
+                class="form-input" 
+                id="student-rule-forward-to-${index}"
+                value="${rule.forward_to_email}"
+                placeholder="${hasPersonal ? rule.personal_email : 'No personal email on file'}"
+                oninput="updateStudentForwardingRuleEmail(${index}, this.value)"
+                style="width: 100%; padding: 10px 10px 10px ${hasPersonal && !hasSavedRule ? '36px' : '10px'}; background: rgba(2,6,23,0.7); border: ${inputBorder}; border-radius: 6px; color: #e8edf5; font-size: 14px; box-sizing: border-box;">
+              ${hasPersonal && !hasSavedRule ? `
+              <span title="Pre-filled from student application" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 13px; pointer-events: none; opacity: 0.7;">📋</span>
+              ` : ''}
+            </div>
+            ${isMissingEmail ? `
+            <p style="color: #ef4444; font-size: 12px; margin-top: 5px; font-weight: 600;">
+              ⚠ A valid forwarding address is required to save this rule.
+            </p>
+            ` : showOnFileHint ? `
+            <p style="color: #8a9ec0; font-size: 12px; margin-top: 5px;">
+              On file: <span style="color: #c9a84c; font-weight: 600;">${rule.personal_email}</span>
+            </p>
+            ` : !hasPersonal ? `
+            <p style="color: #f59e0b; font-size: 12px; margin-top: 5px; font-weight: 600;">
+              No personal email on file — enter a forwarding address manually.
+            </p>
+            ` : `
             <p style="color: #8a9ec0; font-size: 12px; margin-top: 6px;">
               Forward this student's emails to their personal address
             </p>
+            `}
           </div>
         </div>
-      `).join('');
+        `;
+      }).join('');
     }
 
     window.toggleStudentForwardingRule = function(index, enabled) {
       studentForwardingRulesData[index].enabled = enabled;
-      document.getElementById(`student-rule-input-${index}`).style.display = enabled ? 'block' : 'none';
+      const inputBlock = document.getElementById(`student-rule-input-${index}`);
+      if (inputBlock) inputBlock.style.display = enabled ? 'block' : 'none';
+      // Re-evaluate warning state after toggle
+      if (enabled) {
+        const rule = studentForwardingRulesData[index];
+        const inputEl = document.getElementById(`student-rule-forward-to-${index}`);
+        if (inputEl) _updateStudentRuleValidation(index, inputEl.value, rule);
+      }
     };
 
     window.updateStudentForwardingRuleEmail = function(index, email) {
-      studentForwardingRulesData[index].forward_to_email = email.trim();
+      const trimmed = email.trim();
+      studentForwardingRulesData[index].forward_to_email = trimmed;
+      const rule = studentForwardingRulesData[index];
+      const inputEl = document.getElementById(`student-rule-forward-to-${index}`);
+      if (inputEl) _updateStudentRuleValidation(index, trimmed, rule);
     };
+
+    // Live validation: update border color + warning message without full re-render
+    function _updateStudentRuleValidation(index, emailVal, rule) {
+      const inputEl = document.getElementById(`student-rule-forward-to-${index}`);
+      if (!inputEl) return;
+      const isEmpty = !emailVal;
+      const isEnabled = rule.enabled;
+      if (isEmpty && isEnabled) {
+        inputEl.style.border = '1px solid rgba(239,68,68,0.6)';
+      } else if (rule.personal_email && !rule.has_saved_rule) {
+        inputEl.style.border = '1px solid rgba(201,168,76,0.4)';
+      } else {
+        inputEl.style.border = '1px solid rgba(139,92,246,0.25)';
+      }
+    }
 
     function renderForwardingRulesList() {
       const container = document.getElementById('forwardingRulesList');
@@ -3733,6 +3833,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         if (invalidStaffRules.length > 0 || invalidStudentRules.length > 0) {
           const totalInvalid = invalidStaffRules.length + invalidStudentRules.length;
           showNotification(`Please enter valid email addresses for all ${totalInvalid} enabled forwarding rules`, 'error');
+          // Re-render student list so invalid rows show red borders
+          if (invalidStudentRules.length > 0) {
+            renderStudentForwardingRulesList();
+            // Switch to student tab if that's where the errors are
+            if (currentForwardingTab !== 'student') switchForwardingTab('student');
+          }
           return;
         }
 
