@@ -2269,11 +2269,15 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       // Load viewed emails from storage
       loadViewedEmails();
-      
-      await loadEmailHistory();
+
+      // Wire up events immediately (no network needed)
       setupEventListeners();
-      await loadPrograms();
-      await loadStatuses();
+
+      // ── Fire all independent network requests in parallel ─────────────────
+      await Promise.all([
+        loadEmailHistory(),
+        loadProgramsAndStatuses()
+      ]);
 
       // Check for URL parameters (from email template selection)
       const urlParams = new URLSearchParams(window.location.search);
@@ -2283,10 +2287,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       const body = urlParams.get('body');
 
       if (toEmail || subject || body) {
-        // Switch to compose tab
         document.querySelector('[data-tab="compose"]').click();
-        
-        // Pre-fill form fields
         setTimeout(() => {
           if (toEmail) {
             const toInput = document.querySelector('input[placeholder*="recipient"]');
@@ -2306,7 +2307,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // Auto-refresh emails every 5 minutes
       autoRefreshInterval = setInterval(async () => {
         await loadEmailHistory();
-      }, 300000); // 5 minutes (300,000ms)
+      }, 300000);
     });
 
     function setupEventListeners() {
@@ -2769,55 +2770,51 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     }
 
     async function loadPrograms() {
-      try {
-        const { data: programs, error } = await db
-          .from('applications')
-          .select('program')
-          .not('program', 'is', null);
-
-        if (error) throw error;
-
-        const uniquePrograms = [...new Set(programs.map(p => p.program))];
-        const programSelect = document.getElementById('programFilter');
-        
-        programSelect.innerHTML = uniquePrograms.map(program => 
-          `<option value="${program}">${program}</option>`
-        ).join('');
-      } catch (error) {
-        console.error('Error loading programs:', error);
-      }
+      // No-op: programs and statuses are now loaded together in loadProgramsAndStatuses()
     }
 
     async function loadStatuses() {
+      // No-op: programs and statuses are now loaded together in loadProgramsAndStatuses()
+    }
+
+    // Single query replaces the two separate loadPrograms() + loadStatuses() calls
+    async function loadProgramsAndStatuses() {
       try {
-        const { data: applications, error } = await db
+        const { data, error } = await db
           .from('applications')
-          .select('status')
+          .select('program, status')
           .not('status', 'is', null);
 
         if (error) throw error;
 
-        // Get unique statuses from actual applications
-        const uniqueStatuses = [...new Set(applications.map(a => a.status))].filter(s => s);
+        const rows = data || [];
+
+        // Programs
+        const uniquePrograms = [...new Set(rows.map(r => r.program).filter(Boolean))];
+        const programSelect = document.getElementById('programFilter');
+        if (uniquePrograms.length > 0) {
+          programSelect.innerHTML = uniquePrograms
+            .map(p => `<option value="${p}">${p}</option>`)
+            .join('');
+        }
+
+        // Statuses
+        const uniqueStatuses = [...new Set(rows.map(r => r.status).filter(Boolean))];
         const statusSelect = document.getElementById('statusFilter');
-        
         if (uniqueStatuses.length > 0) {
-          statusSelect.innerHTML = uniqueStatuses.map(status => 
-            `<option value="${status}">${status.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</option>`
-          ).join('');
-          console.log('✅ Loaded statuses:', uniqueStatuses);
+          statusSelect.innerHTML = uniqueStatuses
+            .map(s => `<option value="${s}">${s.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}</option>`)
+            .join('');
         } else {
-          // Fallback to default statuses if no applications exist yet
           statusSelect.innerHTML = `
             <option value="pending">Pending</option>
             <option value="under-review">Under Review</option>
             <option value="accepted">Accepted</option>
             <option value="rejected">Rejected</option>
           `;
-          console.log('⚠️ No statuses found in database, using defaults');
         }
       } catch (error) {
-        console.error('Error loading statuses:', error);
+        console.error('Error loading programs/statuses:', error);
       }
     }
 
@@ -2832,32 +2829,32 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
         const isMainAdmin = ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
         
+        // ── OPTIMIZATION: select only columns needed for the list view ──────
+        // body / html_body are large HTML strings — skip them here.
+        // Full body is fetched on-demand in showEmailDetail() via selectEmail().
         const { data: emails, error } = await db
           .from('email_history')
-          .select('*')
+          .select('id, sender, recipient, subject, status, sent_at, attachments, archived')
           .order('sent_at', { ascending: false })
-          .limit(500);
+          .limit(100);  // 100 is more than enough for a visible list; was 500
 
         if (error) throw error;
 
+        // Pre-compute body_preview = empty string (body not loaded at list level)
+        // It will be populated when full email is fetched on click.
+        const rawEmails = (emails || []).map(e => ({ ...e, body_preview: '' }));
+
         // Filter emails based on user permissions
         if (!isMainAdmin) {
-          // Non-admin users: only see emails sent TO or FROM their allowed addresses
-          emailHistory = (emails || []).filter(email => {
+          emailHistory = rawEmails.filter(email => {
             const recipientMatch = userAllowedEmails.includes(email.recipient?.toLowerCase());
             const senderMatch = userAllowedEmails.includes(email.sender?.toLowerCase());
             return recipientMatch || senderMatch;
           });
-          console.log(`📧 Filtered emails: ${emailHistory.length} of ${emails?.length || 0}`);
-          console.log(`   Allowed emails: ${userAllowedEmails.join(', ')}`);
-          console.log(`   Total sent status: ${emailHistory.filter(e => e.status === 'sent').length}`);
-          console.log(`   Total received status: ${emailHistory.filter(e => e.status === 'received').length}`);
+          console.log(`📧 Filtered emails: ${emailHistory.length} of ${rawEmails.length}`);
         } else {
-          // Main admin sees ALL emails
-          emailHistory = emails || [];
-          console.log(`📧 Main admin - showing ALL ${emailHistory.length} emails`);
-          console.log(`   Total sent status: ${emailHistory.filter(e => e.status === 'sent').length}`);
-          console.log(`   Total received status: ${emailHistory.filter(e => e.status === 'received').length}`);
+          emailHistory = rawEmails;
+          console.log(`📧 Main admin — showing ${emailHistory.length} emails`);
         }
         
         renderEmailList();
@@ -2939,15 +2936,25 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     }
 
     function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
+      // Pure string replace — no DOM element creation per call
+      if (!text) return '';
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function stripHtmlTags(html) {
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      return div.textContent || div.innerText || '';
+      // Regex strip — no DOM element creation per call
+      if (!html) return '';
+      return String(html)
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
     }
 
     function formatAttachmentSize(bytes) {
@@ -3000,14 +3007,15 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         return;
       }
 
+      // Cache date comparison once for the entire render pass
+      const _fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
       container.innerHTML = filtered.map(email => {
-        // Strip HTML tags and escape for safe display
-        const bodyPreview = escapeHtml(stripHtmlTags(email.body || '').substring(0, 60));
+        // body not loaded at list level (select optimization) — preview omitted
+        const bodyPreview = email.body_preview || '';
         
-        // Check if email is new (received in last 5 minutes AND not yet viewed)
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        const emailDate = new Date(email.sent_at);
-        const isNew = email.status === 'received' && emailDate > fiveMinutesAgo && !viewedEmails.has(email.id);
+        // ── Date math cached outside map by caller ──
+        const isNew = email.status === 'received' && new Date(email.sent_at) > _fiveMinutesAgo && !viewedEmails.has(email.id);
         const isChecked = selectedEmails.has(email.id);
         const hasAttachments = Array.isArray(email.attachments) && email.attachments.length > 0;
         
@@ -3033,23 +3041,43 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       updateSelectionUI();
     }
 
-    window.selectEmail = function(emailId) {
+    window.selectEmail = async function(emailId) {
       selectedEmail = emailHistory.find(e => e.id === emailId);
       
       // Mark email as viewed to remove glow
       viewedEmails.add(emailId);
-      saveViewedEmails(); // Persist to localStorage
+      saveViewedEmails();
       
       // Update active state in the list
-      document.querySelectorAll('.email-item').forEach(item => {
-        item.classList.remove('active');
-      });
+      document.querySelectorAll('.email-item').forEach(item => item.classList.remove('active'));
       const activeItem = document.querySelector(`.email-item [onclick*="selectEmail('${emailId}')"]`)?.closest('.email-item');
       if (activeItem) {
         activeItem.classList.add('active');
-        activeItem.classList.remove('new-email'); // Remove new email glow
+        activeItem.classList.remove('new-email');
       }
-      
+
+      // ── Lazy-load full body on demand (not pre-loaded in list query) ───────
+      if (selectedEmail && !selectedEmail._bodyLoaded) {
+        try {
+          const { data: full, error } = await db
+            .from('email_history')
+            .select('body, html_body, attachments')
+            .eq('id', emailId)
+            .maybeSingle();
+          if (!error && full) {
+            selectedEmail.body = full.body || '';
+            selectedEmail.html_body = full.html_body || '';
+            selectedEmail.attachments = full.attachments || selectedEmail.attachments;
+            selectedEmail._bodyLoaded = true;
+            // Also update the object inside emailHistory so repeat clicks don't re-fetch
+            const idx = emailHistory.findIndex(e => e.id === emailId);
+            if (idx !== -1) emailHistory[idx] = selectedEmail;
+          }
+        } catch (err) {
+          console.warn('Could not lazy-load email body:', err);
+        }
+      }
+
       showEmailDetail();
     }
 
