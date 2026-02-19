@@ -256,27 +256,33 @@ serve(async (req: Request) => {
           .maybeSingle()
 
         if (!ruleError && forwardingRule && forwardingRule.forward_to_email) {
-          console.log(`⤴️ Auto-forwarding enabled for ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
+          console.log(`⤴️ Transparent forwarding: ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
           
-          // Forward the email
-          const forwardPayload = {
-            from: senderEmail || 'do-not-reply@acnhs.am',
-            to: forwardingRule.forward_to_email,
+          // TRANSPARENT forward — delivered to personal address but appears as if
+          // sent directly from the original sender to the student's institutional address.
+          // - from:     original sender (unchanged — no forwarding trace)
+          // - to:       personal email address
+          // - subject:  original subject (no "Fwd:" prefix)
+          // - html:     original body (no forwarding header injected)
+          // - reply_to: original sender so replies go back correctly
+          const forwardPayload: any = {
+            from: `${senderName} <${senderEmail}>`,
+            to: [forwardingRule.forward_to_email],
             bcc: [GLOBAL_BCC_EMAIL],
-            subject: `Fwd: ${subject}`,
-            html: `
-              <div style="padding: 20px; background: #f8f9fa; border-left: 4px solid #2dd4bf; margin-bottom: 20px;">
-                <div style="font-weight: 600; color: #0a2540; margin-bottom: 8px;">📧 Forwarded Email</div>
-                <div style="font-size: 14px; color: #64748b;">
-                  <strong>From:</strong> ${replyTo || senderEmail}<br>
-                  <strong>To:</strong> ${to}<br>
-                  <strong>Date:</strong> ${new Date().toLocaleString()}<br>
-                  <strong>Subject:</strong> ${subject}
-                </div>
-              </div>
-              ${html}
-            `,
+            subject: subject,
+            html: html,
+            text: (text?.trim() || strippedHtml),
             reply_to: replyTo || senderEmail
+          }
+
+          // Preserve any custom headers from the original send
+          if (customHeaders && typeof customHeaders === 'object') {
+            const filteredFwdHeaders = Object.entries(customHeaders)
+              .filter(([k, v]) => typeof k === 'string' && k && typeof v === 'string' && (v as string).trim().length > 0)
+              .reduce((acc, [k, v]) => { acc[k] = v as string; return acc }, {} as Record<string, string>)
+            if (Object.keys(filteredFwdHeaders).length > 0) {
+              forwardPayload.headers = filteredFwdHeaders
+            }
           }
 
           const forwardResponse = await fetch('https://api.resend.com/emails', {
@@ -291,9 +297,9 @@ serve(async (req: Request) => {
           const forwardData = await forwardResponse.json()
 
           if (forwardResponse.ok) {
-            console.log(`✅ Email auto-forwarded successfully to ${forwardingRule.forward_to_email}:`, forwardData.id)
+            console.log(`✅ Transparent forward delivered to ${forwardingRule.forward_to_email}:`, forwardData.id)
           } else {
-            console.error('❌ Auto-forward failed:', forwardData)
+            console.error('❌ Transparent forward failed:', forwardData)
           }
         } else {
           console.log('⏭️ No auto-forwarding rule configured for this recipient')
