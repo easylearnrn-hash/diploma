@@ -98,6 +98,9 @@ window.EMAIL_HTML_TEMPLATE = `<!doctype html>
               <!-- Signature -->
               <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">
                 <tr>
+                  <td width="90" valign="middle" style="padding-right:18px;">
+                    <img src="{{ACNHS_SEAL_BASE64}}" width="80" height="80" alt="ACNHS Seal" style="display:block;">
+                  </td>
                   <td valign="middle">
                     <div style="margin-top:12px;">{{SIGNATURE}}</div>
                   </td>
