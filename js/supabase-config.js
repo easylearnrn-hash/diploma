@@ -11,14 +11,26 @@ const SUPABASE_CONFIG = {
   // Optional: Additional configuration
   options: {
     auth: {
-      persistSession: true,  // MUST be true to keep users logged in!
+      persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: false,
       storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-      // Use a consistent storage key so all tabs share one lock instead of
-      // competing for separate locks — prevents LockManager timeout errors
-      // when multiple ACNHS admin tabs are open simultaneously.
-      storageKey: 'acnhs-admin-auth'
+      storageKey: 'acnhs-admin-auth',
+      // Prevent Navigator LockManager timeout when multiple admin tabs are open.
+      // Instead of blocking for 10s waiting to acquire an exclusive lock, we
+      // use a non-exclusive relaxed lock that resolves immediately.
+      lock: typeof navigator !== 'undefined' && navigator.locks
+        ? async (name, acquireTimeout, fn) => {
+            return navigator.locks.request(
+              name,
+              { mode: 'exclusive', ifAvailable: true },
+              async (lock) => {
+                // If lock isn't available (another tab holds it), run anyway
+                return fn(lock);
+              }
+            );
+          }
+        : undefined
     }
   }
 };

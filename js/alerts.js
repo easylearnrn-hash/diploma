@@ -420,7 +420,9 @@
     
     // Replace template variables in message and title
     const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
-    const personalizedMessage = replaceTemplateVariables(alert.message_html, currentStudent);
+    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
+    // Ensure newlines render as line breaks (handles both stored <br> and raw \n)
+    const personalizedMessage = rawMessage.replace(/\n/g, '<br>');
 
     modal.innerHTML = `
       <div class="acnhs-alert-modal" style="border-top: 4px solid ${severityColors[alert.severity]}">
@@ -741,6 +743,7 @@
       font-size: 15px;
       line-height: 1.8;
       text-align: left;
+      white-space: pre-wrap;
     }
 
     .acnhs-alert-body p {
