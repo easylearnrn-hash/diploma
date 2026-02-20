@@ -19,6 +19,7 @@ const ACNHS_HEADER_HTML = `
           <span class="help-arrow" aria-hidden="true"></span>
         </button>
         <div class="help-dropdown-content" role="menu">
+          <a href="academic-catalog.html" role="menuitem">Academic Catalog</a>
           <a href="index.html#programs" role="menuitem">Programs</a>
           <a href="#" role="menuitem" data-action="open-curriculum">Curriculum</a>
           <a href="index.html#simulation" role="menuitem">Simulation</a>
@@ -185,6 +186,13 @@ function wireHeaderInteractions(root) {
   // Apply now
   root.querySelectorAll('[data-action="apply-now"]').forEach(btn => {
     btn.addEventListener('click', () => {
+      // Fire GA4 key event
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'apply_now_click', {
+          button_location: 'header',
+          page_path: window.location.pathname
+        });
+      }
       // Match index behavior: open in popup window.
       window.open('admission-form.html', '_blank', 'width=1200,height=900,scrollbars=yes,resizable=yes');
     });

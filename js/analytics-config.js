@@ -11,9 +11,38 @@
  */
 
 const ACNHS_ANALYTICS = {
-  // Replace with your actual GA4 Measurement ID
-  MEASUREMENT_ID: 'G-XXXXXXXXXX',
-  
+  // GA4 Measurement ID — Armenian College of Nursing & Health Sciences
+  MEASUREMENT_ID: 'G-0DJ1793XW8',
+
+  // ── KEY CONVERSION EVENTS ─────────────────────────────────────────────────
+  // These map to GA4 Key Events (conversions) tracked in admin-analytics.html
+
+  trackApplyNowClick: function(location = 'unknown') {
+    this.trackEvent('apply_now_click', { button_location: location, page_path: window.location.pathname });
+  },
+
+  trackRequestInfoClick: function(location = 'unknown') {
+    this.trackEvent('request_info_click', { button_location: location, page_path: window.location.pathname });
+  },
+
+  trackLoginSubmit: function(method = 'email_password', role = 'unknown') {
+    this.trackEvent('login_submit', { method, role, page_path: window.location.pathname });
+  },
+
+  trackContactSubmit: function(topic = 'general') {
+    this.trackEvent('contact_submit', { form_location: 'contact_page', topic, page_path: window.location.pathname });
+  },
+
+  trackCallClick: function(number = '') {
+    this.trackEvent('call_click', { phone_number: number, page_path: window.location.pathname });
+  },
+
+  trackWhatsAppClick: function(number = '') {
+    this.trackEvent('whatsapp_click', { phone_number: number, page_path: window.location.pathname });
+  },
+
+  // ── GENERIC EVENT TRACKING ────────────────────────────────────────────────
+
   // Track custom events
   trackEvent: function(eventName, eventParams = {}) {
     if (typeof gtag !== 'undefined') {

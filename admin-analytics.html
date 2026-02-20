@@ -1,0 +1,2723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Analytics — ACNHS Admin</title>
+  <link rel="icon" type="image/png" href="assets/images/favicon-32.png">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <script src="js/acnhs-logo-base64.js"></script>
+  <!-- Chart.js for native charts (Phase 2 ready) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --navy-deep:    #020617;
+      --navy-primary: #0f172a;
+      --navy-light:   #1e293b;
+      --navy-border:  #334155;
+      --gold-primary: #c9a84c;
+      --gold-light:   #d4b56a;
+      --gold-dim:     rgba(201,168,76,0.35);
+      --gold-glow:    rgba(201,168,76,0.12);
+      --primary:      #c9a84c;
+      --primary-dark: #b8942f;
+      --bg-dark:      #020617;
+      --bg-card:      #0c1a32;
+      --bg-hover:     #16284a;
+      --text:         #e8edf5;
+      --text-muted:   #8a9ec0;
+      --border:       rgba(255,255,255,0.07);
+      --shadow:       rgba(0,0,0,0.5);
+      --green:        #22c55e;
+      --red:          #ef4444;
+      --amber:        #f59e0b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(ellipse at 15% 25%, rgba(201,168,76,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 80%, rgba(15,23,42,0.9) 0%, transparent 60%),
+        linear-gradient(160deg, #020a1a 0%, #0a1628 45%, #050d1e 100%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .main-content {
+      padding: 40px 44px 60px;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      animation: fadeUpIn 0.45s ease both;
+    }
+
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; left: 0;
+      width: 72px; height: 2px;
+      background: linear-gradient(90deg, var(--gold-primary), transparent);
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .header-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    .header-breadcrumb span { color: var(--gold-primary); }
+
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 6px;
+      font-weight: 400;
+    }
+
+    /* ── PHASE BADGE ── */
+    .phase-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      color: var(--gold-primary);
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    /* ── FILTERS BAR (sticky) ── */
+    .filters-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(2,8,20,0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px 20px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      animation: fadeUpIn 0.5s ease 0.1s both;
+    }
+
+    .filters-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-muted);
+      margin-right: 4px;
+      white-space: nowrap;
+    }
+
+    .date-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .date-pill {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .date-pill:hover {
+      background: rgba(201,168,76,0.08);
+      color: var(--text);
+      border-color: var(--gold-dim);
+    }
+
+    .date-pill.active {
+      background: var(--gold-glow);
+      color: var(--gold-primary);
+      border-color: var(--gold-dim);
+    }
+
+    .date-pill-custom {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .date-pill-custom input[type="date"] {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .date-pill-custom input[type="date"]:focus {
+      outline: none;
+      border-color: var(--gold-primary);
+    }
+
+    .compare-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+
+    .toggle-switch input { display: none; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,0.12);
+      border-radius: 99px;
+      transition: 0.3s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      top: 3px;
+      left: 3px;
+      transition: 0.3s;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+      background: var(--gold-primary);
+    }
+
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+    }
+
+    .toggle-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .filter-btn {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-btn:hover {
+      background: rgba(201,168,76,0.08);
+      color: var(--text);
+      border-color: var(--gold-dim);
+    }
+
+    /* ── SECTION TITLE ── */
+    .section-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title .icon {
+      font-size: 20px;
+    }
+
+    /* ── KPI CARDS ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      margin-bottom: 32px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px 22px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+      animation: fadeUpIn 0.5s ease both;
+    }
+
+    .kpi-card::before {
+      content: '';
+      position: absolute;
+      top: 0; right: 0;
+      width: 100px; height: 100px;
+      background: radial-gradient(circle, rgba(201,168,76,0.07), transparent);
+      pointer-events: none;
+    }
+
+    .kpi-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+      border-color: var(--gold-dim);
+    }
+
+    .kpi-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 14px;
+    }
+
+    .kpi-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .kpi-trend {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 8px;
+      border-radius: 6px;
+    }
+
+    .kpi-trend.up {
+      background: rgba(34,197,94,0.12);
+      color: var(--green);
+    }
+
+    .kpi-trend.down {
+      background: rgba(239,68,68,0.12);
+      color: var(--red);
+    }
+
+    .kpi-trend.neutral {
+      background: rgba(100,116,139,0.15);
+      color: var(--text-muted);
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .kpi-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ── CHARTS SECTION ── */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 1100px) {
+      .charts-grid { grid-template-columns: 1fr; }
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      animation: fadeUpIn 0.5s ease both;
+    }
+
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .chart-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .chart-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .chart-tabs {
+      display: flex;
+      gap: 4px;
+    }
+
+    .chart-tab {
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .chart-tab.active {
+      background: var(--gold-glow);
+      color: var(--gold-primary);
+      border-color: var(--gold-dim);
+    }
+
+    .chart-container {
+      position: relative;
+      height: 220px;
+    }
+
+    /* ── LOOKER STUDIO SECTION ── */
+    .looker-section {
+      margin-bottom: 32px;
+      animation: fadeUpIn 0.5s ease 0.15s both;
+    }
+
+    .looker-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+
+    .looker-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .looker-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .looker-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    .looker-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .looker-btn:hover {
+      background: var(--gold-glow);
+      color: var(--gold-primary);
+      border-color: var(--gold-dim);
+    }
+
+    .looker-btn.primary {
+      background: linear-gradient(135deg, var(--gold-primary), var(--primary-dark));
+      color: #020617;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .looker-btn.primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(201,168,76,0.3);
+    }
+
+    .looker-iframe-wrapper {
+      position: relative;
+      width: 100%;
+      min-height: 700px;
+      background: #060e1f;
+    }
+
+    .looker-iframe-wrapper iframe {
+      width: 100%;
+      height: 700px;
+      border: none;
+      display: block;
+    }
+
+    .looker-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 700px;
+      padding: 60px 40px;
+      text-align: center;
+      gap: 20px;
+    }
+
+    .looker-placeholder-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 20px;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+    }
+
+    .looker-placeholder h3 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .looker-placeholder p {
+      color: var(--text-muted);
+      font-size: 14px;
+      max-width: 480px;
+      line-height: 1.7;
+    }
+
+    .looker-setup-steps {
+      text-align: left;
+      background: rgba(201,168,76,0.05);
+      border: 1px solid var(--gold-dim);
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 560px;
+      width: 100%;
+    }
+
+    .looker-setup-steps h4 {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--gold-primary);
+      margin-bottom: 16px;
+    }
+
+    .setup-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .setup-step:last-child { margin-bottom: 0; }
+
+    .step-num {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--gold-primary);
+      color: #020617;
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-text {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .step-text strong { color: var(--text); }
+
+    .step-text code {
+      background: rgba(201,168,76,0.1);
+      border: 1px solid var(--gold-dim);
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      color: var(--gold-light);
+    }
+
+    .embed-url-input {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+
+    .embed-url-input:focus {
+      outline: none;
+      border-color: var(--gold-primary);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.1);
+    }
+
+    .save-embed-btn {
+      margin-top: 12px;
+      padding: 10px 20px;
+      background: linear-gradient(135deg, var(--gold-primary), var(--primary-dark));
+      color: #020617;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .save-embed-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(201,168,76,0.3);
+    }
+
+    /* ── TABLES SECTION ── */
+    .tables-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    @media (max-width: 1100px) {
+      .tables-grid { grid-template-columns: 1fr; }
+    }
+
+    .table-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      animation: fadeUpIn 0.5s ease both;
+    }
+
+    .table-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .table-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .table-title .emoji { font-size: 16px; }
+
+    .table-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 99px;
+      background: var(--gold-glow);
+      color: var(--gold-primary);
+      border: 1px solid var(--gold-dim);
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .data-table th {
+      padding: 10px 22px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--text-muted);
+      text-align: left;
+      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 12px 22px;
+      font-size: 13px;
+      color: var(--text);
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+      vertical-align: middle;
+    }
+
+    .data-table tr:last-child td { border-bottom: none; }
+
+    .data-table tr:hover td {
+      background: rgba(201,168,76,0.03);
+    }
+
+    .mini-bar-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mini-bar-track {
+      flex: 1;
+      height: 5px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 99px;
+      overflow: hidden;
+      max-width: 80px;
+    }
+
+    .mini-bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--gold-primary), var(--gold-light));
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .pill.green { background: rgba(34,197,94,0.12); color: var(--green); }
+    .pill.red   { background: rgba(239,68,68,0.12);  color: var(--red);   }
+    .pill.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .pill.blue  { background: rgba(59,130,246,0.18); color: #93c5fd; }
+
+    .rank-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      background: rgba(201,168,76,0.08);
+      color: var(--text-muted);
+      font-size: 10px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .rank-num.top { background: var(--gold-glow); color: var(--gold-primary); }
+
+    /* ── DEVICE CARDS ── */
+    .device-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      padding: 20px;
+    }
+
+    .device-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 16px;
+      text-align: center;
+      transition: all 0.2s;
+    }
+
+    .device-card:hover {
+      background: var(--gold-glow);
+      border-color: var(--gold-dim);
+    }
+
+    .device-icon { font-size: 28px; margin-bottom: 8px; }
+
+    .device-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .device-pct {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--gold-primary);
+    }
+
+    .device-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    /* ── CONVERSIONS SECTION ── */
+    .conversions-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .conv-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      animation: fadeUpIn 0.5s ease both;
+      transition: all 0.3s;
+    }
+
+    .conv-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--gold-dim);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .conv-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .conv-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      margin-bottom: 4px;
+    }
+
+    .conv-value {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .conv-trend {
+      font-size: 11px;
+      color: var(--green);
+      font-weight: 600;
+      margin-top: 4px;
+    }
+
+    /* ── PHASE 2 PANEL ── */
+    .phase2-panel {
+      background: linear-gradient(135deg, rgba(201,168,76,0.06) 0%, rgba(201,168,76,0.02) 100%);
+      border: 1px solid var(--gold-dim);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 32px;
+      animation: fadeUpIn 0.5s ease both;
+    }
+
+    .phase2-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .phase2-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .phase2-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      max-width: 560px;
+      line-height: 1.7;
+    }
+
+    .phase2-features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .phase2-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 10px;
+    }
+
+    .phase2-feature .feat-icon {
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .phase2-feature .feat-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.55;
+    }
+
+    .phase2-feature .feat-text strong { color: var(--text); }
+
+    /* ── ERROR STATE ── */
+    .error-state {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+      padding: 48px;
+      text-align: center;
+    }
+
+    .error-state.visible { display: flex; }
+
+    /* ── ANIMATIONS ── */
+    @keyframes fadeUpIn {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes shimmer {
+      0%   { opacity: 0.4; }
+      50%  { opacity: 0.8; }
+      100% { opacity: 0.4; }
+    }
+
+    .skeleton {
+      background: rgba(255,255,255,0.06);
+      border-radius: 6px;
+      animation: shimmer 1.5s ease-in-out infinite;
+    }
+
+    /* ── LOADING OVERLAY ── */
+    .loading-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,20,0.8);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.4s;
+    }
+
+    .loading-overlay.hidden { opacity: 0; pointer-events: none; }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(201,168,76,0.2);
+      border-top-color: var(--gold-primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .main-content { padding: 20px 16px; }
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .conversions-grid { grid-template-columns: repeat(2, 1fr); }
+      .device-grid { grid-template-columns: 1fr; }
+      h1 { font-size: 24px; }
+      .filters-bar { position: relative; top: unset; }
+      .compare-toggle { margin-left: 0; }
+    }
+
+    @media (max-width: 480px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .conversions-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── DETAIL DRILL-DOWN MODAL ── */
+    .detail-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,20,0.82);
+      z-index: 20000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+    .detail-modal-overlay.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .detail-modal {
+      background: #0c1a32;
+      border: 1px solid rgba(201,168,76,0.25);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 780px;
+      max-height: 82vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.7);
+      transform: translateY(24px) scale(0.97);
+      transition: transform 0.28s cubic-bezier(0.34,1.56,0.64,1), opacity 0.25s ease;
+    }
+    .detail-modal-overlay.open .detail-modal {
+      transform: translateY(0) scale(1);
+    }
+    .detail-modal-head {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 22px 26px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      flex-shrink: 0;
+    }
+    .detail-modal-head-icon {
+      width: 46px; height: 46px;
+      border-radius: 12px;
+      background: rgba(201,168,76,0.1);
+      border: 1px solid rgba(201,168,76,0.25);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; flex-shrink: 0;
+    }
+    .detail-modal-title {
+      flex: 1;
+    }
+    .detail-modal-title h2 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 0 0 2px;
+    }
+    .detail-modal-title p {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .detail-modal-close {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-muted);
+      font-size: 18px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .detail-modal-close:hover { background: rgba(239,68,68,0.15); color: var(--red); border-color: var(--red); }
+    .detail-modal-summary {
+      display: flex;
+      gap: 16px;
+      padding: 16px 26px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .detail-stat {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+      padding: 10px 16px;
+      min-width: 100px;
+    }
+    .detail-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .detail-stat-value { font-size: 18px; font-weight: 700; color: var(--text); }
+    .detail-stat-value.gold { color: var(--gold-primary); }
+    .detail-modal-body {
+      overflow-y: auto;
+      flex: 1;
+      padding: 0;
+    }
+    .detail-modal-body::-webkit-scrollbar { width: 6px; }
+    .detail-modal-body::-webkit-scrollbar-track { background: transparent; }
+    .detail-modal-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 3px; }
+    .detail-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .detail-table thead th {
+      position: sticky;
+      top: 0;
+      background: #0a1628;
+      padding: 10px 16px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      color: var(--gold-primary);
+      border-bottom: 1px solid rgba(201,168,76,0.15);
+      z-index: 2;
+      transition: background 0.15s, color 0.15s;
+    }
+    .detail-table thead th:hover {
+      background: rgba(201,168,76,0.07);
+      color: #e8d9a0;
+    }
+    .detail-table thead th.sort-active {
+      background: rgba(201,168,76,0.1);
+      color: #f0e0a0;
+    }
+    .detail-table thead th.sort-active .sort-arrow {
+      opacity: 1 !important;
+      color: var(--gold-primary);
+    }
+    .detail-table tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .detail-table tbody tr:hover { background: rgba(201,168,76,0.04); }
+    .detail-table tbody td {
+      padding: 10px 16px;
+      color: var(--text);
+      vertical-align: middle;
+    }
+    .detail-table .ts-cell {
+      color: var(--text-muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .detail-table .page-cell {
+      font-family: monospace;
+      color: #7dd3fc;
+      font-size: 11px;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .detail-table .num-cell {
+      font-weight: 700;
+      color: var(--text);
+    }
+    .detail-pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 600;
+    }
+    .detail-pill.gold { background: rgba(201,168,76,0.12); color: var(--gold-primary); }
+    .detail-pill.blue { background: rgba(59,130,246,0.12); color: #7dd3fc; }
+    .detail-pill.green { background: rgba(34,197,94,0.12); color: var(--green); }
+    .detail-pill.purple { background: rgba(167,139,250,0.12); color: #c4b5fd; }
+    .detail-pill.amber { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .detail-pill.red { background: rgba(239,68,68,0.12); color: var(--red); }
+    .detail-modal-foot {
+      padding: 14px 26px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .detail-modal-foot span { font-size: 11px; color: var(--text-muted); }
+    .detail-modal-foot button {
+      padding: 7px 18px;
+      border-radius: 8px;
+      border: 1px solid rgba(201,168,76,0.3);
+      background: rgba(201,168,76,0.08);
+      color: var(--gold-primary);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .detail-modal-foot button:hover { background: rgba(201,168,76,0.18); }
+    /* kpi card clickable */
+    .kpi-card.clickable { cursor: pointer; }
+    .kpi-card.clickable::after {
+      content: '↗';
+      position: absolute;
+      bottom: 14px; right: 16px;
+      font-size: 13px;
+      color: rgba(201,168,76,0.35);
+      transition: color 0.2s;
+    }
+    .kpi-card.clickable:hover::after { color: var(--gold-primary); }
+    .conv-card.clickable { cursor: pointer; position: relative; }
+    .conv-card.clickable::after {
+      content: '↗';
+      position: absolute;
+      bottom: 10px; right: 12px;
+      font-size: 12px;
+      color: rgba(201,168,76,0.35);
+      transition: color 0.2s;
+    }
+    .conv-card.clickable:hover::after { color: var(--gold-primary); }
+    @media (max-width: 600px) {
+      .detail-modal { max-height: 90vh; }
+      .detail-modal-summary { gap: 10px; }
+      .detail-stat { min-width: 80px; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar injected by admin-sidebar.js -->
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loadingOverlay">
+    <div style="text-align:center;">
+      <div class="spinner"></div>
+      <div style="margin-top:16px;font-size:13px;color:var(--text-muted);">Loading analytics…</div>
+    </div>
+  </div>
+
+  <!-- ═══ DETAIL DRILL-DOWN MODAL ═══ -->
+  <div class="detail-modal-overlay" id="detailModalOverlay" onclick="handleDetailOverlayClick(event)">
+    <div class="detail-modal" id="detailModal">
+      <div class="detail-modal-head">
+        <div class="detail-modal-head-icon" id="detailModalIcon">📄</div>
+        <div class="detail-modal-title">
+          <h2 id="detailModalTitle">Detail</h2>
+          <p id="detailModalSubtitle">Drill-down data</p>
+        </div>
+        <button class="detail-modal-close" onclick="closeDetailModal()">×</button>
+      </div>
+      <div class="detail-modal-summary" id="detailModalSummary"></div>
+      <div class="detail-modal-body" id="detailModalBody"></div>
+      <div class="detail-modal-foot">
+        <span id="detailModalFootNote">Showing demo data · GA4 live data requires Phase 2 setup</span>
+        <button onclick="closeDetailModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <main class="main-content">
+
+    <!-- HEADER -->
+    <header>
+      <div class="header-top">
+        <div>
+          <div class="header-breadcrumb">Admin Portal <span>›</span> Analytics</div>
+          <h1>📊 Analytics Dashboard</h1>
+          <p class="subtitle">Website traffic, user engagement, conversions &amp; content performance</p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+          <div class="phase-badge">📡 Phase 1 — Looker Studio</div>
+          <div style="font-size:11px;color:var(--text-muted);" id="lastUpdated">Data via Google Analytics 4</div>
+        </div>
+      </div>
+    </header>
+
+    <!-- STICKY FILTERS BAR -->
+    <div class="filters-bar" id="filtersBar">
+      <span class="filters-label">📅 Range:</span>
+      <div class="date-pills">
+        <button class="date-pill" data-range="today"   onclick="setDateRange('today')">Today</button>
+        <button class="date-pill active" data-range="7d" onclick="setDateRange('7d')">7 Days</button>
+        <button class="date-pill" data-range="28d"  onclick="setDateRange('28d')">28 Days</button>
+        <button class="date-pill" data-range="90d"  onclick="setDateRange('90d')">90 Days</button>
+        <button class="date-pill" data-range="custom" onclick="setDateRange('custom')">Custom</button>
+      </div>
+
+      <div class="date-pill-custom" id="customDatePicker" style="display:none;">
+        <input type="date" id="customStart" title="Start date">
+        <span style="color:var(--text-muted);font-size:12px;">→</span>
+        <input type="date" id="customEnd" title="End date">
+        <button class="date-pill active" onclick="applyCustomRange()" style="margin-left:4px;">Apply</button>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span class="toggle-label">Compare Period</span>
+        <label class="toggle-switch" aria-label="Compare to previous period">
+          <input type="checkbox" id="compareToggle" onchange="toggleCompare(this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <button class="filter-btn" onclick="openFilterModal()" title="Advanced filters">
+        ⚙️ Filters
+      </button>
+
+      <button class="filter-btn" onclick="refreshData()" title="Refresh data" id="refreshBtn">
+        🔄 Refresh
+      </button>
+    </div>
+
+    <!-- KPI CARDS -->
+    <div class="section-title">
+      <span class="icon">📈</span> Key Performance Indicators
+      <span id="periodLabel" style="font-size:12px;font-weight:600;color:var(--text-muted);font-family:'Inter',sans-serif;margin-left:4px;">— Last 7 days</span>
+    </div>
+
+    <div class="kpi-grid" id="kpiGrid">
+      <!-- Cards injected by JS -->
+    </div>
+
+    <!-- CONVERSION EVENTS -->
+    <div class="section-title" style="margin-bottom:14px;">
+      <span class="icon">🎯</span> Key Conversions (GA4 Events)
+    </div>
+    <div class="conversions-grid" id="conversionsGrid">
+      <!-- Injected by JS -->
+    </div>
+
+    <!-- CHARTS -->
+    <div class="section-title">
+      <span class="icon">📉</span> Traffic &amp; Engagement Trends
+    </div>
+
+    <div class="charts-grid">
+      <!-- Users / Sessions Over Time -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Users &amp; Sessions Over Time</div>
+            <div class="chart-subtitle">Daily trend for selected period</div>
+          </div>
+          <div class="chart-tabs">
+            <button class="chart-tab active" onclick="switchMetric('users', this)">Users</button>
+            <button class="chart-tab" onclick="switchMetric('sessions', this)">Sessions</button>
+            <button class="chart-tab" onclick="switchMetric('views', this)">Views</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Traffic Channel Mix -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <div class="chart-title">Traffic Channel Mix</div>
+            <div class="chart-subtitle">Source breakdown</div>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="channelChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Events / Conversions Trend -->
+    <div class="chart-card" style="margin-bottom:32px;">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">🎯 Conversions Trend</div>
+          <div class="chart-subtitle">apply_now_click · request_info · login_submit · contact_submit</div>
+        </div>
+        <div class="chart-tabs">
+          <button class="chart-tab active" onclick="switchConvMetric('all',this)">All Events</button>
+          <button class="chart-tab" onclick="switchConvMetric('apply',this)">Apply</button>
+          <button class="chart-tab" onclick="switchConvMetric('login',this)">Login</button>
+        </div>
+      </div>
+      <div class="chart-container" style="height:180px;">
+        <canvas id="convChart"></canvas>
+      </div>
+    </div>
+
+    <!-- LOOKER STUDIO EMBED (Phase 1 core) -->
+    <div class="looker-section">
+      <div class="section-title">
+        <span class="icon">📊</span> Full GA4 Dashboard (Looker Studio)
+        <div class="phase-badge" style="margin-left:auto;font-size:10px;">LIVE DATA</div>
+      </div>
+
+      <div class="looker-card" id="lookerCard">
+        <div class="looker-header">
+          <div class="looker-title">
+            📊 Looker Studio Report
+            <span id="lookerStatus" style="font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;background:rgba(245,158,11,0.12);color:var(--amber);">Not configured</span>
+          </div>
+          <div class="looker-actions">
+            <button class="looker-btn" onclick="toggleLookerConfig()" id="configToggleBtn">⚙️ Configure</button>
+            <a id="openLookerBtn" href="#" target="_blank" class="looker-btn" style="display:none;">↗ Open in Looker</a>
+            <button class="looker-btn primary" onclick="refreshLooker()">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <!-- Config Panel (collapsed by default) -->
+        <div id="lookerConfigPanel" style="display:none;padding:24px;border-bottom:1px solid var(--border);background:rgba(201,168,76,0.03);">
+          <div class="looker-setup-steps">
+            <h4>⚡ Quick Setup — 3 Steps</h4>
+            <div style="margin-bottom:16px;padding:10px 14px;border-radius:8px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.28);font-size:12px;color:var(--gold-primary);display:flex;align-items:center;gap:8px;">
+              <span style="font-size:15px;">🔑</span>
+              <span>Use <strong>acnhs.2026@gmail.com</strong> for all Looker Studio steps — report creation, GA4 data source connection, and share settings.</span>
+            </div>
+            <div class="setup-step">
+              <div class="step-num">1</div>
+              <div class="step-text">
+                Sign in to <strong><a href="https://lookerstudio.google.com" target="_blank" style="color:var(--gold-primary);">Looker Studio</a></strong> as <strong>acnhs.2026@gmail.com</strong> → Create Report → Connect to <strong>Google Analytics 4</strong> (select the ACNHS property for <code>G-0DJ1793XW8</code>).
+              </div>
+            </div>
+            <div class="setup-step">
+              <div class="step-num">2</div>
+              <div class="step-text">
+                Build your report. Then click <strong>Share → Embed Report</strong>. Set access to <em>"Anyone with the link can view"</em> (or restrict to <strong>acnhs.2026@gmail.com</strong>). Copy the <code>src=""</code> URL from the iframe embed code.
+              </div>
+            </div>
+            <div class="setup-step">
+              <div class="step-num">3</div>
+              <div class="step-text">
+                Paste the embed URL below and click <strong>Save &amp; Embed</strong>. The dashboard will load inside this page. If the iframe shows an access error, confirm the report sharing settings in Looker Studio under the <strong>acnhs.2026@gmail.com</strong> account.
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:20px;">
+            <label for="lookerEmbedUrl" style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:6px;">Looker Studio Embed URL</label>
+            <input
+              type="url"
+              id="lookerEmbedUrl"
+              class="embed-url-input"
+              placeholder="https://lookerstudio.google.com/embed/reporting/XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX/page/XXXXX"
+            >
+            <div style="display:flex;gap:10px;margin-top:10px;">
+              <button class="save-embed-btn" onclick="saveLookerUrl()">💾 Save &amp; Embed</button>
+              <button class="save-embed-btn" style="background:rgba(255,255,255,0.05);color:var(--text-muted);border:1px solid var(--border);" onclick="clearLookerUrl()">✕ Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Iframe or Placeholder -->
+        <div class="looker-iframe-wrapper" id="lookerContent">
+          <!-- Placeholder shown until URL is configured -->
+          <div class="looker-placeholder" id="lookerPlaceholder">
+            <div class="looker-placeholder-icon">📊</div>
+            <h3>Connect Your Looker Studio Report</h3>
+            <p>Embed your GA4 Looker Studio report for a full interactive analytics experience — traffic breakdown, conversion funnels, audience segments, and more. No API keys needed.</p>
+            <p style="font-size:12px;color:var(--gold-primary);margin-top:8px;">⚠️ Report must be created and shared via <strong>acnhs.2026@gmail.com</strong></p>
+            <button class="save-embed-btn" onclick="toggleLookerConfig()">⚙️ Configure Embed URL</button>
+          </div>
+          <!-- iframe injected dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- BREAKDOWN TABLES -->
+    <div class="section-title">
+      <span class="icon">📋</span> Detailed Breakdown Tables
+    </div>
+
+    <div class="tables-grid">
+      <!-- Top Pages -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title"><span class="emoji">📄</span> Top Pages</div>
+          <span class="table-badge" id="topPagesBadge">—</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:32px;">#</th>
+              <th>Page</th>
+              <th>Views</th>
+              <th>Eng. Rate</th>
+            </tr>
+          </thead>
+          <tbody id="topPagesBody">
+            <tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px;">Showing demo data — connect GA4 for live data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Traffic Sources -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title"><span class="emoji">🔗</span> Traffic Sources</div>
+          <span class="table-badge" id="sourcesBadge">—</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Source / Medium</th>
+              <th>Users</th>
+              <th>Conv.</th>
+            </tr>
+          </thead>
+          <tbody id="sourcesBody">
+            <tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px;">Showing demo data — connect GA4 for live data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Countries -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title"><span class="emoji">🌍</span> Countries &amp; Cities</div>
+          <span class="table-badge" id="countriesBadge">—</span>
+        </div>
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Location</th>
+              <th>Users</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody id="countriesBody">
+            <tr><td colspan="4" style="text-align:center;padding:28px;color:var(--text-muted);font-size:13px;">Showing demo data — connect GA4 for live data</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Device & Browser -->
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title"><span class="emoji">💻</span> Devices &amp; Browsers</div>
+        </div>
+        <div class="device-grid" id="deviceGrid">
+          <!-- Injected by JS -->
+        </div>
+        <table class="data-table" style="border-top:1px solid var(--border);">
+          <thead>
+            <tr>
+              <th>Browser</th>
+              <th>Users</th>
+              <th>%</th>
+            </tr>
+          </thead>
+          <tbody id="browsersBody">
+            <tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text-muted);font-size:13px;">Demo data</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PHASE 2 UPGRADE PANEL -->
+    <div class="phase2-panel">
+      <div class="phase2-header">
+        <div>
+          <div class="phase2-title">🚀 Phase 2 — Native GA4 Dashboard</div>
+          <div class="phase2-desc">Upgrade to server-side GA4 Data API integration for fully native charts, custom KPIs, and real-time data — all rendered inside this page without an iframe. No credentials are ever exposed to the browser.</div>
+        </div>
+        <div class="phase-badge" style="background:#0d2554;border-color:#2563eb;color:#e0e9ff;">🔬 Phase 2</div>
+      </div>
+      <div class="phase2-features">
+        <div class="phase2-feature">
+          <span class="feat-icon">⚡</span>
+          <div class="feat-text"><strong>Supabase Edge Function</strong><br>Secure server-side proxy: <code>GET /api/analytics/summary</code> fetches GA4 Data API and returns JSON — no keys in browser.</div>
+        </div>
+        <div class="phase2-feature">
+          <span class="feat-icon">📊</span>
+          <div class="feat-text"><strong>Native Chart.js Rendering</strong><br>Chart.js is already loaded on this page. Replace demo data functions with real API calls to get live KPI cards and charts.</div>
+        </div>
+        <div class="phase2-feature">
+          <span class="feat-icon">🔄</span>
+          <div class="feat-text"><strong>Real-time Comparison</strong><br>Date range vs. previous period delta calculations shown on each KPI card with ↑↓ trend indicators.</div>
+        </div>
+        <div class="phase2-feature">
+          <span class="feat-icon">🎯</span>
+          <div class="feat-text"><strong>Conversion Funnels</strong><br>Track apply_now_click → admission_form_submit → acceptance_letter_viewed as a full funnel in the native UI.</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Advanced Filter Modal -->
+  <div id="filterModal" style="display:none;position:fixed;inset:0;background:rgba(2,8,20,0.78);z-index:10000;align-items:center;justify-content:center;backdrop-filter:blur(8px);">
+    <div style="background:linear-gradient(180deg,#071b30 0%,#04111f 100%);border:1px solid rgba(201,168,76,0.28);border-radius:18px;padding:32px;max-width:480px;width:90%;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;">
+        <h3 style="font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:var(--text);">⚙️ Advanced Filters</h3>
+        <button onclick="closeFilterModal()" style="width:32px;height:32px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.25);border-radius:8px;color:var(--text-muted);font-size:18px;cursor:pointer;">×</button>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <label for="filterCountry" style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">Country</label>
+        <select id="filterCountry" style="width:100%;background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:8px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px;">
+          <option value="">All Countries</option>
+          <option value="AM">Armenia</option>
+          <option value="US">United States</option>
+          <option value="RU">Russia</option>
+          <option value="FR">France</option>
+          <option value="DE">Germany</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <p style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">Device Category</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="date-pill active" id="devAll"    onclick="setDeviceFilter('all', this)">All</button>
+          <button class="date-pill"        id="devMobile" onclick="setDeviceFilter('mobile', this)">📱 Mobile</button>
+          <button class="date-pill"        id="devDesktop"onclick="setDeviceFilter('desktop', this)">💻 Desktop</button>
+          <button class="date-pill"        id="devTablet" onclick="setDeviceFilter('tablet', this)">📟 Tablet</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:24px;">
+        <p style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-muted);margin-bottom:8px;">Traffic Channel</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="date-pill active" onclick="setChannelFilter('all', this)">All</button>
+          <button class="date-pill"        onclick="setChannelFilter('organic', this)">🔍 Organic</button>
+          <button class="date-pill"        onclick="setChannelFilter('direct', this)">🔗 Direct</button>
+          <button class="date-pill"        onclick="setChannelFilter('social', this)">📱 Social</button>
+          <button class="date-pill"        onclick="setChannelFilter('referral', this)">↗ Referral</button>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;justify-content:flex-end;">
+        <button onclick="resetFilters()" style="padding:10px 20px;border-radius:8px;border:1px solid var(--border);background:rgba(255,255,255,0.04);color:var(--text-muted);font-weight:600;font-size:13px;cursor:pointer;">Reset All</button>
+        <button onclick="applyFilters()" style="padding:10px 20px;border-radius:8px;border:none;background:linear-gradient(135deg,var(--gold-primary),var(--primary-dark));color:#020617;font-weight:700;font-size:13px;cursor:pointer;">Apply Filters</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/admin-sidebar.js"></script>
+  <script>
+    // ============================================================
+    // AUTH GUARD
+    // ============================================================
+    const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+    const isAdmin    = sessionStorage.getItem('isAdmin')    === 'true' || localStorage.getItem('isAdmin')    === 'true';
+
+    if (!isLoggedIn || !isAdmin) {
+      window.location.href = 'login.html';
+    }
+
+    // ============================================================
+    // STATE
+    // ============================================================
+    let currentRange   = '7d';
+    let compareEnabled = false;
+    let deviceFilter   = 'all';
+    let channelFilter  = 'all';
+    let countryFilter  = '';
+
+    // ============================================================
+    // DEMO DATA (Phase 1 — replace with GA4 Data API in Phase 2)
+    // ============================================================
+
+    function generateDemoTimeSeries(days, base, variance) {
+      const data = [];
+      const labels = [];
+      const now = new Date();
+      for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        labels.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+        data.push(Math.round(base + (Math.random() - 0.5) * variance));
+      }
+      return { labels, data };
+    }
+
+    const DEMO_KPI = {
+      '7d':  { users: 312, newUsers: 218, sessions: 489, views: 1204, engRate: '64%', avgTime: '2m 38s', events: 3872, conversions: 28 },
+      '28d': { users: 1241, newUsers: 870, sessions: 1987, views: 4830, engRate: '61%', avgTime: '2m 51s', events: 15280, conversions: 94 },
+      '90d': { users: 3850, newUsers: 2640, sessions: 6120, views: 14700, engRate: '59%', avgTime: '2m 44s', events: 48200, conversions: 287 },
+      'today': { users: 47, newUsers: 31, sessions: 62, views: 178, engRate: '68%', avgTime: '2m 14s', events: 540, conversions: 4 },
+    };
+
+    const DEMO_CONV = {
+      '7d':  { apply_now: 16, request_info: 8, login: 42, contact: 4, call: 7, whatsapp: 3 },
+      '28d': { apply_now: 63, request_info: 31, login: 187, contact: 18, call: 24, whatsapp: 11 },
+      '90d': { apply_now: 191, request_info: 94, login: 570, contact: 52, call: 74, whatsapp: 37 },
+      'today': { apply_now: 2, request_info: 1, login: 7, contact: 0, call: 1, whatsapp: 0 },
+    };
+
+    const DEMO_TOP_PAGES = [
+      { page: '/index.html',            views: 4120, engRate: '68%' },
+      { page: '/admission-form.html',   views: 2340, engRate: '72%' },
+      { page: '/about.html',            views: 1180, engRate: '58%' },
+      { page: '/academic-catalog.html', views: 890,  engRate: '61%' },
+      { page: '/login.html',            views: 820,  engRate: '55%' },
+      { page: '/contact.html',          views: 640,  engRate: '63%' },
+      { page: '/hub.html',              views: 510,  engRate: '79%' },
+      { page: '/studies-portal.html',   views: 430,  engRate: '81%' },
+    ];
+
+    const DEMO_SOURCES = [
+      { source: 'google / organic',   users: 1520, conv: 48 },
+      { source: '(direct) / (none)',  users:  940, conv: 31 },
+      { source: 'facebook / social',  users:  380, conv: 9  },
+      { source: 'instagram / social', users:  210, conv: 5  },
+      { source: 't.me / referral',    users:  148, conv: 4  },
+      { source: 'email / email',      users:  104, conv: 7  },
+    ];
+
+    const DEMO_COUNTRIES = [
+      { loc: '🇦🇲 Armenia',       users: 2140, pct: 56 },
+      { loc: '🇷🇺 Russia',        users:  610, pct: 16 },
+      { loc: '🇺🇸 United States', users:  380, pct: 10 },
+      { loc: '🇫🇷 France',        users:  210, pct:  5 },
+      { loc: '🇩🇪 Germany',       users:  168, pct:  4 },
+      { loc: '🇬🇧 United Kingdom',users:  120, pct:  3 },
+      { loc: '🌍 Other',          users:  222, pct:  6 },
+    ];
+
+    const DEMO_DEVICES = [
+      { name: 'Mobile',  icon: '📱', pct: 58, count: 2214 },
+      { name: 'Desktop', icon: '💻', pct: 36, count: 1376 },
+      { name: 'Tablet',  icon: '📟', pct:  6, count:  230 },
+    ];
+
+    const DEMO_BROWSERS = [
+      { name: 'Chrome',  users: 2180, pct: 57 },
+      { name: 'Safari',  users:  960, pct: 25 },
+      { name: 'Firefox', users:  380, pct: 10 },
+      { name: 'Edge',    users:  220, pct:  6 },
+      { name: 'Other',   users:   80, pct:  2 },
+    ];
+
+    const DEMO_CHANNELS = {
+      labels: ['Organic', 'Direct', 'Social', 'Referral', 'Email'],
+      data:   [40, 25, 16, 12, 7],
+      colors: ['#c9a84c','#3b82f6','#a78bfa','#34d399','#f59e0b'],
+    };
+
+    // ============================================================
+    // DEMO DRILL-DOWN DATA
+    // ============================================================
+    // Helper — generates realistic timestamps going back N days from now
+    function makeDemoTimestamps(count, maxDaysAgo) {
+      const now = Date.now();
+      const out = [];
+      for (let i = 0; i < count; i++) {
+        const msBefore = Math.random() * maxDaysAgo * 86400000;
+        out.push(new Date(now - msBefore));
+      }
+      return out.sort((a, b) => b - a); // newest first
+    }
+
+    function fmtTs(d) {
+      return d.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+        + ' · ' + d.toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    }
+
+    const PAGE_LIST = [
+      '/index.html', '/admission-form.html', '/about.html',
+      '/academic-catalog.html', '/login.html', '/contact.html',
+      '/hub.html', '/studies-portal.html', '/acceptance-letter.html',
+      '/student-page.html', '/teacher.html', '/verify-transcript.html',
+    ];
+    const COUNTRY_LIST = ['Armenia 🇦🇲','Russia 🇷🇺','United States 🇺🇸','France 🇫🇷','Germany 🇩🇪','UK 🇬🇧','Other 🌍'];
+    const DEVICE_LIST  = ['Mobile 📱','Desktop 💻','Tablet 📟'];
+    const SOURCE_LIST  = ['google / organic','(direct) / (none)','facebook / social','instagram / social','t.me / referral','email / email'];
+    const BROWSER_LIST = ['Chrome','Safari','Firefox','Edge'];
+
+    function rnd(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+    function rndInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+    // Builds generic page-view rows
+    function buildPageViewRows(count, maxDays) {
+      const ts = makeDemoTimestamps(count, maxDays);
+      return ts.map(d => ({
+        ts: d,
+        page: rnd(PAGE_LIST),
+        duration: rndInt(20, 380) + 's',
+        device: rnd(DEVICE_LIST),
+        country: rnd(COUNTRY_LIST),
+        source: rnd(SOURCE_LIST),
+      }));
+    }
+
+    // Builds generic session rows
+    function buildSessionRows(count, maxDays) {
+      const ts = makeDemoTimestamps(count, maxDays);
+      return ts.map(d => ({
+        ts: d,
+        entry: rnd(PAGE_LIST),
+        pages: rndInt(1, 9),
+        duration: rndInt(25, 420) + 's',
+        device: rnd(DEVICE_LIST),
+        source: rnd(SOURCE_LIST),
+        engaged: Math.random() > 0.35,
+      }));
+    }
+
+    // Builds conversion event rows
+    function buildConvRows(count, maxDays, eventName) {
+      const ts = makeDemoTimestamps(count, maxDays);
+      return ts.map(d => ({
+        ts: d,
+        event: eventName,
+        page: rnd(PAGE_LIST),
+        device: rnd(DEVICE_LIST),
+        country: rnd(COUNTRY_LIST),
+      }));
+    }
+
+    // Builds user rows
+    function buildUserRows(count, maxDays, newOnly) {
+      const ts = makeDemoTimestamps(count, maxDays);
+      return ts.map((d, i) => ({
+        ts: d,
+        userId: 'usr_' + Math.random().toString(36).substr(2,8),
+        country: rnd(COUNTRY_LIST),
+        device: rnd(DEVICE_LIST),
+        sessions: newOnly ? 1 : rndInt(1, 6),
+        isNew: newOnly ? true : Math.random() > 0.6,
+      }));
+    }
+
+    // Determines maxDays for current range
+    function rangeDays() {
+      return currentRange === 'today' ? 1 : currentRange === '7d' ? 7 : currentRange === '28d' ? 28 : 90;
+    }
+
+    // ============================================================
+    // DETAIL MODAL FUNCTIONS
+    // ============================================================
+    function openKpiModal(type) {
+      const days = rangeDays();
+      const d = DEMO_KPI[currentRange] || DEMO_KPI['7d'];
+      let icon, title, subtitle, summaryStats, cols, rows;
+
+      if (type === 'pageviews') {
+        rows = buildPageViewRows(Math.min(d.views, 200), days);
+        icon = '📄'; title = 'Page Views'; subtitle = 'All page impression events — newest first';
+        summaryStats = [
+          { label:'Total Views', value: d.views.toLocaleString(), gold: true },
+          { label:'Unique Pages', value: PAGE_LIST.length },
+          { label:'Top Page', value: '/index.html' },
+          { label:'Period', value: currentRange === 'today' ? 'Today' : currentRange === '7d' ? '7 Days' : currentRange === '28d' ? '28 Days' : '90 Days' },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'page',    label:'Page',          type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
+          { key:'duration',label:'Duration',      type:'num',    render: r => `<span class="num-cell">${r.duration}</span>` },
+          { key:'device',  label:'Device',        type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'country', label:'Country',       type:'string', render: r => r.country },
+          { key:'source',  label:'Source',        type:'string', render: r => `<span style="font-size:10px;color:var(--text-muted);">${r.source}</span>` },
+        ];
+
+      } else if (type === 'sessions') {
+        rows = buildSessionRows(Math.min(d.sessions, 150), days);
+        icon = '📊'; title = 'Sessions'; subtitle = 'All site sessions — newest first';
+        summaryStats = [
+          { label:'Total Sessions', value: d.sessions.toLocaleString(), gold: true },
+          { label:'Engaged', value: Math.round(d.sessions * 0.64).toLocaleString() },
+          { label:'Avg Duration', value: d.avgTime },
+          { label:'Bounce Rate', value: '36%' },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'entry',   label:'Entry Page',   type:'string', render: r => `<span class="page-cell">${r.entry}</span>` },
+          { key:'pages',   label:'Pages',         type:'num',    render: r => `<span class="num-cell">${r.pages}</span>` },
+          { key:'duration',label:'Duration',      type:'num',    render: r => r.duration },
+          { key:'device',  label:'Device',        type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'source',  label:'Source',        type:'string', render: r => `<span style="font-size:10px;color:var(--text-muted);">${r.source}</span>` },
+          { key:'engaged', label:'Engaged',       type:'bool',   render: r => r.engaged ? '<span class="detail-pill green">Yes</span>' : '<span class="detail-pill amber">No</span>' },
+        ];
+
+      } else if (type === 'users') {
+        rows = buildUserRows(Math.min(d.users, 150), days, false);
+        icon = '👥'; title = 'Total Users'; subtitle = 'All users in period — newest first';
+        summaryStats = [
+          { label:'Total Users', value: d.users.toLocaleString(), gold: true },
+          { label:'New Users', value: d.newUsers.toLocaleString() },
+          { label:'Returning', value: (d.users - d.newUsers).toLocaleString() },
+          { label:'Avg Sessions', value: (d.sessions / d.users).toFixed(1) },
+        ];
+        cols = [
+          { key:'ts',      label:'First Seen',    type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'userId',  label:'User ID',        type:'string', render: r => `<span style="font-family:monospace;font-size:10px;color:var(--text-muted);">${r.userId}</span>` },
+          { key:'country', label:'Country',        type:'string', render: r => r.country },
+          { key:'device',  label:'Device',         type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'sessions',label:'Sessions',       type:'num',    render: r => `<span class="num-cell">${r.sessions}</span>` },
+          { key:'isNew',   label:'Type',           type:'bool',   render: r => r.isNew ? '<span class="detail-pill green">New</span>' : '<span class="detail-pill purple">Returning</span>' },
+        ];
+
+      } else if (type === 'newusers') {
+        rows = buildUserRows(Math.min(d.newUsers, 150), days, true).map(r => ({ ...r, source: rnd(SOURCE_LIST) }));
+        icon = '✨'; title = 'New Users'; subtitle = 'First-time visitors — newest first';
+        summaryStats = [
+          { label:'New Users', value: d.newUsers.toLocaleString(), gold: true },
+          { label:'% of Total', value: Math.round(d.newUsers / d.users * 100) + '%' },
+          { label:'Top Source', value: 'google / organic' },
+          { label:'Top Country', value: 'Armenia 🇦🇲' },
+        ];
+        cols = [
+          { key:'ts',      label:'First Seen',   type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'userId',  label:'User ID',       type:'string', render: r => `<span style="font-family:monospace;font-size:10px;color:var(--text-muted);">${r.userId}</span>` },
+          { key:'country', label:'Country',       type:'string', render: r => r.country },
+          { key:'device',  label:'Device',        type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'source',  label:'Source',        type:'string', render: r => `<span style="font-size:10px;color:var(--text-muted);">${r.source}</span>` },
+        ];
+
+      } else if (type === 'engrate') {
+        rows = buildSessionRows(Math.min(d.sessions, 120), days);
+        const engaged = rows.filter(r => r.engaged);
+        icon = '💡'; title = 'Engagement Rate'; subtitle = 'Engaged vs non-engaged sessions — newest first';
+        summaryStats = [
+          { label:'Engagement Rate', value: d.engRate, gold: true },
+          { label:'Engaged Sessions', value: engaged.length.toLocaleString() },
+          { label:'Non-Engaged', value: (rows.length - engaged.length).toLocaleString() },
+          { label:'Avg Time', value: d.avgTime },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'entry',   label:'Entry Page',   type:'string', render: r => `<span class="page-cell">${r.entry}</span>` },
+          { key:'pages',   label:'Pages Viewed', type:'num',    render: r => `<span class="num-cell">${r.pages}</span>` },
+          { key:'duration',label:'Duration',     type:'num',    render: r => r.duration },
+          { key:'engaged', label:'Engaged',      type:'bool',   render: r => r.engaged ? '<span class="detail-pill green">Engaged</span>' : '<span class="detail-pill amber">Bounced</span>' },
+          { key:'device',  label:'Device',       type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+        ];
+
+      } else if (type === 'avgtime') {
+        rows = buildSessionRows(Math.min(d.sessions, 120), days);
+        icon = '⏱️'; title = 'Avg Engagement Time'; subtitle = 'Session duration breakdown — longest first';
+        summaryStats = [
+          { label:'Avg Duration', value: d.avgTime, gold: true },
+          { label:'Longest', value: '8m 42s' },
+          { label:'Shortest', value: '3s' },
+          { label:'Over 1 min', value: Math.round(d.sessions * 0.55).toLocaleString() + ' sessions' },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time', type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'entry',   label:'Entry Page',  type:'string', render: r => `<span class="page-cell">${r.entry}</span>` },
+          { key:'duration',label:'Duration',    type:'num',    render: r => `<span class="num-cell">${r.duration}</span>` },
+          { key:'pages',   label:'Pages',       type:'num',    render: r => r.pages },
+          { key:'device',  label:'Device',      type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+        ];
+        rows = [...rows].sort((a, b) => parseInt(b.duration) - parseInt(a.duration));
+
+      } else if (type === 'events') {
+        const evtNames = ['page_view','scroll','click','apply_now_click','login_submit','contact_submit','session_start','user_engagement','file_download','outbound_click'];
+        const ts = makeDemoTimestamps(Math.min(d.events, 200), days);
+        rows = ts.map(t => ({ ts: t, name: rnd(evtNames), page: rnd(PAGE_LIST), device: rnd(DEVICE_LIST) }));
+        icon = '🎬'; title = 'Total Events'; subtitle = 'All GA4 events fired — newest first';
+        summaryStats = [
+          { label:'Total Events', value: d.events.toLocaleString(), gold: true },
+          { label:'Event Types', value: evtNames.length },
+          { label:'Top Event', value: 'page_view' },
+          { label:'Per Session', value: (d.events / d.sessions).toFixed(1) },
+        ];
+        cols = [
+          { key:'ts',     label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'name',   label:'Event Name',   type:'string', render: r => `<code style="font-size:10px;background:rgba(201,168,76,0.08);padding:2px 6px;border-radius:4px;color:var(--gold-primary);">${r.name}</code>` },
+          { key:'page',   label:'Page',         type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
+          { key:'device', label:'Device',       type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+        ];
+
+      } else if (type === 'conversions') {
+        const allConvEvents = ['apply_now_click','request_info_click','login_submit','contact_submit','call_click','whatsapp_click'];
+        const ts = makeDemoTimestamps(Math.min(d.conversions * 3, 150), days);
+        rows = ts.map(t => ({ ts: t, event: rnd(allConvEvents), page: rnd(PAGE_LIST), device: rnd(DEVICE_LIST), country: rnd(COUNTRY_LIST) }));
+        icon = '🎯'; title = 'Key Conversions'; subtitle = 'All conversion events — newest first';
+        const convD = DEMO_CONV[currentRange] || DEMO_CONV['7d'];
+        summaryStats = [
+          { label:'Total Conversions', value: d.conversions.toLocaleString(), gold: true },
+          { label:'Apply Now', value: convD.apply_now },
+          { label:'Logins', value: convD.login },
+          { label:'Contact', value: convD.contact },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time', type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'event',   label:'Event',       type:'string', render: r => { const c = r.event.includes('apply')?'gold':r.event.includes('login')?'blue':r.event.includes('contact')?'green':r.event.includes('call')?'purple':'amber'; return `<span class="detail-pill ${c}">${r.event}</span>`; } },
+          { key:'page',    label:'Page',        type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
+          { key:'device',  label:'Device',      type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'country', label:'Country',     type:'string', render: r => r.country },
+        ];
+      }
+
+      showDetailModal({ icon, title, subtitle, summaryStats, cols, rows,
+        footNote: `${rows.length} rows · Demo data · Period: ${currentRange === 'today' ? 'Today' : currentRange}` });
+    }
+
+    function openConvModal(type) {
+      const days = rangeDays();
+      const convD = DEMO_CONV[currentRange] || DEMO_CONV['7d'];
+      const convMeta = {
+        apply_now:    { icon:'📝', label:'Apply Now Clicks',    event:'apply_now_click',    key:'apply_now'    },
+        request_info: { icon:'ℹ️', label:'Request Info Clicks', event:'request_info_click', key:'request_info' },
+        login:        { icon:'🔐', label:'Login Submits',       event:'login_submit',        key:'login'        },
+        contact:      { icon:'📬', label:'Contact Submits',     event:'contact_submit',      key:'contact'      },
+        call:         { icon:'📞', label:'Phone Call Clicks',   event:'call_click',          key:'call'         },
+        whatsapp:     { icon:'💬', label:'WhatsApp Clicks',     event:'whatsapp_click',      key:'whatsapp'     },
+      };
+      const meta = convMeta[type];
+      if (!meta) return;
+      const total = convD[meta.key] || 0;
+      const rows = buildConvRows(Math.max(total * 2, 20), days, meta.event);
+
+      const summaryStats = [
+        { label:'Total', value: total.toLocaleString(), gold: true },
+        { label:'Event', value: meta.event },
+        { label:'Top Page', value: rnd(PAGE_LIST) },
+        { label:'Top Device', value: 'Mobile 📱' },
+      ];
+
+      const cols = [
+        { key:'ts',      label:'Date & Time', type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+        { key:'event',   label:'Event',       type:'string', render: r => `<code style="font-size:10px;background:rgba(201,168,76,0.08);padding:2px 6px;border-radius:4px;color:var(--gold-primary);">${r.event}</code>` },
+        { key:'page',    label:'Page',        type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
+        { key:'device',  label:'Device',      type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+        { key:'country', label:'Country',     type:'string', render: r => r.country },
+      ];
+
+      showDetailModal({
+        icon: meta.icon,
+        title: meta.label,
+        subtitle: `All "${meta.event}" events — newest first`,
+        summaryStats, cols, rows,
+        footNote: `${rows.length} rows · Demo data · Period: ${currentRange === 'today' ? 'Today' : currentRange}`,
+      });
+    }
+
+    // ── Sort state for the currently open modal ──
+    let _modalRows = [];
+    let _modalCols = [];
+    let _sortKey   = null;
+    let _sortDir   = 'asc'; // 'asc' | 'desc'
+
+    function sortDetailTable(colKey) {
+      const col = _modalCols.find(c => c.key === colKey);
+      if (!col) return;
+      if (_sortKey === colKey) {
+        _sortDir = _sortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        _sortKey = colKey;
+        _sortDir = col.type === 'date' ? 'desc' : 'asc';
+      }
+      const dir = _sortDir === 'asc' ? 1 : -1;
+      _modalRows = [..._modalRows].sort((a, b) => {
+        let av = a[colKey], bv = b[colKey];
+        if (col.type === 'date')   return dir * (av - bv);
+        if (col.type === 'num')    return dir * (parseInt(av) - parseInt(bv));
+        if (col.type === 'bool')   return dir * ((av ? 1 : 0) - (bv ? 1 : 0));
+        return dir * String(av).localeCompare(String(bv));
+      });
+      // Re-render tbody only
+      document.getElementById('detailTableBody').innerHTML = _modalRows.map(r =>
+        `<tr>${_modalCols.map(c => `<td>${c.render(r)}</td>`).join('')}</tr>`
+      ).join('');
+      // Update header arrow indicators
+      document.querySelectorAll('#detailTableHead th').forEach(th => {
+        const k = th.dataset.sortKey;
+        th.querySelector('.sort-arrow').textContent =
+          k === _sortKey ? (_sortDir === 'asc' ? ' ↑' : ' ↓') : ' ⇅';
+        th.classList.toggle('sort-active', k === _sortKey);
+      });
+    }
+
+    function showDetailModal({ icon, title, subtitle, summaryStats, cols, rows, footNote }) {
+      _modalRows = [...rows];
+      _modalCols = cols;
+      _sortKey   = null;
+      _sortDir   = 'asc';
+
+      document.getElementById('detailModalIcon').textContent = icon;
+      document.getElementById('detailModalTitle').textContent = title;
+      document.getElementById('detailModalSubtitle').textContent = subtitle;
+      document.getElementById('detailModalFootNote').textContent = footNote || '';
+      document.getElementById('detailModalSummary').innerHTML = summaryStats.map(s => `
+        <div class="detail-stat">
+          <div class="detail-stat-label">${s.label}</div>
+          <div class="detail-stat-value ${s.gold ? 'gold' : ''}">${s.value}</div>
+        </div>
+      `).join('');
+
+      // Build table with sortable headers
+      const thead = `<thead id="detailTableHead"><tr>${cols.map(c =>
+        `<th data-sort-key="${c.key}" onclick="sortDetailTable('${c.key}')" style="cursor:pointer;user-select:none;" title="Sort by ${c.label}">
+          ${c.label}<span class="sort-arrow" style="opacity:0.45;font-size:9px;"> ⇅</span>
+        </th>`
+      ).join('')}</tr></thead>`;
+      const tbody = `<tbody id="detailTableBody">${rows.map(r =>
+        `<tr>${cols.map(c => `<td>${c.render(r)}</td>`).join('')}</tr>`
+      ).join('')}</tbody>`;
+
+      document.getElementById('detailModalBody').innerHTML =
+        `<table class="detail-table">${thead}${tbody}</table>`;
+
+      const overlay = document.getElementById('detailModalOverlay');
+      overlay.style.display = 'flex';
+      requestAnimationFrame(() => overlay.classList.add('open'));
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetailModal() {
+      const overlay = document.getElementById('detailModalOverlay');
+      overlay.classList.remove('open');
+      setTimeout(() => { overlay.style.display = 'none'; }, 280);
+      document.body.style.overflow = '';
+    }
+
+    function handleDetailOverlayClick(e) {
+      if (e.target === document.getElementById('detailModalOverlay')) closeDetailModal();
+    }
+
+    // ============================================================
+    // CHART INSTANCES
+    // ============================================================
+    let trendChartInstance  = null;
+    let channelChartInstance = null;
+    let convChartInstance   = null;
+    let currentTrendMetric  = 'users';
+    let currentConvMetric   = 'all';
+
+    function buildCharts(range) {
+      const days = range === 'today' ? 1 : range === '7d' ? 7 : range === '28d' ? 28 : 90;
+
+      // ─── Trend Chart ───
+      const { labels: tLabels, data: tData } = generateDemoTimeSeries(days, 
+        currentTrendMetric === 'users' ? 44 : currentTrendMetric === 'sessions' ? 70 : 170,
+        currentTrendMetric === 'users' ? 22 : currentTrendMetric === 'sessions' ? 35 : 80
+      );
+
+      const trendCtx = document.getElementById('trendChart').getContext('2d');
+      if (trendChartInstance) trendChartInstance.destroy();
+      trendChartInstance = new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: tLabels,
+          datasets: [{
+            label: currentTrendMetric.charAt(0).toUpperCase() + currentTrendMetric.slice(1),
+            data: tData,
+            borderColor: '#c9a84c',
+            backgroundColor: 'rgba(201,168,76,0.08)',
+            borderWidth: 2.5,
+            pointBackgroundColor: '#c9a84c',
+            pointRadius: days <= 7 ? 4 : 2,
+            tension: 0.4,
+            fill: true,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0a1628',
+              borderColor: 'rgba(201,168,76,0.3)',
+              borderWidth: 1,
+              titleColor: '#c9a84c',
+              bodyColor: '#e8edf5',
+              padding: 10,
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#8a9ec0', font: { size: 10 }, maxTicksLimit: 8 },
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#8a9ec0', font: { size: 10 } },
+              beginAtZero: true,
+            }
+          }
+        }
+      });
+
+      // ─── Channel Pie Chart ───
+      const channelCtx = document.getElementById('channelChart').getContext('2d');
+      if (channelChartInstance) channelChartInstance.destroy();
+      channelChartInstance = new Chart(channelCtx, {
+        type: 'doughnut',
+        data: {
+          labels: DEMO_CHANNELS.labels,
+          datasets: [{
+            data: DEMO_CHANNELS.data,
+            backgroundColor: DEMO_CHANNELS.colors,
+            borderColor: '#0c1a32',
+            borderWidth: 2,
+            hoverOffset: 8,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: '68%',
+          plugins: {
+            legend: {
+              position: 'right',
+              labels: {
+                color: '#8a9ec0',
+                font: { size: 11 },
+                boxWidth: 12,
+                padding: 10,
+              }
+            },
+            tooltip: {
+              backgroundColor: '#0a1628',
+              borderColor: 'rgba(201,168,76,0.3)',
+              borderWidth: 1,
+              titleColor: '#c9a84c',
+              bodyColor: '#e8edf5',
+              padding: 10,
+              callbacks: {
+                label: ctx => ` ${ctx.label}: ${ctx.parsed}%`
+              }
+            }
+          }
+        }
+      });
+
+      // ─── Conversions Trend Chart ───
+      const { labels: cLabels } = generateDemoTimeSeries(days, 0, 0);
+      const convData = cLabels.map(() => Math.round(Math.random() * 5));
+      const loginData = cLabels.map(() => Math.round(Math.random() * 14 + 2));
+
+      const convCtx = document.getElementById('convChart').getContext('2d');
+      if (convChartInstance) convChartInstance.destroy();
+      convChartInstance = new Chart(convCtx, {
+        type: 'bar',
+        data: {
+          labels: cLabels,
+          datasets: [
+            {
+              label: 'Apply Now',
+              data: convData,
+              backgroundColor: 'rgba(201,168,76,0.7)',
+              borderRadius: 4,
+              stack: 'conv',
+            },
+            {
+              label: 'Login',
+              data: loginData,
+              backgroundColor: 'rgba(59,130,246,0.5)',
+              borderRadius: 4,
+              stack: 'conv',
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              labels: { color: '#8a9ec0', font: { size: 10 }, boxWidth: 10 }
+            },
+            tooltip: {
+              backgroundColor: '#0a1628',
+              borderColor: 'rgba(201,168,76,0.3)',
+              borderWidth: 1,
+              titleColor: '#c9a84c',
+              bodyColor: '#e8edf5',
+              padding: 10,
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#8a9ec0', font: { size: 9 }, maxTicksLimit: 10 },
+              stacked: true,
+            },
+            y: {
+              grid: { color: 'rgba(255,255,255,0.04)' },
+              ticks: { color: '#8a9ec0', font: { size: 10 } },
+              stacked: true,
+              beginAtZero: true,
+            }
+          }
+        }
+      });
+    }
+
+    // ============================================================
+    // RENDER KPI CARDS
+    // ============================================================
+    function renderKPIs(range) {
+      const d = DEMO_KPI[range] || DEMO_KPI['7d'];
+      const isCompare = compareEnabled;
+
+      const cards = [
+        { icon:'👥', label:'Total Users',            value: d.users.toLocaleString(),    trend:'+8%',  up:true,  sub:'vs prev period',           type:'users'       },
+        { icon:'✨', label:'New Users',              value: d.newUsers.toLocaleString(),  trend:'+12%', up:true,  sub:'first-time visitors',       type:'newusers'    },
+        { icon:'📊', label:'Sessions',               value: d.sessions.toLocaleString(),  trend:'+5%',  up:true,  sub:'total site visits',         type:'sessions'    },
+        { icon:'📄', label:'Page Views',             value: d.views.toLocaleString(),     trend:'+3%',  up:true,  sub:'total page impressions',    type:'pageviews'   },
+        { icon:'⏱️', label:'Avg Engagement Time',   value: d.avgTime,                    trend:'-4%',  up:false, sub:'per session',               type:'avgtime'     },
+        { icon:'💡', label:'Engagement Rate',        value: d.engRate,                    trend:'+2%',  up:true,  sub:'sessions with engagement',  type:'engrate'     },
+        { icon:'🎬', label:'Total Events',           value: d.events.toLocaleString(),    trend:'+18%', up:true,  sub:'all GA4 events',             type:'events'      },
+        { icon:'🎯', label:'Key Conversions',        value: d.conversions.toLocaleString(),trend:'+21%',up:true,  sub:'apply/contact/login',       type:'conversions' },
+      ];
+
+      const grid = document.getElementById('kpiGrid');
+      grid.innerHTML = cards.map((c, i) => `
+        <div class="kpi-card clickable" style="animation-delay:${i * 0.04}s;" onclick="openKpiModal('${c.type}')" title="Click for detail breakdown">
+          <div class="kpi-card-header">
+            <div class="kpi-icon">${c.icon}</div>
+            ${isCompare ? `<div class="kpi-trend ${c.up ? 'up' : 'down'}">${c.up ? '↑' : '↓'} ${c.trend}</div>` : ''}
+          </div>
+          <div class="kpi-label">${c.label}</div>
+          <div class="kpi-value">${c.value}</div>
+          <div class="kpi-sub">${isCompare ? c.sub + ` <span style="color:${c.up?'var(--green)':'var(--red)'};">(${c.trend})</span>` : c.sub}</div>
+        </div>
+      `).join('');
+    }
+
+    // ============================================================
+    // RENDER CONVERSION CARDS
+    // ============================================================
+    function renderConversions(range) {
+      const d = DEMO_CONV[range] || DEMO_CONV['7d'];
+      const convs = [
+        { icon:'📝', label:'Apply Now Clicks',     key:'apply_now',    event:'apply_now_click'    },
+        { icon:'ℹ️', label:'Request Info Clicks',  key:'request_info', event:'request_info_click' },
+        { icon:'🔐', label:'Login Submits',        key:'login',        event:'login_submit'       },
+        { icon:'📬', label:'Contact Submits',      key:'contact',      event:'contact_submit'     },
+        { icon:'📞', label:'Phone Call Clicks',    key:'call',         event:'call_click'         },
+        { icon:'💬', label:'WhatsApp Clicks',      key:'whatsapp',     event:'whatsapp_click'     },
+      ];
+
+      const grid = document.getElementById('conversionsGrid');
+      grid.innerHTML = convs.map((c, i) => `
+        <div class="conv-card clickable" style="animation-delay:${i * 0.05}s;" onclick="openConvModal('${c.key}')" title="Click for event detail">
+          <div class="conv-icon">${c.icon}</div>
+          <div>
+            <div class="conv-label">${c.label}</div>
+            <div class="conv-value">${(d[c.key] || 0).toLocaleString()}</div>
+            <div class="conv-trend">↑ event: <code style="font-size:10px;background:rgba(201,168,76,0.1);padding:1px 5px;border-radius:4px;">${c.event}</code></div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ============================================================
+    // RENDER TABLES
+    // ============================================================
+    function renderTables() {
+      const maxViews = DEMO_TOP_PAGES[0].views;
+
+      document.getElementById('topPagesBody').innerHTML = DEMO_TOP_PAGES.map((p, i) => `
+        <tr>
+          <td><span class="rank-num ${i < 3 ? 'top' : ''}">${i+1}</span></td>
+          <td style="font-family:monospace;font-size:11px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${p.page}</td>
+          <td>
+            <div class="mini-bar-wrapper">
+              <span style="font-weight:600;">${p.views.toLocaleString()}</span>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${Math.round(p.views/maxViews*100)}%;"></div></div>
+            </div>
+          </td>
+          <td><span class="pill green">${p.engRate}</span></td>
+        </tr>
+      `).join('');
+      document.getElementById('topPagesBadge').textContent = DEMO_TOP_PAGES.length + ' pages';
+
+      const maxUsers = DEMO_SOURCES[0].users;
+      document.getElementById('sourcesBody').innerHTML = DEMO_SOURCES.map((s, i) => `
+        <tr>
+          <td><span class="rank-num ${i < 3 ? 'top' : ''}">${i+1}</span></td>
+          <td style="font-size:12px;font-family:monospace;">${s.source}</td>
+          <td>
+            <div class="mini-bar-wrapper">
+              <span style="font-weight:600;">${s.users.toLocaleString()}</span>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${Math.round(s.users/maxUsers*100)}%;"></div></div>
+            </div>
+          </td>
+          <td><span class="pill blue">${s.conv}</span></td>
+        </tr>
+      `).join('');
+      document.getElementById('sourcesBadge').textContent = DEMO_SOURCES.length + ' sources';
+
+      const maxCountry = DEMO_COUNTRIES[0].users;
+      document.getElementById('countriesBody').innerHTML = DEMO_COUNTRIES.map((c, i) => `
+        <tr>
+          <td><span class="rank-num ${i < 3 ? 'top' : ''}">${i+1}</span></td>
+          <td>${c.loc}</td>
+          <td><span style="font-weight:600;">${c.users.toLocaleString()}</span></td>
+          <td><span class="pill amber">${c.pct}%</span></td>
+        </tr>
+      `).join('');
+      document.getElementById('countriesBadge').textContent = DEMO_COUNTRIES.length + ' countries';
+
+      document.getElementById('deviceGrid').innerHTML = DEMO_DEVICES.map(d => `
+        <div class="device-card">
+          <div class="device-icon">${d.icon}</div>
+          <div class="device-name">${d.name}</div>
+          <div class="device-pct">${d.pct}%</div>
+          <div class="device-count">${d.count.toLocaleString()} users</div>
+        </div>
+      `).join('');
+
+      document.getElementById('browsersBody').innerHTML = DEMO_BROWSERS.map(b => `
+        <tr>
+          <td style="font-weight:600;">${b.name}</td>
+          <td>${b.users.toLocaleString()}</td>
+          <td>
+            <div class="mini-bar-wrapper">
+              <span class="pill green">${b.pct}%</span>
+              <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${b.pct}%;"></div></div>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // ============================================================
+    // DATE RANGE & FILTERS
+    // ============================================================
+    const RANGE_LABELS = {
+      today: '— Today',
+      '7d':  '— Last 7 days',
+      '28d': '— Last 28 days',
+      '90d': '— Last 90 days',
+      custom:'— Custom range',
+    };
+
+    function setDateRange(range) {
+      currentRange = range;
+      document.querySelectorAll('.date-pill[data-range]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.range === range);
+      });
+      document.getElementById('customDatePicker').style.display = range === 'custom' ? 'flex' : 'none';
+      document.getElementById('periodLabel').textContent = RANGE_LABELS[range] || '';
+      if (range !== 'custom') refreshData();
+    }
+
+    function applyCustomRange() {
+      const start = document.getElementById('customStart').value;
+      const end   = document.getElementById('customEnd').value;
+      if (!start || !end) { return; }
+      currentRange = 'custom';
+      document.getElementById('periodLabel').textContent = `— ${start} → ${end}`;
+      refreshData();
+    }
+
+    function toggleCompare(enabled) {
+      compareEnabled = enabled;
+      refreshData();
+    }
+
+    function openFilterModal()  { document.getElementById('filterModal').style.display = 'flex'; }
+    function closeFilterModal() { document.getElementById('filterModal').style.display = 'none'; }
+    function setDeviceFilter(v, el)  { deviceFilter = v;  document.querySelectorAll('#filterModal .date-pill').forEach(b => b.classList.remove('active')); el.classList.add('active'); }
+    function setChannelFilter(v, el) { channelFilter = v; }
+
+    function resetFilters() {
+      deviceFilter  = 'all';
+      channelFilter = 'all';
+      countryFilter = '';
+      document.getElementById('filterCountry').value = '';
+      document.querySelectorAll('#filterModal .date-pill').forEach((b, i) => b.classList.toggle('active', i === 0));
+    }
+
+    function applyFilters() {
+      countryFilter = document.getElementById('filterCountry').value;
+      closeFilterModal();
+      refreshData();
+    }
+
+    // ============================================================
+    // LOOKER STUDIO EMBED
+    // ============================================================
+    const LOOKER_URL_KEY = 'acnhs_looker_embed_url';
+
+    function loadLookerUrl() {
+      const saved = localStorage.getItem(LOOKER_URL_KEY);
+      if (saved) {
+        document.getElementById('lookerEmbedUrl').value = saved;
+        embedLooker(saved);
+      }
+    }
+
+    function saveLookerUrl() {
+      const url = document.getElementById('lookerEmbedUrl').value.trim();
+      if (!url) { alert('Please enter a valid Looker Studio embed URL.'); return; }
+      if (!url.includes('lookerstudio.google.com') && !url.includes('datastudio.google.com')) {
+        if (!confirm('This URL doesn\'t look like a Looker Studio URL. Embed anyway?')) return;
+      }
+      localStorage.setItem(LOOKER_URL_KEY, url);
+      embedLooker(url);
+      document.getElementById('lookerConfigPanel').style.display = 'none';
+      document.getElementById('configToggleBtn').textContent = '⚙️ Configure';
+    }
+
+    function clearLookerUrl() {
+      localStorage.removeItem(LOOKER_URL_KEY);
+      document.getElementById('lookerEmbedUrl').value = '';
+      showLookerPlaceholder();
+    }
+
+    function embedLooker(url) {
+      const content  = document.getElementById('lookerContent');
+      const status   = document.getElementById('lookerStatus');
+      const openBtn  = document.getElementById('openLookerBtn');
+
+      const iframe = document.createElement('iframe');
+      iframe.src = url;
+      iframe.allowFullscreen = true;
+      iframe.allow = 'fullscreen';
+      iframe.title = 'ACNHS Looker Studio Analytics Report';
+      iframe.onload = () => {
+        status.textContent = '🟢 Live';
+        status.style.background = 'rgba(34,197,94,0.12)';
+        status.style.color = '#22c55e';
+      };
+      iframe.onerror = showLookerError;
+
+      content.innerHTML = '';
+      content.appendChild(iframe);
+
+      // Show open-in-looker button
+      openBtn.href = url.replace('/embed/', '/').split('?')[0];
+      openBtn.style.display = 'flex';
+
+      status.textContent = '⏳ Loading…';
+      status.style.background = 'rgba(245,158,11,0.12)';
+      status.style.color = 'var(--amber)';
+    }
+
+    function showLookerPlaceholder() {
+      const content = document.getElementById('lookerContent');
+      content.innerHTML = `
+        <div class="looker-placeholder" id="lookerPlaceholder">
+          <div class="looker-placeholder-icon">📊</div>
+          <h3>Connect Your Looker Studio Report</h3>
+          <p>Embed your GA4 Looker Studio report for a full interactive analytics experience. Click below to configure the embed URL.</p>
+          <button class="save-embed-btn" onclick="toggleLookerConfig()">⚙️ Configure Embed URL</button>
+        </div>
+      `;
+      document.getElementById('lookerStatus').textContent = 'Not configured';
+      document.getElementById('lookerStatus').style.background = 'rgba(245,158,11,0.12)';
+      document.getElementById('lookerStatus').style.color = 'var(--amber)';
+      document.getElementById('openLookerBtn').style.display = 'none';
+    }
+
+    function showLookerError() {
+      const status = document.getElementById('lookerStatus');
+      status.textContent = '⚠️ Load Error';
+      status.style.background = 'rgba(239,68,68,0.12)';
+      status.style.color = 'var(--red)';
+    }
+
+    function toggleLookerConfig() {
+      const panel = document.getElementById('lookerConfigPanel');
+      const btn   = document.getElementById('configToggleBtn');
+      const open  = panel.style.display === 'none';
+      panel.style.display = open ? 'block' : 'none';
+      btn.textContent = open ? '✕ Close' : '⚙️ Configure';
+    }
+
+    function refreshLooker() {
+      const saved = localStorage.getItem(LOOKER_URL_KEY);
+      if (saved) embedLooker(saved);
+    }
+
+    // ============================================================
+    // CHART SWITCHING
+    // ============================================================
+    function switchMetric(metric, btn) {
+      currentTrendMetric = metric;
+      document.querySelectorAll('#trendChart').forEach(() => {});
+      document.querySelectorAll('.chart-tab').forEach(t => {
+        if (t.closest('.chart-card') === btn.closest('.chart-card')) t.classList.remove('active');
+      });
+      btn.classList.add('active');
+      buildCharts(currentRange);
+    }
+
+    function switchConvMetric(metric, btn) {
+      currentConvMetric = metric;
+      document.querySelectorAll('.chart-card:last-of-type .chart-tab').forEach(t => t.classList.remove('active'));
+      btn.classList.add('active');
+      buildCharts(currentRange);
+    }
+
+    // ============================================================
+    // MAIN REFRESH
+    // ============================================================
+    function refreshData() {
+      const btn = document.getElementById('refreshBtn');
+      btn.innerHTML = '⏳ Loading…';
+      btn.disabled = true;
+      setTimeout(() => {
+        renderKPIs(currentRange);
+        renderConversions(currentRange);
+        buildCharts(currentRange);
+        btn.innerHTML = '🔄 Refresh';
+        btn.disabled = false;
+        document.getElementById('lastUpdated').textContent = 
+          'Updated ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+      }, 600);
+    }
+
+    // ============================================================
+    // INIT
+    // ============================================================
+    document.addEventListener('DOMContentLoaded', () => {
+      renderKPIs(currentRange);
+      renderConversions(currentRange);
+      renderTables();
+      buildCharts(currentRange);
+      loadLookerUrl();
+
+      // Set today's date defaults for custom picker
+      const today = new Date().toISOString().split('T')[0];
+      const week  = new Date(Date.now() - 6*24*60*60*1000).toISOString().split('T')[0];
+      document.getElementById('customStart').value = week;
+      document.getElementById('customEnd').value   = today;
+
+      // Hide loading overlay
+      setTimeout(() => {
+        document.getElementById('loadingOverlay').classList.add('hidden');
+      }, 700);
+
+      document.getElementById('lastUpdated').textContent =
+        'Updated ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' });
+    });
+
+    // Close filter modal on backdrop click
+    document.getElementById('filterModal').addEventListener('click', function(e) {
+      if (e.target === this) closeFilterModal();
+    });
+
+    // Close detail modal on Escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        const overlay = document.getElementById('detailModalOverlay');
+        if (overlay && overlay.classList.contains('open')) closeDetailModal();
+        else closeFilterModal();
+      }
+    });
+
+    // Expose globals
+    window.setDateRange     = setDateRange;
+    window.applyCustomRange = applyCustomRange;
+    window.toggleCompare    = toggleCompare;
+    window.openFilterModal  = openFilterModal;
+    window.closeFilterModal = closeFilterModal;
+    window.setDeviceFilter  = setDeviceFilter;
+    window.setChannelFilter = setChannelFilter;
+    window.resetFilters     = resetFilters;
+    window.applyFilters     = applyFilters;
+    window.switchMetric     = switchMetric;
+    window.switchConvMetric = switchConvMetric;
+    window.refreshData      = refreshData;
+    window.saveLookerUrl    = saveLookerUrl;
+    window.clearLookerUrl   = clearLookerUrl;
+    window.toggleLookerConfig = toggleLookerConfig;
+    window.refreshLooker    = refreshLooker;
+    window.openKpiModal     = openKpiModal;
+    window.openConvModal    = openConvModal;
+    window.closeDetailModal = closeDetailModal;
+    window.handleDetailOverlayClick = handleDetailOverlayClick;
+    window.sortDetailTable  = sortDetailTable;
+  </script>
+</body>
+</html>

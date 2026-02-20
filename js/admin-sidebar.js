@@ -105,6 +105,13 @@
         permission: 'view_reports'
       },
       { 
+        href: 'admin-analytics.html', 
+        icon: '📈', 
+        text: 'Analytics', 
+        permission: null, // Admin-only via email check
+        allowedEmails: ['hrachfilm@gmail.com', 's.gharibyan@acnhs.am', 'Hrachfilm@gmail.com']
+      },
+      { 
         href: 'help-appeals.html', 
         icon: '⚖️', 
         text: 'Appeals', 
