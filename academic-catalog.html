@@ -137,13 +137,83 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
   .def-label{width:auto;}
   .year-credits{display:none;}
 }
+
+/* ======================================================
+   PROGRAM PICKER MODAL
+   ====================================================== */
+.picker-overlay{position:fixed;inset:0;background:rgba(4,17,31,.92);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.picker-overlay.hidden{display:none;}
+.picker-modal{background:var(--navy-800);border:1px solid var(--border-gold);border-radius:var(--radius-lg);padding:52px 48px;max-width:680px;width:100%;text-align:center;position:relative;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.6);}
+.picker-modal::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold-500),transparent);}
+.picker-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold-400);background:var(--gold-glow);border:1px solid var(--border-gold);padding:6px 16px;border-radius:999px;margin-bottom:24px;}
+.picker-modal h2{font-family:'Playfair Display',Georgia,serif;font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--gold-200);margin-bottom:10px;letter-spacing:-0.3px;}
+.picker-modal p{font-size:14px;color:var(--text-muted);margin-bottom:36px;line-height:1.7;}
+.picker-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.picker-card{background:rgba(201,168,76,.04);border:2px solid rgba(201,168,76,.2);border-radius:var(--radius-md);padding:28px 24px;cursor:pointer;transition:border-color .2s,background .2s,transform .2s;text-align:left;}
+.picker-card:hover{border-color:var(--gold-500);background:rgba(201,168,76,.09);transform:translateY(-3px);}
+.picker-card-badge{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--navy-900);background:var(--gold-500);padding:4px 12px;border-radius:5px;margin-bottom:14px;}
+.picker-card h3{font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:800;color:var(--gold-200);margin-bottom:8px;line-height:1.2;}
+.picker-card .pick-meta{font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:16px;}
+.picker-card .pick-cta{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--gold-400);letter-spacing:.5px;}
+.picker-card .pick-cta::after{content:'→';}
+/* Reset button styles on picker-card */
+button.picker-card{font-family:'Inter',sans-serif;text-align:left;width:100%;}
+@media(max-width:560px){.picker-cards{grid-template-columns:1fr;}.picker-modal{padding:36px 24px;}}
+
+/* ======================================================
+   PROGRAM TAB SWITCHER (shown inside catalog)
+   ====================================================== */
+.prog-tabs{display:flex;gap:8px;background:rgba(201,168,76,.05);border:1px solid var(--border-gold);border-radius:var(--radius-md);padding:6px;margin-bottom:32px;}
+.prog-tab{flex:1;padding:10px 20px;border-radius:calc(var(--radius-md) - 4px);border:none;background:transparent;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);cursor:pointer;transition:background .2s,color .2s;text-transform:uppercase;}
+.prog-tab.active{background:var(--gold-500);color:var(--navy-900);}
+.prog-tab:not(.active):hover{background:rgba(201,168,76,.1);color:var(--gold-400);}
+
+/* Catalog panes */
+.catalog-pane{display:none;}
+.catalog-pane.active{display:block;}
 </style>
 </head>
 
 <body class="acnhs-watermarked">
 <div data-acnhs-header></div>
 
+<!-- ======================================================
+     PROGRAM PICKER MODAL
+     ====================================================== -->
+<div class="picker-overlay" id="pickerOverlay" aria-label="Select a program catalog">
+  <div class="picker-modal">
+    <div class="picker-eyebrow">Official Institutional Publication</div>
+    <h2>Academic Catalog</h2>
+    <p>Armenian College of Nursing &amp; Health Sciences<br>Select the program catalog you'd like to view.</p>
+    <div class="picker-cards">
+      <button class="picker-card" onclick="selectProgram('bsn')" aria-label="View BSN Catalog">
+        <div class="picker-card-badge">BSN</div>
+        <h3>Bachelor of Science in Nursing</h3>
+        <div class="pick-meta">4 Academic Years · 124 Credits<br>~960–1,050 Clinical Hours</div>
+        <span class="pick-cta">View BSN Catalog</span>
+      </button>
+      <button class="picker-card" onclick="selectProgram('asn')" aria-label="View ASN Catalog">
+        <div class="picker-card-badge">ASN</div>
+        <h3>Associate of Science in Nursing</h3>
+        <div class="pick-meta">3 Academic Years · 72–78 Credits<br>~810–850 Clinical Hours</div>
+        <span class="pick-cta">View ASN Catalog</span>
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="page">
+
+  <!-- Program Tab Switcher -->
+  <div class="prog-tabs" id="progTabs">
+    <button class="prog-tab active" id="tabBsn" onclick="switchTab('bsn')">BSN — Bachelor of Science in Nursing</button>
+    <button class="prog-tab" id="tabAsn" onclick="switchTab('asn')">ASN — Associate of Science in Nursing</button>
+  </div>
+
+  <!-- ================================================
+       BSN CATALOG PANE
+       ================================================ -->
+  <div class="catalog-pane active" id="paneBsn">
 
   <!-- HERO -->
   <div class="page-hero">
@@ -457,9 +527,333 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
     <p>Upon graduation, students receive <strong>Lifetime Membership</strong> in the <strong>Armenian Nurses Association of the United States (ANA-US)</strong>, a nonprofit professional organization supporting continued professional development and networking for Armenian nursing graduates worldwide.</p>
   </div>
 
+  </div><!-- /.catalog-pane #paneBsn -->
+
+  <!-- ================================================
+       ASN CATALOG PANE
+       ================================================ -->
+  <div class="catalog-pane" id="paneAsn">
+
+  <!-- HERO -->
+  <div class="page-hero">
+    <div class="eyebrow">Official Institutional Publication</div>
+    <h1>Academic Catalog</h1>
+    <div class="hero-sub">Associate of Science in Nursing (ASN) · Academic Year 2026–2027</div>
+    <p>Armenian College of Nursing &amp; Health Sciences — the authoritative reference for the ASN program requirements, curriculum, policies, and institutional standards.</p>
+  </div>
+
+  <!-- TABLE OF CONTENTS -->
+  <div class="toc">
+    <h3>Contents</h3>
+    <div class="toc-grid">
+      <a href="#asn-institutional-status">Institutional Status</a>
+      <a href="#asn-program-overview">Program Overview</a>
+      <a href="#asn-concurrency">Concurrency Statement</a>
+      <a href="#asn-outcomes">Program Learning Outcomes</a>
+      <a href="#asn-curriculum">Curriculum Plan</a>
+      <a href="#asn-clinical-hours">Clinical Hour Distribution</a>
+      <a href="#asn-clinical-policy">Clinical Education Policy</a>
+      <a href="#asn-faculty">Faculty Qualifications</a>
+      <a href="#asn-academic-policies">Academic Policies</a>
+      <a href="#asn-transfer">Transfer Credit Policy</a>
+      <a href="#asn-graduation">Graduation Requirements</a>
+      <a href="#asn-licensure">Licensure Statement</a>
+      <a href="#asn-membership">Professional Membership</a>
+    </div>
+  </div>
+
+  <!-- § 1 INSTITUTIONAL STATUS -->
+  <div class="section" id="asn-institutional-status">
+    <div class="section-title"><span class="sec-num">§ 1</span> Institutional Status</div>
+    <p>The <strong>Armenian College of Nursing &amp; Health Sciences (ACNHS)</strong> is a higher education institution operating under Armenian national education standards.</p>
+    <div class="callout"><p>Instruction is delivered primarily in English. Approximately 90% of classroom instruction is conducted in English. All academic materials are provided exclusively in English.</p></div>
+    <div class="notice"><p>Completion of the ASN program does not guarantee licensure in any jurisdiction. Licensure eligibility is determined solely by the regulatory authority where the graduate applies.</p></div>
+  </div>
+
+  <!-- § 2 PROGRAM OVERVIEW -->
+  <div class="section" id="asn-program-overview">
+    <div class="section-title"><span class="sec-num">§ 2</span> Program Overview</div>
+    <div class="key-facts">
+      <div class="key-fact"><div class="key-fact-label">Degree Awarded</div><div class="key-fact-value">ASN</div></div>
+      <div class="key-fact"><div class="key-fact-label">Program Length</div><div class="key-fact-value">3 Academic Years</div></div>
+      <div class="key-fact"><div class="key-fact-label">Core Nursing</div><div class="key-fact-value">2 Academic Years</div></div>
+      <div class="key-fact"><div class="key-fact-label">Total Credits</div><div class="key-fact-value">72–78 Credits</div></div>
+      <div class="key-fact"><div class="key-fact-label">Clinical Hours</div><div class="key-fact-value">~750–850 Hours</div></div>
+    </div>
+    <p>The ASN program prepares graduates for entry-level registered nursing practice through integrated theory instruction and concurrent supervised clinical experience.</p>
+  </div>
+
+  <!-- § 3 CONCURRENCY -->
+  <div class="section" id="asn-concurrency">
+    <div class="section-title"><span class="sec-num">§ 3</span> Explicit Concurrency Statement</div>
+    <p>All specialty nursing courses — including <strong>Medical-Surgical, Obstetrics, Pediatrics, Psychiatric/Mental Health, and Geriatric Nursing</strong> — are delivered with concurrent theory and supervised clinical practice during the same academic term.</p>
+    <div class="callout"><p>Clinical instruction is not separated from related theoretical coursework.</p></div>
+  </div>
+
+  <!-- § 4 OUTCOMES -->
+  <div class="section" id="asn-outcomes">
+    <div class="section-title"><span class="sec-num">§ 4</span> Program Learning Outcomes</div>
+    <p>Graduates of the ASN program will be able to:</p>
+    <ul class="outcomes-list">
+      <li><span class="ol-num">1</span><span class="ol-text">Provide safe, patient-centered nursing care.</span></li>
+      <li><span class="ol-num">2</span><span class="ol-text">Apply clinical judgment in common healthcare situations.</span></li>
+      <li><span class="ol-num">3</span><span class="ol-text">Administer medications safely.</span></li>
+      <li><span class="ol-num">4</span><span class="ol-text">Demonstrate effective communication.</span></li>
+      <li><span class="ol-num">5</span><span class="ol-text">Integrate ethical and legal standards into practice.</span></li>
+      <li><span class="ol-num">6</span><span class="ol-text">Collaborate within interdisciplinary healthcare teams.</span></li>
+    </ul>
+  </div>
+
+  <!-- § 5 CURRICULUM -->
+  <div class="section" id="asn-curriculum">
+    <div class="section-title"><span class="sec-num">§ 5</span> Curriculum Structure</div>
+
+    <!-- YEAR 1 -->
+    <div class="year-block">
+      <div class="year-header">
+        <span class="year-badge">Year 1</span>
+        <span class="year-title">Prerequisites</span>
+        <span class="year-credits">24–30 Credits</span>
+      </div>
+
+      <div class="semester-label">Semester 1</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">BIO 101</td><td class="course-name">Human Anatomy with Lab</td><td class="hours">45 theory · 45 lab</td><td class="credits">4</td></tr>
+          <tr><td class="course-code">ENG 101</td><td class="course-name">English Composition</td><td class="hours">—</td><td class="credits">3</td></tr>
+          <tr><td class="course-code">PSY 101</td><td class="course-name">Introduction to Psychology</td><td class="hours">—</td><td class="credits">3</td></tr>
+          <tr><td class="course-code">GEN ED</td><td class="course-name">General Education Elective</td><td class="hours">—</td><td class="credits">3</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">13</td></tr></tfoot>
+      </table>
+
+      <div class="semester-label">Semester 2</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">BIO 102</td><td class="course-name">Human Physiology with Lab</td><td class="hours">45 theory · 45 lab</td><td class="credits">4</td></tr>
+          <tr><td class="course-code">BIO 201</td><td class="course-name">Microbiology with Lab</td><td class="hours">45 theory · 45 lab</td><td class="credits">4</td></tr>
+          <tr><td class="course-code">SOC 101</td><td class="course-name">Sociology / Cultural Diversity</td><td class="hours">—</td><td class="credits">3</td></tr>
+          <tr><td class="course-code">COM 101</td><td class="course-name">Oral Communication</td><td class="hours">—</td><td class="credits">3</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">14</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- YEAR 2 -->
+    <div class="year-block">
+      <div class="year-header">
+        <span class="year-badge">Year 2</span>
+        <span class="year-title">Core Nursing Begins</span>
+        <span class="year-credits">21 Credits</span>
+      </div>
+
+      <div class="semester-label">Semester 3</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">NURS 201</td><td class="course-name">Fundamentals of Nursing <span class="concurrent">Concurrent</span></td><td class="hours">60 theory · 120 clinical</td><td class="credits">6</td></tr>
+          <tr><td class="course-code">NURS 202</td><td class="course-name">Health Assessment</td><td class="hours">30 theory · 45 lab</td><td class="credits">3</td></tr>
+          <tr><td class="course-code">NURS 203</td><td class="course-name">Pharmacology I</td><td class="hours">45 theory</td><td class="credits">3</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">12</td></tr></tfoot>
+      </table>
+
+      <div class="semester-label">Semester 4</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">NURS 210</td><td class="course-name">Medical-Surgical Nursing I <span class="concurrent">Concurrent</span></td><td class="hours">60 theory · 135 clinical</td><td class="credits">6</td></tr>
+          <tr><td class="course-code">NURS 211</td><td class="course-name">Geriatric Nursing <span style="font-size:10px;color:var(--text-muted);">(integrated within NURS 210 clinical)</span></td><td class="hours">Integrated</td><td class="credits">—</td></tr>
+          <tr><td class="course-code">NURS 212</td><td class="course-name">Pharmacology II</td><td class="hours">45 theory</td><td class="credits">3</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">9</td></tr></tfoot>
+      </table>
+    </div>
+
+    <div class="section-divider"></div>
+
+    <!-- YEAR 3 -->
+    <div class="year-block">
+      <div class="year-header">
+        <span class="year-badge">Year 3</span>
+        <span class="year-title">Specialty &amp; Advanced Practice</span>
+        <span class="year-credits">30 Credits</span>
+      </div>
+
+      <div class="semester-label">Semester 5</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">NURS 301</td><td class="course-name">Maternal &amp; Newborn Nursing <span class="concurrent">Concurrent</span></td><td class="hours">45 theory · 90 clinical</td><td class="credits">5</td></tr>
+          <tr><td class="course-code">NURS 302</td><td class="course-name">Pediatric Nursing <span class="concurrent">Concurrent</span></td><td class="hours">45 theory · 90 clinical</td><td class="credits">5</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">10</td></tr></tfoot>
+      </table>
+
+      <div class="semester-label">Semester 6</div>
+      <table class="course-table">
+        <thead><tr><th>Code</th><th>Course</th><th>Hours</th><th style="text-align:center;">Credits</th></tr></thead>
+        <tbody>
+          <tr><td class="course-code">NURS 401</td><td class="course-name">Psychiatric/Mental Health Nursing <span class="concurrent">Concurrent</span></td><td class="hours">45 theory · 90 clinical</td><td class="credits">5</td></tr>
+          <tr><td class="course-code">NURS 410</td><td class="course-name">Advanced Medical-Surgical Nursing <span class="concurrent">Concurrent</span></td><td class="hours">60 theory · 135 clinical</td><td class="credits">6</td></tr>
+          <tr><td class="course-code">NURS 420</td><td class="course-name">Capstone Clinical Integration</td><td class="hours">150 clinical hours</td><td class="credits">4</td></tr>
+        </tbody>
+        <tfoot><tr><td colspan="3" class="course-credits-total">Semester Total</td><td class="credits" style="font-size:13px;font-weight:800;color:var(--gold-400);border-top:1px solid rgba(201,168,76,.15);text-align:center;">15</td></tr></tfoot>
+      </table>
+    </div>
+
+  </div><!-- /curriculum section -->
+
+  <!-- § 6 CLINICAL HOURS -->
+  <div class="section" id="asn-clinical-hours">
+    <div class="section-title"><span class="sec-num">§ 6</span> Total Clinical Hour Distribution</div>
+    <table class="clin-table">
+      <thead><tr><th>Course</th><th>Course Code</th><th style="text-align:right;">Clinical Hours</th></tr></thead>
+      <tbody>
+        <tr><td>Fundamentals of Nursing</td><td>NURS 201</td><td>120</td></tr>
+        <tr><td>Medical-Surgical Nursing I</td><td>NURS 210</td><td>135</td></tr>
+        <tr><td>Maternal &amp; Newborn Nursing</td><td>NURS 301</td><td>90</td></tr>
+        <tr><td>Pediatric Nursing</td><td>NURS 302</td><td>90</td></tr>
+        <tr><td>Psychiatric/Mental Health Nursing</td><td>NURS 401</td><td>90</td></tr>
+        <tr><td>Advanced Medical-Surgical Nursing</td><td>NURS 410</td><td>135</td></tr>
+        <tr><td>Capstone Clinical Integration</td><td>NURS 420</td><td>150</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="2"><strong>Total Clinical Hours</strong></td><td>~810–850 hours</td></tr></tfoot>
+    </table>
+  </div>
+
+  <!-- § 7 CLINICAL POLICY -->
+  <div class="section" id="asn-clinical-policy">
+    <div class="section-title"><span class="sec-num">§ 7</span> Clinical Education Policy</div>
+    <p>Clinical instruction at ACNHS:</p>
+    <ul class="policy-list">
+      <li>Occurs in supervised healthcare settings.</li>
+      <li>Is delivered concurrently with theory.</li>
+      <li>Includes direct patient care responsibilities.</li>
+      <li>Is evaluated through competency-based assessment.</li>
+      <li>Requires completion of all assigned hours.</li>
+    </ul>
+    <div class="callout"><p>Students must complete all required clinical hours to progress in the program.</p></div>
+  </div>
+
+  <!-- § 8 FACULTY -->
+  <div class="section" id="asn-faculty">
+    <div class="section-title"><span class="sec-num">§ 8</span> Faculty Qualifications</div>
+    <p>Nursing faculty must:</p>
+    <ul class="policy-list">
+      <li>Hold active nursing licensure.</li>
+      <li>Possess a minimum of a Master's degree in Nursing or related health field.</li>
+      <li>Demonstrate clinical practice experience.</li>
+      <li>Meet institutional teaching competency standards.</li>
+    </ul>
+  </div>
+
+  <!-- § 9 ACADEMIC POLICIES -->
+  <div class="section" id="asn-academic-policies">
+    <div class="section-title"><span class="sec-num">§ 9</span> Academic Policies</div>
+    <div class="def-row"><span class="def-label">Minimum passing grade (nursing theory)</span><span class="def-val">75%</span></div>
+    <div class="def-row"><span class="def-label">Clinical courses grading</span><span class="def-val">Pass / Fail</span></div>
+    <div class="def-row"><span class="def-label">Minimum GPA requirement</span><span class="def-val">2.5</span></div>
+    <div class="def-row"><span class="def-label">Course failure policy</span><span class="def-val">Failure in two core nursing courses may result in dismissal.</span></div>
+  </div>
+
+  <!-- § 10 TRANSFER -->
+  <div class="section" id="asn-transfer">
+    <div class="section-title"><span class="sec-num">§ 10</span> Transfer Credit Policy</div>
+    <p>Prerequisite sciences and general education courses may be transferred if:</p>
+    <ul class="policy-list">
+      <li>Completed at a recognized institution.</li>
+      <li>Minimum grade of C (2.0) achieved.</li>
+      <li>Laboratory components verified for sciences.</li>
+    </ul>
+    <p>Nursing courses may only be transferred if:</p>
+    <ul class="policy-list">
+      <li>Theory and clinical were completed concurrently.</li>
+      <li>Clinical hours are documented.</li>
+      <li>Course syllabi are submitted for review.</li>
+      <li>Coursework completed within the past 5 years.</li>
+    </ul>
+    <div class="callout"><p>A minimum of 40% of nursing coursework must be completed at ACNHS.</p></div>
+  </div>
+
+  <!-- § 11 GRADUATION -->
+  <div class="section" id="asn-graduation">
+    <div class="section-title"><span class="sec-num">§ 11</span> Graduation Requirements</div>
+    <p>Students must:</p>
+    <ul class="policy-list">
+      <li>Complete all required credit hours.</li>
+      <li>Complete all required clinical hours.</li>
+      <li>Successfully complete the Capstone Clinical Integration (NURS 420).</li>
+      <li>Meet professional conduct standards throughout the program.</li>
+    </ul>
+  </div>
+
+  <!-- § 12 LICENSURE -->
+  <div class="section" id="asn-licensure">
+    <div class="section-title"><span class="sec-num">§ 12</span> Licensure Statement</div>
+    <div class="notice"><p>Completion of the ASN program does not guarantee licensure in any jurisdiction.</p></div>
+    <p>Graduates are responsible for meeting all regulatory requirements of the jurisdiction in which licensure is sought. ACNHS makes no representation regarding licensure eligibility in any specific state, country, or territory.</p>
+  </div>
+
+  <!-- § 13 MEMBERSHIP -->
+  <div class="section" id="asn-membership">
+    <div class="section-title"><span class="sec-num">§ 13</span> Professional Membership</div>
+    <p>Upon graduation, students receive <strong>Lifetime Membership</strong> in the <strong>Armenian Nurses Association of the United States (ANA-US)</strong>, a nonprofit professional organization supporting continued professional development and networking for Armenian nursing graduates worldwide.</p>
+  </div>
+
+  </div><!-- /.catalog-pane #paneAsn -->
+
 </div><!-- /.page -->
 
 <div data-acnhs-footer></div>
 <script src="js/site-chrome.js"></script>
+<script>
+  // ── Program Picker & Tab Switcher ──────────────────────────
+  (function () {
+    var overlay = document.getElementById('pickerOverlay');
+    var paneBsn = document.getElementById('paneBsn');
+    var paneAsn = document.getElementById('paneAsn');
+    var tabBsn  = document.getElementById('tabBsn');
+    var tabAsn  = document.getElementById('tabAsn');
+
+    // Show picker on every fresh load (no hash/preference)
+    var savedProg = sessionStorage.getItem('acnhs_catalog_prog');
+    if (savedProg) {
+      // Skip picker if user already chose during this session
+      applyProgram(savedProg, false);
+    }
+    // else overlay stays visible (default)
+
+    window.selectProgram = function (prog) {
+      sessionStorage.setItem('acnhs_catalog_prog', prog);
+      overlay.classList.add('hidden');
+      applyProgram(prog, true);
+    };
+
+    window.switchTab = function (prog) {
+      sessionStorage.setItem('acnhs_catalog_prog', prog);
+      applyProgram(prog, false);
+    };
+
+    function applyProgram(prog, scroll) {
+      if (prog === 'bsn') {
+        paneBsn.classList.add('active');
+        paneAsn.classList.remove('active');
+        tabBsn.classList.add('active');
+        tabAsn.classList.remove('active');
+      } else {
+        paneAsn.classList.add('active');
+        paneBsn.classList.remove('active');
+        tabAsn.classList.add('active');
+        tabBsn.classList.remove('active');
+      }
+      if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  })();
+</script>
 </body>
 </html>
