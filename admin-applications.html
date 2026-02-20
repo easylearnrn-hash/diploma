@@ -9058,6 +9058,8 @@
     async function updateApplicationStatus() {
       if (!currentApplicationId) return;
       
+      const savedAppId = currentApplicationId; // capture before any async ops can null it out
+      
       const supabase = initSupabase();
       if (!supabase) return;
       
@@ -9239,7 +9241,7 @@
           });
         
         // ===== REFRESH DRAWER TO SHOW UPDATED STATUS HISTORY =====
-        refreshApplicationDrawer(currentApplicationId);
+        refreshApplicationDrawer(savedAppId);
         
         showNotification(
           'Status Updated Successfully!',
@@ -9247,14 +9249,8 @@
           'success'
         );
         
-  // Reload applications list in the background
-  setTimeout(() => loadApplications(), 0);
-        
-        // Reopen drawer with updated data
-        const updatedApp = applicationsData.find(a => a.id === currentApplicationId);
-        if (updatedApp) {
-          openApplicationDrawer(currentApplicationId);
-        }
+        // Reload applications list in the background (use savedAppId so the closure is safe)
+        setTimeout(() => loadApplications(), 0);
         
       } catch (error) {
         console.error('Error updating status:', error);
