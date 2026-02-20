@@ -1359,7 +1359,7 @@
       
       // Expose functions to global scope for onclick handlers (after they're defined)
       window.openCreateModal = openCreateModal;
-      window.previewAlert = previewAlert;
+      window.previewAlertById = previewAlertById;
       window.viewAnalytics = viewAnalytics;
       window.toggleAlertStatus = toggleAlertStatus;
       window.deleteAlert = deleteAlert;
@@ -1512,7 +1512,7 @@
               <td>${scheduleText}</td>
               <td>${statusBadge}</td>
               <td>
-                <button class="btn btn-secondary btn-icon" onclick="previewAlert('${alert.id}')" title="Preview Alert">👁️</button>
+                <button class="btn btn-secondary btn-icon" onclick="previewAlertById('${alert.id}')" title="Preview Alert">👁️</button>
                 <button class="btn btn-secondary btn-icon" onclick="viewAnalytics('${alert.id}')" title="View Analytics">📊</button>
                 <button class="btn btn-primary btn-icon" onclick="editAlert('${alert.id}')" title="Edit Alert">✏️</button>
                 <button class="btn btn-info btn-icon" onclick="replayAlert('${alert.id}')" title="Clear Impressions & Replay">🔄</button>
@@ -2485,94 +2485,13 @@
 
     // Preview alert from form (before saving)
     function previewFormAlert() {
-      try {
-        // Get form values
-        const title = document.getElementById('alert-title').value || 'Untitled Alert';
-        const message = document.getElementById('alert-message').value || '';
-        const severity = document.getElementById('alert-severity').value || 'info';
-        const requiresResponse = document.getElementById('alert-requires-response').checked;
-        const yesLabel = document.getElementById('alert-yes-label').value || 'Yes';
-        const noLabel = document.getElementById('alert-no-label').value || 'No';
-
-        if (!message.trim()) {
-          showNotification('Please enter an alert message first', 'warn');
-          return;
-        }
-
-        // Replace template variables with sample data
-        let processedMessage = message
-          .replace(/\n/g, '<br>')
-          .replace(/\{student_name\}/g, '<strong>John Doe</strong>')
-          .replace(/\{student_id\}/g, '<strong>ACNHS-0001</strong>')
-          .replace(/\{email\}/g, '<strong>john.doe@example.com</strong>')
-          .replace(/\{month\}/g, '<strong>February</strong>')
-          .replace(/\{year\}/g, '<strong>2026</strong>')
-          .replace(/\{date\}/g, '<strong>02/13/2026</strong>')
-          .replace(/\{group\}/g, '<strong>Group A</strong>');
-
-        // Build severity colors
-        const severityColors = {
-          info: '#3b82f6',
-          success: '#10b981',
-          warn: '#f59e0b',
-          critical: '#ef4444'
-        };
-
-        const severityIcons = {
-          info: 'ℹ️',
-          success: '✅',
-          warn: '⚠️',
-          critical: '🚨'
-        };
-
-        // Build preview HTML
-        const previewHTML = `
-          <div style="max-width: 600px; margin: 0 auto;">
-            <div style="background: linear-gradient(135deg, ${severityColors[severity]}, ${severityColors[severity]}dd); padding: 20px; border-radius: 12px 12px 0 0; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-              <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                <span style="font-size: 28px;">${severityIcons[severity]}</span>
-                <h3 style="color: white; margin: 0; font-size: 20px; font-weight: 700;">${title}</h3>
-              </div>
-              <div style="color: rgba(255,255,255,0.9); font-size: 13px;">
-                Preview - This is how students will see this alert
-              </div>
-            </div>
-            <div style="background: white; padding: 24px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-              <div style="color: #1e293b; line-height: 1.8; white-space: pre-wrap;">
-                ${processedMessage}
-              </div>
-              ${requiresResponse ? `
-                <div style="margin-top: 24px; display: flex; gap: 12px; justify-content: center;">
-                  <button style="padding: 12px 32px; background: #10b981; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                    ${yesLabel}
-                  </button>
-                  <button style="padding: 12px 32px; background: #6b7280; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                    ${noLabel}
-                  </button>
-                </div>
-              ` : `
-                <div style="margin-top: 24px; text-align: center;">
-                  <button style="padding: 10px 24px; background: #e2e8f0; color: #475569; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
-                    Dismiss
-                  </button>
-                </div>
-              `}
-            </div>
-          </div>
-        `;
-
-        document.getElementById('preview-content').innerHTML = previewHTML;
-        document.getElementById('preview-modal').style.display = 'flex';
-
-      } catch (error) {
-        console.error('Error previewing alert:', error);
-        showNotification('Error creating preview', 'error');
-      }
+      // Delegate to the main previewAlert() which uses the acnhs-alert-* CSS classes
+      syncEditorToTextarea();
+      previewAlert();
     }
 
-    async function previewAlert(alertId) {
-      alert('Preview button clicked! Alert ID: ' + alertId);
-      console.log('🔍 Preview function called with alertId:', alertId);
+    async function previewAlertById(alertId) {
+      console.log('🔍 previewAlertById called with alertId:', alertId);
       
       try {
         console.log('🔌 Connecting to database...');
@@ -2732,7 +2651,7 @@
         `;
 
         document.getElementById('preview-content').innerHTML = previewHTML;
-        document.getElementById('preview-modal').style.display = 'flex';
+        document.getElementById('preview-modal').classList.add('show');
 
       } catch (error) {
         console.error('Error previewing alert:', error);
@@ -3209,8 +3128,8 @@
             </div>
           `}
         </div>
-        <div style="margin-top: 16px; padding: 12px; background: rgba(45, 212, 191, 0.1); border-radius: 8px; font-size: 13px;">
-          <strong>📝 Preview Note:</strong> Variables like {student_name} have been replaced with sample data. 
+        <div style="margin-top: 16px; padding: 12px; background: var(--gold-glow); border: 1px solid var(--gold-dim); border-radius: 8px; font-size: 13px; color: var(--text-muted);">
+          <strong style="color:var(--gold-primary);">📝 Preview Note:</strong> Variables like {student_name} have been replaced with sample data. 
           When shown to students, these will be replaced with their actual information.
         </div>
       `;
@@ -3220,7 +3139,9 @@
     }
 
     function closePreviewModal() {
-      document.getElementById('preview-modal').style.display = 'none';
+      const modal = document.getElementById('preview-modal');
+      modal.classList.remove('show');
+      modal.style.display = '';
     }
 
     function openCreateModal() {
