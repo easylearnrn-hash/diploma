@@ -333,6 +333,23 @@ body{
 .modal-close{position:absolute;top:16px;right:16px;background:var(--gold-glow);border:1px solid var(--border-gold);width:40px;height:40px;border-radius:50%;font-size:24px;cursor:pointer;color:var(--gold-400);display:flex;align-items:center;justify-content:center;transition:all 0.3s;z-index:10;}
 .modal-close:hover{background:var(--gold-500);color:var(--navy-900);transform:scale(1.1);}
 
+/* ── Academic Catalog Picker ── */
+.picker-overlay{position:fixed;inset:0;background:rgba(4,17,31,.92);backdrop-filter:blur(6px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.picker-overlay.hidden{display:none;}
+.picker-modal{background:var(--navy-800);border:1px solid var(--border-gold);border-radius:20px;padding:52px 48px;max-width:680px;width:100%;text-align:center;position:relative;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.6);}
+.picker-modal::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold-500),transparent);}
+.picker-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--gold-400);background:var(--gold-glow);border:1px solid var(--border-gold);padding:6px 16px;border-radius:999px;margin-bottom:24px;}
+.picker-modal h2{font-family:'Playfair Display',Georgia,serif;font-size:clamp(22px,3vw,32px);font-weight:800;color:var(--gold-200);margin-bottom:10px;letter-spacing:-0.3px;}
+.picker-modal p{font-size:14px;color:var(--text-muted);margin-bottom:36px;line-height:1.7;}
+.picker-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+.picker-card{background:rgba(201,168,76,.04);border:2px solid rgba(201,168,76,.2);border-radius:14px;padding:28px 24px;cursor:pointer;transition:border-color .2s,background .2s,transform .2s;text-align:left;width:100%;font-family:'Inter',sans-serif;}
+.picker-card:hover{border-color:var(--gold-500);background:rgba(201,168,76,.09);transform:translateY(-3px);}
+.picker-card-badge{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--navy-900);background:var(--gold-500);padding:4px 12px;border-radius:5px;margin-bottom:14px;}
+.picker-card h3{font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:800;color:var(--gold-200);margin-bottom:8px;line-height:1.2;}
+.pick-meta{font-size:12px;color:var(--text-muted);line-height:1.7;margin-bottom:16px;}
+.pick-cta{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--gold-400);letter-spacing:.5px;}
+.pick-cta::after{content:'→';}
+
 /* ── RESPONSIVE ── */
 @media(max-width:900px){
   .container,.container-sm{padding:0 24px;}
@@ -395,6 +412,7 @@ body{
           <span class="help-arrow" aria-hidden="true"></span>
         </button>
         <div class="help-dropdown-content" role="menu">
+          <a href="academic-catalog.html" role="menuitem" onclick="openCatalogPicker(); return false;">Academic Catalog</a>
           <a href="#programs" role="menuitem" onclick="closeAllDropdowns(); scrollToSection('programs'); return false;">Programs</a>
           <a href="#" role="menuitem" onclick="closeAllDropdowns(); openCurriculumModal(); return false;">Curriculum</a>
           <a href="#simulation" role="menuitem" onclick="closeAllDropdowns(); scrollToSection('simulation'); return false;">Simulation</a>
@@ -422,6 +440,29 @@ body{
     </div>
   </div>
 </header>
+
+<!-- ── Academic Catalog Picker Modal ── -->
+<div class="picker-overlay hidden" id="catalogPickerOverlay" aria-label="Select a program catalog">
+  <div class="picker-modal">
+    <div class="picker-eyebrow">Official Institutional Publication</div>
+    <h2>Academic Catalog</h2>
+    <p>Armenian College of Nursing &amp; Health Sciences<br>Select the program catalog you'd like to view.</p>
+    <div class="picker-cards">
+      <button class="picker-card" onclick="openCatalogProgram('bsn')" aria-label="View BSN Catalog">
+        <div class="picker-card-badge">BSN</div>
+        <h3>Bachelor of Science in Nursing</h3>
+        <div class="pick-meta">4 Academic Years · 124 Credits<br>~960–1,050 Clinical Hours</div>
+        <span class="pick-cta">View BSN Catalog</span>
+      </button>
+      <button class="picker-card" onclick="openCatalogProgram('asn')" aria-label="View ASN Catalog">
+        <div class="picker-card-badge">ASN</div>
+        <h3>Associate of Science in Nursing</h3>
+        <div class="pick-meta">3 Academic Years · 72–78 Credits<br>~810–850 Clinical Hours</div>
+        <span class="pick-cta">View ASN Catalog</span>
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- ── Hero ── -->
 <section class="hero">
@@ -1682,10 +1723,40 @@ function closeAllDropdowns() {
   document.querySelectorAll('.help-dropdown').forEach(d => d.classList.remove('active'));
 }
 
+// Academic Catalog picker (from Academics dropdown)
+function openCatalogPicker() {
+  const overlay = document.getElementById('catalogPickerOverlay');
+  closeAllDropdowns();
+  if (overlay) overlay.classList.remove('hidden');
+}
+
+function openCatalogProgram(program) {
+  const overlay = document.getElementById('catalogPickerOverlay');
+  if (overlay) overlay.classList.add('hidden');
+  window.location.href = `academic-catalog.html?program=${program}`;
+}
+
 // Close dropdowns when clicking outside
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.help-dropdown')) {
     closeAllDropdowns();
+  }
+});
+
+// Close catalog picker when clicking outside or pressing Escape
+document.addEventListener('click', function(e) {
+  const overlay = document.getElementById('catalogPickerOverlay');
+  if (!overlay || overlay.classList.contains('hidden')) return;
+  if (e.target === overlay) {
+    overlay.classList.add('hidden');
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  const overlay = document.getElementById('catalogPickerOverlay');
+  if (overlay && !overlay.classList.contains('hidden')) {
+    overlay.classList.add('hidden');
   }
 });
 

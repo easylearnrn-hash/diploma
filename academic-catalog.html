@@ -141,7 +141,7 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
 /* ======================================================
    PROGRAM PICKER MODAL
    ====================================================== */
-.picker-overlay{position:fixed;inset:0;background:rgba(4,17,31,.92);backdrop-filter:blur(6px);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.picker-overlay{position:fixed;inset:0;background:rgba(4,17,31,.95);backdrop-filter:blur(6px);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px;}
 .picker-overlay.hidden{display:none;}
 .picker-modal{background:var(--navy-800);border:1px solid var(--border-gold);border-radius:var(--radius-lg);padding:52px 48px;max-width:680px;width:100%;text-align:center;position:relative;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.6);}
 .picker-modal::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold-500),transparent);}
@@ -160,13 +160,8 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
 button.picker-card{font-family:'Inter',sans-serif;text-align:left;width:100%;}
 @media(max-width:560px){.picker-cards{grid-template-columns:1fr;}.picker-modal{padding:36px 24px;}}
 
-/* ======================================================
-   PROGRAM TAB SWITCHER (shown inside catalog)
-   ====================================================== */
-.prog-tabs{display:flex;gap:8px;background:rgba(201,168,76,.05);border:1px solid var(--border-gold);border-radius:var(--radius-md);padding:6px;margin-bottom:32px;}
-.prog-tab{flex:1;padding:10px 20px;border-radius:calc(var(--radius-md) - 4px);border:none;background:transparent;font-family:'Inter',sans-serif;font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--text-muted);cursor:pointer;transition:background .2s,color .2s;text-transform:uppercase;}
-.prog-tab.active{background:var(--gold-500);color:var(--navy-900);}
-.prog-tab:not(.active):hover{background:rgba(201,168,76,.1);color:var(--gold-400);}
+/* Hide catalog content while picker is open */
+body.picker-open .page{visibility:hidden;}
 
 /* Catalog panes */
 .catalog-pane{display:none;}
@@ -177,43 +172,12 @@ button.picker-card{font-family:'Inter',sans-serif;text-align:left;width:100%;}
 <body class="acnhs-watermarked">
 <div data-acnhs-header></div>
 
-<!-- ======================================================
-     PROGRAM PICKER MODAL
-     ====================================================== -->
-<div class="picker-overlay" id="pickerOverlay" aria-label="Select a program catalog">
-  <div class="picker-modal">
-    <div class="picker-eyebrow">Official Institutional Publication</div>
-    <h2>Academic Catalog</h2>
-    <p>Armenian College of Nursing &amp; Health Sciences<br>Select the program catalog you'd like to view.</p>
-    <div class="picker-cards">
-      <button class="picker-card" onclick="selectProgram('bsn')" aria-label="View BSN Catalog">
-        <div class="picker-card-badge">BSN</div>
-        <h3>Bachelor of Science in Nursing</h3>
-        <div class="pick-meta">4 Academic Years · 124 Credits<br>~960–1,050 Clinical Hours</div>
-        <span class="pick-cta">View BSN Catalog</span>
-      </button>
-      <button class="picker-card" onclick="selectProgram('asn')" aria-label="View ASN Catalog">
-        <div class="picker-card-badge">ASN</div>
-        <h3>Associate of Science in Nursing</h3>
-        <div class="pick-meta">3 Academic Years · 72–78 Credits<br>~810–850 Clinical Hours</div>
-        <span class="pick-cta">View ASN Catalog</span>
-      </button>
-    </div>
-  </div>
-</div>
-
 <div class="page">
-
-  <!-- Program Tab Switcher -->
-  <div class="prog-tabs" id="progTabs">
-    <button class="prog-tab active" id="tabBsn" onclick="switchTab('bsn')">BSN — Bachelor of Science in Nursing</button>
-    <button class="prog-tab" id="tabAsn" onclick="switchTab('asn')">ASN — Associate of Science in Nursing</button>
-  </div>
 
   <!-- ================================================
        BSN CATALOG PANE
        ================================================ -->
-  <div class="catalog-pane active" id="paneBsn">
+  <div class="catalog-pane" id="paneBsn">
 
   <!-- HERO -->
   <div class="page-hero">
@@ -812,46 +776,30 @@ button.picker-card{font-family:'Inter',sans-serif;text-align:left;width:100%;}
 <div data-acnhs-footer></div>
 <script src="js/site-chrome.js"></script>
 <script>
-  // ── Program Picker & Tab Switcher ──────────────────────────
+  // ── Program Picker (Shared) ────────────────────────────────
   (function () {
-    var overlay = document.getElementById('pickerOverlay');
     var paneBsn = document.getElementById('paneBsn');
     var paneAsn = document.getElementById('paneAsn');
-    var tabBsn  = document.getElementById('tabBsn');
-    var tabAsn  = document.getElementById('tabAsn');
 
-    // Show picker on every fresh load (no hash/preference)
-    var savedProg = sessionStorage.getItem('acnhs_catalog_prog');
-    if (savedProg) {
-      // Skip picker if user already chose during this session
-      applyProgram(savedProg, false);
-    }
-    // else overlay stays visible (default)
-
-    window.selectProgram = function (prog) {
-      sessionStorage.setItem('acnhs_catalog_prog', prog);
-      overlay.classList.add('hidden');
-      applyProgram(prog, true);
-    };
-
-    window.switchTab = function (prog) {
-      sessionStorage.setItem('acnhs_catalog_prog', prog);
-      applyProgram(prog, false);
-    };
-
-    function applyProgram(prog, scroll) {
+    window.setCatalogProgram = function (prog, scroll) {
       if (prog === 'bsn') {
         paneBsn.classList.add('active');
         paneAsn.classList.remove('active');
-        tabBsn.classList.add('active');
-        tabAsn.classList.remove('active');
-      } else {
+        sessionStorage.setItem('acnhs_catalog_program', 'bsn');
+      } else if (prog === 'asn') {
         paneAsn.classList.add('active');
         paneBsn.classList.remove('active');
-        tabAsn.classList.add('active');
-        tabBsn.classList.remove('active');
+        sessionStorage.setItem('acnhs_catalog_program', 'asn');
       }
       if (scroll) window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    var urlParams = new URLSearchParams(window.location.search);
+    var urlProgram = (urlParams.get('program') || '').toLowerCase();
+    if (urlProgram === 'bsn' || urlProgram === 'asn') {
+      window.setCatalogProgram(urlProgram, false);
+    } else if (typeof window.openCatalogPicker === 'function') {
+      window.openCatalogPicker();
     }
   })();
 </script>

@@ -19,7 +19,7 @@ const ACNHS_HEADER_HTML = `
           <span class="help-arrow" aria-hidden="true"></span>
         </button>
         <div class="help-dropdown-content" role="menu">
-          <a href="academic-catalog.html" role="menuitem">Academic Catalog</a>
+          <a href="academic-catalog.html" role="menuitem" data-action="open-catalog-picker">Academic Catalog</a>
           <a href="index.html#programs" role="menuitem">Programs</a>
           <a href="#" role="menuitem" data-action="open-curriculum">Curriculum</a>
           <a href="index.html#simulation" role="menuitem">Simulation</a>
@@ -70,7 +70,7 @@ const ACNHS_FOOTER_HTML = `
         <h4>Institution</h4>
         <a href="about.html">About the College</a>
         <a href="contact.html">Contact Us</a>
-        <a href="academic-catalog.html">Academic Catalog</a>
+        <a href="academic-catalog.html" data-action="open-catalog-picker">Academic Catalog</a>
       </div>
     </div>
   </div>
@@ -110,6 +110,8 @@ function setupDropdownClose_Chrome(dropdown, triggerBtn) {
 function wireHeaderInteractions(root) {
   if (!root) return;
 
+  ensureCatalogPickerOverlay();
+
   // Curriculum modal is only on index.html; fall back to the catalog page elsewhere.
   root.querySelectorAll('[data-action="open-curriculum"]').forEach(a => {
     a.addEventListener('click', (e) => {
@@ -118,6 +120,16 @@ function wireHeaderInteractions(root) {
         window.openCurriculumModal();
       } else {
         window.location.href = 'academic-catalog.html';
+      }
+    });
+  });
+
+  // Academic catalog picker (header + footer)
+  root.querySelectorAll('[data-action="open-catalog-picker"]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      if (typeof window.openCatalogPicker === 'function') {
+        e.preventDefault();
+        window.openCatalogPicker();
       }
     });
   });
@@ -205,6 +217,136 @@ function wireHeaderInteractions(root) {
       el.style.display = 'none';
     });
   }
+}
+
+function ensureCatalogPickerOverlay() {
+  if (document.getElementById('catalogPickerOverlay')) return;
+
+  const pickerHtml = `
+    <div class="picker-overlay hidden" id="catalogPickerOverlay" aria-label="Select a program catalog">
+      <div class="picker-modal">
+        <div class="picker-eyebrow">Official Institutional Publication</div>
+        <h2>Academic Catalog</h2>
+        <p>Armenian College of Nursing &amp; Health Sciences<br>Select the program catalog you'd like to view.</p>
+        <div class="picker-cards">
+          <button class="picker-card" onclick="openCatalogProgram('bsn')" aria-label="View BSN Catalog">
+            <div class="picker-card-badge">BSN</div>
+            <h3>Bachelor of Science in Nursing</h3>
+            <div class="pick-meta">4 Academic Years · 124 Credits<br>~960–1,050 Clinical Hours</div>
+            <span class="pick-cta">View BSN Catalog</span>
+          </button>
+          <button class="picker-card" onclick="openCatalogProgram('asn')" aria-label="View ASN Catalog">
+            <div class="picker-card-badge">ASN</div>
+            <h3>Associate of Science in Nursing</h3>
+            <div class="pick-meta">3 Academic Years · 72–78 Credits<br>~810–850 Clinical Hours</div>
+            <span class="pick-cta">View ASN Catalog</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', pickerHtml);
+}
+
+let catalogPickerWired = false;
+
+function openCatalogPicker() {
+  ensureCatalogPickerOverlay();
+  const overlay = document.getElementById('catalogPickerOverlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    document.body.classList.add('picker-open');
+  }
+}
+
+function closeCatalogPicker() {
+  const overlay = document.getElementById('catalogPickerOverlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+    document.body.classList.remove('picker-open');
+  }
+  if (typeof window.setCatalogProgram === 'function') {
+    const storedProgram = sessionStorage.getItem('acnhs_catalog_program');
+    if (storedProgram === 'bsn' || storedProgram === 'asn') {
+      window.setCatalogProgram(storedProgram, false);
+    }
+  }
+}
+
+function openCatalogProgram(program) {
+  closeCatalogPicker();
+  sessionStorage.setItem('acnhs_catalog_program', program);
+  if (typeof window.setCatalogProgram === 'function') {
+    window.setCatalogProgram(program, true);
+    const url = new URL(window.location.href);
+    url.searchParams.set('program', program);
+    window.history.replaceState({}, '', url.toString());
+    return;
+  }
+  window.location.href = `academic-catalog.html?program=${program}`;
+}
+
+if (typeof window.openCatalogPicker !== 'function') {
+  window.openCatalogPicker = openCatalogPicker;
+}
+
+if (typeof window.openCatalogProgram !== 'function') {
+  window.openCatalogProgram = openCatalogProgram;
+}
+
+if (!catalogPickerWired) {
+  document.addEventListener('mousedown', (event) => {
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (event.target === overlay) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
+  document.addEventListener('mouseup', (event) => {
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (event.target === overlay) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, true);
+
+  document.addEventListener('touchstart', (event) => {
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (event.target === overlay) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, { capture: true, passive: false });
+
+  document.addEventListener('touchend', (event) => {
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (event.target === overlay) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+  }, { capture: true, passive: false });
+
+  document.addEventListener('click', (event) => {
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (!overlay || overlay.classList.contains('hidden')) return;
+    if (event.target === overlay) {
+      event.preventDefault();
+      event.stopPropagation();
+      setTimeout(() => closeCatalogPicker(), 0);
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const overlay = document.getElementById('catalogPickerOverlay');
+    if (overlay && !overlay.classList.contains('hidden')) closeCatalogPicker();
+  });
+  catalogPickerWired = true;
 }
 
 const injectSiteChrome = once(async function injectSiteChrome() {
