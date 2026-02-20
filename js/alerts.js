@@ -343,25 +343,34 @@
   }
 
   // ==========================================
-  // DISPLAY ALERT MODAL
+  // DISPLAY ALERT — position-aware dispatcher
   // ==========================================
   async function showAlert(alert) {
     isShowingAlert = true;
 
-    // Create modal HTML
-    const modal = createAlertModal(alert);
-    document.body.appendChild(modal);
+    const position = alert.display_position
+      || alert.trigger_rules?.display_position
+      || 'modal';
 
-    // Animate in
+    let el;
+    if (position === 'modal') {
+      el = createAlertModal(alert);
+    } else if (position === 'banner_top' || position === 'banner_bottom') {
+      el = createAlertBanner(alert, position);
+    } else if (position.startsWith('toast_')) {
+      el = createAlertToast(alert, position);
+    } else {
+      el = createAlertModal(alert); // fallback
+    }
+
+    document.body.appendChild(el);
+
     requestAnimationFrame(() => {
-      modal.classList.add('show');
+      el.classList.add('show');
     });
 
-    // Record impression
     await recordImpression(alert.id, currentStudent.id);
-
-    // Setup event listeners
-    setupAlertEventListeners(modal, alert);
+    setupAlertEventListeners(el, alert);
   }
 
   // ==========================================
@@ -421,8 +430,23 @@
     // Replace template variables in message and title
     const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
     const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
-    // Ensure newlines render as line breaks (handles both stored <br> and raw \n)
-    const personalizedMessage = rawMessage.replace(/\n/g, '<br>');
+    // message_html is rich HTML — render as-is (no \n conversion needed)
+    const personalizedMessage = rawMessage;
+
+    // Optional click-through link button
+    const linkBtn = alert.link_url
+      ? `<div style="padding:0 40px 20px; text-align:center;">
+           <a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener"
+              style="display:inline-block; padding:10px 24px; background:transparent;
+                     border:1px solid ${severityColors[alert.severity]}; border-radius:8px;
+                     color:${severityColors[alert.severity]}; font-size:13px; font-weight:600;
+                     text-decoration:none; transition:background 0.2s;"
+              onmouseover="this.style.background='${severityColors[alert.severity]}20'"
+              onmouseout="this.style.background='transparent'">
+             ${escapeHtml(alert.link_label || 'Learn More')} ↗
+           </a>
+         </div>`
+      : '';
 
     modal.innerHTML = `
       <div class="acnhs-alert-modal" style="border-top: 4px solid ${severityColors[alert.severity]}">
@@ -438,6 +462,7 @@
         <div class="acnhs-alert-body">
           ${personalizedMessage}
         </div>
+        ${linkBtn}
         ${needsResponse ? `
           <div class="acnhs-alert-actions">
             <button class="acnhs-alert-btn acnhs-alert-btn-yes" data-answer="yes">
@@ -452,6 +477,65 @@
     `;
 
     return modal;
+  }
+
+  // ── Banner (full-width top or bottom bar) ──
+  function createAlertBanner(alert, position) {
+    const severityColors = { info:'#3b82f6', success:'#10b981', warn:'#f59e0b', critical:'#ef4444' };
+    const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
+    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
+    const personalizedMessage = rawMessage.replace(/<[^>]*>/g, ' ').replace(/\s+/g,' ').trim();
+    const color = severityColors[alert.severity] || severityColors.info;
+    const linkBtn = alert.link_url
+      ? `<a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener" class="acnhs-alert-banner-link">${escapeHtml(alert.link_label || 'Learn More')}</a>`
+      : '';
+    const isTop = position === 'banner_top';
+
+    const el = document.createElement('div');
+    el.className = `acnhs-alert-banner acnhs-alert-banner-${isTop ? 'top' : 'bottom'}`;
+    el.id = `alert-${alert.id}`;
+    el.dataset.alertId = alert.id;
+    el.style.borderColor = color;
+
+    el.innerHTML = `
+      <div class="acnhs-alert-banner-inner">
+        <span class="acnhs-alert-banner-title" style="color:${color}">${escapeHtml(personalizedTitle)}</span>
+        <span class="acnhs-alert-banner-msg">${escapeHtml(personalizedMessage)}</span>
+        ${linkBtn}
+      </div>
+      <button class="acnhs-alert-close" aria-label="Close">&times;</button>
+    `;
+    return el;
+  }
+
+  // ── Toast (small corner notification) ──
+  function createAlertToast(alert, position) {
+    const severityColors = { info:'#3b82f6', success:'#10b981', warn:'#f59e0b', critical:'#ef4444' };
+    const severityIcons = { info:'📘', success:'✅', warn:'⚠️', critical:'🚨' };
+    const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
+    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
+    const personalizedMessage = rawMessage.replace(/<[^>]*>/g, ' ').replace(/\s+/g,' ').trim();
+    const color = severityColors[alert.severity] || severityColors.info;
+    const linkBtn = alert.link_url
+      ? `<a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener" class="acnhs-alert-toast-link">${escapeHtml(alert.link_label || 'Learn More')} ↗</a>`
+      : '';
+
+    const el = document.createElement('div');
+    el.className = `acnhs-alert-toast acnhs-alert-toast-${position.replace('toast_','')}`;
+    el.id = `alert-${alert.id}`;
+    el.dataset.alertId = alert.id;
+    el.style.borderLeftColor = color;
+
+    el.innerHTML = `
+      <div class="acnhs-alert-toast-header">
+        <span class="acnhs-alert-toast-icon">${severityIcons[alert.severity]}</span>
+        <span class="acnhs-alert-toast-title">${escapeHtml(personalizedTitle)}</span>
+        <button class="acnhs-alert-close" aria-label="Close">&times;</button>
+      </div>
+      <div class="acnhs-alert-toast-body">${escapeHtml(personalizedMessage)}</div>
+      ${linkBtn}
+    `;
+    return el;
   }
 
   function setupAlertEventListeners(modal, alert) {
@@ -859,6 +943,126 @@
         transition: none;
       }
     }
+
+    /* ── BANNER ALERTS ── */
+    .acnhs-alert-banner {
+      position: fixed;
+      left: 0;
+      right: 0;
+      z-index: 99999;
+      background: linear-gradient(135deg, #0f1f3a 0%, #162844 100%);
+      border-top: 3px solid;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+      transform: translateY(-100%);
+      opacity: 0;
+      transition: transform 0.35s cubic-bezier(0.34,1.2,0.64,1), opacity 0.3s ease;
+    }
+    .acnhs-alert-banner-bottom {
+      top: auto;
+      bottom: 0;
+      border-top: none;
+      border-bottom: 3px solid;
+      transform: translateY(100%);
+    }
+    .acnhs-alert-banner.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+    .acnhs-alert-banner-inner {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      flex-wrap: wrap;
+      min-width: 0;
+    }
+    .acnhs-alert-banner-title {
+      font-weight: 700;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .acnhs-alert-banner-msg {
+      font-size: 13px;
+      color: rgba(255,255,255,0.8);
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .acnhs-alert-banner-link {
+      display: inline-block;
+      padding: 5px 14px;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+      opacity: 0.9;
+      transition: opacity 0.2s;
+    }
+    .acnhs-alert-banner-link:hover { opacity: 1; }
+
+    /* ── TOAST ALERTS ── */
+    .acnhs-alert-toast {
+      position: fixed;
+      z-index: 99999;
+      width: 320px;
+      max-width: calc(100vw - 32px);
+      background: linear-gradient(135deg, #0f1f3a 0%, #162844 100%);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-left: 4px solid;
+      border-radius: 12px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+      padding: 14px 16px;
+      opacity: 0;
+      transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.34,1.2,0.64,1);
+    }
+    .acnhs-alert-toast-tr { top: 20px; right: 20px; transform: translateX(120%); }
+    .acnhs-alert-toast-tl { top: 20px; left: 20px; transform: translateX(-120%); }
+    .acnhs-alert-toast-br { bottom: 20px; right: 20px; transform: translateX(120%); }
+    .acnhs-alert-toast-bl { bottom: 20px; left: 20px; transform: translateX(-120%); }
+    .acnhs-alert-toast.show {
+      opacity: 1;
+      transform: translateX(0);
+    }
+    .acnhs-alert-toast-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .acnhs-alert-toast-icon { font-size: 18px; flex-shrink: 0; }
+    .acnhs-alert-toast-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #e2e8f0;
+      flex: 1;
+      min-width: 0;
+    }
+    .acnhs-alert-toast-body {
+      font-size: 13px;
+      color: rgba(255,255,255,0.75);
+      line-height: 1.55;
+      margin-bottom: 8px;
+    }
+    .acnhs-alert-toast-link {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #2dd4bf;
+      text-decoration: none;
+      opacity: 0.9;
+      transition: opacity 0.2s;
+    }
+    .acnhs-alert-toast-link:hover { opacity: 1; text-decoration: underline; }
+    /* The close button already styled by .acnhs-alert-close */
   `;
 
   // Inject styles into page
