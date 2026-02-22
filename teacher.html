@@ -307,10 +307,8 @@
                     return;
                 }
 
-                // Try to verify password using bcrypt via Edge Function
-                // If function doesn't exist, fall back to plain text comparison
+                // Verify password via Edge Function (PBKDF2-SHA256); fall back to direct compare
                 let passwordValid = false;
-                
                 try {
                     const { data: verifyData, error: verifyError } = await db.functions.invoke('hash-password', {
                         body: {
@@ -319,21 +317,15 @@
                             hash: teacher.password_hash
                         }
                     });
-
-                    if (verifyError) {
-                        console.warn('Hash function not available, using plain text comparison (TEMPORARY)');
-                        // Fallback: check if password matches plain_password or password_hash
-                        passwordValid = (teacher.plain_password && password === teacher.plain_password) || 
-                                       password === teacher.password_hash;
+                    if (!verifyError && typeof verifyData?.match === 'boolean') {
+                        passwordValid = verifyData.match;
                     } else {
-                        passwordValid = verifyData?.match || false;
-                        console.log('✅ Password verified with bcrypt');
+                        // Fallback: Edge Function unavailable — compare directly (covers plain-text legacy passwords)
+                        passwordValid = password === teacher.password_hash;
                     }
                 } catch (funcError) {
-                    console.warn('Hash function error, using plain text comparison (TEMPORARY):', funcError);
-                    // Fallback: check if password matches plain_password or password_hash
-                    passwordValid = (teacher.plain_password && password === teacher.plain_password) || 
-                                   password === teacher.password_hash;
+                    // Fallback: network/function error
+                    passwordValid = password === teacher.password_hash;
                 }
 
                 if (!passwordValid) {
@@ -361,6 +353,7 @@
                 sessionStorage.setItem('teacherEmail', teacher.email);
                 sessionStorage.setItem('teacherUsername', teacher.username);
                 sessionStorage.setItem('teacherGroups', JSON.stringify(assignments || []));
+                sessionStorage.setItem('teacherSubjects', JSON.stringify(teacher.subjects || []));
 
                 // Redirect to admin hub
                 window.location.href = 'admin-hub.html';
