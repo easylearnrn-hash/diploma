@@ -3066,49 +3066,49 @@
         console.error('❌ catGrid element not found!');
         return;
       }
-      
-      // Safety check for student ID
-      if (!currentStudentId) {
-        console.error('❌ No student ID available - cannot filter notes');
-        catGrid.innerHTML = '<p style="color: red; padding: 20px;">Error: Student ID not found. Please refresh the page.</p>';
-        return;
-      }
-      
+
       const allNotes = getAllNotesWithCategories();
       console.log(`📚 getAllNotesWithCategories returned: ${allNotes.length} notes`);
-      
+
       let publishedNoteIds = [];
-      let showAllNotes = false;
-      
+      let showAllNotes = isAdmin; // admins always see everything
+
       // Fetch published notes for this student from Supabase
       try {
-        const { data: publishedData, error } = await db
-          .from('published_notes')
-          .select('note_id')
-          .eq('student_id', currentStudentId);
-        
-        if (error) {
-          console.warn('⚠️ published_notes table may not exist or query failed:', error.message);
-          console.log('📖 Fallback: Showing ALL notes to student');
+        if (!currentStudentId) {
+          console.warn('⚠️ No student ID — showing all notes as fallback');
           showAllNotes = true;
         } else {
-          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-          console.log(`📋 Student has access to ${publishedNoteIds.length} notes`);
-          
-          // If no notes are published yet, show all notes as fallback
-          if (publishedNoteIds.length === 0) {
-            console.log('📖 No published notes found - showing ALL notes as fallback');
+          const { data: publishedData, error } = await db
+            .from('published_notes')
+            .select('note_id')
+            .eq('student_id', currentStudentId);
+
+          if (error) {
+            console.warn('⚠️ published_notes query failed:', error.message, '— showing all notes');
             showAllNotes = true;
+          } else {
+            publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+            console.log(`📋 Student has access to ${publishedNoteIds.length} published notes`);
+            // Only fall back to "show all" when the table is truly empty (no notes published to anyone yet)
+            if (publishedNoteIds.length === 0) {
+              // Check if the table has ANY records at all
+              const { count } = await db.from('published_notes').select('*', { count: 'exact', head: true });
+              if (!count || count === 0) {
+                console.log('📖 No notes published to anyone yet — showing all as fallback');
+                showAllNotes = true;
+              }
+              // else: table has records but none for this student → show nothing (locked)
+            }
           }
         }
-        
+
         const categoryCounts = {};
-        
+
         allNotes.forEach(note => {
-          // Show all notes if table doesn't exist or is empty, otherwise filter by published
           const isPublishedToStudent = publishedNoteIds.includes(note.id);
-          const canView = showAllNotes || isPublishedToStudent || isAdmin;
-          
+          const canView = showAllNotes || isPublishedToStudent;
+
           if (canView) {
             categoryCounts[note.category] = (categoryCounts[note.category] || 0) + 1;
           }
@@ -3182,45 +3182,63 @@
     // Render notes in category
     async function renderNotesInCategory(category) {
       if (!notesList) return;
-      
-      // Safety check for student ID
-      if (!currentStudentId) {
-        console.error('❌ No student ID available - cannot filter notes');
-        notesList.innerHTML = '<p style="color: red; padding: 20px;">Error: Student ID not found. Please refresh the page.</p>';
-        return;
-      }
-      
+
       const allNotes = getAllNotesWithCategories();
       const categoryNotes = allNotes.filter(n => n.category === category);
 
       let publishedNoteIds = [];
-      let showAllNotes = false;
-      
+      let showAllNotes = isAdmin;
+
       try {
-        // Fetch published notes for this student from Supabase
-        const { data: publishedData, error } = await db
-          .from('published_notes')
-          .select('note_id')
-          .eq('student_id', currentStudentId);
-        
-        if (error) {
-          console.warn('⚠️ published_notes table may not exist or query failed:', error.message);
-          console.log('📖 Fallback: Showing ALL notes in this category');
+        if (!currentStudentId) {
+          console.warn('⚠️ No student ID — showing all notes in category as fallback');
           showAllNotes = true;
         } else {
-          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-          
-          // If no notes are published yet, show all notes as fallback
-          if (publishedNoteIds.length === 0) {
-            console.log('📖 No published notes found - showing ALL notes as fallback');
+          // Fetch published notes for this student from Supabase
+          const { data: publishedData, error } = await db
+            .from('published_notes')
+            .select('note_id')
+            .eq('student_id', currentStudentId);
+
+          if (error) {
+            console.warn('⚠️ published_notes query failed:', error.message, '— showing all');
             showAllNotes = true;
+          } else {
+            publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+
+            // Only fall back to "show all" when nobody has any published notes yet
+            if (publishedNoteIds.length === 0) {
+              const { count } = await db.from('published_notes').select('*', { count: 'exact', head: true });
+              if (!count || count === 0) {
+                console.log('📖 No notes published to anyone yet — showing all as fallback');
+                showAllNotes = true;
+              }
+            }
           }
+        }
+
+        const visibleNotes = categoryNotes.filter(note => {
+          const isPublishedToStudent = publishedNoteIds.includes(note.id);
+          return showAllNotes || isPublishedToStudent;
+        });
+
+        if (visibleNotes.length === 0 && !showAllNotes) {
+          notesList.innerHTML = `
+            <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:0.4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--text-secondary)">No notes available yet</div>
+              <div style="font-size:13px">Your instructor hasn't published any notes in this category for you yet.</div>
+            </div>`;
+          if (notesEmpty) notesEmpty.style.display = 'none';
+          if (visibleNotesCount) visibleNotesCount.textContent = '0';
+          filterCurrentView();
+          return;
         }
 
         notesList.innerHTML = categoryNotes.map(note => {
           // Check if this note is published to the current student
           const isPublishedToStudent = publishedNoteIds.includes(note.id);
-          const canView = showAllNotes || isPublishedToStudent || isAdmin;
+          const canView = showAllNotes || isPublishedToStudent;
           const lockedClass = !canView ? 'locked' : '';
           
           return `
@@ -3242,8 +3260,8 @@
         `;
       }).join('');
 
-      if (notesEmpty) notesEmpty.style.display = categoryNotes.length ? 'none' : '';
-      if (visibleNotesCount) visibleNotesCount.textContent = String(categoryNotes.length);
+      if (notesEmpty) notesEmpty.style.display = visibleNotes.length ? 'none' : '';
+      if (visibleNotesCount) visibleNotesCount.textContent = String(visibleNotes.length);
       
       filterCurrentView();
       } catch (err) {
