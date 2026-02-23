@@ -1475,11 +1475,11 @@ body{
       <div style="display:flex;align-items:center;gap:14px;min-width:0">
         <div class="test-title" id="testTitle">Loading Test...</div>
         <!-- Logged-in user pill — populated by applySessionRole() -->
-        <div id="sessionUserPill" style="display:none;align-items:center;gap:7px;padding:5px 12px 5px 8px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);flex-shrink:0;max-width:220px;overflow:hidden">
-          <span id="sessionUserAvatar" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(201,168,76,0.2);border:1.5px solid rgba(201,168,76,0.4);color:var(--gold-primary);font-weight:800;font-size:12px;flex-shrink:0">?</span>
-          <span style="display:flex;flex-direction:column;min-width:0;line-height:1.2">
-            <span id="sessionUserName" style="color:#e2e8f0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</span>
-            <span id="sessionUserRole" style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#64748b">—</span>
+        <div id="sessionUserPill" style="display:none;align-items:center;gap:9px;padding:5px 14px 5px 5px;border-radius:999px;background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.22);flex-shrink:0;max-width:260px;overflow:hidden;transition:border-color 0.2s">
+          <span id="sessionUserAvatar" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:rgba(201,168,76,0.15);border:1.5px solid rgba(201,168,76,0.45);color:var(--gold-primary);font-weight:900;font-size:11px;letter-spacing:0.5px;flex-shrink:0;font-family:'Inter',sans-serif">?</span>
+          <span style="display:flex;flex-direction:column;min-width:0;line-height:1.25">
+            <span id="sessionUserName" style="color:#f1f5f9;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0.1px;font-family:'Inter',sans-serif">—</span>
+            <span id="sessionUserRole" style="font-size:9.5px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;color:var(--gold-primary);font-family:'Inter',sans-serif">—</span>
           </span>
         </div>
       </div>
@@ -1786,9 +1786,13 @@ function initSessionRole() {
   const roleIsTeacher = TEACHER_ROLES.includes(storedRole);
 
   SESSION_ROLE.userRole = storedRole || (isAdmin ? 'admin' : 'student');
+  // Prefer generic 'userName' (set by login.html for admins), then teacher-specific
+  // 'teacherName' (set by teacher.html), then localStorage mirrors of both.
   SESSION_ROLE.userName =
     sessionStorage.getItem('userName') ||
+    sessionStorage.getItem('teacherName') ||
     localStorage.getItem('userName') ||
+    localStorage.getItem('teacherName') ||
     null;
 
   // A user is a teacher if:
@@ -1818,15 +1822,19 @@ function applySessionRole() {
 
   // Resolve display name: prefer stored name, fall back to email username
   const rawName  = SESSION_ROLE.userName ||
-    sessionStorage.getItem('userName') || localStorage.getItem('userName') || '';
-  const rawEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+    sessionStorage.getItem('userName') ||
+    sessionStorage.getItem('teacherName') ||
+    localStorage.getItem('userName') ||
+    localStorage.getItem('teacherName') || '';
+  const rawEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') ||
+    sessionStorage.getItem('teacherEmail') || localStorage.getItem('teacherEmail') || '';
 
   let displayName = rawName.trim();
   if (!displayName && rawEmail) {
     // Use the part before @ as a readable fallback
     displayName = rawEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
-  if (!displayName) displayName = 'User';
+  if (!displayName) displayName = SESSION_ROLE.isTeacher ? 'Faculty' : 'Student';
 
   // Initials for the avatar circle (up to 2 chars)
   const parts    = displayName.split(/\s+/).filter(Boolean);
@@ -1836,28 +1844,28 @@ function applySessionRole() {
 
   // Role label & colour
   const roleLabel = SESSION_ROLE.isTeacher
-    ? (SESSION_ROLE.userRole === 'admin' || SESSION_ROLE.userRole === 'superadmin' ? 'Admin' : 'Teacher')
+    ? (SESSION_ROLE.userRole === 'admin' || SESSION_ROLE.userRole === 'superadmin' ? 'Administrator' : 'Faculty')
     : 'Student';
 
-  const roleColor = SESSION_ROLE.isTeacher ? 'var(--gold-primary)' : '#38bdf8';
-  const avatarBg  = SESSION_ROLE.isTeacher
-    ? 'rgba(201,168,76,0.2)'
-    : 'rgba(56,189,248,0.15)';
-  const avatarBorder = SESSION_ROLE.isTeacher
-    ? 'rgba(201,168,76,0.45)'
-    : 'rgba(56,189,248,0.4)';
+  const isTeacher = SESSION_ROLE.isTeacher;
+  const goldColor = 'var(--gold-primary)';
+  const blueColor = '#38bdf8';
+  const roleColor   = isTeacher ? goldColor : blueColor;
+  const avatarBg    = isTeacher ? 'rgba(201,168,76,0.15)' : 'rgba(56,189,248,0.12)';
+  const avatarBorder= isTeacher ? 'rgba(201,168,76,0.5)'  : 'rgba(56,189,248,0.45)';
+  const pillBg      = isTeacher ? 'rgba(201,168,76,0.07)' : 'rgba(56,189,248,0.07)';
+  const pillBorder  = isTeacher ? 'rgba(201,168,76,0.22)' : 'rgba(56,189,248,0.18)';
 
-  avatar.textContent         = initials;
-  avatar.style.background    = avatarBg;
-  avatar.style.borderColor   = avatarBorder;
-  avatar.style.color         = roleColor;
-  nameEl.textContent         = displayName;
-  roleEl.textContent         = roleLabel;
-  roleEl.style.color         = roleColor;
-  pill.style.display         = 'inline-flex';
-  pill.style.borderColor     = SESSION_ROLE.isTeacher
-    ? 'rgba(201,168,76,0.25)'
-    : 'rgba(56,189,248,0.2)';
+  avatar.textContent      = initials;
+  avatar.style.background = avatarBg;
+  avatar.style.borderColor= avatarBorder;
+  avatar.style.color      = roleColor;
+  nameEl.textContent      = displayName;
+  roleEl.textContent      = roleLabel;
+  roleEl.style.color      = roleColor;
+  pill.style.display      = 'inline-flex';
+  pill.style.background   = pillBg;
+  pill.style.borderColor  = pillBorder;
 }
 
 // ============================================
