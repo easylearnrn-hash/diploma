@@ -36,6 +36,7 @@ const ACNHS_HEADER_HTML = `
         <div class="help-dropdown-content" role="menu">
           <a href="about.html" role="menuitem">About the College</a>
           <a href="president.html" role="menuitem">Office of the President</a>
+          <a href="staff.html" role="menuitem">Faculty &amp; Staff</a>
           <a href="contact.html" role="menuitem">Contact Us</a>
         </div>
       </div>
@@ -82,6 +83,7 @@ const ACNHS_FOOTER_HTML = `
         <h4>Institution</h4>
         <a href="about.html">About the College</a>
         <a href="president.html">Office of the President</a>
+        <a href="staff.html">Faculty &amp; Staff</a>
         <a href="contact.html">Contact Us</a>
         <a href="academic-catalog.html" data-action="open-catalog-picker">Academic Catalog</a>
       </div>
