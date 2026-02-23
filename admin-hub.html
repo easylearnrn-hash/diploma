@@ -591,6 +591,10 @@
       from{transform:translateX(100%);opacity:0}
       to{transform:translateX(0);opacity:1}
     }
+    @keyframes fadeOut{
+      from{opacity:1;transform:translateX(0)}
+      to{opacity:0;transform:translateX(12px)}
+    }
     @keyframes slideOutRight{
       from{transform:translateX(0);opacity:1}
       to{transform:translateX(100%);opacity:0}
@@ -1493,6 +1497,24 @@
             </div>
 
             <!-- Notes Grid -->
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+              <div style="display:flex;gap:8px;align-items:center;">
+                <button onclick="selectAllNoteCards()"
+                        style="background:rgba(201,168,76,0.10);color:#d4b56a;border:1px solid rgba(201,168,76,0.35);padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-family:inherit;"
+                        onmouseover="this.style.background='rgba(201,168,76,0.20)';this.style.borderColor='rgba(201,168,76,0.55)'"
+                        onmouseout="this.style.background='rgba(201,168,76,0.10)';this.style.borderColor='rgba(201,168,76,0.35)'">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                  Select All
+                </button>
+                <button onclick="deselectAllNoteCards()"
+                        style="background:rgba(255,255,255,0.04);color:#8a8070;border:1px solid rgba(255,255,255,0.10);padding:7px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.08)';this.style.color='#c8bfb2'"
+                        onmouseout="this.style.background='rgba(255,255,255,0.04)';this.style.color='#8a8070'">
+                  Deselect All
+                </button>
+              </div>
+              <span id="noteSelectionCounter" style="color:#8a8070;font-size:12px;font-weight:600;"></span>
+            </div>
             <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px" id="notesGridContainer">
               <div style="grid-column:1/-1;text-align:center;padding:60px 20px;color:#64748b">
                 <div class="spinner" style="margin:0 auto 16px"></div>
@@ -7653,13 +7675,15 @@
             <div class="note-card"
                  data-note-id="${note.id}"
                  style="background:${bgColor};border:1px solid ${borderColor};border-radius:var(--radius-lg);padding:0;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s,transform 0.2s;cursor:pointer;position:relative;box-shadow:0 4px 16px rgba(0,0,0,0.25)"
-                 onmouseenter="this.style.borderColor='${borderHover}';this.style.boxShadow='0 8px 28px rgba(201,168,76,0.14)';this.style.transform='translateY(-2px)'"
-                 onmouseleave="this.style.borderColor='${borderColor}';this.style.boxShadow='0 4px 16px rgba(0,0,0,0.25)';this.style.transform='translateY(0)'">
+                 onclick="toggleNoteCard(this)"
+                 onmouseenter="this.style.boxShadow='0 8px 28px rgba(201,168,76,0.14)';this.style.transform='translateY(-2px)'"
+                 onmouseleave="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.25)';this.style.transform='translateY(0)'">
 
               <!-- Checkbox -->
               <div style="position:absolute;top:14px;left:14px;z-index:2">
                 <input type="checkbox" class="note-checkbox" value="${note.id}"
                        onclick="event.stopPropagation()"
+                       onchange="updateCardVisual(this)"
                        style="width:17px;height:17px;cursor:pointer;accent-color:var(--gold-500)">
               </div>
 
@@ -8110,46 +8134,133 @@
     }
 
     async function unpublishNote(noteId) {
-      if (!confirm('Unpublish this note from all students?')) return;
-      
-      try {
-        const { error } = await db
-          .from('published_notes')
-          .delete()
-          .eq('note_id', noteId);
-        
-        if (error) throw error;
-        
-        await renderNotesTable();
-        alert('✅ Note unpublished from all students');
-      } catch (err) {
-        console.error('Error unpublishing note:', err);
-        alert(`❌ Error unpublishing note: ${err.message}`);
-      }
-    }
+      const note = ALL_NOTES.find(n => n.id === noteId);
+      const noteTitle = note ? note.title : 'this note';
 
-    async function bulkPublishNotes() {
-      const selectedNotes = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
-      
-      if (selectedNotes.length === 0) {
-        showToast('Please select at least one note to publish.', 'warning');
-        return;
-      }
-      
-      // On-brand bulk publish modal
       const modal = document.createElement('div');
       modal.className = 'modal-backdrop';
       modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease;';
 
       modal.innerHTML = `
-        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(201,168,76,0.28);border-radius:20px;max-width:480px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
-
-          <!-- Header -->
-          <div style="padding:28px 32px 24px;border-bottom:1px solid rgba(201,168,76,0.14);background:rgba(4,17,31,0.6);position:relative;">
+        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(239,68,68,0.25);border-radius:20px;max-width:440px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
+          <div style="padding:26px 28px 20px;border-bottom:1px solid rgba(239,68,68,0.12);background:rgba(4,17,31,0.6);">
+            <div style="display:flex;align-items:center;gap:13px;">
+              <div style="width:46px;height:46px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.30);border-radius:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <div>
+                <h2 style="margin:0 0 2px;color:#f0ece3;font-size:17px;font-weight:800;">Unpublish Note</h2>
+                <p style="margin:0;color:#8a8070;font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px;">${noteTitle}</p>
+              </div>
+            </div>
+          </div>
+          <div style="padding:20px 28px 22px;">
+            <div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.14);border-radius:10px;padding:13px 15px;color:#8a8070;font-size:13px;line-height:1.55;">
+              This will remove access for <strong style="color:#fca5a5;">all students</strong> who currently have this note. This action cannot be undone.
+            </div>
+          </div>
+          <div style="padding:0 28px 22px;display:flex;justify-content:flex-end;gap:10px;">
             <button onclick="this.closest('.modal-backdrop').remove()"
-                    style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s"
-                    onmouseover="this.style.background='rgba(239,68,68,0.18)';this.style.borderColor='rgba(239,68,68,0.35)'"
-                    onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(255,255,255,0.10)'">
+                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:10px 22px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">Keep Published</button>
+            <button onclick="executeUnpublishNote('${noteId}',this)"
+                    style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none;padding:10px 22px;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:7px;box-shadow:0 4px 12px rgba(239,68,68,0.22);font-family:inherit;"
+                    onmouseover="this.style.transform='translateY(-1px)'"
+                    onmouseout="this.style.transform=''">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Unpublish
+            </button>
+          </div>
+        </div>
+      `;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+
+    async function executeUnpublishNote(noteId, btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Unpublishing…`;
+      try {
+        const { error } = await db.from('published_notes').delete().eq('note_id', noteId);
+        if (error) throw error;
+        document.querySelector('.modal-backdrop')?.remove();
+        await renderNotesTable();
+        showToast('Note unpublished from all students', 'success');
+      } catch (err) {
+        console.error('Error unpublishing note:', err);
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Unpublish`;
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // ─── Note card selection helpers ─────────────────────────────────────────
+    function toggleNoteCard(card) {
+      const cb = card.querySelector('.note-checkbox');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      updateCardVisual(cb);
+    }
+
+    function updateCardVisual(cb) {
+      const card = cb.closest('.note-card');
+      if (!card) return;
+      if (cb.checked) {
+        card.style.outline = '2px solid rgba(201,168,76,0.7)';
+        card.style.boxShadow = '0 0 0 4px rgba(201,168,76,0.10), 0 8px 28px rgba(201,168,76,0.14)';
+      } else {
+        card.style.outline = 'none';
+        card.style.boxShadow = '0 4px 16px rgba(0,0,0,0.25)';
+      }
+      refreshNoteSelectionCounter();
+    }
+
+    function refreshNoteSelectionCounter() {
+      const counter = document.getElementById('noteSelectionCounter');
+      if (!counter) return;
+      const total   = document.querySelectorAll('.note-checkbox').length;
+      const checked = document.querySelectorAll('.note-checkbox:checked').length;
+      counter.textContent = checked > 0 ? `${checked} of ${total} selected` : '';
+    }
+
+    function selectAllNoteCards() {
+      document.querySelectorAll('.note-checkbox').forEach(cb => {
+        cb.checked = true;
+        updateCardVisual(cb);
+      });
+    }
+
+    function deselectAllNoteCards() {
+      document.querySelectorAll('.note-checkbox').forEach(cb => {
+        cb.checked = false;
+        updateCardVisual(cb);
+      });
+    }
+
+    // ─── Bulk Publish ─────────────────────────────────────────────────────────
+    async function bulkPublishNotes() {
+      const selectedNoteIds = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
+
+      if (selectedNoteIds.length === 0) {
+        showToast('Select at least one note first.', 'warning');
+        return;
+      }
+
+      // Fetch all active students to show a preview
+      const activeStudents = allStudents.filter(s => s.enrollment_status === 'active');
+
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease;';
+
+      modal.innerHTML = `
+        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(201,168,76,0.28);border-radius:20px;max-width:500px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
+          <div style="padding:28px 32px 22px;border-bottom:1px solid rgba(201,168,76,0.14);background:rgba(4,17,31,0.6);position:relative;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.18)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.06)'">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ece3" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             <div style="display:flex;align-items:center;gap:14px;">
@@ -8157,82 +8268,189 @@
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
               </div>
               <div>
-                <h2 style="margin:0 0 3px;color:#f0ece3;font-size:19px;font-weight:800;letter-spacing:-0.3px;">Bulk Publish Notes</h2>
-                <p style="margin:0;color:#8a8070;font-size:13px;">Distribute learning materials to your students</p>
+                <h2 style="margin:0 0 3px;color:#f0ece3;font-size:19px;font-weight:800;letter-spacing:-0.3px;">Confirm Bulk Publish</h2>
+                <p style="margin:0;color:#8a8070;font-size:13px;">This will grant access to all active students</p>
               </div>
             </div>
           </div>
 
-          <!-- Body -->
           <div style="padding:24px 32px;">
-
-            <!-- Count pill -->
-            <div style="display:flex;align-items:center;gap:12px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.20);border-radius:12px;padding:14px 18px;margin-bottom:20px;">
-              <div style="width:36px;height:36px;background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.35);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <div style="display:flex;gap:12px;margin-bottom:16px;">
+              <div style="flex:1;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:14px 16px;text-align:center;">
+                <div style="color:#e2cc92;font-size:22px;font-weight:900;">${selectedNoteIds.length}</div>
+                <div style="color:#8a8070;font-size:12px;margin-top:2px;">Note${selectedNoteIds.length!==1?'s':''} selected</div>
               </div>
-              <div>
-                <div style="color:#e2cc92;font-size:15px;font-weight:700;">${selectedNotes.length} note${selectedNotes.length !== 1 ? 's' : ''} selected</div>
-                <div style="color:#8a8070;font-size:12px;margin-top:1px;">Ready to be published to students</div>
+              <div style="flex:1;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:14px 16px;text-align:center;">
+                <div style="color:#e2cc92;font-size:22px;font-weight:900;">${activeStudents.length}</div>
+                <div style="color:#8a8070;font-size:12px;margin-top:2px;">Active student${activeStudents.length!==1?'s':''}</div>
               </div>
             </div>
-
-            <!-- Coming soon notice -->
-            <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start;">
-              <div style="flex-shrink:0;margin-top:1px;">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              </div>
-              <div>
-                <div style="color:#d4b56a;font-size:13px;font-weight:700;margin-bottom:4px;">Student targeting coming soon</div>
-                <div style="color:#8a8070;font-size:13px;line-height:1.55;">The ability to select specific students for bulk publishing is in development. In the meantime, use the individual publish button on each note to choose recipients.</div>
-              </div>
+            <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:13px 16px;display:flex;gap:10px;align-items:flex-start;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              <div style="color:#8a8070;font-size:13px;line-height:1.55;">All <strong style="color:#d4b56a;">${selectedNoteIds.length} note${selectedNoteIds.length!==1?'s':''}</strong> will be published to all <strong style="color:#d4b56a;">${activeStudents.length} active student${activeStudents.length!==1?'s':''}</strong>. Existing assignments will be updated.</div>
             </div>
           </div>
 
-          <!-- Footer -->
-          <div style="padding:16px 32px 24px;display:flex;justify-content:flex-end;">
+          <div style="padding:0 32px 24px;display:flex;justify-content:flex-end;gap:10px;">
             <button onclick="this.closest('.modal-backdrop').remove()"
-                    style="background:rgba(201,168,76,0.10);color:#d4b56a;border:1px solid rgba(201,168,76,0.35);padding:11px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;"
-                    onmouseover="this.style.background='rgba(201,168,76,0.18)';this.style.borderColor='rgba(201,168,76,0.55)'"
-                    onmouseout="this.style.background='rgba(201,168,76,0.10)';this.style.borderColor='rgba(201,168,76,0.35)'">
-              Got it
+                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:11px 24px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+              Cancel
+            </button>
+            <button id="confirmBulkPublishBtn"
+                    onclick="executeBulkPublish(${JSON.stringify(selectedNoteIds)},${JSON.stringify(activeStudents.map(s=>s.id))},this)"
+                    style="background:linear-gradient(135deg,#c9a84c,#a8863a);color:#04111f;border:none;padding:11px 28px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(201,168,76,0.28);font-family:inherit;"
+                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(201,168,76,0.40)'"
+                    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(201,168,76,0.28)'">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Publish Now
             </button>
           </div>
         </div>
       `;
 
-      // Close on backdrop click
       modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
       document.body.appendChild(modal);
     }
 
+    async function executeBulkPublish(noteIds, studentIds, btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Publishing…`;
+
+      try {
+        // For each note, delete old records then insert fresh ones
+        for (const noteId of noteIds) {
+          const { error: delErr } = await db.from('published_notes').delete().eq('note_id', noteId);
+          if (delErr) throw delErr;
+        }
+
+        const records = [];
+        const adminEmail = sessionStorage.getItem('adminEmail') || 'admin';
+        for (const noteId of noteIds) {
+          for (const studentId of studentIds) {
+            records.push({ note_id: noteId, student_id: studentId, published_by: adminEmail });
+          }
+        }
+
+        if (records.length > 0) {
+          const { error: insErr } = await db.from('published_notes').insert(records);
+          if (insErr) throw insErr;
+        }
+
+        document.querySelector('.modal-backdrop')?.remove();
+        deselectAllNoteCards();
+        await renderNotesTable();
+        showToast(`✓ ${noteIds.length} note${noteIds.length!==1?'s':''} published to ${studentIds.length} student${studentIds.length!==1?'s':''}`, 'success');
+
+      } catch (err) {
+        console.error('Bulk publish error:', err);
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Publish Now`;
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // ─── Bulk Unpublish ───────────────────────────────────────────────────────
     async function bulkUnpublishNotes() {
-      const selectedNotes = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
-      
-      if (selectedNotes.length === 0) {
-        alert('Please select at least one note');
+      const selectedNoteIds = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
+
+      if (selectedNoteIds.length === 0) {
+        showToast('Select at least one note first.', 'warning');
         return;
       }
-      
-      if (!confirm(`Unpublish ${selectedNotes.length} selected notes from all students?`)) return;
-      
+
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease;';
+
+      modal.innerHTML = `
+        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(239,68,68,0.28);border-radius:20px;max-width:480px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
+          <div style="padding:28px 32px 22px;border-bottom:1px solid rgba(239,68,68,0.14);background:rgba(4,17,31,0.6);position:relative;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.18)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ece3" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="width:50px;height:50px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <div>
+                <h2 style="margin:0 0 3px;color:#f0ece3;font-size:19px;font-weight:800;letter-spacing:-0.3px;">Confirm Bulk Unpublish</h2>
+                <p style="margin:0;color:#8a8070;font-size:13px;">Students will lose access to these notes</p>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:24px 32px;">
+            <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.18);border-radius:12px;padding:14px 16px;text-align:center;margin-bottom:16px;">
+              <div style="color:#fca5a5;font-size:22px;font-weight:900;">${selectedNoteIds.length}</div>
+              <div style="color:#8a8070;font-size:12px;margin-top:2px;">Note${selectedNoteIds.length!==1?'s':''} will be unpublished from all students</div>
+            </div>
+            <div style="background:rgba(239,68,68,0.05);border:1px solid rgba(239,68,68,0.14);border-radius:10px;padding:13px 16px;display:flex;gap:10px;align-items:flex-start;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <div style="color:#8a8070;font-size:13px;line-height:1.55;">All student access records for the selected notes will be permanently deleted. This action cannot be undone.</div>
+            </div>
+          </div>
+
+          <div style="padding:0 32px 24px;display:flex;justify-content:flex-end;gap:10px;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:11px 24px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+              Cancel
+            </button>
+            <button onclick="executeBulkUnpublish(${JSON.stringify(selectedNoteIds)},this)"
+                    style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none;padding:11px 28px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(239,68,68,0.25);font-family:inherit;"
+                    onmouseover="this.style.transform='translateY(-1px)'"
+                    onmouseout="this.style.transform=''">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              Unpublish Now
+            </button>
+          </div>
+        </div>
+      `;
+
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+    }
+
+    async function executeBulkUnpublish(noteIds, btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Unpublishing…`;
+
       try {
-        const { error } = await db
-          .from('published_notes')
-          .delete()
-          .in('note_id', selectedNotes);
-        
+        const { error } = await db.from('published_notes').delete().in('note_id', noteIds);
         if (error) throw error;
-        
-        // Uncheck all checkboxes
-        document.querySelectorAll('.note-checkbox').forEach(cb => cb.checked = false);
-        
+
+        document.querySelector('.modal-backdrop')?.remove();
+        deselectAllNoteCards();
         await renderNotesTable();
-        alert(`✅ ${selectedNotes.length} notes unpublished from all students`);
+        showToast(`✓ ${noteIds.length} note${noteIds.length!==1?'s':''} unpublished from all students`, 'success');
+
       } catch (err) {
-        console.error('Error bulk unpublishing:', err);
-        alert(`❌ Error: ${err.message}`);
+        console.error('Bulk unpublish error:', err);
+        btn.disabled = false;
+        btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Unpublish Now`;
+        showToast(`Error: ${err.message}`, 'error');
       }
+    }
+
+    // ─── Toast notification helper ────────────────────────────────────────────
+    function showToast(message, type = 'success') {
+      const colors = {
+        success: { bg: 'linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.10))', border: 'rgba(201,168,76,0.45)', text: '#e2cc92', icon: '<polyline points="20 6 9 17 4 12"/>' },
+        error:   { bg: 'linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.08))',   border: 'rgba(239,68,68,0.40)',   text: '#fca5a5', icon: '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' },
+        warning: { bg: 'linear-gradient(135deg,rgba(251,191,36,0.18),rgba(251,191,36,0.08))', border: 'rgba(251,191,36,0.40)',  text: '#fcd34d', icon: '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>' },
+      };
+      const c = colors[type] || colors.success;
+      const toast = document.createElement('div');
+      toast.style.cssText = `position:fixed;top:22px;right:22px;background:${c.bg};border:1px solid ${c.border};color:${c.text};padding:13px 20px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.35);z-index:10002;display:flex;align-items:center;gap:10px;font-weight:700;font-size:13.5px;max-width:360px;backdrop-filter:blur(8px);animation:slideInRight 0.3s ease;font-family:inherit;`;
+      toast.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">${c.icon}</svg><span>${message}</span>`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.animation='fadeOut 0.3s ease forwards'; setTimeout(() => toast.remove(), 300); }, 3500);
     }
 
     // ============================================
