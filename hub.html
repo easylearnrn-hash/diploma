@@ -3070,46 +3070,62 @@
       const allNotes = getAllNotesWithCategories();
       console.log(`📚 getAllNotesWithCategories returned: ${allNotes.length} notes`);
 
+      // ── STRICT ACCESS CONTROL ──────────────────────────────────────────
+      // Admins see everything. Students see ONLY what's explicitly published
+      // to them. No fallbacks, no "show all" — the system must fail closed.
+      // ───────────────────────────────────────────────────────────────────
       let publishedNoteIds = [];
-      let showAllNotes = isAdmin; // admins always see everything
 
-      // Fetch published notes for this student from Supabase
-      try {
+      if (isAdmin) {
+        // Admin / teacher: show all notes
+        publishedNoteIds = allNotes.map(n => n.id);
+      } else {
+        // Student path — must have a resolved UUID
         if (!currentStudentId) {
-          console.warn('⚠️ No student ID — showing all notes as fallback');
-          showAllNotes = true;
-        } else {
+          console.error('❌ Student ID could not be resolved — showing locked state');
+          catGrid.innerHTML = `
+            <div style="text-align:center;padding:64px 20px;color:var(--text-muted)">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 16px;display:block;opacity:0.4">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                <path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--text-secondary)">Unable to load your notes</div>
+              <div style="font-size:13px">Please close this window and re-open your hub from the Student Portal.</div>
+            </div>`;
+          if (catsEmpty) catsEmpty.style.display = 'none';
+          return;
+        }
+
+        try {
           const { data: publishedData, error } = await db
             .from('published_notes')
             .select('note_id')
             .eq('student_id', currentStudentId);
 
           if (error) {
-            console.warn('⚠️ published_notes query failed:', error.message, '— showing all notes');
-            showAllNotes = true;
-          } else {
-            publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-            console.log(`📋 Student has access to ${publishedNoteIds.length} published notes`);
-            // Only fall back to "show all" when the table is truly empty (no notes published to anyone yet)
-            if (publishedNoteIds.length === 0) {
-              // Check if the table has ANY records at all
-              const { count } = await db.from('published_notes').select('*', { count: 'exact', head: true });
-              if (!count || count === 0) {
-                console.log('📖 No notes published to anyone yet — showing all as fallback');
-                showAllNotes = true;
-              }
-              // else: table has records but none for this student → show nothing (locked)
-            }
+            console.error('❌ published_notes query failed:', error.message);
+            catGrid.innerHTML = `
+              <div style="text-align:center;padding:64px 20px;color:var(--text-muted)">
+                <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#ef4444">Error loading notes</div>
+                <div style="font-size:13px">Please refresh the page.</div>
+              </div>`;
+            return;
           }
-        }
 
+          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+          console.log(`📋 Student ${currentStudentId} has ${publishedNoteIds.length} published note(s)`);
+        } catch (err) {
+          console.error('❌ Unexpected error fetching published notes:', err);
+          catGrid.innerHTML = `<div style="text-align:center;padding:64px 20px;color:#ef4444;font-size:13px">Unexpected error. Please refresh.</div>`;
+          return;
+        }
+      }
+
+      try {
         const categoryCounts = {};
 
         allNotes.forEach(note => {
-          const isPublishedToStudent = publishedNoteIds.includes(note.id);
-          const canView = showAllNotes || isPublishedToStudent;
-
-          if (canView) {
+          if (publishedNoteIds.includes(note.id)) {
             categoryCounts[note.category] = (categoryCounts[note.category] || 0) + 1;
           }
         });
@@ -3186,43 +3202,50 @@
       const allNotes = getAllNotesWithCategories();
       const categoryNotes = allNotes.filter(n => n.category === category);
 
+      // ── STRICT ACCESS CONTROL ──────────────────────────────────────────
+      // Same rules as renderCategories: admin sees all, students see ONLY
+      // their explicitly published notes. No fallbacks.
+      // ───────────────────────────────────────────────────────────────────
       let publishedNoteIds = [];
-      let showAllNotes = isAdmin;
 
-      try {
+      if (isAdmin) {
+        publishedNoteIds = allNotes.map(n => n.id);
+      } else {
         if (!currentStudentId) {
-          console.warn('⚠️ No student ID — showing all notes in category as fallback');
-          showAllNotes = true;
-        } else {
-          // Fetch published notes for this student from Supabase
+          notesList.innerHTML = `
+            <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:0.4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:var(--text-secondary)">Session error</div>
+              <div style="font-size:13px">Please close and re-open your hub from the Student Portal.</div>
+            </div>`;
+          return;
+        }
+
+        try {
           const { data: publishedData, error } = await db
             .from('published_notes')
             .select('note_id')
             .eq('student_id', currentStudentId);
 
           if (error) {
-            console.warn('⚠️ published_notes query failed:', error.message, '— showing all');
-            showAllNotes = true;
-          } else {
-            publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-
-            // Only fall back to "show all" when nobody has any published notes yet
-            if (publishedNoteIds.length === 0) {
-              const { count } = await db.from('published_notes').select('*', { count: 'exact', head: true });
-              if (!count || count === 0) {
-                console.log('📖 No notes published to anyone yet — showing all as fallback');
-                showAllNotes = true;
-              }
-            }
+            console.error('❌ published_notes query failed:', error.message);
+            notesList.innerHTML = `<div style="text-align:center;padding:48px 20px;color:#ef4444;font-size:13px">Error loading notes. Please refresh.</div>`;
+            return;
           }
+
+          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
+          console.log(`📋 Student ${currentStudentId} — ${publishedNoteIds.length} note(s) in published set`);
+        } catch (err) {
+          console.error('❌ Unexpected error fetching published notes:', err);
+          notesList.innerHTML = `<div style="text-align:center;padding:48px 20px;color:#ef4444;font-size:13px">Unexpected error. Please refresh.</div>`;
+          return;
         }
+      }
 
-        const visibleNotes = categoryNotes.filter(note => {
-          const isPublishedToStudent = publishedNoteIds.includes(note.id);
-          return showAllNotes || isPublishedToStudent;
-        });
+      try {
+        const visibleNotes = categoryNotes.filter(note => publishedNoteIds.includes(note.id));
 
-        if (visibleNotes.length === 0 && !showAllNotes) {
+        if (visibleNotes.length === 0) {
           notesList.innerHTML = `
             <div style="text-align:center;padding:48px 20px;color:var(--text-muted)">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:0.4"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
@@ -3235,22 +3258,17 @@
           return;
         }
 
-        notesList.innerHTML = categoryNotes.map(note => {
-          // Check if this note is published to the current student
-          const isPublishedToStudent = publishedNoteIds.includes(note.id);
-          const canView = showAllNotes || isPublishedToStudent;
-          const lockedClass = !canView ? 'locked' : '';
-          
+        notesList.innerHTML = visibleNotes.map(note => {
           return `
-            <div class="note-item ${lockedClass}" data-title="${escapeAttr(note.title)}" 
-              ${canView ? `onclick="window.open('${note.htmlFile}', '_blank')"` : ''}>
+            <div class="note-item" data-title="${escapeAttr(note.title)}"
+              onclick="window.open('${note.htmlFile}', '_blank')">
               <div class="note-item-header">
                 <div class="note-title">${escapeHtml(note.title)}</div>
                 <div class="note-actions-small">
                   ${isAdmin ? `
-                    <button class="btn-small ${isPublishedToStudent ? '' : 'delete'}" type="button"
+                    <button class="btn-small" type="button"
                       onclick="event.stopPropagation(); togglePublishNote('${escapeAttr(note.id)}', event)">
-                      ${isPublishedToStudent ? '✓ Published' : '🔒 Locked'}
+                      ✓ Published
                     </button>
                   ` : ''}
                 </div>
