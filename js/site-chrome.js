@@ -28,6 +28,18 @@ const ACNHS_HEADER_HTML = `
 
       <a href="index.html#global-network" style="color:var(--gold-400);font-weight:600;">Global Network</a>
 
+      <div class="help-dropdown" id="aboutDropdown">
+        <button class="help-btn" type="button" data-action="toggle-about">
+          About
+          <span class="help-arrow" aria-hidden="true"></span>
+        </button>
+        <div class="help-dropdown-content" role="menu">
+          <a href="about.html" role="menuitem">About the College</a>
+          <a href="president.html" role="menuitem">Office of the President</a>
+          <a href="contact.html" role="menuitem">Contact Us</a>
+        </div>
+      </div>
+
       <div class="help-dropdown" id="helpDropdown">
         <button class="help-btn" type="button" data-action="toggle-help">
           Help
@@ -69,6 +81,7 @@ const ACNHS_FOOTER_HTML = `
       <div class="footer-link-group">
         <h4>Institution</h4>
         <a href="about.html">About the College</a>
+        <a href="president.html">Office of the President</a>
         <a href="contact.html">Contact Us</a>
         <a href="academic-catalog.html" data-action="open-catalog-picker">Academic Catalog</a>
       </div>
@@ -164,6 +177,23 @@ function wireHeaderInteractions(root) {
       const dropdown = root.querySelector('#academicsDropdown');
       
       // If another dropdown is open (like help), close it
+      root.querySelectorAll('.help-dropdown').forEach(d => {
+        if (d !== dropdown) d.classList.remove('active');
+      });
+
+      if (dropdown) {
+        dropdown.classList.toggle('active');
+        setupDropdownClose_Chrome(dropdown, btn);
+      }
+    });
+  });
+
+  // About dropdown behavior
+  root.querySelectorAll('[data-action="toggle-about"]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const dropdown = root.querySelector('#aboutDropdown');
+
       root.querySelectorAll('.help-dropdown').forEach(d => {
         if (d !== dropdown) d.classList.remove('active');
       });
