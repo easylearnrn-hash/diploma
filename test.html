@@ -2975,7 +2975,9 @@ async function showSubjectSelection() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 Select all topics
                 <span onclick="event.stopPropagation();selectAllTopicsForSubject('${subject.id}', false)"
-                  style="margin-left:auto;color:#475569;font-size:11px;font-weight:600;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);cursor:pointer">
+                  style="margin-left:auto;color:#c8bfb2;font-size:11px;font-weight:700;text-transform:uppercase;padding:3px 10px;border-radius:5px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.12);cursor:pointer;transition:background 0.15s"
+                  onmouseover="this.style.background='rgba(239,68,68,0.18)';this.style.borderColor='rgba(239,68,68,0.35)';this.style.color='#fca5a5'"
+                  onmouseout="this.style.background='rgba(255,255,255,0.10)';this.style.borderColor='rgba(255,255,255,0.12)';this.style.color='#c8bfb2'">
                   Deselect all
                 </span>
               </div>
@@ -3000,7 +3002,7 @@ async function showSubjectSelection() {
 }
 
 // Toggle the expand/collapse of a subject's topic list.
-// Also auto-checks the subject checkbox when expanding.
+// Only auto-selects all topics if the subject has NO selections yet.
 function toggleSubject(subjectId) {
   const row = document.getElementById(`subject-row-${subjectId}`);
   const cb  = document.getElementById(`subject-cb-${subjectId}`);
@@ -3009,10 +3011,14 @@ function toggleSubject(subjectId) {
   const isExpanding = !row.classList.contains('expanded');
   row.classList.toggle('expanded', isExpanding);
 
-  // Auto-check the subject when user expands it (convenience)
-  if (isExpanding && cb && !cb.checked) {
-    cb.checked = true;
-    handleSubjectCheckbox(subjectId, true);
+  // Auto-check the subject when user expands it — but ONLY if nothing is selected yet
+  if (isExpanding && cb && !cb.checked && !cb.indeterminate) {
+    const subjectTopics = availableTopics.filter(t => t.subject_id === subjectId);
+    const anySelected = subjectTopics.some(t => selectedTopics.has(t.id));
+    if (!anySelected) {
+      cb.checked = true;
+      handleSubjectCheckbox(subjectId, true);
+    }
   }
 }
 
