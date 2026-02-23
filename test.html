@@ -2387,7 +2387,7 @@ function saveToLocalStorage() {
     shuffleSeed: testState.shuffleSeed,
     currentIndex: testState.currentIndex,
     answers: testState.answers,
-    answerStatus: testState.answerStatus,
+    answerStatus: {}, // Do NOT persist revealed answers — students re-check on resume
     flagged: Array.from(testState.flagged),
     startTime: testState.startTime,
     questionIds: testState.questions.map(q => q.id),
@@ -3269,10 +3269,66 @@ function renderQuestion() {
   if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
     document.getElementById('checkAnswerBtn').style.display = 'none';
   } else {
-    // Show check answer button if question is answered
-    const savedAnswer = testState.answers[question.id];
-    if (savedAnswer && (Array.isArray(savedAnswer) ? savedAnswer.length > 0 : true)) {
-      document.getElementById('checkAnswerBtn').style.display = 'inline-flex';
+    const existingStatus = testState.answerStatus[question.id];
+
+    if (existingStatus) {
+      // This question was already checked — re-apply the visual state
+      // so correct answers are NOT freshly revealed (just restored to prior state)
+      const isCorrect = existingStatus === 'correct';
+      const feedbackEl = document.getElementById('answerFeedback');
+      feedbackEl.style.display = 'block';
+
+      if (isCorrect) {
+        feedbackEl.style.background = 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))';
+        feedbackEl.style.border = '2px solid var(--success)';
+        feedbackEl.style.color = '#15803d';
+        feedbackEl.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            <div>
+              <div style="font-size:18px;margin-bottom:4px">✅ Correct!</div>
+              ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#166534;margin-top:8px">${question.rationale}</div>` : ''}
+            </div>
+          </div>
+        `;
+      } else {
+        feedbackEl.style.background = 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05))';
+        feedbackEl.style.border = '2px solid var(--error)';
+        feedbackEl.style.color = '#991b1b';
+        feedbackEl.innerHTML = `
+          <div style="display:flex;align-items:center;gap:12px">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <div>
+              <div style="font-size:18px;margin-bottom:4px">❌ Incorrect</div>
+              ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#7f1d1d;margin-top:8px"><strong>Explanation:</strong> ${question.rationale}</div>` : ''}
+            </div>
+          </div>
+        `;
+      }
+
+      // Re-apply correct/incorrect option highlighting and disable inputs
+      document.querySelectorAll('.option').forEach(opt => {
+        const input = opt.querySelector('input');
+        const optionId = String(input.value);
+        opt.classList.add('disabled');
+        input.disabled = true;
+        opt.classList.remove('selected');
+        if (question.correct.map(String).includes(optionId)) {
+          opt.classList.add('correct');
+        } else if (input.checked) {
+          opt.classList.add('incorrect');
+        }
+      });
+
+      // Check button should stay hidden — answer already revealed
+      document.getElementById('checkAnswerBtn').style.display = 'none';
+
+    } else {
+      // Not yet checked — show check button only if an answer is selected
+      const savedAnswer = testState.answers[question.id];
+      if (savedAnswer && (Array.isArray(savedAnswer) ? savedAnswer.length > 0 : true)) {
+        document.getElementById('checkAnswerBtn').style.display = 'inline-flex';
+      }
     }
   }
   
@@ -3574,7 +3630,7 @@ async function saveTestSession() {
       session_id: testState.sessionId,
       current_question_index: testState.currentIndex,
       answers: testState.answers,
-  answer_status: testState.answerStatus,
+      answer_status: {}, // Do NOT save revealed answers — students must re-check on resume
       flagged_questions: Array.from(testState.flagged),
       questions: testState.questions,
       test_config: TEST_CONFIG,
