@@ -7536,13 +7536,37 @@
 
     async function loadNotesManagement() {
       ALL_NOTES = HARDCODED_NOTES;
-      // If logged in as a teacher, only show notes for their assigned subjects
-      if (sessionStorage.getItem('userRole') === 'Teacher') {
-        const teacherSubjects = JSON.parse(sessionStorage.getItem('teacherSubjects') || '[]');
+
+      // If logged in as a teacher, filter notes to their assigned subjects only.
+      // Uses case-insensitive substring matching so 'Fundamentals of Nursing' stored
+      // as a subject correctly matches notes with category 'Fundamentals', and vice-versa.
+      const rawRole = (sessionStorage.getItem('userRole') || '').toLowerCase().trim();
+      const teacherRoles = ['teacher', 'instructor'];
+      if (teacherRoles.includes(rawRole)) {
+        const teacherSubjects = JSON.parse(sessionStorage.getItem('teacherSubjects') || '[]')
+          .map(s => s.toLowerCase().trim())
+          .filter(Boolean);
+
         if (teacherSubjects.length > 0) {
-          ALL_NOTES = HARDCODED_NOTES.filter(n => teacherSubjects.includes(n.category));
+          ALL_NOTES = HARDCODED_NOTES.filter(n => {
+            const cat = (n.category || '').toLowerCase().trim();
+            // Match if subject contains category name OR category contains subject name
+            return teacherSubjects.some(s => cat.includes(s) || s.includes(cat));
+          });
+
+          // If still empty, fall back to showing all notes and warn in console
+          if (ALL_NOTES.length === 0) {
+            console.warn(
+              '⚠️ Notes filter returned 0 results for subjects:',
+              teacherSubjects,
+              '— note categories available:',
+              [...new Set(HARDCODED_NOTES.map(n => n.category))]
+            );
+            ALL_NOTES = HARDCODED_NOTES; // fail-open so teacher is not stranded
+          }
         }
       }
+
       renderNotesTable();
     }
 
