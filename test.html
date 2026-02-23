@@ -1464,7 +1464,17 @@ body{
   <!-- STICKY HEADER -->
   <div class="test-header">
     <div class="test-header-content">
-      <div class="test-title" id="testTitle">Loading Test...</div>
+      <div style="display:flex;align-items:center;gap:14px;min-width:0">
+        <div class="test-title" id="testTitle">Loading Test...</div>
+        <!-- Logged-in user pill — populated by applySessionRole() -->
+        <div id="sessionUserPill" style="display:none;align-items:center;gap:7px;padding:5px 12px 5px 8px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);flex-shrink:0;max-width:220px;overflow:hidden">
+          <span id="sessionUserAvatar" style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:rgba(201,168,76,0.2);border:1.5px solid rgba(201,168,76,0.4);color:var(--gold-primary);font-weight:800;font-size:12px;flex-shrink:0">?</span>
+          <span style="display:flex;flex-direction:column;min-width:0;line-height:1.2">
+            <span id="sessionUserName" style="color:#e2e8f0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">—</span>
+            <span id="sessionUserRole" style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#64748b">—</span>
+          </span>
+        </div>
+      </div>
       <div class="test-meta">
         <div class="timer" id="timer">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -1790,6 +1800,56 @@ function applySessionRole() {
     // Absolute belt-and-suspenders removal for students
     revealBtn.remove();
   }
+
+  // ── User identity pill ─────────────────────────────────────────────────
+  const pill    = document.getElementById('sessionUserPill');
+  const avatar  = document.getElementById('sessionUserAvatar');
+  const nameEl  = document.getElementById('sessionUserName');
+  const roleEl  = document.getElementById('sessionUserRole');
+  if (!pill) return;
+
+  // Resolve display name: prefer stored name, fall back to email username
+  const rawName  = SESSION_ROLE.userName ||
+    sessionStorage.getItem('userName') || localStorage.getItem('userName') || '';
+  const rawEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+
+  let displayName = rawName.trim();
+  if (!displayName && rawEmail) {
+    // Use the part before @ as a readable fallback
+    displayName = rawEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+  if (!displayName) displayName = 'User';
+
+  // Initials for the avatar circle (up to 2 chars)
+  const parts    = displayName.split(/\s+/).filter(Boolean);
+  const initials = parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : displayName.slice(0, 2).toUpperCase();
+
+  // Role label & colour
+  const roleLabel = SESSION_ROLE.isTeacher
+    ? (SESSION_ROLE.userRole === 'admin' || SESSION_ROLE.userRole === 'superadmin' ? 'Admin' : 'Teacher')
+    : 'Student';
+
+  const roleColor = SESSION_ROLE.isTeacher ? 'var(--gold-primary)' : '#38bdf8';
+  const avatarBg  = SESSION_ROLE.isTeacher
+    ? 'rgba(201,168,76,0.2)'
+    : 'rgba(56,189,248,0.15)';
+  const avatarBorder = SESSION_ROLE.isTeacher
+    ? 'rgba(201,168,76,0.45)'
+    : 'rgba(56,189,248,0.4)';
+
+  avatar.textContent         = initials;
+  avatar.style.background    = avatarBg;
+  avatar.style.borderColor   = avatarBorder;
+  avatar.style.color         = roleColor;
+  nameEl.textContent         = displayName;
+  roleEl.textContent         = roleLabel;
+  roleEl.style.color         = roleColor;
+  pill.style.display         = 'inline-flex';
+  pill.style.borderColor     = SESSION_ROLE.isTeacher
+    ? 'rgba(201,168,76,0.25)'
+    : 'rgba(56,189,248,0.2)';
 }
 
 // ============================================
