@@ -1713,6 +1713,7 @@
         <a href="#" data-view="calendar">Calendar <span class="badge">This Week</span></a>
         <a href="#" data-view="grades">Grades <span class="badge">GPA</span></a>
         <a href="#" data-view="downloads">Downloads <span class="badge">PDF</span></a>
+        <a href="#" onclick="openTestPlatform(); return false;" style="border:1px solid rgba(45,212,191,0.25);">🎯 Test Platform <span class="badge" style="background:linear-gradient(135deg,#2dd4bf,#14b8a6);color:#022c22">Launch</span></a>
         <a href="#" data-view="support">Support <span class="badge">Help</span></a>
       </div>
 
@@ -2480,6 +2481,35 @@
     // Go back to portal
     function goBackToPortal() {
       window.close();
+    }
+
+    // ==================== TEST PLATFORM ====================
+    function openTestPlatform() {
+      // Bridge student identity into localStorage so the new window (empty sessionStorage) can read it
+      const sd = studentData || {};
+      const bridgeMap = {
+        'isLoggedIn':      'true',
+        'userRole':        'student',
+        'userName':        sd.fullName  || sd.name      || '',
+        'userEmail':       sd.email     || '',
+        'studentRecordId': sd.id        || sd.studentDbId || '',
+        'studentId':       sd.studentId || sd.student_id  || '',
+      };
+      Object.entries(bridgeMap).forEach(([k, v]) => {
+        if (v) localStorage.setItem(k, v);
+      });
+      // Also mirror hubStudentData so test.html can pick up full profile if needed
+      try { localStorage.setItem('hubStudentData', JSON.stringify(sd)); } catch(_) {}
+
+      const width  = 1400, height = 900;
+      const left   = Math.round((screen.width  - width)  / 2);
+      const top    = Math.round((screen.height - height) / 2);
+      const win = window.open(
+        'test.html', 'ACNHSTestPlatform',
+        `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+      );
+      if (win) { win.focus(); }
+      else     { alert('Please allow pop-ups for this site to open the Test Platform.'); }
     }
 
     // ==================== UNIVERSAL SEARCH ENGINE ====================
