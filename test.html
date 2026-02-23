@@ -2377,6 +2377,26 @@ function shuffleArray(array, seed) {
   return arr;
 }
 
+/**
+ * Derives a deterministic shuffle seed from the test ID and selected topic IDs.
+ * Every device that opens the same test with the same topics will produce the
+ * EXACT same seed → identical question order and answer choice order.
+ * Individual student sessions remain independent (separate sessionId, answers, timer).
+ *
+ * Algorithm: simple djb2-style hash over the combined key string.
+ */
+function deriveShuffleSeed(testId, topicIds) {
+  // Sort topic IDs so selection order doesn't matter
+  const key = [testId, ...(topicIds || []).slice().sort()].join('|');
+  let hash = 5381;
+  for (let i = 0; i < key.length; i++) {
+    hash = ((hash << 5) + hash) ^ key.charCodeAt(i);
+    hash = hash & 0x7fffffff; // Keep positive 31-bit integer
+  }
+  // Ensure it's in the range the seeded shuffle expects (>0)
+  return (hash % 999983) + 1; // 999983 is prime, result is 1..999983
+}
+
 function generateSessionId() {
   return 'test_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
@@ -2391,7 +2411,8 @@ function saveToLocalStorage() {
     flagged: Array.from(testState.flagged),
     startTime: testState.startTime,
     questionIds: testState.questions.map(q => q.id),
-    testId: TEST_CONFIG.testId
+    testId: TEST_CONFIG.testId,
+    selectedTopicIds: TEST_CONFIG.selectedTopicIds || []
   };
   localStorage.setItem('acnhs_test_session', JSON.stringify(saveData));
 }
@@ -2992,7 +3013,13 @@ async function initializeNewTest() {
   clearLocalStorage();
   
   testState.sessionId = generateSessionId();
-  testState.shuffleSeed = Math.floor(Math.random() * 1000000);
+  // Derive a deterministic seed from testId + selected topics so every device
+  // opening the same test sees questions and answer choices in the EXACT same order.
+  // Each student still gets their own independent session (sessionId, answers, timer).
+  testState.shuffleSeed = deriveShuffleSeed(
+    TEST_CONFIG.testId,
+    TEST_CONFIG.selectedTopicIds || []
+  );
   testState.startTime = Date.now();
   
   // Load questions from Supabase with topic filter (new system) or category filter (legacy)
@@ -3054,10 +3081,16 @@ async function resumeTest(saved) {
   testState.answerStatus = saved.answerStatus || {};
   testState.flagged = new Set(saved.flagged);
   
-  // Load questions from Supabase
-  const questions = await loadQuestions(saved.testId, TEST_CONFIG.categoryFilter);
+  // Restore selected topic IDs so question loading uses the same filter
+  if (saved.selectedTopicIds && saved.selectedTopicIds.length > 0) {
+    TEST_CONFIG.selectedTopicIds = saved.selectedTopicIds;
+  }
+
+  // Load questions from Supabase using the saved topic filter
+  const topicIds = TEST_CONFIG.selectedTopicIds || null;
+  const questions = await loadQuestions(saved.testId, TEST_CONFIG.categoryFilter, null, topicIds);
   
-  // Reconstruct questions with same shuffle
+  // Reconstruct questions with the same deterministic seed — produces identical order on every device
   if (TEST_CONFIG.shuffleQuestions) {
     testState.questions = shuffleArray(questions, saved.shuffleSeed);
   } else {
