@@ -1314,6 +1314,83 @@ body{
   letter-spacing: 0.3px;
 }
 
+/* ── Subject + inline topic tree ── */
+.subject-row {
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  transition: border-color 0.18s;
+}
+.subject-row.expanded {
+  border-color: rgba(201,168,76,0.45);
+}
+.subject-row.selected-parent {
+  border-color: var(--gold-primary);
+  background: rgba(201,168,76,0.07);
+}
+.subject-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+.subject-header:hover { background: rgba(201,168,76,0.07); }
+.subject-chevron {
+  flex-shrink: 0;
+  width: 18px; height: 18px;
+  color: #64748b;
+  transition: transform 0.22s, color 0.18s;
+}
+.subject-row.expanded .subject-chevron {
+  transform: rotate(90deg);
+  color: var(--gold-primary);
+}
+.subject-topics-list {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease;
+  border-top: 0px solid rgba(201,168,76,0.18);
+}
+.subject-row.expanded .subject-topics-list {
+  max-height: 1200px;
+  border-top-width: 1px;
+}
+.topic-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 16px 11px 46px;
+  cursor: pointer;
+  transition: background 0.15s;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.topic-row:last-child { border-bottom: none; }
+.topic-row:hover { background: rgba(201,168,76,0.07); }
+.topic-row.selected { background: rgba(201,168,76,0.10); }
+.topic-row input[type=checkbox] {
+  width:16px;height:16px;cursor:pointer;
+  accent-color: var(--gold-primary);flex-shrink:0;
+}
+.subject-topics-select-all {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 10px 46px;
+  background: rgba(201,168,76,0.04);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-primary);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+.subject-topics-select-all:hover { background: rgba(201,168,76,0.10); }
+
 .stats-box {
   background: rgba(255,255,255,0.06);
   border: 1px solid rgba(255,255,255,0.08);
@@ -1378,17 +1455,42 @@ body{
 
 <!-- SUBJECT SELECTION MODAL -->
 <div class="modal-overlay hidden" id="subjectModal">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:680px">
     <div class="modal-header">
-      <h2 class="modal-title">Select Subjects</h2>
-      <p class="modal-subtitle">Choose one or more subjects you want to be tested on</p>
+      <h2 class="modal-title">Select Subjects &amp; Topics</h2>
+      <p class="modal-subtitle">Choose subjects — topics expand automatically. Select all or pick individual topics.</p>
     </div>
-    <div class="modal-body">
-      <div class="selection-grid" id="subjectList"></div>
+    <div class="modal-body" style="max-height:65vh;overflow-y:auto">
+      <div id="subjectList"></div>
       <div class="stats-box" style="margin-top:20px">
         <div class="stat-row">
           <span class="stat-label">Selected subjects:</span>
           <span class="stat-value" id="selectedSubjectsCount">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Selected topics:</span>
+          <span class="stat-value" id="selectedTopicsCount">0</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-label">Questions available:</span>
+          <span class="stat-value accent" id="totalQuestionsCount">—</span>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-top:16px">
+          <label for="questionCountLimit" style="display:block;color:#cbd5e1;font-size:14px;font-weight:600;margin-bottom:12px">
+            Limit questions (optional):
+          </label>
+          <input type="number" id="questionCountLimit" min="1" placeholder="Leave blank for all questions"
+            style="width:100%;padding:12px;border-radius:8px;border:1.5px solid rgba(201,168,76,0.25);background:rgba(255,255,255,0.05);color:#f1f5f9;font-size:14px">
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-top:16px">
+          <label style="display:flex;align-items:center;cursor:pointer;gap:12px">
+            <input type="checkbox" id="mixQAToggle" checked onchange="toggleMixQA()"
+              style="width:20px;height:20px;cursor:pointer;accent-color:var(--gold-primary)">
+            <div>
+              <span style="color:#cbd5e1;font-size:14px;font-weight:600;display:block">Mix Q/A</span>
+              <span style="color:#94a3b8;font-size:12px;display:block;margin-top:4px">Shuffle questions and answer choices for each test</span>
+            </div>
+          </label>
         </div>
       </div>
     </div>
@@ -1397,18 +1499,16 @@ body{
         📂 Load Saved Test
       </button>
       <div style="display:flex;gap:12px">
-        <button onclick="closeSubjectModal()" class="btn-outline">
-          Cancel
-        </button>
-        <button id="continueToTopicsBtn" onclick="continueToTopics()" disabled class="btn btn-primary">
-          Continue to Topics →
+        <button onclick="closeSubjectModal()" class="btn-outline">Cancel</button>
+        <button id="continueToTopicsBtn" onclick="startFromSubjectModal()" disabled class="btn btn-primary">
+          Start Test →
         </button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- TOPIC SELECTION MODAL -->
+<!-- TOPIC SELECTION MODAL (legacy — kept for back-compat; now topics are inline in subject modal) -->
 <div class="modal-overlay hidden" id="topicModal">
   <div class="modal-box">
     <div class="modal-header">
@@ -1417,51 +1517,24 @@ body{
     </div>
     <div class="modal-body">
       <div id="topicList" style="max-height:400px;overflow-y:auto;margin-bottom:20px"></div>
-      
       <div class="stats-box">
         <div class="stat-row">
           <span class="stat-label">Selected topics:</span>
-          <span class="stat-value" id="selectedTopicsCount">0</span>
+          <span class="stat-value" id="legacySelectedTopicsCount">0</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Total questions available:</span>
-          <span class="stat-value accent" id="totalQuestionsCount">-</span>
-        </div>
-        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-top:16px">
-          <label for="questionCountLimit" style="display:block;color:#cbd5e1;font-size:14px;font-weight:600;margin-bottom:12px">
-            Limit questions (optional):
-          </label>
-          <input type="number" id="questionCountLimit" min="1" placeholder="Leave blank for all questions" style="width:100%;padding:12px;border-radius:8px;border:1.5px solid rgba(201,168,76,0.25);background:rgba(255,255,255,0.05);color:#f1f5f9;font-size:14px">
-        </div>
-        
-        <!-- Mix Q/A Toggle -->
-        <div style="border-top:1px solid rgba(255,255,255,0.1);padding-top:16px;margin-top:16px">
-          <label style="display:flex;align-items:center;cursor:pointer;gap:12px">
-            <input type="checkbox" id="mixQAToggle" checked onchange="toggleMixQA()" style="width:20px;height:20px;cursor:pointer;accent-color:var(--gold-primary)">
-            <div>
-              <span style="color:#cbd5e1;font-size:14px;font-weight:600;display:block">Mix Q/A</span>
-              <span style="color:#94a3b8;font-size:12px;display:block;margin-top:4px">Shuffle questions and answer choices for each test</span>
-            </div>
-          </label>
+          <span class="stat-value accent" id="legacyTotalQuestionsCount">-</span>
         </div>
       </div>
-      
       <div style="display:flex;gap:12px;margin-bottom:20px">
-        <button onclick="selectAllTopics()" class="btn-outline" style="flex:1">
-          Select All
-        </button>
-        <button onclick="deselectAllTopics()" class="btn-outline" style="flex:1">
-          Deselect All
-        </button>
+        <button onclick="selectAllTopics()" class="btn-outline" style="flex:1">Select All</button>
+        <button onclick="deselectAllTopics()" class="btn-outline" style="flex:1">Deselect All</button>
       </div>
     </div>
     <div class="modal-footer">
-      <button onclick="closeTopicModal()" class="btn-outline">
-        ← Back to Subjects
-      </button>
-      <button id="startTestBtn" onclick="startTestWithTopics()" disabled class="btn btn-primary">
-        Start Test
-      </button>
+      <button onclick="closeTopicModal()" class="btn-outline">← Back to Subjects</button>
+      <button id="startTestBtn" onclick="startTestWithTopics()" disabled class="btn btn-primary">Start Test</button>
     </div>
   </div>
 </div>
@@ -2832,63 +2905,92 @@ async function showSubjectSelection() {
   const btn = document.getElementById('initialStartBtn');
   btn.innerHTML = '<div class="loading" style="width:20px;height:20px"></div> Loading...';
   btn.disabled = true;
-  
+
   try {
-    // Get test ID from URL
     const urlParams = new URLSearchParams(window.location.search);
     const testId = urlParams.get('test_id') || '00000000-0000-0000-0000-000000000001';
     TEST_CONFIG.testId = testId;
-    
-    // Initialize Supabase
+
     if (!db) {
-      if (!initializeSupabase()) {
-        throw new Error('Cannot connect to database');
-      }
+      if (!initializeSupabase()) throw new Error('Cannot connect to database');
     }
-    
-    // Load test configuration
+
     await loadTestConfiguration(testId);
-    
-    // Load available subjects
-    const { data: subjects, error } = await db
-      .from('test_subjects')
-      .select('*')
-      .eq('is_active', true)
-      .order('display_order');
-    
-    if (error) throw error;
-    
-    if (!subjects || subjects.length === 0) {
-      throw new Error('No subjects available for this test');
-    }
-    
+
+    // Load subjects AND topics in parallel
+    const [{ data: subjects, error: subjectError }, { data: allTopicsRaw, error: topicError }] = await Promise.all([
+      db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
+      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order')
+    ]);
+
+    if (subjectError) throw subjectError;
+    if (!subjects || subjects.length === 0) throw new Error('No subjects available for this test');
+
     allSubjects = subjects;
+    availableTopics = allTopicsRaw || [];
     selectedSubjects.clear();
-    
-    // Render subject list as checkboxes
+    selectedTopics.clear();
+
+    // Group topics by subject_id
+    const topicsBySubject = {};
+    availableTopics.forEach(t => {
+      if (!topicsBySubject[t.subject_id]) topicsBySubject[t.subject_id] = [];
+      topicsBySubject[t.subject_id].push(t);
+    });
+
     const subjectList = document.getElementById('subjectList');
-    if (!subjectList) {
-      throw new Error('Subject list element not found');
-    }
-    
-    subjectList.innerHTML = subjects.map(subject => `
-      <div class="topic-checkbox-card" data-subject-id="${subject.id}" onclick="toggleSubject('${subject.id}')">
-        <div class="topic-card-content">
-          <input type="checkbox" id="subject-${subject.id}" class="topic-checkbox" onclick="event.stopPropagation()">
-          <div class="topic-details">
-            <div class="topic-name">${subject.icon || '📚'} ${subject.name}</div>
-            <div class="topic-description">${subject.description || ''}</div>
+    if (!subjectList) throw new Error('Subject list element not found');
+
+    subjectList.innerHTML = subjects.map(subject => {
+      const topics = topicsBySubject[subject.id] || [];
+      const hasTopics = topics.length > 0;
+      const topicRows = topics.map(topic => `
+        <div class="topic-row" id="topic-row-${topic.id}" onclick="toggleTopicInline('${topic.id}', '${subject.id}')">
+          <input type="checkbox" id="topic-cb-${topic.id}" onclick="event.stopPropagation();toggleTopicInline('${topic.id}','${subject.id}')">
+          <div style="flex:1">
+            <div style="color:#e2e8f0;font-size:13.5px;font-weight:600">${topic.name}</div>
+            ${topic.description ? `<div style="color:#64748b;font-size:12px;margin-top:2px">${topic.description}</div>` : ''}
           </div>
         </div>
-      </div>
-    `).join('');
-    
-    // Show subject modal
+      `).join('');
+
+      return `
+        <div class="subject-row" id="subject-row-${subject.id}">
+          <div class="subject-header" onclick="toggleSubject('${subject.id}')">
+            <svg class="subject-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+            <input type="checkbox" id="subject-cb-${subject.id}"
+              onclick="event.stopPropagation(); handleSubjectCheckbox('${subject.id}', this.checked)"
+              style="width:17px;height:17px;cursor:pointer;accent-color:var(--gold-primary);flex-shrink:0">
+            <div style="flex:1">
+              <div style="color:#f1f5f9;font-size:14.5px;font-weight:700">${subject.name}</div>
+              ${subject.description ? `<div style="color:#64748b;font-size:12px;margin-top:2px">${subject.description}</div>` : ''}
+            </div>
+            ${hasTopics ? `<span style="color:#64748b;font-size:12px;font-weight:600;flex-shrink:0">${topics.length} topic${topics.length !== 1 ? 's' : ''}</span>` : ''}
+          </div>
+          ${hasTopics ? `
+            <div class="subject-topics-list" id="topics-list-${subject.id}">
+              <div class="subject-topics-select-all" onclick="selectAllTopicsForSubject('${subject.id}', true)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Select all topics
+                <span onclick="event.stopPropagation();selectAllTopicsForSubject('${subject.id}', false)"
+                  style="margin-left:auto;color:#475569;font-size:11px;font-weight:600;text-transform:uppercase;padding:2px 8px;border-radius:4px;background:rgba(255,255,255,0.06);cursor:pointer">
+                  Deselect all
+                </span>
+              </div>
+              ${topicRows}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }).join('');
+
     document.getElementById('subjectModal').classList.remove('hidden');
     btn.innerHTML = 'Start Test';
     btn.disabled = false;
     updateSubjectStats();
-    
+
   } catch (error) {
     console.error('Error loading subjects:', error);
     btn.innerHTML = 'Start Test';
@@ -2897,137 +2999,201 @@ async function showSubjectSelection() {
   }
 }
 
+// Toggle the expand/collapse of a subject's topic list.
+// Also auto-checks the subject checkbox when expanding.
 function toggleSubject(subjectId) {
-  const checkbox = document.getElementById(`subject-${subjectId}`);
-  checkbox.checked = !checkbox.checked;
-  
-  if (checkbox.checked) {
+  const row = document.getElementById(`subject-row-${subjectId}`);
+  const cb  = document.getElementById(`subject-cb-${subjectId}`);
+  if (!row) return;
+
+  const isExpanding = !row.classList.contains('expanded');
+  row.classList.toggle('expanded', isExpanding);
+
+  // Auto-check the subject when user expands it (convenience)
+  if (isExpanding && cb && !cb.checked) {
+    cb.checked = true;
+    handleSubjectCheckbox(subjectId, true);
+  }
+}
+
+// Called when the subject checkbox is directly clicked
+function handleSubjectCheckbox(subjectId, checked) {
+  const row = document.getElementById(`subject-row-${subjectId}`);
+  if (!row) return;
+
+  if (checked) {
     selectedSubjects.add(subjectId);
+    row.classList.add('selected-parent');
+    // Auto-expand
+    row.classList.add('expanded');
+    // Select all topics for this subject
+    selectAllTopicsForSubject(subjectId, true);
   } else {
     selectedSubjects.delete(subjectId);
+    row.classList.remove('selected-parent');
+    // Deselect all topics
+    selectAllTopicsForSubject(subjectId, false);
   }
-  
-  // Update visual state
-  const card = checkbox.closest('.topic-checkbox-card');
-  if (checkbox.checked) {
-    card.classList.add('selected');
-  } else {
-    card.classList.remove('selected');
-  }
-  
   updateSubjectStats();
+}
+
+// Select or deselect all topics belonging to a subject
+function selectAllTopicsForSubject(subjectId, select) {
+  const subjectTopics = availableTopics.filter(t => t.subject_id === subjectId);
+  subjectTopics.forEach(topic => {
+    const cb  = document.getElementById(`topic-cb-${topic.id}`);
+    const row = document.getElementById(`topic-row-${topic.id}`);
+    if (select) {
+      selectedTopics.add(topic.id);
+      if (cb)  cb.checked = true;
+      if (row) row.classList.add('selected');
+    } else {
+      selectedTopics.delete(topic.id);
+      if (cb)  cb.checked = false;
+      if (row) row.classList.remove('selected');
+    }
+  });
+  syncSubjectCheckboxState(subjectId);
+  updateSubjectStats();
+}
+
+// Toggle a single topic checkbox and sync the parent subject state
+function toggleTopicInline(topicId, subjectId) {
+  const cb  = document.getElementById(`topic-cb-${topicId}`);
+  const row = document.getElementById(`topic-row-${topicId}`);
+  if (!cb) return;
+
+  cb.checked = !cb.checked;
+  if (cb.checked) {
+    selectedTopics.add(topicId);
+    if (row) row.classList.add('selected');
+  } else {
+    selectedTopics.delete(topicId);
+    if (row) row.classList.remove('selected');
+  }
+  syncSubjectCheckboxState(subjectId);
+  updateSubjectStats();
+}
+
+// Sync the parent subject checkbox based on how many of its topics are selected
+function syncSubjectCheckboxState(subjectId) {
+  const subjectTopics = availableTopics.filter(t => t.subject_id === subjectId);
+  const checkedCount  = subjectTopics.filter(t => selectedTopics.has(t.id)).length;
+  const cb   = document.getElementById(`subject-cb-${subjectId}`);
+  const row  = document.getElementById(`subject-row-${subjectId}`);
+  if (!cb) return;
+
+  if (checkedCount === 0) {
+    cb.checked = false;
+    cb.indeterminate = false;
+    selectedSubjects.delete(subjectId);
+    if (row) row.classList.remove('selected-parent');
+  } else if (checkedCount === subjectTopics.length) {
+    cb.checked = true;
+    cb.indeterminate = false;
+    selectedSubjects.add(subjectId);
+    if (row) row.classList.add('selected-parent');
+  } else {
+    cb.checked = false;
+    cb.indeterminate = true; // Some selected — indeterminate state
+    selectedSubjects.add(subjectId);
+    if (row) row.classList.add('selected-parent');
+  }
 }
 
 function updateSubjectStats() {
   document.getElementById('selectedSubjectsCount').textContent = selectedSubjects.size;
-  
+  document.getElementById('selectedTopicsCount').textContent   = selectedTopics.size;
+
   const continueBtn = document.getElementById('continueToTopicsBtn');
-  if (selectedSubjects.size === 0) {
-    continueBtn.disabled = true;
-    continueBtn.style.opacity = '0.5';
-    continueBtn.style.cursor = 'not-allowed';
+  const hasSelection = selectedTopics.size > 0 || selectedSubjects.size > 0;
+  continueBtn.disabled      = !hasSelection;
+  continueBtn.style.opacity = hasSelection ? '1' : '0.5';
+  continueBtn.style.cursor  = hasSelection ? 'pointer' : 'not-allowed';
+
+  // Live question count
+  if (selectedTopics.size > 0) {
+    db.from('test_questions')
+      .select('*', { count: 'exact', head: true })
+      .eq('test_id', TEST_CONFIG.testId)
+      .in('topic_id', Array.from(selectedTopics))
+      .then(({ count, error }) => {
+        if (!error) document.getElementById('totalQuestionsCount').textContent = count || 0;
+      });
   } else {
-    continueBtn.disabled = false;
-    continueBtn.style.opacity = '1';
-    continueBtn.style.cursor = 'pointer';
+    document.getElementById('totalQuestionsCount').textContent = '—';
+  }
+}
+
+// "Start Test →" button in the subject modal
+async function startFromSubjectModal() {
+  if (selectedTopics.size === 0 && selectedSubjects.size === 0) {
+    showToast('Please select at least one subject or topic', 'warning');
+    return;
+  }
+
+  // If subject selected but no topics explicitly picked, auto-select all its topics
+  selectedSubjects.forEach(subjectId => {
+    const subjectTopics = availableTopics.filter(t => t.subject_id === subjectId);
+    if (subjectTopics.length > 0 && !subjectTopics.some(t => selectedTopics.has(t.id))) {
+      subjectTopics.forEach(t => selectedTopics.add(t.id));
+    }
+  });
+
+  if (selectedTopics.size === 0) {
+    showToast('No published topics found for the selected subjects', 'warning');
+    return;
+  }
+
+  // Read options from the subject modal's controls
+  const mixQAToggle   = document.getElementById('mixQAToggle');
+  const limitInput    = document.getElementById('questionCountLimit');
+  TEST_CONFIG.shuffleQuestions = mixQAToggle ? mixQAToggle.checked : true;
+  TEST_CONFIG.shuffleOptions   = mixQAToggle ? mixQAToggle.checked : true;
+  TEST_CONFIG.questionCount    = limitInput && limitInput.value ? parseInt(limitInput.value) : null;
+  TEST_CONFIG.selectedTopicIds = Array.from(selectedTopics);
+
+  document.getElementById('subjectModal').classList.add('hidden');
+
+  testState.studentId = getOwnerId();
+
+  try {
+    document.getElementById('startScreen').innerHTML = `
+      <div class="start-content">
+        <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
+        <p style="color:#cbd5e1;font-size:18px">Loading test questions...</p>
+        <p style="color:#94a3b8;font-size:14px;margin-top:12px">${selectedTopics.size} topic(s) selected${TEST_CONFIG.questionCount ? `, limited to ${TEST_CONFIG.questionCount} questions` : ''}</p>
+      </div>
+    `;
+
+    const saved = loadFromLocalStorage();
+    if (saved && saved.sessionId && saved.testId === TEST_CONFIG.testId) {
+      const shouldResume = await showResumeTestModal();
+      if (shouldResume) { await resumeTest(saved); }
+      else              { await initializeNewTest(); }
+    } else {
+      await initializeNewTest();
+    }
+
+    document.getElementById('startScreen').style.display = 'none';
+    document.getElementById('testContainer').style.display = 'block';
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+  } catch (error) {
+    console.error('Failed to start test:', error);
+    document.getElementById('startScreen').innerHTML = `
+      <div class="start-content">
+        <p style="color:#ef4444">Failed to start test: ${error.message}</p>
+        <button onclick="location.reload()" class="btn btn-primary" style="margin-top:16px">Try Again</button>
+      </div>
+    `;
   }
 }
 
 async function continueToTopics() {
-  if (selectedSubjects.size === 0) {
-    showToast('Please select at least one subject', 'warning');
-    return;
-  }
-  
-  // Show loading in modal
-  const subjectModal = document.getElementById('subjectModal');
-  subjectModal.querySelector('.modal-body').innerHTML = `
-    <div style="text-align:center;padding:40px">
-      <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
-      <p style="color:#cbd5e1">Loading topics from selected subjects...</p>
-    </div>
-  `;
-  
-  try {
-    // Load topics for all selected subjects
-    const { data: topics, error } = await db
-      .from('test_topics')
-      .select('*, test_subjects(name)')
-      .in('subject_id', Array.from(selectedSubjects))
-      .eq('status', 'published')  // Only show published topics
-      .order('subject_id')
-      .order('display_order');
-    
-    if (error) throw error;
-    
-    if (!topics || topics.length === 0) {
-      throw new Error('No topics available for the selected subjects yet');
-    }
-    
-    availableTopics = topics;
-    selectedTopics.clear();
-    
-    // Group topics by subject for better display
-    const topicsBySubject = {};
-    topics.forEach(topic => {
-      const subjectId = topic.subject_id;
-      if (!topicsBySubject[subjectId]) {
-        topicsBySubject[subjectId] = {
-          name: topic.test_subjects?.name || 'Unknown Subject',
-          topics: []
-        };
-      }
-      topicsBySubject[subjectId].topics.push(topic);
-    });
-    
-    // Render topic list grouped by subject
-    const topicList = document.getElementById('topicList');
-    let html = '';
-    
-    for (const [subjectId, subjectData] of Object.entries(topicsBySubject)) {
-      html += `
-        <div style="margin-bottom:24px">
-          <div style="color:#10b981;font-weight:700;font-size:16px;margin-bottom:12px;padding-bottom:8px;border-bottom:2px solid rgba(16,185,129,0.3)">
-            ${subjectData.name}
-          </div>
-          ${subjectData.topics.map(topic => `
-            <div class="topic-checkbox-card" data-topic-id="${topic.id}" onclick="toggleTopic('${topic.id}')">
-              <div class="topic-card-content">
-                <input type="checkbox" id="topic-${topic.id}" class="topic-checkbox" onclick="event.stopPropagation()">
-                <div class="topic-details">
-                  <div class="topic-name">📄 ${topic.name}</div>
-                  <div class="topic-description">${topic.description || ''}</div>
-                </div>
-                <div class="topic-badge">Published</div>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      `;
-    }
-    
-    topicList.innerHTML = html;
-    
-    // Update modal title to show multiple subjects
-    const subjectNames = Array.from(selectedSubjects).map(id => {
-      const subject = allSubjects.find(s => s.id === id);
-      return subject ? subject.name : '';
-    }).filter(Boolean);
-    
-    const titleText = subjectNames.length > 1 
-      ? `${subjectNames.length} Subjects Selected` 
-      : subjectNames[0];
-    
-    document.getElementById('topicModalTitle').textContent = titleText;
-    document.getElementById('subjectModal').classList.add('hidden');
-    document.getElementById('topicModal').classList.remove('hidden');
-    updateTopicStats();
-    
-  } catch (error) {
-    console.error('Error loading topics:', error);
-    showToast(error.message || 'Failed to load topics', 'error');
-    closeSubjectModal();
-  }
+  // Legacy path — no longer primary, but kept for back-compat
+  // Just call the new unified start function
+  await startFromSubjectModal();
 }
 
 function toggleTopic(topicId) {
@@ -3076,33 +3242,24 @@ function deselectAllTopics() {
 }
 
 async function updateTopicStats() {
-  document.getElementById('selectedTopicsCount').textContent = selectedTopics.size;
-  
+  const countEl = document.getElementById('legacySelectedTopicsCount');
+  const qEl     = document.getElementById('legacyTotalQuestionsCount');
+  if (countEl) countEl.textContent = selectedTopics.size;
+
   const startBtn = document.getElementById('startTestBtn');
   if (selectedTopics.size === 0) {
-    startBtn.disabled = true;
-    startBtn.style.opacity = '0.5';
-    startBtn.style.cursor = 'not-allowed';
-    document.getElementById('totalQuestionsCount').textContent = '-';
+    if (startBtn) { startBtn.disabled = true; startBtn.style.opacity = '0.5'; startBtn.style.cursor = 'not-allowed'; }
+    if (qEl) qEl.textContent = '-';
   } else {
-    startBtn.disabled = false;
-    startBtn.style.opacity = '1';
-    startBtn.style.cursor = 'pointer';
-    
-    // Count questions for selected topics
+    if (startBtn) { startBtn.disabled = false; startBtn.style.opacity = '1'; startBtn.style.cursor = 'pointer'; }
     try {
       const { count, error } = await db
         .from('test_questions')
         .select('*', { count: 'exact', head: true })
         .eq('test_id', TEST_CONFIG.testId)
         .in('topic_id', Array.from(selectedTopics));
-      
-      if (error) throw error;
-      document.getElementById('totalQuestionsCount').textContent = count || 0;
-    } catch (error) {
-      console.error('Error counting questions:', error);
-      document.getElementById('totalQuestionsCount').textContent = '?';
-    }
+      if (!error && qEl) qEl.textContent = count || 0;
+    } catch (_) { if (qEl) qEl.textContent = '?'; }
   }
 }
 
@@ -3140,70 +3297,8 @@ function backToSubjects() {
 }
 
 async function startTestWithTopics() {
-  if (selectedTopics.size === 0) {
-    showToast('Please select at least one topic', 'warning');
-    return;
-  }
-  
-  // Get Mix Q/A toggle value
-  const mixQAToggle = document.getElementById('mixQAToggle');
-  const mixQAEnabled = mixQAToggle ? mixQAToggle.checked : true;
-  TEST_CONFIG.shuffleQuestions = mixQAEnabled;
-  TEST_CONFIG.shuffleOptions = mixQAEnabled;
-  
-  // Close topic modal
-  document.getElementById('topicModal').classList.add('hidden');
-  
-  // Get question limit if specified
-  const limitInput = document.getElementById('questionCountLimit');
-  const questionLimit = limitInput && limitInput.value ? parseInt(limitInput.value) : null;
-  TEST_CONFIG.questionCount = questionLimit;
-  TEST_CONFIG.selectedTopicIds = Array.from(selectedTopics);
-  
-  // Always use the authenticated user's own identity — never a spoofable URL param
-  testState.studentId = getOwnerId();
-  
-  try {
-    // Show loading state
-    document.getElementById('startScreen').innerHTML = `
-      <div class="start-content">
-        <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
-        <p style="color:#cbd5e1;font-size:18px">Loading test questions...</p>
-        <p style="color:#94a3b8;font-size:14px;margin-top:12px">${selectedTopics.size} topic(s) selected${questionLimit ? `, limited to ${questionLimit} questions` : ''}</p>
-      </div>
-    `;
-    
-    // Check for existing session
-    const saved = loadFromLocalStorage();
-    
-    if (saved && saved.sessionId && saved.testId === TEST_CONFIG.testId) {
-      const shouldResume = await showResumeTestModal();
-      if (shouldResume) {
-        await resumeTest(saved);
-      } else {
-        await initializeNewTest();
-      }
-    } else {
-      await initializeNewTest();
-    }
-    
-    // Hide start screen, show test container
-    document.getElementById('startScreen').style.display = 'none';
-    document.getElementById('testContainer').style.display = 'block';
-    
-    // Prevent accidental page leave
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-  } catch (error) {
-    console.error('Failed to start test:', error);
-    document.getElementById('startScreen').innerHTML = `
-      <div class="start-content">
-        <h1 style="color:white;margin-bottom:16px">❌ Error</h1>
-        <p style="color:#cbd5e1;font-size:18px;margin-bottom:32px">${error.message || 'Failed to load test'}</p>
-        <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
-      </div>
-    `;
-  }
+  // This is now an alias for the unified flow
+  await startFromSubjectModal();
 }
 
 // ============================================
