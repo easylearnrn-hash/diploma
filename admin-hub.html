@@ -2312,16 +2312,18 @@
         's.gharibyan@acnhs.am'
       ];
 
-      // Check role (Teacher or Admin)
-      const userRole = sessionStorage.getItem('userRole');
+      // Read role — sessionStorage first (current tab), fallback to localStorage (shared across windows)
+      const userRole = sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || '';
       const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
       const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-      const teacherEmail = sessionStorage.getItem('teacherEmail');
+      // teacherEmail: sessionStorage (set by teacher.html) OR localStorage (mirrored by teacher.html fix)
+      // OR fall back to userEmail for admins who also have teacher-role access
+      const teacherEmail = sessionStorage.getItem('teacherEmail') || localStorage.getItem('teacherEmail') || userEmail;
       
       console.log('🔐 Access check:', { userRole, isAdmin, userEmail, teacherEmail });
 
-      // Allow Teacher role
-      if (userRole === 'Teacher' && teacherEmail) {
+      // Allow Teacher role (case-insensitive)
+      if (userRole.toLowerCase() === 'teacher' && teacherEmail) {
         console.log('✅ Teacher access granted:', teacherEmail);
         initializeTeacherUI();
         return true;
@@ -2334,10 +2336,12 @@
         return true;
       }
 
-      // Deny access
+      // Deny access — clear only session keys, NOT localStorage entirely
+      // (clearing all localStorage would destroy auth data for any open popup windows)
       alert('⛔ Access Denied\n\nOnly authorized administrators and teachers can access this page.\n\nRedirecting to login...');
       sessionStorage.clear();
-      localStorage.clear();
+      ['isLoggedIn','isAdmin','userRole','userName','userEmail',
+       'teacherEmail','teacherName','teacherSubjects','teacherGroups','teacherId'].forEach(k => localStorage.removeItem(k));
       window.location.href = 'login.html';
       return false;
     }
@@ -7448,6 +7452,22 @@
     });
 
     function openTestPlatform() {
+      // Bridge session keys to localStorage before opening popup.
+      // window.open() creates a new window with empty sessionStorage,
+      // but localStorage is shared across all windows of the same origin.
+      const bridge = [
+        'isLoggedIn', 'isAdmin', 'userRole', 'userName', 'userEmail',
+        'teacherEmail', 'teacherName', 'teacherSubjects', 'teacherGroups'
+      ];
+      bridge.forEach(key => {
+        const val = sessionStorage.getItem(key);
+        if (val !== null) localStorage.setItem(key, val);
+      });
+      // Ensure isLoggedIn is always set for the popup
+      if (!localStorage.getItem('isLoggedIn')) {
+        localStorage.setItem('isLoggedIn', 'true');
+      }
+
       // Open test platform in a new window with specific dimensions
       const width = 1400;
       const height = 900;
