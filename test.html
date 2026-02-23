@@ -1801,6 +1801,50 @@ function initSessionRole() {
   SESSION_ROLE.isTeacher = roleIsTeacher || isAdmin;
 }
 
+// ============================================
+// OWNER IDENTITY — DATA ISOLATION
+// ============================================
+// Returns a stable, non-spoofable identity string for the currently
+// logged-in user.  Used as 'student_id' in Supabase rows AND as the
+// suffix of the localStorage in-progress key so that sessions, saved
+// tests, and results are STRICTLY isolated per account.
+//
+// Priority (first non-empty value wins):
+//   1. teacherEmail / userEmail  — set by teacher.html or login.html
+//   2. studentId from sessionStorage — set for real student accounts
+//   3. userName as last resort
+// Falls back to a random ephemeral ID (never 'guest') so that an
+// anonymous device still has its own bucket.
+// ============================================
+function getOwnerId() {
+  const email =
+    sessionStorage.getItem('teacherEmail') ||
+    localStorage.getItem('teacherEmail') ||
+    sessionStorage.getItem('userEmail') ||
+    localStorage.getItem('userEmail') || '';
+  if (email) return email.toLowerCase().trim();
+
+  const studentId =
+    sessionStorage.getItem('studentId') ||
+    localStorage.getItem('studentId') || '';
+  if (studentId && studentId !== 'guest') return studentId;
+
+  const name =
+    sessionStorage.getItem('userName') ||
+    sessionStorage.getItem('teacherName') ||
+    localStorage.getItem('userName') ||
+    localStorage.getItem('teacherName') || '';
+  if (name) return name.toLowerCase().replace(/\s+/g, '_');
+
+  // Truly anonymous: generate a per-device ephemeral ID and persist it
+  let anonId = localStorage.getItem('_acnhs_anon_id');
+  if (!anonId) {
+    anonId = 'anon_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('_acnhs_anon_id', anonId);
+  }
+  return anonId;
+}
+
 // Apply role-gated UI — call after DOM is ready
 function applySessionRole() {
   const revealBtn = document.getElementById('revealAllBtn');
@@ -2606,7 +2650,7 @@ async function saveTestAttempt(results) {
   try {
     const attemptData = {
       test_id: TEST_CONFIG.testId,
-      student_id: testState.studentId,
+      student_id: getOwnerId(),  // always the authenticated owner
       session_id: testState.sessionId,
       started_at: new Date(testState.startTime).toISOString(),
       completed_at: new Date(testState.endTime).toISOString(),
@@ -2696,11 +2740,12 @@ function saveToLocalStorage() {
     testId: TEST_CONFIG.testId,
     selectedTopicIds: TEST_CONFIG.selectedTopicIds || []
   };
-  localStorage.setItem('acnhs_test_session', JSON.stringify(saveData));
+  // Key is scoped per user so in-progress sessions never bleed between accounts
+  localStorage.setItem('acnhs_test_session_' + getOwnerId(), JSON.stringify(saveData));
 }
 
 function loadFromLocalStorage() {
-  const saved = localStorage.getItem('acnhs_test_session');
+  const saved = localStorage.getItem('acnhs_test_session_' + getOwnerId());
   if (saved) {
     try {
       return JSON.parse(saved);
@@ -2712,7 +2757,7 @@ function loadFromLocalStorage() {
 }
 
 function clearLocalStorage() {
-  localStorage.removeItem('acnhs_test_session');
+  localStorage.removeItem('acnhs_test_session_' + getOwnerId());
 }
 
 function formatTime(seconds) {
@@ -3115,9 +3160,8 @@ async function startTestWithTopics() {
   TEST_CONFIG.questionCount = questionLimit;
   TEST_CONFIG.selectedTopicIds = Array.from(selectedTopics);
   
-  // Get student ID
-  const urlParams = new URLSearchParams(window.location.search);
-  testState.studentId = urlParams.get('student_id') || sessionStorage.getItem('studentId') || 'guest';
+  // Always use the authenticated user's own identity — never a spoofable URL param
+  testState.studentId = getOwnerId();
   
   try {
     // Show loading state
@@ -3243,8 +3287,8 @@ async function startTest() {
   const questionCount = questionCountInput && questionCountInput.value ? parseInt(questionCountInput.value) : null;
   TEST_CONFIG.questionCount = questionCount;
   
-  // Get student ID (from session/login - implement your auth flow)
-  testState.studentId = urlParams.get('student_id') || sessionStorage.getItem('studentId') || 'guest';
+  // Always use the authenticated user's own identity — never a spoofable URL param
+  testState.studentId = getOwnerId();
   
   try {
     // Show loading state
@@ -3940,7 +3984,7 @@ async function saveTestSession() {
     // Create session object for Supabase
     const sessionData = {
       session_name: sessionName,
-      student_id: testState.studentId || 'guest',
+      student_id: getOwnerId(),  // always the authenticated owner, never 'guest'
       test_id: TEST_CONFIG.testId,
       session_id: testState.sessionId,
       current_question_index: testState.currentIndex,
@@ -3996,6 +4040,7 @@ async function loadSavedSessions() {
     const { data: savedSessions, error } = await db
       .from('saved_test_sessions')
       .select('*')
+      .eq('student_id', getOwnerId())
       .order('created_at', { ascending: false });
     
     if (error) {
@@ -4087,6 +4132,7 @@ async function loadSavedSession(sessionId) {
       .from('saved_test_sessions')
       .select('*')
       .eq('id', sessionId)
+      .eq('student_id', getOwnerId())  // enforce ownership at fetch time
       .single();
     
     if (error || !session) {
@@ -4163,7 +4209,8 @@ async function deleteSavedSession(sessionId, event) {
     const { error } = await db
       .from('saved_test_sessions')
       .delete()
-      .eq('id', sessionId);
+      .eq('id', sessionId)
+      .eq('student_id', getOwnerId());  // safety: can only delete own rows
     
     if (error) {
       console.error('Error deleting session:', error);
@@ -4204,6 +4251,7 @@ async function loadSavedTestsInModal() {
     const { data: savedSessions, error } = await db
       .from('saved_test_sessions')
       .select('*')
+      .eq('student_id', getOwnerId())
       .order('created_at', { ascending: false });
     
     if (error) {
