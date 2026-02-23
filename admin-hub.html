@@ -763,7 +763,7 @@
         <a data-view="attendance"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Attendance</span> <span class="badge">Track</span></a>
         <a data-view="notes"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Notes Library</span> <span class="badge">Publish</span></a>
         <a href="admin-video-library.html"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg> Video Library</span> <span class="badge">Media</span></a>
-        <a id="testPlatformNavLink" href="#" onclick="openTestPlatform(); return false;"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Test Platform</span> <span class="badge" style="background:linear-gradient(135deg,#2dd4bf,#14b8a6);color:#022c22">Launch</span></a>
+        <a id="testPlatformNavLink" href="#" onclick="openTestPlatform(); return false;"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> Test Platform</span> <span class="badge" style="background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.10));border:1px solid rgba(201,168,76,0.45);color:var(--gold-300)">Launch</span></a>
         <a data-view="teachers" id="teachersNavLink"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Teachers</span> <span class="badge">Manage</span></a>
         <a data-view="reports"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Reports</span> <span class="badge">Export</span></a>
         <a data-view="settings"><span class="nav-label"><svg class="nav-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg> Settings</span> <span class="badge">Admin</span></a>
@@ -8211,12 +8211,78 @@
       const selectedNotes = Array.from(document.querySelectorAll('.note-checkbox:checked')).map(cb => cb.value);
       
       if (selectedNotes.length === 0) {
-        alert('Please select at least one note');
+        showToast('Please select at least one note to publish.', 'warning');
         return;
       }
       
-      // Show student selection modal for bulk publish
-      alert(`Bulk publishing ${selectedNotes.length} notes... (Feature coming soon: Select students for all selected notes)`);
+      // On-brand bulk publish modal
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease;';
+
+      modal.innerHTML = `
+        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(201,168,76,0.28);border-radius:20px;max-width:480px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
+
+          <!-- Header -->
+          <div style="padding:28px 32px 24px;border-bottom:1px solid rgba(201,168,76,0.14);background:rgba(4,17,31,0.6);position:relative;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s"
+                    onmouseover="this.style.background='rgba(239,68,68,0.18)';this.style.borderColor='rgba(239,68,68,0.35)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(255,255,255,0.10)'">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ece3" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="width:50px;height:50px;background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.08));border:1px solid rgba(201,168,76,0.40);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              </div>
+              <div>
+                <h2 style="margin:0 0 3px;color:#f0ece3;font-size:19px;font-weight:800;letter-spacing:-0.3px;">Bulk Publish Notes</h2>
+                <p style="margin:0;color:#8a8070;font-size:13px;">Distribute learning materials to your students</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Body -->
+          <div style="padding:24px 32px;">
+
+            <!-- Count pill -->
+            <div style="display:flex;align-items:center;gap:12px;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.20);border-radius:12px;padding:14px 18px;margin-bottom:20px;">
+              <div style="width:36px;height:36px;background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.35);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              </div>
+              <div>
+                <div style="color:#e2cc92;font-size:15px;font-weight:700;">${selectedNotes.length} note${selectedNotes.length !== 1 ? 's' : ''} selected</div>
+                <div style="color:#8a8070;font-size:12px;margin-top:1px;">Ready to be published to students</div>
+              </div>
+            </div>
+
+            <!-- Coming soon notice -->
+            <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:16px 18px;display:flex;gap:12px;align-items:flex-start;">
+              <div style="flex-shrink:0;margin-top:1px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+              </div>
+              <div>
+                <div style="color:#d4b56a;font-size:13px;font-weight:700;margin-bottom:4px;">Student targeting coming soon</div>
+                <div style="color:#8a8070;font-size:13px;line-height:1.55;">The ability to select specific students for bulk publishing is in development. In the meantime, use the individual publish button on each note to choose recipients.</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:16px 32px 24px;display:flex;justify-content:flex-end;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="background:rgba(201,168,76,0.10);color:#d4b56a;border:1px solid rgba(201,168,76,0.35);padding:11px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(201,168,76,0.18)';this.style.borderColor='rgba(201,168,76,0.55)'"
+                    onmouseout="this.style.background='rgba(201,168,76,0.10)';this.style.borderColor='rgba(201,168,76,0.35)'">
+              Got it
+            </button>
+          </div>
+        </div>
+      `;
+
+      // Close on backdrop click
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
     }
 
     async function bulkUnpublishNotes() {
