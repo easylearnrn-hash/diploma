@@ -1479,6 +1479,15 @@ body{
           </svg>
           <span>Flag</span>
         </button>
+        <!-- TEACHER ONLY — removed from DOM entirely for students in applySessionRole() -->
+        <button id="revealAllBtn" onclick="revealAllAnswers()"
+          style="display:none;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;border:2px solid rgba(201,168,76,0.6);background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.07));color:var(--gold-primary);font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          REVEAL ALL
+        </button>
       </div>
     </div>
   </div>
@@ -1712,6 +1721,74 @@ function initializeSupabase() {
     console.error('Supabase initialization error:', error);
     showToast('Database connection failed', 'error');
     return false;
+  }
+}
+
+// ============================================
+// SESSION ROLE — AUTH & PERMISSION STATE
+// ============================================
+// Populated on DOMContentLoaded from sessionStorage/localStorage.
+// isLoggedIn  — gate: unauthenticated users are redirected to login.html
+// isTeacher   — true only for admin_users with role 'teacher','admin','superadmin'
+//               Students always have isTeacher === false.
+// ============================================
+const SESSION_ROLE = {
+  isLoggedIn: false,
+  isTeacher: false,
+  userRole: null,
+  userName: null
+};
+
+function initSessionRole() {
+  const loggedIn =
+    sessionStorage.getItem('isLoggedIn') === 'true' ||
+    localStorage.getItem('isLoggedIn') === 'true';
+
+  if (!loggedIn) {
+    // Not authenticated — send to login
+    window.location.replace('login.html');
+    return;
+  }
+
+  SESSION_ROLE.isLoggedIn = true;
+
+  // Role is set in sessionStorage/localStorage by login.html when an admin_user logs in.
+  // Students do NOT have isAdmin='true' and have no userRole in storage.
+  const isAdmin =
+    sessionStorage.getItem('isAdmin') === 'true' ||
+    localStorage.getItem('isAdmin') === 'true';
+
+  const storedRole = (
+    sessionStorage.getItem('userRole') ||
+    localStorage.getItem('userRole') ||
+    ''
+  ).toLowerCase().trim();
+
+  const TEACHER_ROLES = ['teacher', 'admin', 'superadmin', 'instructor'];
+  const roleIsTeacher = TEACHER_ROLES.includes(storedRole);
+
+  SESSION_ROLE.userRole = storedRole || (isAdmin ? 'admin' : 'student');
+  SESSION_ROLE.userName =
+    sessionStorage.getItem('userName') ||
+    localStorage.getItem('userName') ||
+    null;
+
+  // A user is a teacher if:
+  //   - their stored role matches a teacher role, OR
+  //   - isAdmin flag is true (superadmin / primary admin)
+  SESSION_ROLE.isTeacher = roleIsTeacher || isAdmin;
+}
+
+// Apply role-gated UI — call after DOM is ready
+function applySessionRole() {
+  const revealBtn = document.getElementById('revealAllBtn');
+  if (!revealBtn) return;
+
+  if (SESSION_ROLE.isTeacher) {
+    revealBtn.style.display = 'inline-flex';
+  } else {
+    // Absolute belt-and-suspenders removal for students
+    revealBtn.remove();
   }
 }
 
@@ -2089,6 +2166,135 @@ function showTeacherAnswerPanel() {
       </div>
     ` : ''}
   `;
+}
+
+// ============================================
+// REVEAL ALL — TEACHER ONLY
+// Shows correct answers + rationales for every question
+// in a full-screen scrollable modal.
+// JS-enforced: aborts immediately if SESSION_ROLE.isTeacher is false.
+// ============================================
+function revealAllAnswers() {
+  // Hard server-side-equivalent gate — students cannot reach this path
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('revealAllAnswers() blocked: insufficient role');
+    return;
+  }
+
+  if (!testState.questions || testState.questions.length === 0) {
+    showToast('No questions loaded yet.', 'warning');
+    return;
+  }
+
+  // Remove any previous modal
+  const existing = document.getElementById('revealAllModal');
+  if (existing) existing.remove();
+
+  // Build question cards
+  const cards = testState.questions.map((q, idx) => {
+    const correctOptions = (q.options || []).filter(opt =>
+      (q.correct || []).map(String).includes(String(opt.id))
+    );
+    const correctLetters = correctOptions.map((opt, i) => {
+      // Derive letter label (A, B, C …) from position in original options array
+      const pos = (q.options || []).findIndex(o => String(o.id) === String(opt.id));
+      const letter = pos >= 0 ? String.fromCharCode(65 + pos) : '?';
+      return `<span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;background:rgba(34,197,94,0.25);border:2px solid var(--success);color:#86efac;font-weight:800;font-size:12px;margin-right:6px;flex-shrink:0">${letter}</span>${opt.text}`;
+    }).join('<br>');
+
+    // Option list with correct ones highlighted
+    const optionRows = (q.options || []).map((opt, oi) => {
+      const letter = String.fromCharCode(65 + oi);
+      const isCorrect = (q.correct || []).map(String).includes(String(opt.id));
+      return `
+        <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:6px;
+          background:${isCorrect ? 'rgba(34,197,94,0.12)' : 'rgba(255,255,255,0.03)'};
+          border:1.5px solid ${isCorrect ? 'rgba(34,197,94,0.45)' : 'rgba(255,255,255,0.07)'};">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:50%;flex-shrink:0;
+            background:${isCorrect ? 'rgba(34,197,94,0.3)' : 'rgba(255,255,255,0.08)'};
+            border:2px solid ${isCorrect ? 'var(--success)' : 'rgba(255,255,255,0.15)'};
+            color:${isCorrect ? '#86efac' : '#94a3b8'};font-weight:800;font-size:12px;">${letter}</span>
+          <span style="color:${isCorrect ? '#d1fae5' : '#94a3b8'};font-size:14px;line-height:1.6;${isCorrect ? 'font-weight:600;' : ''}">${opt.text}</span>
+          ${isCorrect ? '<span style="margin-left:auto;color:var(--success);flex-shrink:0">✓</span>' : ''}
+        </div>`;
+    }).join('');
+
+    return `
+      <div style="background:linear-gradient(145deg,#1e293b,#151f2e);border:1px solid rgba(201,168,76,0.18);border-radius:14px;padding:24px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <span style="background:rgba(201,168,76,0.18);border:1.5px solid rgba(201,168,76,0.4);color:var(--gold-primary);font-weight:800;font-size:13px;padding:4px 12px;border-radius:20px;flex-shrink:0;">Q${idx + 1}</span>
+          ${q.multi ? '<span style="background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.4);color:#a5b4fc;font-size:11px;padding:3px 9px;border-radius:12px;">Multi-select</span>' : ''}
+        </div>
+        <div style="color:#f1f5f9;font-size:15px;font-weight:500;line-height:1.65;margin-bottom:16px;">${q.text || q.question || ''}</div>
+        <div style="margin-bottom:14px;">${optionRows}</div>
+        ${q.rationale ? `
+          <div style="background:rgba(251,191,36,0.08);border-left:4px solid rgba(251,191,36,0.5);border-radius:0 8px 8px 0;padding:14px 16px;margin-top:4px;">
+            <div style="color:#fbbf24;font-weight:700;font-size:12px;letter-spacing:0.5px;margin-bottom:6px;">RATIONALE</div>
+            <div style="color:#e2e8f0;font-size:13px;line-height:1.7;">${q.rationale}</div>
+          </div>` : ''}
+        ${q.key_point ? `
+          <div style="background:rgba(201,168,76,0.06);border-left:3px solid rgba(201,168,76,0.35);border-radius:0 6px 6px 0;padding:10px 14px;margin-top:10px;">
+            <span style="color:#b45309;font-weight:700;font-size:12px;">KEY POINT: </span>
+            <span style="color:#78716c;font-size:13px;">${q.key_point}</span>
+          </div>` : ''}
+      </div>`;
+  }).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'revealAllModal';
+  modal.style.cssText = `
+    position:fixed;inset:0;z-index:100000;
+    background:rgba(0,0,0,0.92);
+    display:flex;flex-direction:column;
+    overflow:hidden;
+  `;
+
+  modal.innerHTML = `
+    <!-- Header bar -->
+    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:18px 28px;
+      background:linear-gradient(135deg,#0f172a,#1e293b);
+      border-bottom:2px solid rgba(201,168,76,0.35);">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;">🎓</div>
+        <div>
+          <div style="color:var(--gold-primary);font-weight:800;font-size:20px;letter-spacing:0.3px;">Answer Key — Teacher View</div>
+          <div style="color:#64748b;font-size:13px;margin-top:2px;">${testState.questions.length} questions · Strictly confidential</div>
+        </div>
+      </div>
+      <button onclick="document.getElementById('revealAllModal').remove()"
+        style="background:rgba(239,68,68,0.12);border:1.5px solid rgba(239,68,68,0.4);color:#f87171;
+          font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;cursor:pointer;
+          display:flex;align-items:center;gap:8px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+        Close
+      </button>
+    </div>
+    <!-- Scrollable body -->
+    <div style="flex:1;overflow-y:auto;padding:28px;max-width:900px;width:100%;margin:0 auto;box-sizing:border-box;">
+      <div style="background:rgba(239,68,68,0.08);border:1.5px solid rgba(239,68,68,0.25);border-radius:10px;
+        padding:12px 18px;margin-bottom:24px;color:#fca5a5;font-size:13px;font-weight:600;display:flex;align-items:center;gap:10px;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="flex-shrink:0">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        This answer key is restricted to authorised teaching staff. Do not share with students.
+      </div>
+      ${cards}
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Trap Escape key to close
+  const onKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      modal.remove();
+      document.removeEventListener('keydown', onKeyDown);
+    }
+  };
+  document.addEventListener('keydown', onKeyDown);
+  modal.addEventListener('remove', () => document.removeEventListener('keydown', onKeyDown));
 }
 
 // Show Teacher Control Panel with session link
@@ -4391,6 +4597,14 @@ function downloadResults() {
 
 // Load saved sessions on page load
 document.addEventListener('DOMContentLoaded', () => {
+  // ── Auth gate & role detection ─────────────────────────────────────────
+  // initSessionRole() redirects to login.html if not logged in.
+  // Must run before any other UI setup.
+  initSessionRole();
+
+  // After auth passes, show/hide teacher-only controls
+  applySessionRole();
+
   // Initialize Supabase first
   initializeSupabase();
   
