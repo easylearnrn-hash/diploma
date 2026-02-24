@@ -273,8 +273,6 @@
  .pd-card{cursor:pointer}
  .pd-card:hover{border-color:var(--gold);box-shadow:0 0 0 1px rgba(201,168,76,0.18)}
  .pd-card .col-card-head::after{content:'↗';font-size:9px;margin-left:5px;opacity:0.45;vertical-align:middle}
- #pd-overlay{position:fixed;inset:0;z-index:1400;background:transparent;display:none}
- #pd-overlay.open{display:block}
  #pd-popup{position:fixed;z-index:1401;background:#0d1c31;border:1px solid rgba(201,168,76,0.35);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,0.7),0 0 0 1px rgba(201,168,76,0.08);padding:0;width:320px;max-width:calc(100vw - 32px);max-height:72vh;display:flex;flex-direction:column;opacity:0;transform:scale(0.94) translateY(6px);transition:opacity .18s ease,transform .18s ease;pointer-events:none}
  #pd-popup.open{opacity:1;transform:scale(1) translateY(0);pointer-events:auto}
  #pd-popup-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 12px;border-bottom:1px solid rgba(201,168,76,0.15);flex-shrink:0}
@@ -2594,7 +2592,6 @@ pills.forEach(pill => {
 
 <!-- Condition detail popup — appears when clicking a gold-underlined abbreviation -->
 <!-- ── Position & Direction popup ── -->
-<div id="pd-overlay"></div>
 <div id="pd-popup" role="dialog" aria-modal="true" aria-label="Prefix examples">
  <div id="pd-popup-header">
   <div id="pd-popup-title">Examples</div>
@@ -3934,11 +3931,11 @@ const PD_DATA = {
 };
 
 (function(){
- const overlay  = document.getElementById('pd-overlay');
  const popup    = document.getElementById('pd-popup');
  const title    = document.getElementById('pd-popup-title');
  const body     = document.getElementById('pd-popup-body');
  const closeBtn = document.getElementById('pd-popup-close');
+ let currentKey = null;
 
  function openPD(key, anchorEl) {
   const d = PD_DATA[key];
@@ -3952,37 +3949,32 @@ const PD_DATA = {
    </div>
   `).join('');
 
-  // Position popup near the card
   const POPUP_W = 320;
-  const POPUP_MAX_H = window.innerHeight * 0.72;
   const rect = anchorEl.getBoundingClientRect();
   const scrollY = window.scrollY || window.pageYOffset;
 
   let left = rect.left + rect.width / 2 - POPUP_W / 2;
-  // Clamp horizontally within viewport with 12px margin
   left = Math.max(12, Math.min(left, window.innerWidth - POPUP_W - 12));
 
-  // Prefer below card; flip above if not enough space
-  let top;
   const spaceBelow = window.innerHeight - rect.bottom - 12;
+  let top;
   if (spaceBelow >= 180 || spaceBelow >= (window.innerHeight - rect.top - 12)) {
    top = rect.bottom + scrollY + 8;
   } else {
-   top = rect.top + scrollY - 8 - Math.min(POPUP_MAX_H, 300);
+   top = rect.top + scrollY - 8 - 300;
   }
 
-  popup.style.left = left + 'px';
-  popup.style.top  = top  + 'px';
+  popup.style.left  = left + 'px';
+  popup.style.top   = top + 'px';
   popup.style.width = POPUP_W + 'px';
-
-  overlay.classList.add('open');
   popup.classList.add('open');
   body.scrollTop = 0;
+  currentKey = key;
  }
 
  function closePD() {
-  overlay.classList.remove('open');
   popup.classList.remove('open');
+  currentKey = null;
  }
 
  // Card click
@@ -3990,18 +3982,21 @@ const PD_DATA = {
   card.addEventListener('click', e => {
    e.stopPropagation();
    const key = card.dataset.pd;
-   if (popup.classList.contains('open') && overlay.dataset.current === key) {
+   if (popup.classList.contains('open') && currentKey === key) {
     closePD();
-    delete overlay.dataset.current;
    } else {
-    overlay.dataset.current = key;
     openPD(key, card);
    }
   });
  });
 
- // Close via overlay click, button, or ESC
- overlay.addEventListener('click', closePD);
+ // Close when clicking anywhere outside the popup
+ document.addEventListener('click', e => {
+  if (popup.classList.contains('open') && !popup.contains(e.target)) {
+   closePD();
+  }
+ });
+
  closeBtn.addEventListener('click', e => { e.stopPropagation(); closePD(); });
  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePD(); });
  popup.addEventListener('click', e => e.stopPropagation());
