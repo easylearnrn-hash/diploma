@@ -2112,24 +2112,27 @@ const SFX_CAP    = 20;
 const DC_CAP     = 20;
 const TIME_CAP   = 600000; // 10 min in ms
 const IDLE_LIMIT = 60000;  // 60 s idle threshold
+const CLICK_PTS  = 0.0001; // pts per any click
+const CLICK_CAP  = 5;      // max 5 pts from clicks (50 000 clicks to fill)
 
 function loadProgress() {
   try {
     const raw = localStorage.getItem(PROGRESS_KEY);
-    if (!raw) return { ha:[], sfx:[], dc:[], ms:0 };
+    if (!raw) return { ha:[], sfx:[], dc:[], ms:0, clicks:0 };
     const p = JSON.parse(raw);
-    return { ha: p.ha||[], sfx: p.sfx||[], dc: p.dc||[], ms: p.ms||0 };
-  } catch(e) { return { ha:[], sfx:[], dc:[], ms:0 }; }
+    return { ha: p.ha||[], sfx: p.sfx||[], dc: p.dc||[], ms: p.ms||0, clicks: p.clicks||0 };
+  } catch(e) { return { ha:[], sfx:[], dc:[], ms:0, clicks:0 }; }
 }
 function saveProgress(p) {
-  localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ha:p.ha, sfx:p.sfx, dc:p.dc, ms:p.ms }));
+  localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ha:p.ha, sfx:p.sfx, dc:p.dc, ms:p.ms, clicks:p.clicks }));
 }
 function calcProgress(p) {
-  const haPts  = Math.min(p.ha.length  / HA_TOTAL, 1) * 40;
-  const sfxPts = Math.min(p.sfx.length / SFX_CAP,  1) * 20;
-  const dcPts  = Math.min(p.dc.length  / DC_CAP,   1) * 20;
-  const timePts= Math.min(p.ms         / TIME_CAP,  1) * 20;
-  return Math.round(haPts + sfxPts + dcPts + timePts);
+  const haPts   = Math.min(p.ha.length  / HA_TOTAL, 1) * 40;
+  const sfxPts  = Math.min(p.sfx.length / SFX_CAP,  1) * 20;
+  const dcPts   = Math.min(p.dc.length  / DC_CAP,   1) * 20;
+  const timePts = Math.min(p.ms         / TIME_CAP,  1) * 20;
+  const clkPts  = Math.min(p.clicks * CLICK_PTS,     CLICK_CAP);
+  return Math.round(haPts + sfxPts + dcPts + timePts + clkPts);
 }
 
 let prog = loadProgress();
@@ -2155,6 +2158,18 @@ activeInterval = setInterval(() => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { lastActivity = 0; } // force idle
 });
+
+// ── Track every click (0.0001 pts each, max 5 pts) ─────────────
+let _clickBuffer = 0;
+document.addEventListener('click', () => {
+  if (prog.clicks * CLICK_PTS >= CLICK_CAP) return; // already maxed
+  prog.clicks++;
+  _clickBuffer++;
+  if (_clickBuffer >= 10) { // batch-save every 10 clicks
+    saveProgress(prog);
+    _clickBuffer = 0;
+  }
+}, { passive: true });
 
 // ── Track HA popup opens ────────────────────────────────────────
 function trackHA(key) {
