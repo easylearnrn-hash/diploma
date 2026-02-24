@@ -1870,115 +1870,125 @@ function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 function doSearch(q) {
  const t = q.trim();
  clrBtn.classList.toggle('visible', t.length > 0);
- restoreAll();
- allRows.forEach(r => r.classList.remove('hidden'));
- allSecs.forEach(s => s.classList.remove('hidden'));
- noRes.classList.remove('show');
- countEl.textContent = '';
- countEl.classList.remove('has-results');
 
- // Always restore special blocks visibility
- const sfxExplorer = document.getElementById('sfx-explorer');
- const haGrid = document.querySelector('.high-alert-grid');
- const antidoteGrid = document.querySelector('.antidote-grid');
- if (sfxExplorer) sfxExplorer.style.display = '';
- if (haGrid) haGrid.style.display = '';
- document.querySelectorAll('.sfx-pill').forEach(p => p.style.display = '');
- document.querySelectorAll('.high-alert-item').forEach(p => p.style.display = '');
- document.querySelectorAll('.sfx-group').forEach(g => g.style.display = '');
- document.querySelectorAll('.class-card').forEach(c => c.style.display = '');
+ // ── CLEAR: restore everything ────────────────────────────────────
+ if (!t) {
+  restoreAll();
+  allRows.forEach(r => r.classList.remove('hidden'));
+  allSecs.forEach(s => s.classList.remove('hidden'));
+  noRes.classList.remove('show');
+  countEl.textContent = '';
+  countEl.classList.remove('has-results');
 
- if (!t) return;
+  // Restore all special blocks
+  document.querySelectorAll(
+   '#sfx-explorer, #ph-antidotes, #ph-classes, .high-alert-grid, .ha-heading,' +
+   '.sfx-group, .sfx-pill, .high-alert-item, .class-card, .class-section, .antidote-grid'
+  ).forEach(el => el.style.display = '');
+  return;
+ }
 
+ // ── SEARCH ACTIVE ────────────────────────────────────────────────
  const re = new RegExp('(' + escRe(t) + ')', 'gi');
  let count = 0;
 
- // ── Standard search-rows ──
+ // Step 1: hide EVERYTHING (sections, special blocks, their headings)
+ allRows.forEach(r => r.classList.add('hidden'));
+ allSecs.forEach(s => s.classList.add('hidden'));
+
+ const sfxExplorer  = document.getElementById('sfx-explorer');
+ const phAntidotes  = document.getElementById('ph-antidotes');
+ const haGrid       = document.querySelector('.high-alert-grid');
+ const haHeading    = haGrid ? haGrid.previousElementSibling : null; // group-heading before haGrid
+ const antidoteGrid = document.querySelector('.antidote-grid');
+ const phClasses    = document.getElementById('ph-classes');
+
+ if (sfxExplorer)  sfxExplorer.style.display  = 'none';
+ if (phAntidotes)  phAntidotes.style.display   = 'none';
+ if (haGrid)       haGrid.style.display        = 'none';
+ if (haHeading && haHeading.classList.contains('group-heading')) haHeading.style.display = 'none';
+ if (phClasses)    phClasses.style.display     = 'none';
+
+ // Step 2: standard search-rows (abbreviations, prefixes, roots, suffixes tables)
  allRows.forEach(row => {
-  // For class-section rows, filter individual cards inside
-  if (row.classList.contains('class-section')) {
-   const cards = Array.from(row.querySelectorAll('.class-card'));
-   let sectionHits = 0;
-   cards.forEach(card => {
-    if (re.test(card.textContent || '')) {
-     card.style.display = '';
-     sectionHits++;
-    } else {
-     card.style.display = 'none';
-    }
-   });
-   if (sectionHits === 0) {
-    row.classList.add('hidden');
-   } else {
-    count++;
-   }
-   return;
-  }
   if (re.test(row.textContent || '')) {
+   row.classList.remove('hidden');
    count++;
    row.querySelectorAll('td, .a-code, .a-def').forEach(cell => {
     if (!cell.children.length)
      cell.innerHTML = (origMap.get(cell) || cell.textContent).replace(re, '<mark>$1</mark>');
    });
-  } else {
-   row.classList.add('hidden');
   }
  });
-
+ // Show any section that has at least one visible row
  allSecs.forEach(sec => {
-  if (!sec.querySelector('.search-row:not(.hidden)')) sec.classList.add('hidden');
+  if (sec.querySelector('.search-row:not(.hidden)')) sec.classList.remove('hidden');
  });
 
- // ── Suffix pills (sfx-explorer) ──
+ // Step 3: suffix pills (sfx-explorer)
  if (sfxExplorer) {
-  const pillGroups = Array.from(document.querySelectorAll('.sfx-group'));
-  let anyPillMatch = false;
-  pillGroups.forEach(group => {
-   const pills = Array.from(group.querySelectorAll('.sfx-pill'));
+  let anyPill = false;
+  document.querySelectorAll('.sfx-group').forEach(group => {
    let groupHit = false;
-   pills.forEach(pill => {
-    if (re.test(pill.textContent || '')) {
-     pill.style.display = '';
-     groupHit = true;
-     anyPillMatch = true;
-    } else {
-     pill.style.display = 'none';
-    }
+   group.querySelectorAll('.sfx-pill').forEach(pill => {
+    const match = re.test(pill.textContent || '');
+    pill.style.display = match ? '' : 'none';
+    if (match) { groupHit = true; anyPill = true; }
    });
    group.style.display = groupHit ? '' : 'none';
   });
-  // If no pill matched at all, hide the whole sfx-explorer block
-  if (!anyPillMatch) {
-   sfxExplorer.style.display = 'none';
-  } else {
-   count++;
-  }
+  if (anyPill) { sfxExplorer.style.display = ''; count++; }
  }
 
- // ── High-alert pills ──
- if (haGrid) {
-  const haPills = Array.from(document.querySelectorAll('.high-alert-item'));
-  let anyHaMatch = false;
-  haPills.forEach(pill => {
-   if (re.test(pill.textContent || '')) {
-    pill.style.display = '';
-    anyHaMatch = true;
-   } else {
-    pill.style.display = 'none';
-   }
+ // Step 4: antidote cards (inside #ph-antidotes)
+ if (phAntidotes && antidoteGrid) {
+  let anyAntidote = false;
+  antidoteGrid.querySelectorAll('.antidote-card.search-row').forEach(card => {
+   const match = re.test(card.textContent || '');
+   card.classList.toggle('hidden', !match);
+   if (match) anyAntidote = true;
   });
-  if (!anyHaMatch) {
-   haGrid.style.display = 'none';
-  } else {
+  if (anyAntidote) { phAntidotes.style.display = ''; antidoteGrid.style.display = ''; count++; }
+ }
+
+ // Step 5: high-alert pills
+ if (haGrid) {
+  let anyHA = false;
+  haGrid.querySelectorAll('.high-alert-item').forEach(pill => {
+   const match = re.test(pill.textContent || '');
+   pill.style.display = match ? '' : 'none';
+   if (match) anyHA = true;
+  });
+  if (anyHA) {
+   haGrid.style.display = '';
+   if (haHeading && haHeading.classList.contains('group-heading')) haHeading.style.display = '';
    count++;
   }
  }
 
+ // Step 6: drug classification cards (inside #ph-classes)
+ if (phClasses) {
+  let anyClass = false;
+  phClasses.querySelectorAll('.class-section').forEach(section => {
+   let sectionHit = false;
+   section.querySelectorAll('.class-card').forEach(card => {
+    const match = re.test(card.textContent || '');
+    card.style.display = match ? '' : 'none';
+    if (match) { sectionHit = true; anyClass = true; }
+   });
+   section.style.display = sectionHit ? '' : 'none';
+  });
+  if (anyClass) { phClasses.style.display = ''; count++; }
+ }
+
+ // Step 7: show result count / no-results state
  if (count > 0) {
   countEl.textContent = count + (count === 1 ? ' result' : ' results');
   countEl.classList.add('has-results');
+  noRes.classList.remove('show');
  } else {
   countEl.textContent = '0 results';
+  countEl.classList.add('has-results');
   noResQ.textContent = '"' + t + '"';
   noRes.classList.add('show');
  }
