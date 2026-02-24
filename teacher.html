@@ -222,7 +222,8 @@
                 <div class="input-wrapper">
                     <span class="input-icon">&#128100;</span>
                     <input type="text" id="username" name="username" required
-                        autocomplete="username" placeholder="Enter your username" spellcheck="false">
+                        autocomplete="username" placeholder="Username or email address" spellcheck="false"
+                        autocapitalize="none" autocorrect="off">
                 </div>
             </div>
             <div class="form-group">
@@ -282,7 +283,9 @@
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             
-            const username = document.getElementById('username').value.trim();
+            // Normalize: trim + lowercase so capitalization never matters
+            const rawInput = document.getElementById('username').value.trim();
+            const username = rawInput.toLowerCase();
             const password = document.getElementById('password').value;
 
             if (!username || !password) {
@@ -293,21 +296,43 @@
             setLoading(true);
 
             try {
-                // Query teachers table for matching username
-                const { data: teacher, error } = await db
+                // Try username first, then email — handles both "n.abrahamyan" and "n.abrahamyan@acnhs.am"
+                let teacher = null;
+
+                // 1) Exact username match (case-insensitive via ilike)
+                const { data: byUsername } = await db
                     .from('teachers')
                     .select('*')
-                    .eq('username', username)
+                    .ilike('username', username)
                     .eq('active', true)
-                    .single();
+                    .limit(1);
+                if (byUsername && byUsername.length > 0) {
+                    teacher = byUsername[0];
+                }
 
-                if (error || !teacher) {
+                // 2) If not found, try matching by email
+                if (!teacher) {
+                    const { data: byEmail } = await db
+                        .from('teachers')
+                        .select('*')
+                        .ilike('email', username)
+                        .eq('active', true)
+                        .limit(1);
+                    if (byEmail && byEmail.length > 0) {
+                        teacher = byEmail[0];
+                    }
+                }
+
+                if (!teacher) {
                     showError('Invalid username or password');
                     setLoading(false);
                     return;
                 }
 
-                // Verify password via Edge Function (PBKDF2-SHA256); fall back to direct compare
+                // Verify password:
+                // 1) Via Edge Function (handles PBKDF2 hashes and plain-text legacy)
+                // 2) Direct plain-text compare against password_hash (plain-text fallback)
+                // 3) Direct compare against plain_password column (admin-set plain-text)
                 let passwordValid = false;
                 try {
                     const { data: verifyData, error: verifyError } = await db.functions.invoke('hash-password', {
@@ -320,12 +345,14 @@
                     if (!verifyError && typeof verifyData?.match === 'boolean') {
                         passwordValid = verifyData.match;
                     } else {
-                        // Fallback: Edge Function unavailable — compare directly (covers plain-text legacy passwords)
-                        passwordValid = password === teacher.password_hash;
+                        // Edge Function returned unexpected result — direct compare
+                        passwordValid = password === teacher.password_hash
+                            || password === teacher.plain_password;
                     }
                 } catch (funcError) {
-                    // Fallback: network/function error
-                    passwordValid = password === teacher.password_hash;
+                    // Edge Function unreachable — direct compare
+                    passwordValid = password === teacher.password_hash
+                        || password === teacher.plain_password;
                 }
 
                 if (!passwordValid) {
