@@ -464,6 +464,14 @@
   cursor:default;
   font-style:normal;
  }
+ /* Condition abbrevs that have detail data get a clickable gold underline */
+ .dc-abbr[data-cond]{
+  text-decoration:underline dotted rgba(201,168,76,0.7);
+  cursor:pointer;
+ }
+ .dc-abbr[data-cond]:hover{
+  color:var(--gold-light);
+ }
  /* ── Body-level floating tooltip ── */
  #dc-tip{
   position:fixed;
@@ -492,6 +500,45 @@
   transform:translateX(-50%);
   border:5px solid transparent;
   border-top-color:#0d1e35;
+ }
+ /* ── Condition detail popup (click on gold-underlined abbrev) ── */
+ #cond-popup{
+  position:fixed;
+  z-index:10000;
+  width:300px;
+  background:#0b1a2e;
+  border:1px solid rgba(201,168,76,0.45);
+  border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,0.75);
+  padding:16px 18px 14px;
+  display:none;
+  animation:condPopIn .15s ease;
+ }
+ #cond-popup.open{display:block}
+ @keyframes condPopIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+ #cond-popup-close{
+  position:absolute;top:10px;right:12px;
+  background:none;border:none;color:rgba(255,255,255,0.35);
+  font-size:16px;cursor:pointer;line-height:1;padding:2px 4px;border-radius:4px;
+ }
+ #cond-popup-close:hover{color:#fff;background:rgba(255,255,255,0.08)}
+ #cond-popup-cat{font-size:9px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold);margin-bottom:5px}
+ #cond-popup-title{font-size:15px;font-weight:800;color:#fff;margin-bottom:2px;padding-right:20px;line-height:1.3}
+ #cond-popup-full{font-size:11px;color:rgba(201,168,76,0.8);margin-bottom:10px;font-style:italic}
+ #cond-popup-def{font-size:12px;color:#c8d8e8;line-height:1.6;margin-bottom:10px}
+ .cond-popup-section{margin-top:8px}
+ .cond-popup-label{font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,0.35);margin-bottom:4px}
+ .cond-popup-tags{display:flex;flex-wrap:wrap;gap:5px}
+ .cond-popup-tag{font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.12);color:#c8d8e8}
+ .cond-popup-tag.red{background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#fca5a5}
+ .cond-popup-tag.amber{background:rgba(251,146,60,0.1);border-color:rgba(251,146,60,0.3);color:#fdba74}
+ .cond-popup-tag.green{background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.3);color:#86efac}
+ #cond-popup::after{
+  content:'';position:absolute;top:100%;left:50%;
+  transform:translateX(-50%);
+  border:6px solid transparent;
+  border-top-color:#0b1a2e;
+  filter:drop-shadow(0 2px 1px rgba(0,0,0,0.4));
  }
  .dc-pill.gold{background:rgba(201,168,76,0.10);border-color:var(--border-gold);color:var(--gold-light)}
  .dc-pill.red{background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.3);color:#fca5a5}
@@ -2524,6 +2571,23 @@ pills.forEach(pill => {
 
 <!-- ── Drug Class Detail Drawer ─────────────────────────────── -->
 <div id="dc-overlay"></div>
+
+<!-- Condition detail popup — appears when clicking a gold-underlined abbreviation -->
+<div id="cond-popup" role="dialog" aria-modal="true" aria-label="Condition details">
+ <button id="cond-popup-close" aria-label="Close">✕</button>
+ <div id="cond-popup-cat"></div>
+ <div id="cond-popup-title"></div>
+ <div id="cond-popup-full"></div>
+ <div id="cond-popup-def"></div>
+ <div id="cond-popup-signs" class="cond-popup-section" style="display:none">
+  <div class="cond-popup-label">Key Signs / Features</div>
+  <div class="cond-popup-tags" id="cond-popup-signs-tags"></div>
+ </div>
+ <div id="cond-popup-nursing" class="cond-popup-section" style="display:none">
+  <div class="cond-popup-label">Nursing Priority</div>
+  <div class="cond-popup-tags" id="cond-popup-nursing-tags"></div>
+ </div>
+</div>
 <aside id="dc-drawer" role="dialog" aria-modal="true" aria-label="Drug class details">
  <div id="dc-drawer-head">
  <div id="dc-drawer-title-wrap">
@@ -3571,7 +3635,9 @@ function injectAbbrevTooltips(text){
   const full = ABBREV_MAP[match];
   if(!full) return match;
   const tip = `${match} → ${full}`.replace(/"/g,'&quot;');
-  return `<abbr class="dc-abbr" data-abbrev="${tip}">${match}</abbr>`;
+  // If this abbrev has condition detail data, add data-cond for click popup
+  const hasCond = COND_KEYS.has(match);
+  return `<abbr class="dc-abbr" data-abbrev="${tip}"${hasCond ? ` data-cond="${match}"` : ''}>${match}</abbr>`;
  });
 }
 
@@ -3666,6 +3732,143 @@ document.querySelectorAll('.sidebar-subsections a[data-dc]').forEach(link => {
 const dcTip = document.createElement('div');
 dcTip.id = 'dc-tip';
 document.body.appendChild(dcTip);
+
+// ── Condition detail data ─────────────────────────────────────────────────
+// Abbreviations with a COND_DATA entry get a gold underline + clickable popup.
+const COND_DATA = {
+ // Renal / Fluid
+ 'SIADH':{cat:'Renal / Fluid', full:'Syndrome of Inappropriate Antidiuretic Hormone Secretion', def:'Excess ADH causes water retention → dilutional hyponatremia (Na < 135). Body holds water without holding salt.', signs:['Hyponatremia (Na < 135)','Concentrated urine','Headache, confusion','Seizures if Na < 120'], nursing:['Fluid restriction (800–1000 mL/day)','Hypertonic saline only for symptomatic severe hyponatremia','Correct Na slowly (≤ 10–12 mEq/24 hr) — risk of osmotic demyelination','Monitor neuro status q2–4 hr']},
+ 'DI':{cat:'Renal / Fluid', full:'Diabetes Insipidus', def:'Deficient ADH (central DI) or kidney unresponsiveness to ADH (nephrogenic DI) → massive dilute urine output (> 3 L/day) and hypernatremia.', signs:['Polyuria (> 3 L/day)','Dilute urine (SG < 1.005)','Polydipsia','Hypernatremia if no access to water'], nursing:['I&O hourly — report urine output > 200 mL/hr × 2 hr','Central DI: desmopressin (DDAVP) replacement','Nephrogenic DI: low-sodium diet, thiazide diuretics, NSAIDs (paradoxical)','Free water replacement — replace slowly to avoid cerebral edema']},
+ 'AKI':{cat:'Renal', full:'Acute Kidney Injury', def:'Sudden ↓ kidney function over hours to days. Causes: prerenal (↓ perfusion), intrinsic (ATN, AIN), postrenal (obstruction).', signs:['↑ Cr, ↑ BUN','Oliguria (< 0.5 mL/kg/hr)','Fluid overload','Hyperkalemia'], nursing:['Daily weights, strict I&O','Avoid nephrotoxic drugs (NSAIDs, aminoglycosides, contrast)','Hold ACEi/ARBs/NSAIDs','Monitor potassium closely — risk of fatal arrhythmia']},
+ 'CKD':{cat:'Renal', full:'Chronic Kidney Disease', def:'Irreversible, progressive loss of kidney function (GFR < 60 mL/min for > 3 months). Staged 1–5; Stage 5 = ESRD requiring dialysis.', signs:['↑ Cr, ↓ GFR','Fatigue, edema','Hypertension','Anemia (↓ EPO)'], nursing:['Restrict potassium, phosphorus, sodium in diet','Avoid nephrotoxic drugs','Renally dose all medications','Monitor BP — tight control slows progression']},
+ 'ESRD':{cat:'Renal', full:'End-Stage Renal Disease', def:'GFR < 15 mL/min — kidney function insufficient to sustain life. Requires dialysis (hemodialysis or peritoneal) or kidney transplant.', signs:['Uremia (BUN > 100)','Fluid overload','Hyperkalemia','Metabolic acidosis'], nursing:['Dialysis access care (fistula: no BP, no IV, no blood draws in that arm)','AV fistula: assess bruit/thrill before each treatment','Fluid restriction between dialysis sessions','Monitor potassium — dietary restriction essential']},
+ // Endocrine
+ 'DM':{cat:'Endocrine', full:'Diabetes Mellitus', def:'Chronic metabolic disorder of impaired glucose regulation. T1DM: autoimmune beta cell destruction (no insulin). T2DM: insulin resistance + relative deficiency.', signs:['Polyuria, polydipsia, polyphagia','Fatigue','Blurred vision','Frequent infections'], nursing:['Blood glucose monitoring (fasting target 80–130 mg/dL)','Foot inspection daily — neuropathy + PAD risk','HbA1c goal generally < 7%','Hypoglycemia: 15-15 rule — 15g fast carbs, recheck in 15 min']},
+ 'DKA':{cat:'Endocrine / Critical', full:'Diabetic Ketoacidosis', def:'Life-threatening: insulin deficiency → uncontrolled hyperglycemia + ketone production → metabolic acidosis. Mainly T1DM; can occur in T2DM.', signs:['Blood glucose > 250 mg/dL','pH < 7.3, bicarb < 18','Ketones in blood/urine','Kussmaul respirations (deep, rapid)','Fruity breath'], nursing:['IV fluid resuscitation first (0.9% NaCl)','Insulin drip — start AFTER K+ ≥ 3.5 mEq/L','Replace potassium (K drops when insulin starts)','Monitor glucose hourly, electrolytes q2–4 hr']},
+ 'HHS':{cat:'Endocrine / Critical', full:'Hyperglycemic Hyperosmolar State', def:'Severe hyperglycemia (often > 600 mg/dL) + extreme dehydration without significant ketosis. Mainly T2DM elderly patients; high mortality.', signs:['Glucose > 600 mg/dL','Serum osmolality > 320','Profound dehydration','AMS, coma'], nursing:['Aggressive fluid replacement (0.9% then 0.45% NaCl)','Low-dose insulin drip after fluids started','Treat precipitating cause (infection, MI)','Mortality 5–20% — early ICU care']},
+ 'SIADH':{cat:'Renal / Fluid', full:'Syndrome of Inappropriate Antidiuretic Hormone Secretion', def:'Excess ADH causes water retention → dilutional hyponatremia. Common causes: CNS disorders, malignancy (small cell lung cancer), medications (carbamazepine, SSRIs, opioids).', signs:['Hyponatremia (Na < 135)','Concentrated urine (> 20 mEq/L Na)','Headache, nausea, confusion','Seizures if Na falls rapidly'], nursing:['Fluid restriction (800–1000 mL/day) — primary treatment','Hypertonic saline (3%) only for severe symptomatic hyponatremia','Correct Na ≤ 10–12 mEq/L per 24 hr (risk of osmotic demyelination syndrome)','Identify and treat underlying cause']},
+ 'PCOS':{cat:'Endocrine', full:'Polycystic Ovary Syndrome', def:'Hormonal disorder: excess androgens, irregular ovulation, polycystic ovaries. Most common cause of female infertility. Associated with insulin resistance and T2DM risk.', signs:['Irregular/absent periods','Hirsutism, acne','Weight gain, obesity','Infertility'], nursing:['Lifestyle modification (weight loss 5–10% → restores ovulation)','Metformin (insulin sensitizer — first-line for metabolic features)','Oral contraceptives for menstrual regulation','Clomiphene for fertility']},
+ // Cardiovascular
+ 'MI':{cat:'Cardiovascular', full:'Myocardial Infarction (Heart Attack)', def:'Irreversible myocardial necrosis from prolonged ischemia, usually due to plaque rupture → coronary artery thrombosis. STEMI: complete occlusion. NSTEMI: partial occlusion.', signs:['Chest pain/pressure radiating to arm/jaw','Diaphoresis, dyspnea','Elevated troponin','ST changes on ECG'], nursing:['MONA: Morphine, Oxygen (if SpO2 < 90%), Nitroglycerin, Aspirin','12-lead ECG within 10 min of presentation','PCI goal: door-to-balloon < 90 min (STEMI)','Monitor for arrhythmias, cardiogenic shock']},
+ 'HF':{cat:'Cardiovascular', full:'Heart Failure', def:'Heart unable to pump sufficient blood to meet metabolic demands. HFrEF (EF < 40%): systolic dysfunction. HFpEF (EF ≥ 50%): diastolic dysfunction.', signs:['Dyspnea on exertion','Orthopnea, PND','Bilateral leg edema','S3 gallop, crackles'], nursing:['Daily weight — report gain > 2 lb/day or > 5 lb/week','Fluid restriction (1.5–2 L/day)','Low sodium diet (< 2 g/day)','Elevate HOB 30–45°; dangle legs before ambulation']},
+ 'HTN':{cat:'Cardiovascular', full:'Hypertension', def:'Persistently elevated blood pressure ≥ 130/80 mmHg (ACC/AHA 2017). Primary (essential, 95%): idiopathic. Secondary: renal disease, hyperaldosteronism, sleep apnea.', signs:['BP ≥ 130/80 mmHg','Often asymptomatic ("silent killer")','Headache, epistaxis in hypertensive urgency','End-organ damage in crisis'], nursing:['Encourage DASH diet, weight loss, exercise, smoking cessation','Medication adherence — never stop abruptly','Hypertensive crisis (> 180/120): IV labetalol/nicardipine — reduce MAP by 20–25% in first hour','Orthostatic precautions with antihypertensives']},
+ 'AFib':{cat:'Cardiovascular', full:'Atrial Fibrillation', def:'Most common sustained cardiac arrhythmia. Chaotic atrial electrical activity → irregular ventricular response. Major risk: thrombus formation in left atrial appendage → stroke.', signs:['Irregularly irregular pulse','Palpitations, dyspnea','Fatigue','Possible hemodynamic instability'], nursing:['Rate control (beta-blockers, CCBs) vs rhythm control (cardioversion, antiarrhythmics)','Anticoagulation for stroke prevention (DOACs preferred over warfarin)','CHA₂DS₂-VASc score guides anticoagulation decision','Cardioversion: anticoagulate ≥ 3 weeks before if AF > 48 hr']},
+ 'DVT':{cat:'Cardiovascular', full:'Deep Vein Thrombosis', def:'Blood clot in a deep vein, usually legs. Virchow\'s Triad: stasis, endothelial injury, hypercoagulability. Major risk: embolization to lungs (PE).', signs:['Unilateral leg swelling, redness, warmth','Calf pain (Homan\'s sign — unreliable)','Pitting edema','Confirmed by duplex ultrasound'], nursing:['Anticoagulation: LMWH bridge to warfarin OR direct DOAC','Do NOT massage affected leg — risk of embolization','Compression stockings after acute phase','Monitor for PE: sudden dyspnea, pleuritic chest pain, hemoptysis, hypoxia']},
+ 'PE':{cat:'Cardiovascular / Pulmonary', full:'Pulmonary Embolism', def:'Blood clot (usually from DVT) lodging in pulmonary vasculature → impaired gas exchange + right heart strain. Massive PE can cause obstructive shock.', signs:['Sudden dyspnea (most common)','Pleuritic chest pain','Tachycardia, hypoxia','Hemoptysis (less common)'], nursing:['Anticoagulation immediately (LMWH or UFH)','Thrombolytics for massive PE with hemodynamic instability','Supplemental O2, position upright','Monitor for recurrence — INR target 2–3 if warfarin']},
+ // Pulmonary
+ 'ARDS':{cat:'Pulmonary / Critical', full:'Acute Respiratory Distress Syndrome', def:'Diffuse lung injury → bilateral infiltrates + severe hypoxemia (PaO2/FiO2 < 300). Causes: sepsis, pneumonia, aspiration, trauma. Non-cardiogenic pulmonary edema.', signs:['Rapid-onset severe hypoxia','Bilateral infiltrates on CXR','PaO2/FiO2 < 300','Diffuse crackles'], nursing:['Mechanical ventilation: low tidal volume (6 mL/kg IBW) — lung protective','Prone positioning 12–16 hr/day for severe ARDS (↑ oxygenation)','Conservative fluid management','Watch for VAP, barotrauma, MODS']},
+ 'COPD':{cat:'Pulmonary', full:'Chronic Obstructive Pulmonary Disease', def:'Progressive airflow limitation from emphysema (alveolar destruction) and/or chronic bronchitis (mucus hypersecretion). Main cause: smoking. Irreversible unlike asthma.', signs:['Dyspnea on exertion','Chronic productive cough','Barrel chest, pursed-lip breathing','FEV1/FVC < 0.70'], nursing:['O2 target SpO2 88–92% (hypoxic drive in chronic CO2 retainers)','Smoking cessation — most important intervention','SABA for acute relief; LABA + LAMA for maintenance','Pulmonary rehab, vaccines (flu, pneumococcal)']},
+ // Neuro
+ 'CVA':{cat:'Neurology', full:'Cerebrovascular Accident (Stroke)', def:'Sudden neurological deficit from ischemic (87%) or hemorrhagic (13%) brain injury. Time-critical: "Time is brain" — 1.9 million neurons lost per minute of ischemia.', signs:['FAST: Face droop, Arm weakness, Speech difficulty, Time to call 911','Sudden severe headache (hemorrhagic)','Vision changes','Ataxia'], nursing:['Ischemic stroke: tPA within 4.5 hr of onset (check contraindications first)','Hemorrhagic: NO tPA, control BP, manage ICP','Dysphagia screening before any oral intake (aspiration risk)','NIH Stroke Scale monitoring']},
+ 'TIA':{cat:'Neurology', full:'Transient Ischemic Attack', def:'"Mini-stroke" — temporary focal neurological deficit resolving within 24 hr (usually < 1 hr) without permanent infarction. High risk of subsequent stroke (10% within 48 hr).', signs:['Transient focal neurological deficits','Resolves within 24 hr','No imaging evidence of infarction','ABCD2 score predicts stroke risk'], nursing:['Urgent evaluation and imaging (within 24 hr)','Antiplatelet therapy (aspirin ± clopidogrel)','Control modifiable risk factors (HTN, DM, AFib)','Educate patient: TIA is a warning — do not ignore']},
+ 'SE':{cat:'Neurology / Critical', full:'Status Epilepticus', def:'Seizure lasting > 5 min OR ≥ 2 seizures without regaining consciousness between them. Life-threatening — prolonged seizures cause irreversible neuronal injury.', signs:['Continuous seizure activity > 5 min','Loss of consciousness','Tonic-clonic movements','Postictal unresponsiveness'], nursing:['Protect airway (position on side), do NOT restrain, remove hazards','Benzodiazepine FIRST (lorazepam or midazolam) — 0–5 min','Second-line: levetiracetam, fentoin IV if benzodiazepine fails','Monitor SpO2, prepare for intubation']},
+ 'ICP':{cat:'Neurology / Critical', full:'Increased Intracranial Pressure', def:'ICP > 20 mmHg (normal 5–15). Causes: TBI, stroke, brain tumor, hydrocephalus. Uncal herniation (Cushing\'s Triad) is a sign of impending brainstem compression.', signs:['Cushing\'s Triad: ↑BP + bradycardia + irregular respirations','Headache, vomiting','↓ LOC, pupil changes','Papilledema'], nursing:['HOB 30°, head midline (neutral position)','Avoid hypotension, hypoxia, hyperthermia, hypercapnia','Mannitol or hypertonic saline for acute ↑ ICP','Minimize stimulation; cluster care to reduce ICP spikes']},
+ // Hematology
+ 'DIC':{cat:'Hematology / Critical', full:'Disseminated Intravascular Coagulation', def:'Paradoxical simultaneous clotting AND bleeding. Systemic clotting consumes platelets and clotting factors → bleeding. Triggered by sepsis, trauma, obstetric emergency, malignancy.', signs:['Bleeding from multiple sites','Petechiae, purpura','↑ PT/aPTT, ↓ fibrinogen','↓ Platelets'], nursing:['Treat underlying cause (primary treatment)','Transfuse: FFP (factors), platelets, cryoprecipitate (fibrinogen)','Do NOT give heparin without hematology guidance','Monitor closely for bleeding and thrombosis simultaneously']},
+ 'SCD':{cat:'Hematology', full:'Sickle Cell Disease', def:'Autosomal recessive Hgb mutation → sickle-shaped RBCs that occlude microvasculature → ischemic pain (vaso-occlusive crisis), hemolytic anemia, organ damage.', signs:['Episodic severe pain (crisis)','Anemia, jaundice','Acute chest syndrome','Stroke in children'], nursing:['Pain management: opioids + NSAIDs + adjuvants (do NOT under-treat)', 'Hydroxyurea reduces crisis frequency','Keep well hydrated','Acute chest syndrome: blood transfusion, bronchodilators, oxygen — urgent']},
+ // GI
+ 'GERD':{cat:'Gastrointestinal', full:'Gastroesophageal Reflux Disease', def:'Chronic reflux of gastric contents into esophagus → heartburn, regurgitation, esophageal injury. Risk: obesity, smoking, hiatal hernia, fatty foods.', signs:['Heartburn (burning epigastric/chest)','Regurgitation','Dysphagia (alarm symptom)','Chronic cough, hoarseness'], nursing:['Elevate HOB 30° after meals, avoid eating 2–3 hr before bed','Avoid triggers: caffeine, alcohol, fatty foods, citrus','PPIs most effective for erosive GERD','Teach: small frequent meals; loose-fitting clothing']},
+ 'IBD':{cat:'Gastrointestinal', full:'Inflammatory Bowel Disease (Crohn\'s / Ulcerative Colitis)', def:'Chronic immune-mediated GI inflammation. UC: colon only, continuous, mucosal. Crohn\'s: any GI segment, skip lesions, transmural. Both increase colorectal cancer risk.', signs:['Chronic diarrhea (bloody in UC)','Abdominal cramping','Weight loss','Extraintestinal: arthritis, uveitis, erythema nodosum'], nursing:['Nutritional support — elemental diet in Crohn\'s flare','Aminosalicylates (UC), immunomodulators, biologics (anti-TNF)','Surgical option: colectomy (curative in UC)','Monitor for toxic megacolon (fever + distended abdomen — emergency)']},
+ // Sepsis
+ 'SIRS':{cat:'Critical Care', full:'Systemic Inflammatory Response Syndrome', def:'Non-specific inflammatory response (≥ 2 of: fever/hypothermia, tachycardia, tachypnea, abnormal WBC). Can be from infection (sepsis), trauma, or non-infectious causes.', signs:['Temp > 38°C or < 36°C','HR > 90/min','RR > 20/min or PaCO2 < 32','WBC > 12,000 or < 4,000 or > 10% bands'], nursing:['Identify source — culture BEFORE antibiotics','Sepsis bundle: blood cultures + lactate + antibiotics within 1 hr','IV fluid resuscitation 30 mL/kg crystalloid','Monitor MAP ≥ 65 mmHg, urine output ≥ 0.5 mL/kg/hr']},
+ // Obstetric
+ 'HELLP':{cat:'OB / GYN', full:'Hemolysis Elevated Liver enzymes Low Platelets Syndrome', def:'Severe complication of preeclampsia. Triad of hemolysis, elevated LFTs, low platelets. Can occur without classic HTN/proteinuria. Life-threatening to mother and fetus.', signs:['RUQ/epigastric pain','Nausea, malaise','Thrombocytopenia (< 100,000)','↑ AST/ALT, hemolysis'], nursing:['Delivery is the only cure — expedite based on gestational age','Magnesium sulfate for seizure prophylaxis (eclampsia prevention)','Monitor for DIC, hepatic rupture, placental abruption','Strict I&O, BP monitoring, platelet transfusion if < 20,000 before delivery']},
+ 'GDM':{cat:'OB / GYN', full:'Gestational Diabetes Mellitus', def:'Glucose intolerance first recognized in pregnancy. Caused by placental hormones antagonizing insulin. Risks: macrosomia, neonatal hypoglycemia, C-section, future T2DM in mother.', signs:['Asymptomatic (screen at 24–28 wk)','Large-for-gestational-age fetus','Polyhydramnios','Maternal hyperglycemia'], nursing:['Blood glucose 4×/day; fasting goal < 95, postprandial < 140','Diet + exercise first-line; insulin if targets not met (metformin/glyburide — less preferred)','Neonatal monitoring for hypoglycemia after birth','Screen mother for T2DM at 6–12 weeks postpartum']},
+ // Musculoskeletal
+ 'RA':{cat:'Rheumatology', full:'Rheumatoid Arthritis', def:'Chronic autoimmune synovitis → symmetric joint destruction. Affects small joints first (MCPs, PIPs). Systemic complications: pericarditis, lung disease, vasculitis.', signs:['Morning stiffness > 1 hour','Symmetric polyarthritis','Rheumatoid factor, anti-CCP positive','Systemic fatigue, fever'], nursing:['Early DMARD therapy (methotrexate first-line) — prevents joint destruction','Assess functional status and ADL limitations','Hot/cold therapy for symptom relief','NSAIDs for pain; do NOT rely on them alone — no disease modification']},
+ 'SLE':{cat:'Rheumatology', full:'Systemic Lupus Erythematosus', def:'Systemic autoimmune disease → multi-organ inflammation. Affects skin, joints, kidneys, heart, CNS. ANA positive > 95%. Flares triggered by sun, infection, stress.', signs:['Malar butterfly rash','Photosensitivity','Lupus nephritis (hematuria, proteinuria)','Oral ulcers, serositis'], nursing:['Sun protection (SPF 50+, avoid peak sun hours)','Hydroxychloroquine (Plaquenil) baseline eye exam before starting','Flare monitoring: CBC, CMP, anti-dsDNA, complement (C3/C4)','Avoid live vaccines if on immunosuppressants']},
+};
+
+// Mark abbreviations with condition detail data in injectAbbrevTooltips
+// (called once; reuses COND_DATA key set)
+const COND_KEYS = new Set(Object.keys(COND_DATA));
+
+// ── Condition popup logic ────────────────────────────────────────────────────
+const condPopup       = document.getElementById('cond-popup');
+const condPopupClose  = document.getElementById('cond-popup-close');
+const condPopupCat    = document.getElementById('cond-popup-cat');
+const condPopupTitle  = document.getElementById('cond-popup-title');
+const condPopupFull   = document.getElementById('cond-popup-full');
+const condPopupDef    = document.getElementById('cond-popup-def');
+const condPopupSigns  = document.getElementById('cond-popup-signs');
+const condPopupSignsT = document.getElementById('cond-popup-signs-tags');
+const condPopupNurs   = document.getElementById('cond-popup-nursing');
+const condPopupNursT  = document.getElementById('cond-popup-nursing-tags');
+
+function openCondPopup(abbr, anchorEl) {
+ const d = COND_DATA[abbr];
+ if (!d) return;
+ // Hide hover tooltip while popup is open
+ dcTip.classList.remove('visible');
+
+ condPopupCat.textContent   = d.cat;
+ condPopupTitle.textContent = abbr;
+ condPopupFull.textContent  = d.full;
+ condPopupDef.textContent   = d.def;
+
+ if (d.signs && d.signs.length) {
+  condPopupSignsT.innerHTML = d.signs.map(s => `<span class="cond-popup-tag red">${s}</span>`).join('');
+  condPopupSigns.style.display = '';
+ } else {
+  condPopupSigns.style.display = 'none';
+ }
+ if (d.nursing && d.nursing.length) {
+  condPopupNursT.innerHTML = d.nursing.map(n => `<span class="cond-popup-tag green">${n}</span>`).join('');
+  condPopupNurs.style.display = '';
+ } else {
+  condPopupNurs.style.display = 'none';
+ }
+
+ // Position popup above the anchor element, centered
+ condPopup.classList.add('open');
+ const r   = anchorEl.getBoundingClientRect();
+ const pw  = condPopup.offsetWidth  || 300;
+ const ph  = condPopup.offsetHeight || 200;
+ const vw  = window.innerWidth;
+ const vh  = window.innerHeight;
+
+ let left = r.left + r.width / 2 - pw / 2;
+ let top  = r.top - ph - 14;
+
+ // Flip below if not enough space above
+ if (top < 8) top = r.bottom + 10;
+ // Clamp horizontally
+ left = Math.max(8, Math.min(left, vw - pw - 8));
+ // Clamp vertically
+ if (top + ph > vh - 8) top = vh - ph - 8;
+
+ condPopup.style.left = left + 'px';
+ condPopup.style.top  = top  + 'px';
+}
+
+function closeCondPopup() {
+ condPopup.classList.remove('open');
+}
+
+condPopupClose.addEventListener('click', closeCondPopup);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCondPopup(); });
+// Click outside popup closes it
+document.addEventListener('click', e => {
+ if (condPopup.classList.contains('open') &&
+     !condPopup.contains(e.target) &&
+     !e.target.closest('.dc-abbr[data-cond]')) {
+  closeCondPopup();
+ }
+});
+
+// Click handler on condition abbreviations
+document.addEventListener('click', e => {
+ const el = e.target.closest('.dc-abbr[data-cond]');
+ if (!el) return;
+ e.stopPropagation();
+ // Toggle: click same abbr again to close
+ if (condPopup.classList.contains('open') && condPopup.dataset.activeAbbr === el.dataset.cond) {
+  closeCondPopup();
+  return;
+ }
+ condPopup.dataset.activeAbbr = el.dataset.cond;
+ openCondPopup(el.dataset.cond, el);
+});
 
 let dcTipTimer = null;
 
