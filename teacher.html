@@ -332,7 +332,6 @@
                 // Verify password:
                 // 1) Via Edge Function (handles PBKDF2 hashes and plain-text legacy)
                 // 2) Direct plain-text compare against password_hash (plain-text fallback)
-                // 3) Direct compare against plain_password column (admin-set plain-text)
                 let passwordValid = false;
                 try {
                     const { data: verifyData, error: verifyError } = await db.functions.invoke('hash-password', {
@@ -346,13 +345,11 @@
                         passwordValid = verifyData.match;
                     } else {
                         // Edge Function returned unexpected result — direct compare
-                        passwordValid = password === teacher.password_hash
-                            || password === teacher.plain_password;
+                        passwordValid = password === teacher.password_hash;
                     }
                 } catch (funcError) {
                     // Edge Function unreachable — direct compare
-                    passwordValid = password === teacher.password_hash
-                        || password === teacher.plain_password;
+                    passwordValid = password === teacher.password_hash;
                 }
 
                 if (!passwordValid) {
