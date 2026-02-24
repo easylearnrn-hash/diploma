@@ -3227,6 +3227,12 @@
       }
     }
 
+    // ── Shared fetch caches — populated once at init ──────────────────────
+    // _hubPublishedCache: string[]  — note_ids published to this student
+    // _hubProgressCache:  object    — note_id → module_progress row
+    let _hubPublishedCache = null;
+    let _hubProgressCache  = null;
+
     // Render categories
     async function renderCategories() {
       console.log('🎨 renderCategories() called');
@@ -3248,7 +3254,7 @@
         // Admin / teacher: show all notes
         publishedNoteIds = allNotes.map(n => n.id);
       } else {
-        // Student path — must have a resolved UUID
+        // Student path — use shared cache (already fetched at init)
         if (!currentStudentId) {
           console.error('❌ Student ID could not be resolved — showing locked state');
           catGrid.innerHTML = `
@@ -3263,37 +3269,16 @@
           if (catsEmpty) catsEmpty.style.display = 'none';
           return;
         }
-
-        try {
-          const { data: publishedData, error } = await db
-            .from('published_notes')
-            .select('note_id')
-            .eq('student_id', currentStudentId);
-
-          if (error) {
-            console.error('❌ published_notes query failed:', error.message);
-            catGrid.innerHTML = `
-              <div style="text-align:center;padding:64px 20px;color:var(--text-muted)">
-                <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#ef4444">Error loading notes</div>
-                <div style="font-size:13px">Please refresh the page.</div>
-              </div>`;
-            return;
-          }
-
-          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-          console.log(`📋 Student ${currentStudentId} has ${publishedNoteIds.length} published note(s)`);
-        } catch (err) {
-          console.error('❌ Unexpected error fetching published notes:', err);
-          catGrid.innerHTML = `<div style="text-align:center;padding:64px 20px;color:#ef4444;font-size:13px">Unexpected error. Please refresh.</div>`;
-          return;
-        }
+        publishedNoteIds = _hubPublishedCache || [];
+        console.log(`📋 Student ${currentStudentId} has ${publishedNoteIds.length} published note(s)`);
       }
 
       try {
         const categoryCounts = {};
+        const pubSet = new Set(publishedNoteIds);
 
         allNotes.forEach(note => {
-          if (publishedNoteIds.includes(note.id)) {
+          if (pubSet.has(note.id)) {
             categoryCounts[note.category] = (categoryCounts[note.category] || 0) + 1;
           }
         });
@@ -3388,30 +3373,14 @@
             </div>`;
           return;
         }
-
-        try {
-          const { data: publishedData, error } = await db
-            .from('published_notes')
-            .select('note_id')
-            .eq('student_id', currentStudentId);
-
-          if (error) {
-            console.error('❌ published_notes query failed:', error.message);
-            notesList.innerHTML = `<div style="text-align:center;padding:48px 20px;color:#ef4444;font-size:13px">Error loading notes. Please refresh.</div>`;
-            return;
-          }
-
-          publishedNoteIds = publishedData ? publishedData.map(p => p.note_id) : [];
-          console.log(`📋 Student ${currentStudentId} — ${publishedNoteIds.length} note(s) in published set`);
-        } catch (err) {
-          console.error('❌ Unexpected error fetching published notes:', err);
-          notesList.innerHTML = `<div style="text-align:center;padding:48px 20px;color:#ef4444;font-size:13px">Unexpected error. Please refresh.</div>`;
-          return;
-        }
+        // Use shared cache — no DB call needed
+        publishedNoteIds = _hubPublishedCache || [];
+        console.log(`📋 Student ${currentStudentId} — ${publishedNoteIds.length} note(s) in published set`);
       }
 
       try {
-        const visibleNotes = categoryNotes.filter(note => publishedNoteIds.includes(note.id));
+        const pubSet = new Set(publishedNoteIds);
+        const visibleNotes = categoryNotes.filter(note => pubSet.has(note.id));
 
         if (visibleNotes.length === 0) {
           notesList.innerHTML = `
@@ -3531,15 +3500,12 @@
         }
       } catch(e) {}
 
-      // ── Fetch published notes for this student from Supabase ──────────
+      // ── Use shared published_notes cache (already fetched at init) ──────
       let publishedNoteIds = [];
-      if (!isAdmin && currentStudentId) {
-        try {
-          const { data, error } = await db.from('published_notes').select('note_id').eq('student_id', currentStudentId);
-          if (!error && data) publishedNoteIds = data.map(r => r.note_id);
-        } catch(e) {}
-      } else if (isAdmin) {
+      if (isAdmin) {
         publishedNoteIds = Object.keys(noteMap);
+      } else if (currentStudentId) {
+        publishedNoteIds = _hubPublishedCache || [];
       }
 
       // ── Resolve published notes that have an htmlFile AND are modules ─
@@ -3602,28 +3568,23 @@
         'Community Health':    { c1:'#f59e0b', c2:'#78350f', accent:'linear-gradient(90deg,#f59e0b,#b45309)', prog:'linear-gradient(90deg,#f59e0b,#fde68a)' },
       };
 
-      // ── Progress reader — tries Supabase first, falls back to localStorage ──
-      async function readModuleProgress(noteId) {
-        // Try Supabase (cross-device)
-        if (db && currentStudentId) {
-          try {
-            const { data } = await db.from('module_progress').select('*')
-              .eq('student_id', currentStudentId).eq('note_id', noteId).limit(1);
-            if (data && data.length > 0) {
-              const p = data[0];
-              const ha  = (p.ha  || []).length;
-              const sfx = (p.sfx || []).length;
-              const dc  = (p.dc  || []).length;
-              const ms  = p.ms || 0;
-              const clk = p.clicks || 0;
-              const haPts   = Math.min(ha  / 6,           1) * 40;
-              const sfxPts  = Math.min(sfx / 20,          1) * 20;
-              const dcPts   = Math.min(dc  / 20,          1) * 20;
-              const timePts = Math.min(ms  / 432000000,   1) * 20; // 120 hrs
-              const clkPts  = Math.min(clk * 0.0001,      5);
-              return Math.round(haPts + sfxPts + dcPts + timePts + clkPts);
-            }
-          } catch(e) {}
+      // ── Progress reader — reads from shared cache (no DB call) ──────────
+      function readModuleProgress(noteId) {
+        // Try shared Supabase cache first (cross-device)
+        if (_hubProgressCache && _hubProgressCache[noteId]) {
+          const p = _hubProgressCache[noteId];
+          const ha  = (p.ha  || []).length;
+          const sfx = (p.sfx || []).length;
+          const dc  = (p.dc  || []).length;
+          const ms  = p.ms || 0;
+          const clk = p.clicks || 0;
+          return Math.round(
+            Math.min(ha  / 6,         1) * 40 +
+            Math.min(sfx / 20,        1) * 20 +
+            Math.min(dc  / 20,        1) * 20 +
+            Math.min(ms  / 432000000, 1) * 20 +
+            Math.min(clk * 0.0001,    5)
+          );
         }
         // Fallback: localStorage (same device only)
         try {
@@ -3635,19 +3596,20 @@
           const dc  = (p.dc  || []).length;
           const ms  = p.ms || 0;
           const clk = p.clicks || 0;
-          const haPts   = Math.min(ha  / 6,           1) * 40;
-          const sfxPts  = Math.min(sfx / 20,          1) * 20;
-          const dcPts   = Math.min(dc  / 20,          1) * 20;
-          const timePts = Math.min(ms  / 432000000,   1) * 20; // 120 hrs
-          const clkPts  = Math.min(clk * 0.0001,      5);
-          return Math.round(haPts + sfxPts + dcPts + timePts + clkPts);
+          return Math.round(
+            Math.min(ha  / 6,         1) * 40 +
+            Math.min(sfx / 20,        1) * 20 +
+            Math.min(dc  / 20,        1) * 20 +
+            Math.min(ms  / 432000000, 1) * 20 +
+            Math.min(clk * 0.0001,    5)
+          );
         } catch(e) { return 0; }
       }
 
       for (const note of publishedModules) {
         const cfg = catConfig[note.category] || { c1:'#6366f1', c2:'#1e1b4b', accent:'linear-gradient(90deg,#6366f1,#3730a3)', prog:'linear-gradient(90deg,#6366f1,#a5b4fc)' };
         const initials = note.title.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
-        const pct = await readModuleProgress(note.id);
+        const pct = readModuleProgress(note.id);  // sync — reads from cache
         html += `
           <div class="mod-card" onclick="window.location.href='${escapeAttr(note.htmlFile)}'">
             <div class="mod-card-accent" style="background:${cfg.accent}"></div>
@@ -3695,16 +3657,36 @@
     (async function initNotesLibrary(){
       await resolveStudentId();
       
-      // Load student courses
-      await loadStudentCourses();
-      
-      // Update sidebar badge with correct count
-      const notesCountBadge = document.getElementById('notesCount');
-      if (notesCountBadge) {
-        notesCountBadge.textContent = String(HARDCODED_NOTES.length);
+      // ── Single shared DB fetch — runs ONCE, shared by all consumers ──────
+      // Fetches published_notes + module_progress in parallel.
+      // renderCategories, renderNotesInCategory, and loadStudentCourses all
+      // read from these caches — zero extra DB calls on navigation.
+      if (!isAdmin && currentStudentId) {
+        try {
+          const [pubRes, progRes] = await Promise.all([
+            db.from('published_notes').select('note_id').eq('student_id', currentStudentId),
+            db.from('module_progress').select('*').eq('student_id', currentStudentId)
+          ]);
+          _hubPublishedCache = pubRes.data ? pubRes.data.map(r => r.note_id) : [];
+          _hubProgressCache  = {};
+          if (progRes.data) progRes.data.forEach(r => { _hubProgressCache[r.note_id] = r; });
+        } catch(e) {
+          _hubPublishedCache = [];
+          _hubProgressCache  = {};
+        }
+      } else if (isAdmin) {
+        _hubPublishedCache = HARDCODED_NOTES.map(n => n.id);
+        _hubProgressCache  = {};
       }
-      
-      renderCategories();
+
+      // Run courses + categories in parallel — neither needs to wait for the other
+      const notesCountBadge = document.getElementById('notesCount');
+      if (notesCountBadge) notesCountBadge.textContent = String(HARDCODED_NOTES.length);
+
+      await Promise.all([
+        loadStudentCourses(),
+        renderCategories()
+      ]);
     })();
 
     console.log('✅ Modern Notes Library System initialized');
