@@ -30,12 +30,12 @@
     // Create Supabase client with explicit auth settings
     const vidSupabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        persistSession: false,       // Don't persist — VID checks auth fresh on every load
-        autoRefreshToken: false,     // Prevents 401 spam from expired refresh token attempts
+        persistSession: true,        // Persist session so login survives page reloads
+        autoRefreshToken: true,      // Auto-refresh token before it expires
         detectSessionInUrl: false,
         storage: window.localStorage,
         storageKey: 'vid-auth-token',
-        flowType: 'pkce'
+        flowType: 'implicit'         // implicit works for email/password in static files; pkce requires server-side code exchange
       }
     });
     
@@ -2371,26 +2371,17 @@
         
         if (error) throw error;
         
-        // Verify session is in localStorage
-        loginBtn.textContent = '✓ Verifying session...';
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Check if session persisted
-        const { data: { session: verifySession } } = await vidSupabaseClient.auth.getSession();
-        
-        if (!verifySession) {
-          throw new Error('Session created but not persisted. Clear browser cache and try again.');
-        }
-        
         loginBtn.textContent = '✓ Success! Loading dashboard...';
         
-        // Wait a bit more, then reload
+        // Small delay for UX, then reload — session is now persisted in localStorage
         await new Promise(resolve => setTimeout(resolve, 500));
         window.location.href = window.location.href.split('?')[0];
         
       } catch (error) {
         console.error('❌ Login failed:', error);
-        loginError.textContent = error.message || 'Invalid email or password';
+        const msg = error.message || 'Invalid email or password';
+        const code = error.status ? ` (${error.status})` : '';
+        loginError.textContent = msg + code;
         loginError.style.display = 'block';
         loginBtn.disabled = false;
         loginBtn.textContent = 'Sign In';
