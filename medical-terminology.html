@@ -1890,34 +1890,110 @@ function doSearch(q) {
  countEl.textContent = '';
  countEl.classList.remove('has-results');
 
+ // Always restore special blocks visibility
+ const sfxExplorer = document.getElementById('sfx-explorer');
+ const haGrid = document.querySelector('.high-alert-grid');
+ const antidoteGrid = document.querySelector('.antidote-grid');
+ if (sfxExplorer) sfxExplorer.style.display = '';
+ if (haGrid) haGrid.style.display = '';
+ document.querySelectorAll('.sfx-pill').forEach(p => p.style.display = '');
+ document.querySelectorAll('.high-alert-item').forEach(p => p.style.display = '');
+ document.querySelectorAll('.sfx-group').forEach(g => g.style.display = '');
+ document.querySelectorAll('.class-card').forEach(c => c.style.display = '');
+
  if (!t) return;
 
  const re = new RegExp('(' + escRe(t) + ')', 'gi');
  let count = 0;
 
+ // ── Standard search-rows ──
  allRows.forEach(row => {
- if (re.test(row.textContent || '')) {
- count++;
- row.querySelectorAll('td, .a-code, .a-def').forEach(cell => {
- if (!cell.children.length)
- cell.innerHTML = (origMap.get(cell) || cell.textContent).replace(re, '<mark>$1</mark>');
- });
- } else {
- row.classList.add('hidden');
- }
+  // For class-section rows, filter individual cards inside
+  if (row.classList.contains('class-section')) {
+   const cards = Array.from(row.querySelectorAll('.class-card'));
+   let sectionHits = 0;
+   cards.forEach(card => {
+    if (re.test(card.textContent || '')) {
+     card.style.display = '';
+     sectionHits++;
+    } else {
+     card.style.display = 'none';
+    }
+   });
+   if (sectionHits === 0) {
+    row.classList.add('hidden');
+   } else {
+    count++;
+   }
+   return;
+  }
+  if (re.test(row.textContent || '')) {
+   count++;
+   row.querySelectorAll('td, .a-code, .a-def').forEach(cell => {
+    if (!cell.children.length)
+     cell.innerHTML = (origMap.get(cell) || cell.textContent).replace(re, '<mark>$1</mark>');
+   });
+  } else {
+   row.classList.add('hidden');
+  }
  });
 
  allSecs.forEach(sec => {
- if (!sec.querySelector('.search-row:not(.hidden)')) sec.classList.add('hidden');
+  if (!sec.querySelector('.search-row:not(.hidden)')) sec.classList.add('hidden');
  });
 
+ // ── Suffix pills (sfx-explorer) ──
+ if (sfxExplorer) {
+  const pillGroups = Array.from(document.querySelectorAll('.sfx-group'));
+  let anyPillMatch = false;
+  pillGroups.forEach(group => {
+   const pills = Array.from(group.querySelectorAll('.sfx-pill'));
+   let groupHit = false;
+   pills.forEach(pill => {
+    if (re.test(pill.textContent || '')) {
+     pill.style.display = '';
+     groupHit = true;
+     anyPillMatch = true;
+    } else {
+     pill.style.display = 'none';
+    }
+   });
+   group.style.display = groupHit ? '' : 'none';
+  });
+  // If no pill matched at all, hide the whole sfx-explorer block
+  if (!anyPillMatch) {
+   sfxExplorer.style.display = 'none';
+  } else {
+   count++;
+  }
+ }
+
+ // ── High-alert pills ──
+ if (haGrid) {
+  const haPills = Array.from(document.querySelectorAll('.high-alert-item'));
+  let anyHaMatch = false;
+  haPills.forEach(pill => {
+   if (re.test(pill.textContent || '')) {
+    pill.style.display = '';
+    anyHaMatch = true;
+   } else {
+    pill.style.display = 'none';
+   }
+  });
+  if (!anyHaMatch) {
+   haGrid.style.display = 'none';
+  } else {
+   count++;
+  }
+ }
+
  if (count > 0) {
- countEl.textContent = count + (count === 1 ? ' result' : ' results');
- countEl.classList.add('has-results');
+  countEl.textContent = count + (count === 1 ? ' result' : ' results');
+  countEl.classList.add('has-results');
  } else {
- countEl.textContent = '0 results';
- noResQ.textContent = '"' + t + '"';
- noRes.classList.add('show');
+  countEl.textContent = '0 results';
+  noResQ.textContent = '"' + t + '"';
+  noRes.classList.add('show');
  }
 }
 
