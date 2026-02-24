@@ -2127,13 +2127,13 @@ const haClose   = document.getElementById('ha-close');
 // ══════════════════════════════════════════════════
 const PROGRESS_KEY = 'module_progress_note_mt_1';
 const NOTE_ID    = 'note_mt_1';
-const HA_TOTAL   = 6;   // insulin heparin warfarin opioids digoxin potassium
+const HA_TOTAL   = 6;         // insulin heparin warfarin opioids digoxin potassium
 const SFX_CAP    = 20;
 const DC_CAP     = 20;
-const TIME_CAP   = 600000; // 10 min in ms
-const IDLE_LIMIT = 60000;  // 60 s idle threshold
-const CLICK_PTS  = 0.0001; // pts per any click
-const CLICK_CAP  = 5;      // max 5 pts from clicks (50 000 clicks to fill)
+const TIME_CAP   = 432000000; // 120 hours in ms — full engagement required for 100%
+const IDLE_LIMIT = 60000;     // 60 s idle threshold
+const CLICK_PTS  = 0.0001;    // pts per any click
+const CLICK_CAP  = 5;         // max 5 pts from clicks
 
 // ── Supabase client (already loaded via CDN in page head or gate) ──
 const _db = (typeof initSupabase === 'function') ? initSupabase() : null;
@@ -2188,17 +2188,42 @@ function calcProgress(p) {
 
 let prog = loadProgress();
 
-// ── On load: pull from Supabase and merge with local (best of both) ──
+// ── On load: check republish reset, then pull & merge from Supabase ──
 if (_db && _studentId) {
-  _db.from('module_progress').select('*')
-    .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1)
-    .then(({ data }) => {
-      if (data && data.length > 0) {
-        const remote = { ha: data[0].ha||[], sfx: data[0].sfx||[], dc: data[0].dc||[], ms: data[0].ms||0, clicks: data[0].clicks||0 };
-        prog = mergeProgress(prog, remote);
-        localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog)); // update local with merged
+  (async () => {
+    try {
+      // 1. Get published_at for this student+note
+      const { data: pubData } = await _db.from('published_notes').select('published_at')
+        .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1);
+      const publishedAt = pubData && pubData.length > 0 ? new Date(pubData[0].published_at) : null;
+
+      // 2. Get existing remote progress
+      const { data: progData } = await _db.from('module_progress').select('*')
+        .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1);
+      const remoteRow = progData && progData.length > 0 ? progData[0] : null;
+      const remoteUpdatedAt = remoteRow ? new Date(remoteRow.updated_at) : null;
+
+      // 3. If admin republished AFTER last progress update → reset to zero
+      if (publishedAt && remoteUpdatedAt && publishedAt > remoteUpdatedAt) {
+        const zero = { ha:[], sfx:[], dc:[], ms:0, clicks:0 };
+        prog = zero;
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(zero));
+        await _db.from('module_progress').upsert({
+          student_id: _studentId, note_id: NOTE_ID,
+          ha:[], sfx:[], dc:[], ms:0, clicks:0,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'student_id,note_id' });
+        return; // don't merge stale remote data
       }
-    });
+
+      // 4. Normal merge: take best of local + remote
+      if (remoteRow) {
+        const remote = { ha: remoteRow.ha||[], sfx: remoteRow.sfx||[], dc: remoteRow.dc||[], ms: remoteRow.ms||0, clicks: remoteRow.clicks||0 };
+        prog = mergeProgress(prog, remote);
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog));
+      }
+    } catch(e) {}
+  })();
 }
 
 // ── Active time tracking (idle-aware) ──────────────────────────
