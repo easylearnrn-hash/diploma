@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive 3D Anatomy</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #020617;
+      --bg-elevated: #020617;
+      --panel-bg: rgba(15,23,42,0.96);
+      --border-soft: rgba(148,163,184,0.18);
+      --gold: #c9a84c;
+      --text-primary: #f9fafb;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      background: radial-gradient(circle at top,#020617 0%,#020617 40%,#020617 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .anatomy-shell {
+      display: grid;
+      grid-template-columns: minmax(0, 2.2fr) minmax(320px, 420px);
+      gap: 0;
+      min-height: 100vh;
+    }
+    @media (max-width: 900px) {
+      .anatomy-shell {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
+      }
+    }
+    .viewport-wrap {
+      position: relative;
+      background: radial-gradient(circle at top,#020617 0%,#020617 40%,#020617 100%);
+      border-right: 1px solid rgba(15,23,42,0.9);
+      overflow: hidden;
+    }
+    canvas#anatomyCanvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .viewport-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px 22px;
+      background: radial-gradient(circle at top,rgba(15,23,42,0.8) 0,rgba(15,23,42,0.4) 22%,transparent 55%);
+    }
+    .vp-top-label {
+      align-self: flex-start;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(15,23,42,0.8);
+      border: 1px solid rgba(148,163,184,0.45);
+      color: var(--text-muted);
+      backdrop-filter: blur(12px);
+    }
+    .vp-footnote {
+      align-self: flex-start;
+      padding: 8px 11px;
+      border-radius: 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      background: radial-gradient(circle at left,rgba(15,23,42,0.92),rgba(15,23,42,0.85));
+      border: 1px solid rgba(15,23,42,0.95);
+      backdrop-filter: blur(10px);
+    }
+
+    .side-panel {
+      background: var(--panel-bg);
+      border-left: 1px solid #020617;
+      padding: 18px 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: -24px 0 60px rgba(0,0,0,0.65);
+    }
+    .panel-header h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-header h1 span.dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: radial-gradient(circle,var(--gold),#92400e);
+      box-shadow: 0 0 0 4px rgba(201,168,76,0.25);
+    }
+    .panel-header p {
+      margin: 4px 0 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .toggle-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .segmented {
+      display: inline-flex;
+      padding: 2px;
+      border-radius: 999px;
+      background: radial-gradient(circle at top,rgba(15,23,42,0.9),rgba(15,23,42,0.95));
+      border: 1px solid rgba(148,163,184,0.35);
+    }
+    .segmented button {
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+    .segmented button.active {
+      background: linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.08));
+      color: var(--gold);
+      box-shadow: 0 0 0 1px rgba(201,168,76,0.45);
+    }
+
+    .organs-search {
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(30,64,175,0.7);
+      background: radial-gradient(circle at left,rgba(15,23,42,0.96),rgba(15,23,42,0.9));
+    }
+    .organs-search input {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--text-primary);
+      font-size: 13px;
+      outline: none;
+    }
+    .organs-search input::placeholder {
+      color: rgba(148,163,184,0.6);
+    }
+
+    .organs-list {
+      margin-top: 10px;
+      max-height: 180px;
+      overflow: auto;
+      padding-right: 4px;
+      border-radius: 12px;
+      border: 1px solid rgba(15,23,42,0.9);
+      background: radial-gradient(circle at top,rgba(15,23,42,0.96),rgba(15,23,42,0.98));
+    }
+    .organs-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 1px solid rgba(15,23,42,0.9);
+    }
+    .organs-list-item:last-child { border-bottom: none; }
+    .organs-list-item:hover {
+      background: radial-gradient(circle at left,rgba(30,64,175,0.35),transparent);
+      color: var(--text-primary);
+    }
+    .organs-list-item.active {
+      background: radial-gradient(circle at left,rgba(201,168,76,0.22),rgba(15,23,42,0.96));
+      color: var(--gold);
+    }
+    .organs-list-item span.badge {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(51,65,85,0.9);
+      color: rgba(148,163,184,0.9);
+    }
+
+    .organ-detail {
+      margin-top: 8px;
+      padding: 10px 11px 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(51,65,85,0.9);
+      background: radial-gradient(circle at top,rgba(15,23,42,0.98),rgba(15,23,42,1));
+    }
+    .organ-detail-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+    }
+    .organ-detail-header h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+    .organ-detail-header span.system {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(51,65,85,0.9);
+      color: rgba(148,163,184,0.9);
+    }
+    .organ-summary {
+      margin: 6px 0 0;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .organ-expand-toggle {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--gold);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .organ-more { display: none; margin-top: 6px; font-size: 13px; color: var(--text-muted); }
+    .organ-more.open { display: block; }
+
+    .panel-footer {
+      margin-top: auto;
+      font-size: 11px;
+      color: var(--text-muted);
+      border-top: 1px solid rgba(15,23,42,0.9);
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="anatomy-shell">
+    <div class="viewport-wrap">
+      <canvas id="anatomyCanvas"></canvas>
+      <div class="viewport-overlay">
+        <div class="vp-top-label">Interactive 3D Anatomy (beta)</div>
+        <div class="vp-footnote">Click or tap on an organ in the 3D model or choose it from the list. Use your mouse or trackpad to orbit and zoom.</div>
+      </div>
+    </div>
+    <aside class="side-panel">
+      <header class="panel-header">
+        <h1><span class="dot"></span> Human Anatomy</h1>
+        <p>Select an organ to explore structure and function. Toggle male / female to view reproductive anatomy differences.</p>
+      </header>
+      <div class="toggle-row">
+        <div class="segmented" id="sexToggle">
+          <button data-sex="male" class="active">Male</button>
+          <button data-sex="female">Female</button>
+        </div>
+      </div>
+      <div class="organs-search">
+        <span style="font-size:13px;opacity:.7;">🔍</span>
+        <input id="organSearch" type="text" placeholder="Search organ…" />
+      </div>
+      <div class="organs-list" id="organsList"></div>
+      <section class="organ-detail" id="organDetail" aria-live="polite"></section>
+      <div class="panel-footer">
+        This is an educational visualization only and is not a substitute for professional medical training or advice.
+      </div>
+    </aside>
+  </div>
+
+  <!-- Three.js & loaders from CDN (ES Modules) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+    // ─────────────────────────────────────────────────────────────
+    // 1. Organ metadata
+    // ─────────────────────────────────────────────────────────────
+    const ORGAN_DATA = [
+      { id: 'Brain', system: 'Nervous System', summary: 'Central control center that processes sensory information and coordinates body functions.', more: 'The brain consists of the cerebrum, cerebellum, and brainstem. It regulates consciousness, memory, movement, and homeostasis.' },
+      { id: 'Heart', system: 'Cardiovascular System', summary: 'Muscular pump that circulates blood throughout the body.', more: 'The heart has four chambers (two atria, two ventricles) and valves that ensure one-way blood flow through pulmonary and systemic circuits.' },
+      { id: 'Lungs', system: 'Respiratory System', summary: 'Paired organs that exchange oxygen and carbon dioxide with the blood.', more: 'Each lung contains millions of alveoli where gas exchange occurs. Ventilation is driven by diaphragm and intercostal muscles.' },
+      { id: 'Liver', system: 'Digestive System', summary: 'Largest internal organ, responsible for metabolism, detoxification, and bile production.', more: 'The liver processes nutrients from the gut, stores glycogen and vitamins, and detoxifies drugs and metabolic waste.' },
+      { id: 'Stomach', system: 'Digestive System', summary: 'J-shaped organ that mechanically and chemically breaks down food.', more: 'Gastric acid and enzymes begin protein digestion. The stomach regulates the controlled release of chyme into the small intestine.' },
+      { id: 'Pancreas', system: 'Digestive / Endocrine', summary: 'Produces digestive enzymes and hormones such as insulin and glucagon.', more: 'Exocrine cells release enzymes into the duodenum; endocrine islets regulate blood glucose homeostasis.' },
+      { id: 'SmallIntestine', label: 'Small Intestine', system: 'Digestive System', summary: 'Primary site of nutrient absorption.', more: 'Divided into duodenum, jejunum, and ileum. Villi and microvilli greatly increase surface area for absorption.' },
+      { id: 'LargeIntestine', label: 'Large Intestine', system: 'Digestive System', summary: 'Absorbs water and electrolytes; forms and stores feces.', more: 'Includes cecum, colon, rectum, and anal canal. Houses gut microbiota that ferment undigested material.' },
+      { id: 'Kidneys', system: 'Urinary System', summary: 'Paired organs that filter blood to produce urine and regulate fluid balance.', more: 'Nephrons within the kidneys perform filtration, reabsorption, and secretion to maintain electrolyte and acid-base balance.' },
+      { id: 'UrinaryBladder', label: 'Urinary Bladder', system: 'Urinary System', summary: 'Muscular sac that stores urine before excretion.', more: 'Detrusor muscle and sphincters coordinate during the micturition reflex to allow voluntary voiding.' },
+      { id: 'Spleen', system: 'Lymphatic / Immune', summary: 'Filters blood, recycles red blood cells, and supports immune function.', more: 'The spleen contains white pulp (immune cells) and red pulp (blood filtration and storage).'},
+      { id: 'Gallbladder', system: 'Digestive System', summary: 'Stores and concentrates bile produced by the liver.', more: 'Contracts after meals to release bile into the small intestine for fat digestion and absorption.' },
+      { id: 'Thyroid', label: 'Thyroid Gland', system: 'Endocrine System', summary: 'Produces hormones that regulate metabolism and growth.', more: 'Located in the anterior neck, the thyroid secretes T3 and T4, which influence basal metabolic rate and development.' },
+      { id: 'Esophagus', system: 'Digestive System', summary: 'Muscular tube that transports food from the mouth to the stomach.', more: 'Peristaltic contractions move the bolus; the lower esophageal sphincter prevents reflux of gastric contents.' },
+      { id: 'Trachea', system: 'Respiratory System', summary: 'Windpipe that conducts air between the larynx and bronchi.', more: 'Supported by C-shaped cartilaginous rings; lined with ciliated epithelium that traps and clears particles.' },
+      { id: 'Diaphragm', system: 'Respiratory System', summary: 'Primary muscle of inspiration separating thoracic and abdominal cavities.', more: 'Contraction flattens the diaphragm, increasing thoracic volume and drawing air into the lungs.' },
+      { id: 'ReproductiveMale', label: 'Male Reproductive Organs', system: 'Reproductive System', summary: 'Organs involved in sperm production and delivery.', more: 'Includes testes, epididymis, vas deferens, seminal vesicles, prostate, and penis.' },
+      { id: 'ReproductiveFemale', label: 'Female Reproductive Organs', system: 'Reproductive System', summary: 'Organs involved in ovulation, fertilization, and gestation.', more: 'Includes ovaries, uterine tubes, uterus, cervix, and vagina.' }
+    ];
+
+    const ORGAN_MAP_BY_ID = Object.fromEntries(ORGAN_DATA.map(o => [o.id, o]));
+
+    // Map of mesh names coming from the 3D model to these IDs.
+    // TODO: Once you have your .glb models, adjust the keys on the left to
+    // match the node/mesh names in the file (e.g., "HeartMesh", "brain_low" etc.)
+    const MESH_NAME_TO_ORGAN_ID = {
+      Brain: 'Brain',
+      Heart: 'Heart',
+      Lungs: 'Lungs',
+      Liver: 'Liver',
+      Stomach: 'Stomach',
+      Pancreas: 'Pancreas',
+      SmallIntestine: 'SmallIntestine',
+      LargeIntestine: 'LargeIntestine',
+      Kidneys: 'Kidneys',
+      Bladder: 'UrinaryBladder',
+      Spleen: 'Spleen',
+      Gallbladder: 'Gallbladder',
+      Thyroid: 'Thyroid',
+      Esophagus: 'Esophagus',
+      Trachea: 'Trachea',
+      Diaphragm: 'Diaphragm',
+      MaleRepro: 'ReproductiveMale',
+      FemaleRepro: 'ReproductiveFemale'
+    };
+
+    // ─────────────────────────────────────────────────────────────
+    // 2. UI helpers
+    // ─────────────────────────────────────────────────────────────
+    const organsListEl = document.getElementById('organsList');
+    const organDetailEl = document.getElementById('organDetail');
+    const organSearchEl = document.getElementById('organSearch');
+    const sexToggleEl = document.getElementById('sexToggle');
+
+    let currentSex = 'male';
+    let currentOrganId = null;
+
+    function renderOrganList(filter = '') {
+      const q = filter.trim().toLowerCase();
+      organsListEl.innerHTML = '';
+      ORGAN_DATA.forEach(org => {
+        // Hide sex-specific organs when not relevant
+        if (org.id === 'ReproductiveMale' && currentSex !== 'male') return;
+        if (org.id === 'ReproductiveFemale' && currentSex !== 'female') return;
+
+        const label = org.label || org.id.replace(/([A-Z])/g, ' $1').trim();
+        if (q && !label.toLowerCase().includes(q)) return;
+
+        const row = document.createElement('div');
+        row.className = 'organs-list-item' + (org.id === currentOrganId ? ' active' : '');
+        row.dataset.organId = org.id;
+        row.innerHTML = `<span>${label}</span><span class="badge">${org.system}</span>`;
+        row.onclick = () => selectOrgan(org.id, { fromList: true });
+        organsListEl.appendChild(row);
+      });
+      if (!organsListEl.children.length) {
+        const empty = document.createElement('div');
+        empty.className = 'organs-list-item';
+        empty.style.justifyContent = 'center';
+        empty.style.color = 'var(--text-muted)';
+        empty.textContent = 'No organs match your search.';
+        organsListEl.appendChild(empty);
+      }
+    }
+
+    function renderOrganDetail() {
+      if (!currentOrganId) {
+        organDetailEl.innerHTML = '<div style="font-size:13px;color:var(--text-muted);">Select an organ in the 3D model or from the list to see details.</div>';
+        return;
+      }
+      const org = ORGAN_MAP_BY_ID[currentOrganId];
+      if (!org) return;
+      const label = org.label || org.id.replace(/([A-Z])/g, ' $1').trim();
+      organDetailEl.innerHTML = `
+        <div class="organ-detail-header">
+          <h2>${label}</h2>
+          <span class="system">${org.system}</span>
+        </div>
+        <p class="organ-summary">${org.summary}</p>
+        <div class="organ-expand-toggle" id="organMoreToggle">
+          <span>More details</span>
+          <span aria-hidden="true">▾</span>
+        </div>
+        <div class="organ-more" id="organMoreText">${org.more}</div>
+      `;
+      const toggle = document.getElementById('organMoreToggle');
+      const more = document.getElementById('organMoreText');
+      toggle.onclick = () => {
+        const open = more.classList.toggle('open');
+        toggle.querySelector('span[aria-hidden="true"]').textContent = open ? '▴' : '▾';
+      };
+    }
+
+    function selectOrgan(organId, { fromList = false } = {}) {
+      currentOrganId = organId;
+      // Update list highlight
+      document.querySelectorAll('.organs-list-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.organId === organId);
+      });
+      renderOrganDetail();
+      // Notify 3D layer
+      highlightOrganMesh(organId);
+      if (!fromList) {
+        // Scroll list so selected organ is visible
+        const el = organsListEl.querySelector(`[data-organ-id="${organId}"]`);
+        if (el) {
+          const top = el.offsetTop - 24;
+          organsListEl.scrollTo({ top, behavior: 'smooth' });
+        }
+      }
+    }
+
+    organSearchEl.addEventListener('input', () => {
+      renderOrganList(organSearchEl.value);
+    });
+
+    sexToggleEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-sex]');
+      if (!btn) return;
+      const sex = btn.dataset.sex;
+      if (sex === currentSex) return;
+      currentSex = sex;
+      sexToggleEl.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.sex === sex));
+      renderOrganList(organSearchEl.value);
+      // Notify 3D layer to swap model
+      setSex(sex);
+    });
+
+    renderOrganList();
+    renderOrganDetail();
+
+    // ─────────────────────────────────────────────────────────────
+    // 3. Three.js scene + model loading
+    // ─────────────────────────────────────────────────────────────
+    let renderer, scene, camera, controls, raycaster, pointer;
+    let currentRoot = null;
+    let organMeshIndex = {}; // organId -> [meshes]
+    let highlightedMeshes = [];
+
+    const canvas = document.getElementById('anatomyCanvas');
+
+    function initScene() {
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x020617);
+
+      const width = canvas.clientWidth || window.innerWidth;
+      const height = canvas.clientHeight || window.innerHeight;
+
+      camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+      camera.position.set(0, 1.6, 4.2);
+
+      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(width, height, false);
+
+      controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, 1.3, 0);
+      controls.enableDamping = true;
+      controls.minDistance = 1.8;
+      controls.maxDistance = 6;
+      controls.enablePan = false;
+
+      raycaster = new THREE.Raycaster();
+      pointer = new THREE.Vector2();
+
+      const hemi = new THREE.HemisphereLight(0xffffff, 0x0f172a, 0.75);
+      scene.add(hemi);
+      const key = new THREE.DirectionalLight(0xffffff, 0.9);
+      key.position.set(3, 6, 5);
+      scene.add(key);
+      const rim = new THREE.DirectionalLight(0x93c5fd, 0.5);
+      rim.position.set(-4, 2, -3);
+      scene.add(rim);
+
+      window.addEventListener('resize', onWindowResize);
+      canvas.addEventListener('pointerdown', onPointerDown);
+
+      animate();
+    }
+
+    function onWindowResize() {
+      if (!renderer || !camera) return;
+      const width = canvas.clientWidth || window.innerWidth;
+      const height = canvas.clientHeight || window.innerHeight;
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
+      renderer.setSize(width, height, false);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+      if (controls) controls.update();
+      if (renderer && scene && camera) renderer.render(scene, camera);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. Model loading & male/female toggle
+    // ─────────────────────────────────────────────────────────────
+    const loader = new GLTFLoader();
+    const modelCache = { male: null, female: null };
+
+    // TODO: Replace these URLs with your own GLB/GLTF files once available.
+    const MODEL_URLS = {
+      male: 'models/human_male.glb',
+      female: 'models/human_female.glb'
+    };
+
+    function loadModelForSex(sex) {
+      const url = MODEL_URLS[sex];
+      if (!url) return;
+
+      if (modelCache[sex]) {
+        attachModel(modelCache[sex]);
+        return;
+      }
+
+      loader.load(
+        url,
+        (gltf) => {
+          const root = gltf.scene || gltf.scenes[0];
+          modelCache[sex] = root;
+          attachModel(root);
+        },
+        undefined,
+        (err) => {
+          console.error('Failed to load anatomy model:', err);
+          // Fallback placeholder if model missing
+          if (!currentRoot) {
+            const grp = new THREE.Group();
+            const geo = new THREE.SphereGeometry(0.6, 32, 32);
+            const mat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, metalness: 0.1, roughness: 0.4 });
+            const sphere = new THREE.Mesh(geo, mat);
+            sphere.name = 'Heart';
+            grp.add(sphere);
+            modelCache[sex] = grp;
+            attachModel(grp);
+          }
+        }
+      );
+    }
+
+    function attachModel(root) {
+      if (currentRoot) {
+        scene.remove(currentRoot);
+      }
+      currentRoot = root;
+      scene.add(root);
+      root.position.set(0, 0, 0);
+      buildOrganMeshIndex();
+    }
+
+    function setSex(sex) {
+      loadModelForSex(sex);
+    }
+
+    function buildOrganMeshIndex() {
+      organMeshIndex = {};
+      highlightedMeshes = [];
+
+      if (!currentRoot) return;
+      currentRoot.traverse(obj => {
+        if (!obj.isMesh) return;
+        const name = obj.name || '';
+        const organId = MESH_NAME_TO_ORGAN_ID[name];
+        if (!organId) return;
+        if (!organMeshIndex[organId]) organMeshIndex[organId] = [];
+        organMeshIndex[organId].push(obj);
+        // Store original colors for highlight restoration
+        if (!obj.userData.baseEmissive) {
+          obj.userData.baseEmissive = obj.material.emissive ? obj.material.emissive.clone() : new THREE.Color(0x000000);
+        }
+      });
+    }
+
+    function clearHighlights() {
+      highlightedMeshes.forEach(m => {
+        if (m.material && m.userData.baseEmissive) {
+          m.material.emissive.copy(m.userData.baseEmissive);
+        }
+      });
+      highlightedMeshes = [];
+    }
+
+    function highlightOrganMesh(organId) {
+      clearHighlights();
+      const meshes = organMeshIndex[organId];
+      if (!meshes) return;
+      meshes.forEach(m => {
+        if (!m.material) return;
+        if (!m.userData.baseEmissive) {
+          m.userData.baseEmissive = m.material.emissive ? m.material.emissive.clone() : new THREE.Color(0x000000);
+        }
+        if (!m.material.emissive) m.material.emissive = new THREE.Color(0x000000);
+        m.material.emissive.setHex(0xfacc15);
+        highlightedMeshes.push(m);
+      });
+    }
+
+    function onPointerDown(event) {
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 1.1 - 0.55;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
+
+      const intersects = raycaster.intersectObjects(currentRoot ? currentRoot.children : [], true);
+      if (!intersects.length) return;
+      let target = intersects[0].object;
+      // Walk up until we find a mesh name mapped to an organ
+      while (target) {
+        const organId = MESH_NAME_TO_ORGAN_ID[target.name];
+        if (organId && ORGAN_MAP_BY_ID[organId]) {
+          selectOrgan(organId);
+          break;
+        }
+        target = target.parent;
+      }
+    }
+
+    initScene();
+    loadModelForSex('male');
+  </script>
+</body>
+</html>
