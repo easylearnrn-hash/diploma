@@ -442,32 +442,38 @@
  .dc-section{display:flex;flex-direction:column;gap:10px}
  .dc-section-title{font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);padding:10px 0 8px;border-bottom:2px solid rgba(201,168,76,0.35);margin-top:4px;line-height:1.2}
  .dc-pills{display:flex;flex-wrap:wrap;gap:7px}
- .dc-pill{font-size:12px;font-weight:600;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);line-height:1.5;position:relative}
- /* ── Abbreviation tooltip ── */
- .dc-pill[data-abbrev]{cursor:default;text-decoration:underline dotted rgba(255,255,255,0.3);text-underline-offset:2px}
- .dc-pill[data-abbrev]::after{
+ .dc-pill{font-size:12px;font-weight:600;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);line-height:1.5}
+ /* ── Abbreviation tooltip — anchored to the abbreviation word itself ── */
+ .dc-abbr{
+  position:relative;
+  display:inline-block;
+  text-decoration:underline dotted rgba(255,255,255,0.35);
+  text-underline-offset:2px;
+  cursor:default;
+  font-style:normal;
+ }
+ .dc-abbr::after{
   content:attr(data-abbrev);
   position:absolute;
-  bottom:calc(100% + 7px);
+  bottom:calc(100% + 8px);
   left:50%;
   transform:translateX(-50%);
   background:#0d1e35;
   color:#e8dfc5;
   font-size:11px;
   font-weight:500;
-  font-style:normal;
-  line-height:1.4;
+  line-height:1.45;
   white-space:nowrap;
-  padding:5px 10px;
+  padding:5px 11px;
   border-radius:6px;
-  border:1px solid rgba(201,168,76,0.35);
-  box-shadow:0 4px 14px rgba(0,0,0,0.55);
+  border:1px solid rgba(201,168,76,0.38);
+  box-shadow:0 4px 16px rgba(0,0,0,0.6);
   pointer-events:none;
   opacity:0;
-  transition:opacity .15s ease;
-  z-index:999;
+  transition:opacity .14s ease;
+  z-index:1100;
  }
- .dc-pill[data-abbrev]::before{
+ .dc-abbr::before{
   content:'';
   position:absolute;
   bottom:calc(100% + 2px);
@@ -477,11 +483,11 @@
   border-top-color:#0d1e35;
   pointer-events:none;
   opacity:0;
-  transition:opacity .15s ease;
-  z-index:999;
+  transition:opacity .14s ease;
+  z-index:1100;
  }
- .dc-pill[data-abbrev]:hover::after,
- .dc-pill[data-abbrev]:hover::before{opacity:1}
+ .dc-abbr:hover::after,
+ .dc-abbr:hover::before{opacity:1}
  .dc-pill.gold{background:rgba(201,168,76,0.10);border-color:var(--border-gold);color:var(--gold-light)}
  .dc-pill.red{background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.3);color:#fca5a5}
  .dc-pill.orange{background:rgba(251,146,60,0.10);border-color:rgba(251,146,60,0.3);color:#fdba74}
@@ -3313,11 +3319,24 @@ function abbrevify(text){
  return parts.length ? {abbrev: parts.join(' | ')} : null;
 }
 
+// Wrap each individual abbreviation token inline with its own <abbr> tooltip span.
+// This makes the arrow point at the exact abbreviation word inside the pill text.
+function injectAbbrevTooltips(text){
+ const keys = Object.keys(ABBREV_MAP).sort((a,b)=>b.length-a.length);
+ const escaped = keys.map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+ const re = new RegExp(`(?<![\\w-])(${escaped.join('|')})(?![\\w-])`,'g');
+ return text.replace(re, (match) => {
+  const full = ABBREV_MAP[match];
+  if(!full) return match;
+  const tip = `${match} → ${full}`.replace(/"/g,'&quot;');
+  return `<abbr class="dc-abbr" data-abbrev="${tip}">${match}</abbr>`;
+ });
+}
+
 function dcPills(arr, cls=''){
  return arr.map(text => {
-  const hit = abbrevify(text);
-  const attr = hit ? ` data-abbrev="${hit.abbrev.replace(/"/g,'&quot;')}"` : '';
-  return `<span class="dc-pill ${cls}"${attr}>${text}</span>`;
+  const html = injectAbbrevTooltips(text);
+  return `<span class="dc-pill ${cls}">${html}</span>`;
  }).join('');
 }
 function dcSection(title, content){
