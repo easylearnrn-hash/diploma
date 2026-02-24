@@ -3299,13 +3299,18 @@ function abbrevify(text){
  const keys = Object.keys(ABBREV_MAP).sort((a,b)=>b.length-a.length);
  const escaped = keys.map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
  const re = new RegExp(`(?<![\\w-])(${escaped.join('|')})(?![\\w-])`,'g');
- let found = null;
- let matched = null;
- text.replace(re, (m) => { if(!matched){ matched=m; found=ABBREV_MAP[m]; } });
- if(found){
-  return {abbrev: found};
+ // Collect ALL matches in the order they appear in the text
+ const parts = [];
+ const seen = new Set();
+ let m;
+ while((m = re.exec(text)) !== null){
+  const abbr = m[1];
+  if(!seen.has(abbr) && ABBREV_MAP[abbr]){
+   seen.add(abbr);
+   parts.push(`${abbr} → ${ABBREV_MAP[abbr]}`);
+  }
  }
- return null;
+ return parts.length ? {abbrev: parts.join(' | ')} : null;
 }
 
 function dcPills(arr, cls=''){
