@@ -127,8 +127,9 @@
     .ex-sep{color:var(--text-dim)}.ex-desc{color:var(--text-muted);line-height:1.5}
     .example-def{margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:14px;color:var(--text-muted);font-style:italic;line-height:1.6}
     .pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-    .pill{padding:4px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:999px;font-size:12px;font-weight:600;color:var(--text-muted);transition:border-color .15s,color .15s}
+    .pill{padding:4px 12px;background:rgba(255,255,255,0.05);border:1px solid var(--border);border-radius:999px;font-size:12px;font-weight:600;color:var(--text-muted);transition:border-color .15s,color .15s,background .15s;cursor:pointer;user-select:none}
     .pill:hover{border-color:var(--gold-dim);color:var(--gold-light)}
+    .pill.active{border-color:var(--gold);color:var(--gold);background:rgba(201,168,76,0.10)}
 
     /* ABBREV */
     .group-heading{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.10em;color:var(--gold);margin:28px 0 10px;display:flex;align-items:center;gap:8px}
@@ -363,8 +364,34 @@
       </div>
       <div class="example-def">→ A condition in which the thyroid gland is overactive (produces too much hormone).</div>
       <div class="pills">
-        <span class="pill">Hypertension</span><span class="pill">Hypotension</span>
-        <span class="pill">Appendectomy</span><span class="pill">Gastroenteritis</span>
+        <span class="pill active"
+          data-word="Hyperthyroidism"
+          data-p="Hyper-" data-p-meaning="Over / In Excess"
+          data-r="Thyroid" data-r-meaning="Thyroid gland"
+          data-s="-ism" data-s-meaning="Condition / State"
+          data-def="A condition in which the thyroid gland is overactive (produces too much hormone).">Hyperthyroidism</span>
+        <span class="pill"
+          data-word="Hypertension"
+          data-p="Hyper-" data-p-meaning="Above normal / excessive"
+          data-r="Tens-" data-r-meaning="Pressure / stretch"
+          data-s="-ion" data-s-meaning="Process / condition"
+          data-def="Abnormally high blood pressure in the arteries.">Hypertension</span>
+        <span class="pill"
+          data-word="Hypotension"
+          data-p="Hypo-" data-p-meaning="Below normal / deficient"
+          data-r="Tens-" data-r-meaning="Pressure / stretch"
+          data-s="-ion" data-s-meaning="Process / condition"
+          data-def="Abnormally low blood pressure.">Hypotension</span>
+        <span class="pill"
+          data-word="Appendectomy"
+          data-r="Append-" data-r-meaning="Appendix"
+          data-s="-ectomy" data-s-meaning="Surgical removal"
+          data-def="Surgical removal of the appendix.">Appendectomy</span>
+        <span class="pill"
+          data-word="Gastroenteritis"
+          data-r="Gastro / Enter-" data-r-meaning="Stomach / intestine"
+          data-s="-itis" data-s-meaning="Inflammation"
+          data-def="Inflammation of the stomach and intestines, often causing vomiting and diarrhea.">Gastroenteritis</span>
       </div>
     </div>
   </div>
@@ -856,6 +883,46 @@ function doSearch(q) {
 
 inp.addEventListener('input', () => doSearch(inp.value));
 clrBtn.addEventListener('click', () => { inp.value = ''; inp.focus(); doSearch(''); });
+
+/* PILL CLICK → update Worked Example */
+const pills = document.querySelectorAll('.pills .pill');
+const exWord  = document.querySelector('.example-word');
+const exDef   = document.querySelector('.example-def');
+const chainEl = document.querySelector('.word-chain');
+
+function buildChain(d) {
+  const parts = [];
+  if (d.p)  parts.push({ cls:'wp-prefix', label:'Prefix',        term: d.p,  meaning: d.pMeaning });
+  if (d.r)  parts.push({ cls:'wp-root',   label:'Root',          term: d.r,  meaning: d.rMeaning });
+  if (d.s)  parts.push({ cls:'wp-suffix', label:'Suffix',        term: d.s,  meaning: d.sMeaning });
+  const pos = ['Position 1','Position 2','Position 3'];
+  return parts.map((pt, i) => `
+    <div class="word-part ${pt.cls}">
+      <div class="wp-part-label">${pt.label} · ${pos[i]}</div>
+      <div class="wp-part-term">${pt.term}</div>
+      <div class="wp-part-meaning">${pt.meaning}</div>
+    </div>`).join('');
+}
+
+pills.forEach(pill => {
+  pill.addEventListener('click', () => {
+    pills.forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+    const d = {
+      word:     pill.dataset.word,
+      p:        pill.dataset.p        || '',
+      pMeaning: pill.dataset.pMeaning || '',
+      r:        pill.dataset.r        || '',
+      rMeaning: pill.dataset.rMeaning || '',
+      s:        pill.dataset.s        || '',
+      sMeaning: pill.dataset.sMeaning || '',
+      def:      pill.dataset.def      || ''
+    };
+    exWord.textContent  = d.word;
+    exDef.textContent   = '→ ' + d.def;
+    chainEl.innerHTML   = buildChain(d);
+  });
+});
 </script>
 </body>
 </html>
