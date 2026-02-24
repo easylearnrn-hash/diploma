@@ -419,6 +419,19 @@
  .class-section-icon{display:none}
  .class-section-label{font-size:12px;font-weight:800;color:var(--gold);letter-spacing:.04em;text-transform:uppercase}
  .class-section-count{margin-left:auto;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--text-dim);background:rgba(255,255,255,0.04);border:1px solid var(--border);border-radius:999px;padding:3px 10px}
+ /* ── DC Data deep-search results panel ── */
+ #dc-search-results{display:none;margin-bottom:28px}
+ #dc-search-results.active{display:block}
+ .dcsr-heading{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+ .dcsr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+ .dcsr-card{padding:14px 16px;border-radius:12px;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold-dim);cursor:pointer;transition:border-top-color .15s,background .15s,transform .15s}
+ .dcsr-card:hover{border-top-color:var(--gold);background:rgba(201,168,76,0.07);transform:translateY(-2px)}
+ .dcsr-card-name{font-size:14px;font-weight:800;color:#fff;margin-bottom:4px}
+ .dcsr-card-sub{font-size:11px;color:var(--text-dim);margin-bottom:8px}
+ .dcsr-matches{display:flex;flex-wrap:wrap;gap:5px}
+ .dcsr-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.25);color:var(--gold);text-transform:uppercase;letter-spacing:.04em}
+ .dcsr-snippet{font-size:11px;color:var(--text-dim);line-height:1.5;margin-top:6px}
+ .dcsr-snippet mark{background:rgba(201,168,76,0.25);color:#e8dfc5;border-radius:2px;padding:0 2px}
  .class-grid{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;margin:0}
  .class-card{padding:16px;border-radius:12px;background:var(--card);border:1px solid var(--border);border-top:2px solid var(--gold-dim);transition:border-top-color .15s,background .15s,transform .15s;cursor:pointer;display:flex;flex-direction:column;gap:5px}
  .class-card:hover{border-top-color:var(--gold);background:rgba(201,168,76,0.06);transform:translateY(-2px)}
@@ -1463,6 +1476,9 @@
  </div>
  </div>
 
+ <!-- DC Data deep-search results (shown only during search) -->
+ <div id="dc-search-results"></div>
+
  <!-- X. CLASSIFICATIONS -->
  <hr class="rule">
  <div id="ph-classes" class="section">
@@ -1953,6 +1969,8 @@ function doSearch(q) {
    '#sfx-explorer, #ph-antidotes, #ph-classes, .high-alert-grid, .ha-heading,' +
    '.sfx-group, .sfx-pill, .high-alert-item, .class-card, .class-section, .antidote-grid'
   ).forEach(el => el.style.display = '');
+  const dcsrElClr = document.getElementById('dc-search-results');
+  if (dcsrElClr) { dcsrElClr.innerHTML = ''; dcsrElClr.classList.remove('active'); }
   return;
  }
 
@@ -2036,8 +2054,13 @@ function doSearch(q) {
   }
  }
 
- // Step 6: drug classification cards (inside #ph-classes)
+ // Step 6: drug classification cards (inside #ph-classes) + deep DC_DATA search
+ const dcsrEl = document.getElementById('dc-search-results');
+ dcsrEl.innerHTML = '';
+ dcsrEl.classList.remove('active');
+
  if (phClasses) {
+  // 6a — existing card-name / card-desc match (show/hide cards as before)
   let anyClass = false;
   phClasses.querySelectorAll('.class-section').forEach(section => {
    let sectionHit = false;
@@ -2049,6 +2072,67 @@ function doSearch(q) {
    section.style.display = sectionHit ? '' : 'none';
   });
   if (anyClass) { phClasses.style.display = ''; count++; }
+ }
+
+ // 6b — deep search inside DC_DATA fields (action, examples, uses, monitor,
+ //        sideEffects, adverseEffects, complications, nursingTips)
+ if (typeof DC_DATA !== 'undefined') {
+  const FIELD_LABELS = {
+   action:'Mechanism', examples:'Examples', uses:'Uses',
+   monitor:'Monitor', sideEffects:'Side Effects',
+   adverseEffects:'Adverse Effects', complications:'Complications',
+   nursingTips:'Nursing Tips'
+  };
+  const dcMatches = [];
+
+  Object.entries(DC_DATA).forEach(([key, d]) => {
+   const hitFields = [];
+   const snippets  = [];
+
+   Object.entries(FIELD_LABELS).forEach(([field, label]) => {
+    const val = d[field];
+    if (!val) return;
+    const haystack = Array.isArray(val) ? val.join(' ') : String(val);
+    if (re.test(haystack)) {
+     hitFields.push(label);
+     // Grab first sentence/item that contains the match for snippet
+     const items = Array.isArray(val) ? val : [val];
+     const hit   = items.find(s => re.test(String(s)));
+     if (hit) {
+      const s = String(hit).replace(/<[^>]+>/g,''); // strip any HTML
+      const snip = s.length > 100 ? s.slice(0, 100) + '…' : s;
+      snippets.push(snip.replace(re, '<mark>$1</mark>'));
+     }
+    }
+   });
+
+   if (hitFields.length) {
+    dcMatches.push({ key, d, hitFields, snippets });
+   }
+  });
+
+  if (dcMatches.length) {
+   dcsrEl.innerHTML = `
+    <div class="dcsr-heading">💊 Found in ${dcMatches.length} Drug Class${dcMatches.length > 1 ? 'es' : ''}</div>
+    <div class="dcsr-grid">
+     ${dcMatches.map(({ key, d, hitFields, snippets }) => `
+      <div class="dcsr-card" data-dc-key="${key}" data-dc-name="${(d.fullName || key).replace(/"/g,'&quot;')}" data-dc-sub="${(d.sub||'').replace(/"/g,'&quot;')}">
+       <div class="dcsr-card-name">${d.fullName ? d.fullName.split('–')[0].trim() : key}</div>
+       <div class="dcsr-card-sub">${d.sub || ''}</div>
+       <div class="dcsr-matches">${hitFields.map(f=>`<span class="dcsr-tag">${f}</span>`).join('')}</div>
+       ${snippets[0] ? `<div class="dcsr-snippet">${snippets[0]}</div>` : ''}
+      </div>
+     `).join('')}
+    </div>`;
+   dcsrEl.classList.add('active');
+   // Wire click → open DC drawer
+   dcsrEl.querySelectorAll('.dcsr-card').forEach(card => {
+    card.addEventListener('click', () => {
+     openDC(card.dataset.dcKey, card.dataset.dcName, card.dataset.dcSub);
+    });
+   });
+   count += dcMatches.length;
+  }
  }
 
  // Step 7: show result count / no-results state
