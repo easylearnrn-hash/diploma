@@ -443,21 +443,17 @@
  .dc-section-title{font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);padding:10px 0 8px;border-bottom:2px solid rgba(201,168,76,0.35);margin-top:4px;line-height:1.2}
  .dc-pills{display:flex;flex-wrap:wrap;gap:7px}
  .dc-pill{font-size:12px;font-weight:600;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);line-height:1.5}
- /* ── Abbreviation tooltip — anchored to the abbreviation word itself ── */
+ /* ── Abbreviation inline marker (tooltip is JS-managed on <body> to escape overflow:auto) ── */
  .dc-abbr{
-  position:relative;
   display:inline-block;
   text-decoration:underline dotted rgba(255,255,255,0.35);
   text-underline-offset:2px;
   cursor:default;
   font-style:normal;
  }
- .dc-abbr::after{
-  content:attr(data-abbrev);
-  position:absolute;
-  bottom:calc(100% + 8px);
-  left:50%;
-  transform:translateX(-50%);
+ /* ── Body-level floating tooltip ── */
+ #dc-tip{
+  position:fixed;
   background:#0d1e35;
   color:#e8dfc5;
   font-size:11px;
@@ -466,28 +462,24 @@
   white-space:nowrap;
   padding:5px 11px;
   border-radius:6px;
-  border:1px solid rgba(201,168,76,0.38);
-  box-shadow:0 4px 16px rgba(0,0,0,0.6);
+  border:1px solid rgba(201,168,76,0.42);
+  box-shadow:0 4px 18px rgba(0,0,0,0.65);
   pointer-events:none;
   opacity:0;
-  transition:opacity .14s ease;
-  z-index:1100;
+  transition:opacity .12s ease;
+  z-index:9999;
+  transform:translateX(-50%);
  }
- .dc-abbr::before{
+ #dc-tip.visible{opacity:1}
+ #dc-tip::after{
   content:'';
   position:absolute;
-  bottom:calc(100% + 2px);
+  top:100%;
   left:50%;
   transform:translateX(-50%);
   border:5px solid transparent;
   border-top-color:#0d1e35;
-  pointer-events:none;
-  opacity:0;
-  transition:opacity .14s ease;
-  z-index:1100;
  }
- .dc-abbr:hover::after,
- .dc-abbr:hover::before{opacity:1}
  .dc-pill.gold{background:rgba(201,168,76,0.10);border-color:var(--border-gold);color:var(--gold-light)}
  .dc-pill.red{background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.3);color:#fca5a5}
  .dc-pill.orange{background:rgba(251,146,60,0.10);border-color:rgba(251,146,60,0.3);color:#fdba74}
@@ -3416,6 +3408,33 @@ document.querySelectorAll('.sidebar-subsections a[data-dc]').forEach(link => {
   trackDC(key);
   openDC(key, name, desc);
  });
+});
+
+// ── Body-level abbreviation tooltip ─────────────────────────────────────────
+// Appended to <body> so overflow:auto on #dc-body never clips it.
+const dcTip = document.createElement('div');
+dcTip.id = 'dc-tip';
+document.body.appendChild(dcTip);
+
+let dcTipTimer = null;
+
+document.addEventListener('mouseover', e => {
+ const el = e.target.closest('.dc-abbr');
+ if(!el) return;
+ clearTimeout(dcTipTimer);
+ const rect = el.getBoundingClientRect();
+ dcTip.textContent = el.dataset.abbrev || '';
+ // Position: centered above the abbreviation word
+ dcTip.style.left = (rect.left + rect.width / 2) + 'px';
+ dcTip.style.top  = (rect.top - 10) + 'px';
+ dcTip.style.transform = 'translateX(-50%) translateY(-100%)';
+ dcTip.classList.add('visible');
+});
+
+document.addEventListener('mouseout', e => {
+ const el = e.target.closest('.dc-abbr');
+ if(!el) return;
+ dcTipTimer = setTimeout(() => dcTip.classList.remove('visible'), 80);
 });
 </script>
 
