@@ -2107,6 +2107,7 @@ const haClose   = document.getElementById('ha-close');
 // Idle rule: >60 s no mouse/key/scroll = paused (not counted)
 // ══════════════════════════════════════════════════
 const PROGRESS_KEY = 'module_progress_note_mt_1';
+const NOTE_ID    = 'note_mt_1';
 const HA_TOTAL   = 6;   // insulin heparin warfarin opioids digoxin potassium
 const SFX_CAP    = 20;
 const DC_CAP     = 20;
@@ -2114,6 +2115,10 @@ const TIME_CAP   = 600000; // 10 min in ms
 const IDLE_LIMIT = 60000;  // 60 s idle threshold
 const CLICK_PTS  = 0.0001; // pts per any click
 const CLICK_CAP  = 5;      // max 5 pts from clicks (50 000 clicks to fill)
+
+// ── Supabase client (already loaded via CDN in page head or gate) ──
+const _db = (typeof initSupabase === 'function') ? initSupabase() : null;
+const _studentId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId') || null;
 
 function loadProgress() {
   try {
@@ -2123,9 +2128,36 @@ function loadProgress() {
     return { ha: p.ha||[], sfx: p.sfx||[], dc: p.dc||[], ms: p.ms||0, clicks: p.clicks||0 };
   } catch(e) { return { ha:[], sfx:[], dc:[], ms:0, clicks:0 }; }
 }
+
+// Merge two progress objects — always take the maximum/union of each field
+function mergeProgress(a, b) {
+  const haSet  = [...new Set([...(a.ha||[]),  ...(b.ha||[])])];
+  const sfxSet = [...new Set([...(a.sfx||[]), ...(b.sfx||[])])];
+  const dcSet  = [...new Set([...(a.dc||[]),  ...(b.dc||[])])];
+  return {
+    ha: haSet, sfx: sfxSet, dc: dcSet,
+    ms:     Math.max(a.ms     ||0, b.ms     ||0),
+    clicks: Math.max(a.clicks ||0, b.clicks ||0)
+  };
+}
+
 function saveProgress(p) {
   localStorage.setItem(PROGRESS_KEY, JSON.stringify({ ha:p.ha, sfx:p.sfx, dc:p.dc, ms:p.ms, clicks:p.clicks }));
+  // Async Supabase upsert — fire and forget, no await needed
+  if (_db && _studentId) {
+    _db.from('module_progress').upsert({
+      student_id: _studentId,
+      note_id:    NOTE_ID,
+      ha:         p.ha,
+      sfx:        p.sfx,
+      dc:         p.dc,
+      ms:         p.ms,
+      clicks:     p.clicks,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'student_id,note_id' }).then(() => {});
+  }
 }
+
 function calcProgress(p) {
   const haPts   = Math.min(p.ha.length  / HA_TOTAL, 1) * 40;
   const sfxPts  = Math.min(p.sfx.length / SFX_CAP,  1) * 20;
@@ -2136,6 +2168,19 @@ function calcProgress(p) {
 }
 
 let prog = loadProgress();
+
+// ── On load: pull from Supabase and merge with local (best of both) ──
+if (_db && _studentId) {
+  _db.from('module_progress').select('*')
+    .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1)
+    .then(({ data }) => {
+      if (data && data.length > 0) {
+        const remote = { ha: data[0].ha||[], sfx: data[0].sfx||[], dc: data[0].dc||[], ms: data[0].ms||0, clicks: data[0].clicks||0 };
+        prog = mergeProgress(prog, remote);
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog)); // update local with merged
+      }
+    });
+}
 
 // ── Active time tracking (idle-aware) ──────────────────────────
 let lastActivity = Date.now();
