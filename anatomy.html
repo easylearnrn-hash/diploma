@@ -1,116 +1,74 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>Interactive Human Anatomy — ACNHS</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
-      --bg: #020617;
-      --panel-bg: #0f172a;
-      --panel-border: rgba(148,163,184,0.14);
-      --gold: #c9a84c;
-      --gold-dim: rgba(201,168,76,0.18);
-      --text-primary: #f1f5f9;
-      --text-muted: #64748b;
-      --text-subtle: #94a3b8;
-      --badge-bg: rgba(30,41,59,0.9);
+      --bg:#03060f; --panel-bg:rgba(8,14,30,0.97); --panel-border:rgba(60,80,130,0.28);
+      --gold:#c9a84c; --gold-dim:rgba(201,168,76,.13); --gold-glow:rgba(201,168,76,.35);
+      --text:#e8edf6; --text-subtle:#9bacc4; --text-muted:#4a5878;
+      --badge-bg:rgba(30,40,70,0.7); --accent-blue:#3b82f6;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-      background: var(--bg);
-      color: var(--text-primary);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+    *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
+    html, body { height:100%; background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; overflow:hidden; }
     .topbar {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 24px; border-bottom: 1px solid var(--panel-border);
-      background: var(--panel-bg); flex-shrink: 0;
+      display:flex; align-items:center; justify-content:space-between;
+      padding:0 20px; height:52px; background:rgba(4,8,20,0.98);
+      border-bottom:1px solid var(--panel-border); flex-shrink:0; z-index:10; position:relative;
     }
-    .topbar-left { display: flex; align-items: center; gap: 10px; }
-    .topbar-logo { font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--gold); }
-    .topbar-title { font-size: 14px; color: var(--text-subtle); }
-    .topbar-back {
-      text-decoration: none; font-size: 13px; color: var(--text-muted);
-      padding: 6px 12px; border-radius: 8px; border: 1px solid var(--panel-border);
-      transition: color .2s, border-color .2s;
-    }
-    .topbar-back:hover { color: var(--text-primary); border-color: var(--text-muted); }
-    .shell {
-      display: grid; grid-template-columns: minmax(0,1fr) 380px;
-      flex: 1; overflow: hidden; min-height: 0;
-    }
-    @media (max-width: 860px) { .shell { grid-template-columns: 1fr; overflow: auto; } }
-    .diagram-panel {
-      position: relative; display: flex; flex-direction: column;
-      align-items: center; justify-content: flex-start;
-      background: radial-gradient(ellipse at 50% 0%, #0f172a 0%, #020617 70%);
-      border-right: 1px solid var(--panel-border);
-      overflow: auto; padding: 20px 10px 30px;
-    }
-    .sex-toggle {
-      display: flex; border-radius: 10px; overflow: hidden;
-      border: 1px solid var(--panel-border); background: var(--panel-bg);
-      margin-bottom: 18px; flex-shrink: 0;
-    }
-    .sex-toggle button {
-      padding: 7px 26px; font-size: 13px; font-weight: 600;
-      background: transparent; color: var(--text-muted);
-      border: none; cursor: pointer; transition: background .2s, color .2s; letter-spacing: .03em;
-    }
-    .sex-toggle button.active { background: var(--gold); color: #020617; }
-    .svg-wrap { width: 100%; max-width: 480px; position: relative; }
-    .svg-wrap svg { width: 100%; height: auto; overflow: visible; }
-    .organ { cursor: pointer; transition: filter .2s, transform .15s; transform-origin: center; transform-box: fill-box; }
-    .organ:hover { filter: brightness(1.5) drop-shadow(0 0 6px rgba(201,168,76,.5)); }
-    .organ.selected { filter: brightness(1.6) drop-shadow(0 0 10px rgba(201,168,76,.75)); }
-    .organ.sex-hidden { display: none; }
-    .organ-label-group { cursor: pointer; }
+    .topbar-left { display:flex; align-items:center; gap:14px; }
+    .topbar-logo { font-weight:800; font-size:17px; letter-spacing:.05em; color:var(--gold); }
+    .topbar-title { font-size:14px; color:var(--text-subtle); font-weight:400; }
+    .topbar-back { font-size:12px; color:var(--text-muted); text-decoration:none; padding:6px 12px; border:1px solid var(--panel-border); border-radius:8px; transition:color .2s,border-color .2s; }
+    .topbar-back:hover { color:var(--gold); border-color:var(--gold-glow); }
+    .shell { display:grid; grid-template-columns:minmax(0,1fr) 370px; height:calc(100vh - 52px); overflow:hidden; }
+    .diagram-panel { position:relative; display:flex; flex-direction:column; align-items:center; background:radial-gradient(ellipse 70% 80% at 50% 30%, #0d1e3a 0%, #030610 100%); overflow:hidden; }
+    .sex-toggle { display:flex; gap:0; margin-top:14px; border-radius:10px; overflow:hidden; border:1px solid var(--panel-border); flex-shrink:0; z-index:5; }
+    .sex-toggle button { padding:6px 22px; font-size:12px; font-weight:600; letter-spacing:.04em; background:transparent; color:var(--text-muted); border:none; cursor:pointer; transition:background .2s, color .2s; }
+    .sex-toggle button.active { background:var(--gold); color:#060a15; }
+    .svg-wrap { flex:1; display:flex; align-items:center; justify-content:center; overflow:hidden; padding:8px 0 6px; }
+    #anatomySvg { height:100%; max-height:calc(100vh - 100px); width:auto; display:block; }
+
+    /* organ interaction */
+    .organ { cursor:pointer; transition:filter .18s; }
+    .organ:hover { filter: brightness(1.35) drop-shadow(0 0 8px rgba(201,168,76,.6)); }
+    .organ.selected { filter: brightness(1.5) drop-shadow(0 0 14px rgba(201,168,76,.85)) drop-shadow(0 0 5px rgba(255,255,255,.25)); }
+    .organ-label-group { cursor:pointer; opacity:.7; transition:opacity .15s; }
+    .organ-label-group:hover, .organ-label-group.selected-label { opacity:1; }
+    .organ-label-text { font-family:'Segoe UI',system-ui,sans-serif; font-size:9.5px; fill:#8fa8c8; font-weight:500; }
     .organ-dot { transition: r .15s; }
-    .organ-label-text {
-      font-size: 9.5px; fill: #64748b; pointer-events: none;
-      font-family: system-ui, -apple-system, sans-serif; font-weight: 500;
-    }
-    .organ-label-group.selected-label .organ-label-text { fill: #c9a84c; font-weight: 700; }
-    .side-panel { display: flex; flex-direction: column; background: var(--panel-bg); overflow-y: auto; }
-    .side-inner { padding: 20px 18px 24px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
-    .side-header h2 { font-size: 17px; font-weight: 700; letter-spacing: -.02em; display: flex; align-items: center; gap: 7px; }
-    .side-header h2 .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--gold); flex-shrink: 0; }
-    .side-header p { margin-top: 5px; font-size: 12px; color: var(--text-muted); line-height: 1.5; }
-    .organs-search {
-      display: flex; align-items: center; gap: 7px;
-      background: rgba(15,23,42,.6); border: 1px solid var(--panel-border);
-      border-radius: 10px; padding: 7px 11px;
-    }
-    .organs-search input { flex: 1; background: none; border: none; outline: none; color: var(--text-primary); font-size: 13px; caret-color: var(--gold); }
-    .organs-search input::placeholder { color: var(--text-muted); }
-    .organs-list {
-      display: flex; flex-direction: column; gap: 2px;
-      max-height: 260px; overflow-y: auto;
-      border-radius: 12px; border: 1px solid var(--panel-border);
-      background: rgba(2,6,23,.5); padding: 4px;
-    }
-    .organs-list::-webkit-scrollbar { width: 4px; }
-    .organs-list::-webkit-scrollbar-thumb { background: rgba(148,163,184,.2); border-radius: 4px; }
-    .organ-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background .15s; }
-    .organ-row:hover { background: rgba(15,23,42,.8); }
-    .organ-row.active { background: var(--gold-dim); }
-    .organ-row .label { font-size: 13px; font-weight: 500; }
-    .organ-row .badge { font-size: 10px; color: var(--text-muted); padding: 2px 7px; border-radius: 999px; border: 1px solid var(--panel-border); background: var(--badge-bg); white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis; }
-    .organ-detail-card { border: 1px solid var(--panel-border); border-radius: 14px; background: rgba(2,6,23,.6); padding: 14px 15px 16px; min-height: 130px; }
-    .detail-placeholder { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
-    .detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 8px; }
-    .detail-header h3 { font-size: 16px; font-weight: 700; letter-spacing: -.02em; }
-    .detail-system { font-size: 11px; color: var(--text-muted); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--panel-border); white-space: nowrap; flex-shrink: 0; }
-    .detail-summary { font-size: 13px; color: var(--text-subtle); line-height: 1.6; margin-bottom: 10px; }
-    .detail-more-toggle { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--gold); cursor: pointer; user-select: none; }
-    .detail-more-toggle:hover { opacity: .8; }
-    .detail-more-body { display: none; margin-top: 8px; font-size: 13px; color: var(--text-subtle); line-height: 1.65; border-top: 1px solid var(--panel-border); padding-top: 8px; }
-    .detail-more-body.open { display: block; }
-    .side-footer { padding: 12px 18px 14px; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--panel-border); line-height: 1.5; }
+    .organ-label-group.selected-label .organ-dot { r:3.5; fill:var(--gold); }
+    .organ-label-group.selected-label .organ-label-text { fill:#c9a84c; }
+    .sex-hidden { display:none; }
+
+    /* side panel */
+    .side-panel { display:flex; flex-direction:column; background:var(--panel-bg); border-left:1px solid var(--panel-border); overflow:hidden; }
+    .side-inner { flex:1; overflow-y:auto; padding:16px 18px 12px; display:flex; flex-direction:column; gap:12px; scrollbar-width:thin; scrollbar-color:var(--panel-border) transparent; }
+    .side-header .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--gold); margin-right:7px; vertical-align:middle; }
+    .side-header h2 { font-size:15px; font-weight:700; letter-spacing:-.01em; margin-bottom:4px; }
+    .side-header p { font-size:12px; color:var(--text-muted); line-height:1.5; }
+    .organs-search { display:flex; align-items:center; gap:8px; background:rgba(255,255,255,.04); border:1px solid var(--panel-border); border-radius:9px; padding:6px 12px; }
+    .organs-search input { background:transparent; border:none; outline:none; font-size:13px; color:var(--text); flex:1; }
+    .organs-search input::placeholder { color:var(--text-muted); }
+    .organs-list { display:flex; flex-direction:column; gap:2px; max-height:200px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--panel-border) transparent; }
+    .organ-row { display:flex; justify-content:space-between; align-items:center; padding:7px 10px; border-radius:8px; cursor:pointer; transition:background .15s; gap:8px; }
+    .organ-row:hover { background:rgba(255,255,255,.05); }
+    .organ-row.active { background:var(--gold-dim); }
+    .organ-row .label { font-size:13px; font-weight:500; }
+    .organ-row .badge { font-size:10px; color:var(--text-muted); padding:2px 7px; border-radius:999px; border:1px solid var(--panel-border); background:var(--badge-bg); white-space:nowrap; max-width:130px; overflow:hidden; text-overflow:ellipsis; }
+    .organ-detail-card { border:1px solid var(--panel-border); border-radius:14px; background:rgba(2,6,23,.6); padding:14px 15px 16px; min-height:130px; }
+    .detail-placeholder { font-size:13px; color:var(--text-muted); line-height:1.6; }
+    .detail-header { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px; }
+    .detail-header h3 { font-size:16px; font-weight:700; letter-spacing:-.02em; }
+    .detail-system { font-size:11px; color:var(--text-muted); padding:3px 8px; border-radius:999px; border:1px solid var(--panel-border); white-space:nowrap; flex-shrink:0; }
+    .detail-summary { font-size:13px; color:var(--text-subtle); line-height:1.6; margin-bottom:10px; }
+    .detail-more-toggle { display:inline-flex; align-items:center; gap:4px; font-size:12px; color:var(--gold); cursor:pointer; user-select:none; }
+    .detail-more-toggle:hover { opacity:.8; }
+    .detail-more-body { display:none; margin-top:8px; font-size:13px; color:var(--text-subtle); line-height:1.65; border-top:1px solid var(--panel-border); padding-top:8px; }
+    .detail-more-body.open { display:block; }
+    .side-footer { padding:12px 18px 14px; font-size:11px; color:var(--text-muted); border-top:1px solid var(--panel-border); line-height:1.5; }
   </style>
 </head>
 <body>
@@ -128,163 +86,571 @@
         <button data-sex="female">♀ Female</button>
       </div>
       <div class="svg-wrap">
-        <svg id="anatomySvg" viewBox="0 0 340 720" xmlns="http://www.w3.org/2000/svg">
+        <svg id="anatomySvg" viewBox="0 0 340 730" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <linearGradient id="bodyOutline" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/>
+            <!-- ─── BODY GRADIENTS ─── -->
+            <radialGradient id="gBodyFill" cx="50%" cy="38%" r="58%" gradientUnits="objectBoundingBox">
+              <stop offset="0%"   stop-color="#1c3a5e"/>
+              <stop offset="40%"  stop-color="#102240"/>
+              <stop offset="100%" stop-color="#050e1f"/>
+            </radialGradient>
+            <radialGradient id="gBodyEdge" cx="50%" cy="45%" r="55%">
+              <stop offset="0%"   stop-color="#2a4a72" stop-opacity="0"/>
+              <stop offset="80%"  stop-color="#1a3055" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#0a1a35" stop-opacity="0.9"/>
+            </radialGradient>
+            <radialGradient id="gHead" cx="45%" cy="38%" r="60%">
+              <stop offset="0%"   stop-color="#1e3f63"/>
+              <stop offset="55%"  stop-color="#112238"/>
+              <stop offset="100%" stop-color="#060e1e"/>
+            </radialGradient>
+            <radialGradient id="gSkin" cx="38%" cy="30%" r="70%">
+              <stop offset="0%"   stop-color="#3a6090" stop-opacity=".18"/>
+              <stop offset="100%" stop-color="#0a1830" stop-opacity=".04"/>
+            </radialGradient>
+
+            <!-- ─── ORGAN GRADIENTS (multi-stop, volumetric) ─── -->
+            <!-- BRAIN -->
+            <radialGradient id="gBrain" cx="38%" cy="30%" r="65%">
+              <stop offset="0%"   stop-color="#d4b8f0"/>
+              <stop offset="18%"  stop-color="#b89de0"/>
+              <stop offset="50%"  stop-color="#8b68c8"/>
+              <stop offset="80%"  stop-color="#5e3a9e"/>
+              <stop offset="100%" stop-color="#3d1f70"/>
+            </radialGradient>
+            <radialGradient id="gBrainSpec" cx="32%" cy="22%" r="30%">
+              <stop offset="0%"   stop-color="#ecdcff" stop-opacity=".7"/>
+              <stop offset="100%" stop-color="#a878e8" stop-opacity="0"/>
+            </radialGradient>
+            <!-- HEART -->
+            <radialGradient id="gHeart" cx="38%" cy="28%" r="68%">
+              <stop offset="0%"   stop-color="#ff9090"/>
+              <stop offset="20%"  stop-color="#f05050"/>
+              <stop offset="55%"  stop-color="#c02020"/>
+              <stop offset="82%"  stop-color="#8a0a0a"/>
+              <stop offset="100%" stop-color="#5c0000"/>
+            </radialGradient>
+            <radialGradient id="gHeartSpec" cx="28%" cy="20%" r="32%">
+              <stop offset="0%"   stop-color="#ffc0c0" stop-opacity=".8"/>
+              <stop offset="100%" stop-color="#ff5050" stop-opacity="0"/>
+            </radialGradient>
+            <!-- LUNGS -->
+            <radialGradient id="gLung" cx="40%" cy="30%" r="65%">
+              <stop offset="0%"   stop-color="#ffb080"/>
+              <stop offset="22%"  stop-color="#f07040"/>
+              <stop offset="55%"  stop-color="#c04018"/>
+              <stop offset="82%"  stop-color="#8a2008"/>
+              <stop offset="100%" stop-color="#5a1200"/>
+            </radialGradient>
+            <radialGradient id="gLungSpec" cx="30%" cy="22%" r="28%">
+              <stop offset="0%"   stop-color="#ffd4a0" stop-opacity=".75"/>
+              <stop offset="100%" stop-color="#f07840" stop-opacity="0"/>
+            </radialGradient>
+            <!-- LIVER -->
+            <radialGradient id="gLiver" cx="42%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#d4882a"/>
+              <stop offset="20%"  stop-color="#b86818"/>
+              <stop offset="55%"  stop-color="#8a4408"/>
+              <stop offset="82%"  stop-color="#5c2800"/>
+              <stop offset="100%" stop-color="#381500"/>
+            </radialGradient>
+            <radialGradient id="gLiverSpec" cx="30%" cy="20%" r="32%">
+              <stop offset="0%"   stop-color="#f0b858" stop-opacity=".6"/>
+              <stop offset="100%" stop-color="#c07828" stop-opacity="0"/>
+            </radialGradient>
+            <!-- STOMACH -->
+            <radialGradient id="gStomach" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#80e8a8"/>
+              <stop offset="22%"  stop-color="#40c870"/>
+              <stop offset="55%"  stop-color="#1a9048"/>
+              <stop offset="82%"  stop-color="#0a5828"/>
+              <stop offset="100%" stop-color="#053015"/>
+            </radialGradient>
+            <radialGradient id="gStomachSpec" cx="30%" cy="22%" r="30%">
+              <stop offset="0%"   stop-color="#b0ffc8" stop-opacity=".6"/>
+              <stop offset="100%" stop-color="#50d880" stop-opacity="0"/>
+            </radialGradient>
+            <!-- PANCREAS -->
+            <radialGradient id="gPancreas" cx="40%" cy="32%" r="65%">
+              <stop offset="0%"   stop-color="#ffd090"/>
+              <stop offset="25%"  stop-color="#f0a040"/>
+              <stop offset="58%"  stop-color="#c06010"/>
+              <stop offset="85%"  stop-color="#7a3000"/>
+              <stop offset="100%" stop-color="#4a1800"/>
+            </radialGradient>
+            <!-- SPLEEN -->
+            <radialGradient id="gSpleen" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#d890f8"/>
+              <stop offset="22%"  stop-color="#b060e0"/>
+              <stop offset="55%"  stop-color="#7828b8"/>
+              <stop offset="82%"  stop-color="#4a1080"/>
+              <stop offset="100%" stop-color="#280848"/>
+            </radialGradient>
+            <radialGradient id="gSpleenSpec" cx="30%" cy="22%" r="28%">
+              <stop offset="0%"   stop-color="#eeaaff" stop-opacity=".65"/>
+              <stop offset="100%" stop-color="#c070f0" stop-opacity="0"/>
+            </radialGradient>
+            <!-- KIDNEYS -->
+            <radialGradient id="gKidney" cx="40%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#f8a0c8"/>
+              <stop offset="22%"  stop-color="#e060a0"/>
+              <stop offset="55%"  stop-color="#a81868"/>
+              <stop offset="82%"  stop-color="#700040"/>
+              <stop offset="100%" stop-color="#420025"/>
+            </radialGradient>
+            <radialGradient id="gKidneySpec" cx="30%" cy="22%" r="28%">
+              <stop offset="0%"   stop-color="#ffc8e0" stop-opacity=".65"/>
+              <stop offset="100%" stop-color="#e878b8" stop-opacity="0"/>
+            </radialGradient>
+            <!-- GALLBLADDER -->
+            <radialGradient id="gGallbladder" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#b8f858"/>
+              <stop offset="30%"  stop-color="#78d018"/>
+              <stop offset="65%"  stop-color="#3e8808"/>
+              <stop offset="100%" stop-color="#1c4800"/>
+            </radialGradient>
+            <!-- SMALL INT -->
+            <radialGradient id="gSmallInt" cx="40%" cy="30%" r="65%">
+              <stop offset="0%"   stop-color="#fce090"/>
+              <stop offset="28%"  stop-color="#e8b840"/>
+              <stop offset="60%"  stop-color="#c07808"/>
+              <stop offset="88%"  stop-color="#784000"/>
+              <stop offset="100%" stop-color="#482000"/>
+            </radialGradient>
+            <!-- LARGE INT -->
+            <radialGradient id="gLargeInt" cx="40%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#f8a870"/>
+              <stop offset="25%"  stop-color="#e07840"/>
+              <stop offset="58%"  stop-color="#a83810"/>
+              <stop offset="85%"  stop-color="#681800"/>
+              <stop offset="100%" stop-color="#3e0c00"/>
+            </radialGradient>
+            <!-- BLADDER -->
+            <radialGradient id="gBladder" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#a8e8ff"/>
+              <stop offset="25%"  stop-color="#58c0f0"/>
+              <stop offset="58%"  stop-color="#1880c8"/>
+              <stop offset="85%"  stop-color="#084888"/>
+              <stop offset="100%" stop-color="#022850"/>
+            </radialGradient>
+            <radialGradient id="gBladderSpec" cx="30%" cy="20%" r="32%">
+              <stop offset="0%"   stop-color="#d8f6ff" stop-opacity=".75"/>
+              <stop offset="100%" stop-color="#78d0f8" stop-opacity="0"/>
+            </radialGradient>
+            <!-- THYROID -->
+            <radialGradient id="gThyroid" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#80f0d0"/>
+              <stop offset="30%"  stop-color="#30d0a0"/>
+              <stop offset="65%"  stop-color="#089870"/>
+              <stop offset="100%" stop-color="#025038"/>
+            </radialGradient>
+            <!-- DIAPHRAGM -->
+            <linearGradient id="gDiaphragm" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stop-color="#3a4e68"/>
+              <stop offset="30%"  stop-color="#6880a0"/>
+              <stop offset="50%"  stop-color="#889cb8"/>
+              <stop offset="70%"  stop-color="#6880a0"/>
+              <stop offset="100%" stop-color="#3a4e68"/>
             </linearGradient>
-            <radialGradient id="gBrain" cx="50%" cy="40%"><stop offset="0%" stop-color="#a78cba"/><stop offset="100%" stop-color="#6b46a0"/></radialGradient>
-            <radialGradient id="gHeart" cx="50%" cy="40%"><stop offset="0%" stop-color="#f87171"/><stop offset="100%" stop-color="#b91c1c"/></radialGradient>
-            <radialGradient id="gLungs" cx="50%" cy="40%"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#c2410c"/></radialGradient>
-            <radialGradient id="gLiver" cx="50%" cy="40%"><stop offset="0%" stop-color="#a16207"/><stop offset="100%" stop-color="#78350f"/></radialGradient>
-            <radialGradient id="gStomach" cx="50%" cy="40%"><stop offset="0%" stop-color="#86efac"/><stop offset="100%" stop-color="#15803d"/></radialGradient>
-            <radialGradient id="gPancreas" cx="50%" cy="40%"><stop offset="0%" stop-color="#fdba74"/><stop offset="100%" stop-color="#ea580c"/></radialGradient>
-            <radialGradient id="gSpleen" cx="50%" cy="40%"><stop offset="0%" stop-color="#c084fc"/><stop offset="100%" stop-color="#7e22ce"/></radialGradient>
-            <radialGradient id="gKidneys" cx="50%" cy="40%"><stop offset="0%" stop-color="#f472b6"/><stop offset="100%" stop-color="#be185d"/></radialGradient>
-            <radialGradient id="gGallbladder" cx="50%" cy="40%"><stop offset="0%" stop-color="#a3e635"/><stop offset="100%" stop-color="#4d7c0f"/></radialGradient>
-            <radialGradient id="gSmallInt" cx="50%" cy="40%"><stop offset="0%" stop-color="#fcd34d"/><stop offset="100%" stop-color="#b45309"/></radialGradient>
-            <radialGradient id="gLargeInt" cx="50%" cy="40%"><stop offset="0%" stop-color="#fb923c"/><stop offset="100%" stop-color="#9a3412"/></radialGradient>
-            <radialGradient id="gBladder" cx="50%" cy="40%"><stop offset="0%" stop-color="#7dd3fc"/><stop offset="100%" stop-color="#0369a1"/></radialGradient>
-            <radialGradient id="gThyroid" cx="50%" cy="40%"><stop offset="0%" stop-color="#6ee7b7"/><stop offset="100%" stop-color="#047857"/></radialGradient>
-            <radialGradient id="gDiaphragm" cx="50%" cy="40%"><stop offset="0%" stop-color="#94a3b8"/><stop offset="100%" stop-color="#475569"/></radialGradient>
-            <radialGradient id="gRepro" cx="50%" cy="40%"><stop offset="0%" stop-color="#f9a8d4"/><stop offset="100%" stop-color="#9d174d"/></radialGradient>
+            <!-- REPRO -->
+            <radialGradient id="gRepro" cx="38%" cy="28%" r="65%">
+              <stop offset="0%"   stop-color="#f8c0e0"/>
+              <stop offset="28%"  stop-color="#e888b8"/>
+              <stop offset="60%"  stop-color="#b84888"/>
+              <stop offset="88%"  stop-color="#7c1850"/>
+              <stop offset="100%" stop-color="#4a0830"/>
+            </radialGradient>
+
+            <!-- ─── VESSEL GRADIENTS ─── -->
+            <linearGradient id="gAorta" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stop-color="#cc2020"/>
+              <stop offset="50%"  stop-color="#ee4040"/>
+              <stop offset="100%" stop-color="#cc2020"/>
+            </linearGradient>
+            <linearGradient id="gVena" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%"   stop-color="#1a30a0"/>
+              <stop offset="50%"  stop-color="#3050c8"/>
+              <stop offset="100%" stop-color="#1a30a0"/>
+            </linearGradient>
+
+            <!-- ─── SVG FILTERS ─── -->
+            <!-- Subsurface scattering / soft tissue glow -->
+            <filter id="fOrganGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="1.5" result="blur"/>
+              <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+            </filter>
+            <!-- Soft inner shadow for depth -->
+            <filter id="fInnerDepth" x="-15%" y="-15%" width="130%" height="130%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="2" result="blur"/>
+              <feOffset dx="1" dy="2" result="offset"/>
+              <feComposite in="offset" in2="SourceAlpha" operator="in" result="inner"/>
+              <feFlood flood-color="#000" flood-opacity="0.4" result="color"/>
+              <feComposite in="color" in2="inner" operator="in" result="shadow"/>
+              <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="shadow"/></feMerge>
+            </filter>
+            <!-- Tissue texture noise -->
+            <filter id="fTissue" x="0%" y="0%" width="100%" height="100%">
+              <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="4" result="noise"/>
+              <feColorMatrix type="saturate" values="0" in="noise" result="gray"/>
+              <feBlend in="SourceGraphic" in2="gray" mode="overlay" result="textured"/>
+              <feComposite in="textured" in2="SourceGraphic" operator="in"/>
+            </filter>
+            <!-- Vascular surface detail -->
+            <filter id="fVascular" x="-5%" y="-5%" width="110%" height="110%">
+              <feTurbulence type="turbulence" baseFrequency="0.18 0.22" numOctaves="2" result="turbNoise"/>
+              <feDisplacementMap in="SourceGraphic" in2="turbNoise" scale="1.2" xChannelSelector="R" yChannelSelector="G"/>
+            </filter>
+            <!-- Body glow outline -->
+            <filter id="fBodyGlow" x="-8%" y="-4%" width="116%" height="108%">
+              <feGaussianBlur in="SourceAlpha" stdDeviation="4" result="blur"/>
+              <feFlood flood-color="#1a4a88" flood-opacity="0.5" result="color"/>
+              <feComposite in="color" in2="blur" operator="in" result="glow"/>
+              <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
           </defs>
 
-          <!-- BODY SILHOUETTE -->
-          <path d="M170 25 C195 25,215 35,220 50 C230 55,250 60,255 80 C265 100,258 130,255 145 C252 158,248 168,248 178 C260 178,275 180,278 195 C281 210,276 230,270 245 C263 262,255 270,254 285 C258 300,265 310,265 320 C265 335,258 345,254 360 C250 375,248 390,248 405 C250 430,255 445,255 460 C255 480,248 500,244 515 C242 530,244 545,242 560 C240 575,235 595,232 610 C230 625,228 640,228 655 C228 668,230 680,228 690 L215 695 L212 695 C212 675,210 660,210 645 C208 630,204 615,202 600 C200 585,198 570,196 555 C194 540,192 525,190 510 C188 495,185 480,182 465 C180 450,178 435,175 420 C172 435,170 450,168 465 C165 480,162 495,160 510 C158 525,156 540,154 555 C152 570,150 585,148 600 C146 615,142 630,140 645 C140 660,138 675,138 695 L125 695 L112 690 C110 680,112 668,112 655 C112 640,110 625,108 610 C105 595,100 575,98 560 C96 545,98 530,96 515 C92 500,85 480,85 460 C85 445,90 430,90 405 C90 390,88 375,84 360 C80 345,73 335,73 320 C73 310,80 300,84 285 C83 270,75 262,68 245 C62 230,57 210,60 195 C63 180,78 178,90 178 C90 168,86 158,83 145 C80 130,73 100,83 80 C88 60,108 55,118 50 C123 35,145 25,170 25 Z"
-            fill="url(#bodyOutline)" stroke="#1e293b" stroke-width="1.5" opacity="0.9"/>
-          <!-- HEAD -->
-          <ellipse cx="170" cy="50" rx="42" ry="46" fill="#1e293b" stroke="#334155" stroke-width="1.5"/>
+          <!-- ═══ BODY SILHOUETTE ═══ -->
+          <!-- Outer glow layer -->
+          <path d="M170 18 C195 18,218 30,224 48 C234 54,252 62,258 82 C268 104,260 135,257 150 C254 163,250 172,250 182 C262 182,278 185,282 200 C286 216,280 238,272 253 C265 268,257 275,256 290 C260 305,268 315,268 327 C268 343,260 354,256 368 C252 384,250 398,250 412 C252 437,258 452,258 467 C258 488,250 508,246 523 C244 538,246 553,244 568 C242 583,237 602,234 617 C232 632,230 647,230 662 C230 676,232 688,230 698 L217 703 C217 683,215 668,215 653 C213 638,209 623,207 608 C205 593,203 578,201 563 C199 548,197 533,195 518 C193 503,190 488,187 473 C184 458,181 443,178 428 C175 443,172 458,169 473 C166 488,163 503,161 518 C159 533,157 548,155 563 C153 578,151 593,149 608 C147 623,143 638,141 653 C141 668,139 683,139 703 L126 698 C124 688,126 676,126 662 C126 647,124 632,122 617 C119 602,114 583,112 568 C110 553,112 538,110 523 C106 508,98 488,98 467 C98 452,104 437,106 412 C106 398,104 384,100 368 C96 354,88 343,88 327 C88 315,96 305,100 290 C99 275,91 268,84 253 C76 238,70 216,74 200 C78 185,94 182,106 182 C106 172,102 163,99 150 C96 135,88 104,98 82 C104 62,122 54,132 48 C138 30,145 18,170 18 Z"
+            fill="url(#gBodyFill)" filter="url(#fBodyGlow)" opacity="0.98" stroke="#1a3a6a" stroke-width="0.8"/>
+
+          <!-- Skin sheen overlay -->
+          <path d="M170 18 C195 18,218 30,224 48 C234 54,252 62,258 82 C268 104,260 135,257 150 C254 163,250 172,250 182 C262 182,278 185,282 200 C286 216,280 238,272 253 C265 268,257 275,256 290 C260 305,268 315,268 327 C268 343,260 354,256 368 C252 384,250 398,250 412 C252 437,258 452,258 467 C258 488,250 508,246 523 C244 538,246 553,244 568 C242 583,237 602,234 617 C232 632,230 647,230 662 C230 676,232 688,230 698 L217 703 C217 683,215 668,215 653 C213 638,209 623,207 608 C205 593,203 578,201 563 C199 548,197 533,195 518 C193 503,190 488,187 473 C184 458,181 443,178 428 C175 443,172 458,169 473 C166 488,163 503,161 518 C159 533,157 548,155 563 C153 578,151 593,149 608 C147 623,143 638,141 653 C141 668,139 683,139 703 L126 698 C124 688,126 676,126 662 C126 647,124 632,122 617 C119 602,114 583,112 568 C110 553,112 538,110 523 C106 508,98 488,98 467 C98 452,104 437,106 412 C106 398,104 384,100 368 C96 354,88 343,88 327 C88 315,96 305,100 290 C99 275,91 268,84 253 C76 238,70 216,74 200 C78 185,94 182,106 182 C106 172,102 163,99 150 C96 135,88 104,98 82 C104 62,122 54,132 48 C138 30,145 18,170 18 Z"
+            fill="url(#gSkin)" opacity="0.7"/>
+
+          <!-- Subtle rib cage outlines (decorative anatomy) -->
+          <!-- Ribs left -->
+          <path d="M128 150 C118 152,110 162,112 172 C114 180,122 182,130 178" fill="none" stroke="#2a4a72" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+          <path d="M128 158 C116 160,108 172,110 183 C112 192,122 195,131 190" fill="none" stroke="#2a4a72" stroke-width="1.1" stroke-linecap="round" opacity="0.38"/>
+          <path d="M128 167 C115 170,107 183,110 196 C112 207,123 210,133 204" fill="none" stroke="#2a4a72" stroke-width="1.0" stroke-linecap="round" opacity="0.30"/>
+          <path d="M130 176 C117 180,110 195,113 207 C116 217,127 218,135 214" fill="none" stroke="#2a4a72" stroke-width="1.0" stroke-linecap="round" opacity="0.24"/>
+          <path d="M132 185 C119 190,113 205,117 217 C120 226,130 226,137 222" fill="none" stroke="#2a4a72" stroke-width="0.9" stroke-linecap="round" opacity="0.20"/>
+          <!-- Ribs right -->
+          <path d="M212 150 C222 152,230 162,228 172 C226 180,218 182,210 178" fill="none" stroke="#2a4a72" stroke-width="1.2" stroke-linecap="round" opacity="0.45"/>
+          <path d="M212 158 C224 160,232 172,230 183 C228 192,218 195,209 190" fill="none" stroke="#2a4a72" stroke-width="1.1" stroke-linecap="round" opacity="0.38"/>
+          <path d="M212 167 C225 170,233 183,230 196 C228 207,217 210,207 204" fill="none" stroke="#2a4a72" stroke-width="1.0" stroke-linecap="round" opacity="0.30"/>
+          <path d="M210 176 C223 180,230 195,227 207 C224 217,213 218,205 214" fill="none" stroke="#2a4a72" stroke-width="1.0" stroke-linecap="round" opacity="0.24"/>
+          <path d="M208 185 C221 190,227 205,223 217 C220 226,210 226,203 222" fill="none" stroke="#2a4a72" stroke-width="0.9" stroke-linecap="round" opacity="0.20"/>
+          <!-- Sternum -->
+          <line x1="170" y1="140" x2="170" y2="274" stroke="#2a4a72" stroke-width="2" opacity="0.25" stroke-linecap="round"/>
+
+          <!-- Abdominal linea alba -->
+          <line x1="170" y1="278" x2="170" y2="460" stroke="#1e3a60" stroke-width="1.2" opacity="0.2" stroke-dasharray="2,3"/>
+
+          <!-- ═══ HEAD ═══ -->
+          <ellipse cx="170" cy="46" rx="43" ry="44" fill="url(#gHead)" stroke="#1e3a5e" stroke-width="1.2"/>
+          <ellipse cx="170" cy="46" rx="43" ry="44" fill="url(#gSkin)" opacity="0.6"/>
+          <!-- face highlight -->
+          <ellipse cx="162" cy="35" rx="14" ry="10" fill="rgba(80,130,200,0.10)"/>
+
           <!-- Neck -->
-          <rect x="155" y="88" width="30" height="26" rx="8" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+          <path d="M154 86 L151 110 L155 114 L170 116 L185 114 L189 110 L186 86 Z" fill="url(#gBodyFill)" stroke="#1e3a5e" stroke-width="0.8"/>
+          <!-- neck muscle lines (sternocleidomastoid hint) -->
+          <path d="M158 90 C155 100,153 108,154 114" fill="none" stroke="#2a4a6a" stroke-width="1" opacity="0.35"/>
+          <path d="M182 90 C185 100,187 108,186 114" fill="none" stroke="#2a4a6a" stroke-width="1" opacity="0.35"/>
+
+          <!-- ─── VESSELS (aorta / vena cava) ─── -->
+          <path d="M170 195 L170 290 L165 295 L160 320 L160 460" stroke="url(#gAorta)" stroke-width="3.5" fill="none" stroke-linecap="round" opacity="0.5"/>
+          <path d="M173 195 L174 290 L178 295 L180 320 L180 460" stroke="url(#gVena)" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.45"/>
+
+          <!-- Portal vein hint -->
+          <path d="M165 330 C155 320,140 316,128 316" stroke="#8b6a28" stroke-width="1.8" fill="none" opacity="0.4" stroke-linecap="round"/>
+          <path d="M175 330 C185 322,205 318,218 318" stroke="#8b6a28" stroke-width="1.5" fill="none" opacity="0.35" stroke-linecap="round"/>
+
+          <!-- ═══ TRACHEA ═══ -->
+          <rect x="164" y="114" width="12" height="32" rx="5" fill="none" stroke="#4a6890" stroke-width="2.5" stroke-linecap="round" opacity="0.65"/>
+          <line x1="164" y1="120" x2="176" y2="120" stroke="#3a5878" stroke-width="0.8" opacity="0.5"/>
+          <line x1="164" y1="125" x2="176" y2="125" stroke="#3a5878" stroke-width="0.8" opacity="0.5"/>
+          <line x1="164" y1="130" x2="176" y2="130" stroke="#3a5878" stroke-width="0.8" opacity="0.5"/>
+          <line x1="164" y1="135" x2="176" y2="135" stroke="#3a5878" stroke-width="0.8" opacity="0.5"/>
+          <line x1="164" y1="140" x2="176" y2="140" stroke="#3a5878" stroke-width="0.8" opacity="0.4"/>
+          <!-- Trachea bifurcation -->
+          <path d="M170 146 C163 150,148 152,133 150" stroke="#4a6890" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.55"/>
+          <path d="M170 146 C177 150,192 152,207 150" stroke="#4a6890" stroke-width="2.2" fill="none" stroke-linecap="round" opacity="0.55"/>
+
+          <!-- ESOPHAGUS -->
+          <path d="M163 114 L163 147" stroke="#a07028" stroke-width="2.2" stroke-linecap="round" opacity="0.5"/>
+
+          <!-- ═══ ORGANS ═══ -->
 
           <!-- BRAIN -->
-          <g class="organ" data-organ="Brain">
-            <ellipse cx="170" cy="44" rx="26" ry="20" fill="url(#gBrain)" opacity="0.9"/>
-            <path d="M148 44 C150 36,158 32,162 36 C162 30,168 27,172 31 C174 26,180 26,182 31 C184 27,190 28,190 34 C193 36,193 44,190 48 C192 53,188 57,184 55 C182 60,176 62,172 58 C170 63,164 63,162 58 C158 60,153 57,152 52 C148 51,146 46,148 44 Z"
-              fill="none" stroke="rgba(167,140,186,0.5)" stroke-width="0.8"/>
+          <g class="organ" data-organ="Brain" filter="url(#fOrganGlow)">
+            <!-- main mass -->
+            <ellipse cx="170" cy="40" rx="28" ry="22" fill="url(#gBrain)" opacity="0.92"/>
+            <!-- specular highlight -->
+            <ellipse cx="159" cy="30" rx="10" ry="7" fill="url(#gBrainSpec)" opacity="0.9"/>
+            <!-- gyri (brain folds) — left hemisphere -->
+            <path d="M148 38 C150 30,158 26,163 31 C165 26,170 24,174 28 C177 22,183 23,185 28 C188 24,194 26,194 33 C196 38,194 44,192 48" fill="none" stroke="rgba(160,120,200,0.55)" stroke-width="1.1" stroke-linecap="round"/>
+            <path d="M148 44 C150 50,156 54,161 52 C162 57,168 59,172 55 C174 60,180 60,182 55 C185 59,191 57,192 52 C194 48,193 44,192 48" fill="none" stroke="rgba(160,120,200,0.45)" stroke-width="1.0" stroke-linecap="round"/>
+            <!-- central sulcus hint -->
+            <line x1="170" y1="22" x2="170" y2="61" stroke="rgba(140,100,190,0.35)" stroke-width="0.8" stroke-dasharray="1.5,2"/>
+            <!-- cerebellum hint -->
+            <ellipse cx="170" cy="58" rx="14" ry="6" fill="#5e3a9e" opacity="0.6"/>
+            <path d="M158 58 C162 62,168 63,170 61 C172 63,178 62,182 58" fill="none" stroke="rgba(120,80,170,0.6)" stroke-width="0.9"/>
           </g>
 
           <!-- THYROID -->
           <g class="organ" data-organ="Thyroid">
-            <ellipse cx="164" cy="108" rx="5" ry="6" fill="url(#gThyroid)" opacity="0.9"/>
-            <ellipse cx="176" cy="108" rx="5" ry="6" fill="url(#gThyroid)" opacity="0.9"/>
-            <path d="M164 104 C164 100,170 98,176 100 L176 104" stroke="#6ee7b7" stroke-width="1" fill="none" opacity="0.7"/>
+            <!-- left lobe -->
+            <ellipse cx="163" cy="107" rx="6" ry="7.5" fill="url(#gThyroid)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <ellipse cx="160" cy="103" rx="2.5" ry="2" fill="rgba(160,255,220,0.5)"/>
+            <!-- right lobe -->
+            <ellipse cx="177" cy="107" rx="6" ry="7.5" fill="url(#gThyroid)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <ellipse cx="174" cy="103" rx="2.5" ry="2" fill="rgba(160,255,220,0.5)"/>
+            <!-- isthmus -->
+            <rect x="163" y="106" width="14" height="4" rx="2" fill="#20a878" opacity="0.75"/>
           </g>
-
-          <!-- TRACHEA -->
-          <path d="M170 114 L170 145" stroke="#64748b" stroke-width="3" stroke-linecap="round" opacity="0.7"/>
-          <path d="M164 120 L176 120 M164 126 L176 126 M164 132 L176 132 M164 138 L176 138"
-            stroke="#475569" stroke-width="1" opacity="0.5"/>
-
-          <!-- ESOPHAGUS -->
-          <path d="M166 114 L166 148" stroke="#a16207" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
 
           <!-- LUNGS -->
           <g class="organ" data-organ="Lungs">
-            <path d="M130 148 C120 148,112 155,110 165 C107 175,108 188,110 200 C112 215,116 228,118 240 C120 252,120 260,122 265 C124 270,130 272,135 268 C140 263,142 255,143 245 C145 232,145 218,144 205 C143 192,141 178,140 168 C138 158,136 148,130 148 Z" fill="url(#gLungs)" opacity="0.85"/>
-            <path d="M210 148 C220 148,228 155,230 165 C233 175,232 188,230 200 C228 215,224 228,222 240 C220 252,220 260,218 265 C216 270,210 272,205 268 C200 263,198 255,197 245 C195 232,195 218,196 205 C197 192,199 178,200 168 C202 158,204 148,210 148 Z" fill="url(#gLungs)" opacity="0.85"/>
-            <path d="M118 200 C122 208,130 210,138 205" stroke="rgba(251,146,60,0.4)" stroke-width="1" fill="none"/>
-            <path d="M222 200 C218 208,210 210,202 205" stroke="rgba(251,146,60,0.4)" stroke-width="1" fill="none"/>
+            <!-- Left lung -->
+            <path d="M130 150 C120 150,112 158,109 170 C106 182,108 197,110 210 C113 226,118 240,120 254 C122 266,122 274,124 280 C127 287,135 289,141 284 C147 279,149 270,150 260 C152 245,151 230,150 217 C149 204,146 190,145 178 C143 166,140 153,130 150 Z"
+              fill="url(#gLung)" opacity="0.88" filter="url(#fInnerDepth)"/>
+            <!-- Left lung specular -->
+            <ellipse cx="127" cy="174" rx="8" ry="14" fill="url(#gLungSpec)" opacity="0.8"/>
+            <!-- Left lung fissure (oblique) -->
+            <path d="M113 190 C122 208,138 232,145 256" fill="none" stroke="rgba(200,100,50,0.4)" stroke-width="1" stroke-linecap="round"/>
+            <!-- Left lung surface vessels -->
+            <path d="M120 168 C124 180,124 195,122 210" fill="none" stroke="rgba(200,80,30,0.3)" stroke-width="0.9"/>
+            <path d="M132 162 C134 175,133 192,130 208" fill="none" stroke="rgba(200,80,30,0.25)" stroke-width="0.9"/>
+
+            <!-- Right lung -->
+            <path d="M210 150 C220 150,228 158,231 170 C234 182,232 197,230 210 C227 226,222 240,220 254 C218 266,218 274,216 280 C213 287,205 289,199 284 C193 279,191 270,190 260 C188 245,189 230,190 217 C191 204,194 190,195 178 C197 166,200 153,210 150 Z"
+              fill="url(#gLung)" opacity="0.88" filter="url(#fInnerDepth)"/>
+            <!-- Right lung specular -->
+            <ellipse cx="213" cy="174" rx="8" ry="14" fill="url(#gLungSpec)" opacity="0.8"/>
+            <!-- Right lung fissures (horizontal + oblique) -->
+            <path d="M227 185 C218 190,202 190,194 188" fill="none" stroke="rgba(200,100,50,0.4)" stroke-width="1" stroke-linecap="round"/>
+            <path d="M227 185 C220 210,212 235,195 256" fill="none" stroke="rgba(200,100,50,0.35)" stroke-width="1" stroke-linecap="round"/>
+            <!-- Right lung vessels -->
+            <path d="M220 168 C216 180,216 195,218 210" fill="none" stroke="rgba(200,80,30,0.3)" stroke-width="0.9"/>
+            <path d="M208 162 C206 175,207 192,210 208" fill="none" stroke="rgba(200,80,30,0.25)" stroke-width="0.9"/>
+
+            <!-- Pulmonary arteries (red, from heart) -->
+            <path d="M162 180 C148 182,135 178,122 178" stroke="#ee4040" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"/>
+            <path d="M178 180 C192 182,205 178,218 178" stroke="#ee4040" stroke-width="2" fill="none" opacity="0.5" stroke-linecap="round"/>
           </g>
 
           <!-- HEART -->
-          <g class="organ" data-organ="Heart">
-            <path d="M162 165 C158 158,150 157,147 163 C144 169,146 177,152 183 C158 190,165 196,170 200 C175 196,182 190,188 183 C194 177,196 169,193 163 C190 157,182 158,178 165 C176 168,172 170,170 173 C168 170,164 168,162 165 Z" fill="url(#gHeart)" opacity="0.95"/>
+          <g class="organ" data-organ="Heart" filter="url(#fOrganGlow)">
+            <!-- main body -->
+            <path d="M161 163 C156 155,147 154,143 161 C139 168,142 178,149 186 C156 195,164 202,170 207 C176 202,184 195,191 186 C198 178,201 168,197 161 C193 154,184 155,179 163 C177 167,173 171,170 175 C167 171,163 167,161 163 Z"
+              fill="url(#gHeart)" opacity="0.96" filter="url(#fInnerDepth)"/>
+            <!-- specular on upper lobes -->
+            <ellipse cx="154" cy="165" rx="7" ry="5" fill="url(#gHeartSpec)" opacity="0.85"/>
+            <ellipse cx="185" cy="165" rx="7" ry="5" fill="url(#gHeartSpec)" opacity="0.75"/>
+            <!-- coronary sulcus hint -->
+            <path d="M152 182 C158 187,162 190,170 192 C178 190,182 187,188 182" fill="none" stroke="rgba(255,80,80,0.35)" stroke-width="1.1" stroke-linecap="round"/>
+            <!-- anterior interventricular groove -->
+            <path d="M164 175 C165 185,166 194,168 200" fill="none" stroke="rgba(200,40,40,0.35)" stroke-width="1" stroke-linecap="round"/>
+            <!-- great vessels stubs -->
+            <path d="M163 163 C162 157,163 152,168 148" stroke="#ee4040" stroke-width="3" fill="none" stroke-linecap="round" opacity="0.6"/>
+            <path d="M172 162 C173 156,174 152,172 148" stroke="#3050c8" stroke-width="2.5" fill="none" stroke-linecap="round" opacity="0.55"/>
           </g>
 
           <!-- DIAPHRAGM -->
           <g class="organ" data-organ="Diaphragm">
-            <path d="M112 270 C130 278,150 282,170 282 C190 282,210 278,228 270" stroke="url(#gDiaphragm)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.8"/>
+            <path d="M108 280 C125 292,148 298,170 298 C192 298,215 292,232 280"
+              stroke="url(#gDiaphragm)" stroke-width="6.5" fill="none" stroke-linecap="round" opacity="0.78"/>
+            <!-- dome fill hint -->
+            <path d="M108 280 C125 292,148 298,170 298 C192 298,215 292,232 280 C225 272,205 268,170 268 C135 268,115 272,108 280 Z"
+              fill="rgba(60,90,130,0.12)" opacity="0.7"/>
           </g>
 
           <!-- LIVER -->
-          <g class="organ" data-organ="Liver">
-            <path d="M170 290 C184 285,210 284,222 290 C232 296,234 308,230 318 C226 328,216 334,204 335 C192 336,180 332,172 326 C164 320,160 310,162 300 C163 294,166 291,170 290 Z" fill="url(#gLiver)" opacity="0.9"/>
+          <g class="organ" data-organ="Liver" filter="url(#fOrganGlow)">
+            <!-- main lobe -->
+            <path d="M172 295 C186 289,212 288,226 295 C238 302,240 316,235 328 C230 339,218 346,205 347 C192 348,179 343,171 336 C163 328,160 315,163 305 C165 299,168 296,172 295 Z"
+              fill="url(#gLiver)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <!-- left lobe extension -->
+            <path d="M172 295 C165 292,155 292,148 298 C143 305,144 314,150 319 C156 324,165 324,170 319"
+              fill="url(#gLiver)" opacity="0.80"/>
+            <!-- specular -->
+            <ellipse cx="190" cy="302" rx="14" ry="9" fill="url(#gLiverSpec)" opacity="0.85"/>
+            <!-- hepatic surface detail (falciform ligament) -->
+            <path d="M173 296 C173 310,172 325,171 336" fill="none" stroke="rgba(180,120,30,0.4)" stroke-width="1" stroke-linecap="round"/>
+            <!-- right lobe vascular marking -->
+            <path d="M196 300 C204 308,212 318,214 328" fill="none" stroke="rgba(140,80,10,0.3)" stroke-width="1.2" stroke-linecap="round"/>
+            <path d="M210 300 C215 308,218 318,216 330" fill="none" stroke="rgba(140,80,10,0.25)" stroke-width="1" stroke-linecap="round"/>
           </g>
 
           <!-- GALLBLADDER -->
-          <g class="organ" data-organ="Gallbladder">
-            <ellipse cx="205" cy="337" rx="8" ry="11" fill="url(#gGallbladder)" opacity="0.9"/>
+          <g class="organ" data-organ="Gallbladder" filter="url(#fInnerDepth)">
+            <ellipse cx="206" cy="349" rx="9" ry="12" fill="url(#gGallbladder)" opacity="0.92"/>
+            <ellipse cx="203" cy="344" rx="3.5" ry="2.5" fill="rgba(200,255,120,0.6)"/>
+            <!-- cystic duct hint -->
+            <path d="M206 337 C206 332,204 328,202 326" stroke="#60a010" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.5"/>
           </g>
 
           <!-- SPLEEN -->
-          <g class="organ" data-organ="Spleen">
-            <ellipse cx="125" cy="310" rx="14" ry="18" fill="url(#gSpleen)" opacity="0.9"/>
+          <g class="organ" data-organ="Spleen" filter="url(#fOrganGlow)">
+            <path d="M125 298 C118 295,110 298,108 307 C106 317,108 329,114 336 C120 342,130 344,137 339 C144 334,146 324,143 315 C140 306,133 299,125 298 Z"
+              fill="url(#gSpleen)" opacity="0.9" filter="url(#fInnerDepth)"/>
+            <!-- specular -->
+            <ellipse cx="120" cy="306" rx="7" ry="5" fill="url(#gSpleenSpec)" opacity="0.85"/>
+            <!-- gastric impression surface -->
+            <path d="M112 314 C117 310,124 309,130 312" fill="none" stroke="rgba(200,120,255,0.3)" stroke-width="1.1" stroke-linecap="round"/>
           </g>
 
           <!-- STOMACH -->
-          <g class="organ" data-organ="Stomach">
-            <path d="M155 295 C148 292,138 295,136 305 C134 315,136 325,140 332 C144 340,150 344,157 343 C164 342,168 337,168 328 C168 318,165 302,155 295 Z" fill="url(#gStomach)" opacity="0.9"/>
+          <g class="organ" data-organ="Stomach" filter="url(#fOrganGlow)">
+            <path d="M157 298 C149 294,137 298,133 309 C129 320,131 332,136 340 C141 349,149 354,157 353 C165 352,170 346,170 336 C170 324,166 307,157 298 Z"
+              fill="url(#gStomach)" opacity="0.90" filter="url(#fInnerDepth)"/>
+            <!-- specular -->
+            <ellipse cx="149" cy="308" rx="7" ry="5" fill="url(#gStomachSpec)" opacity="0.8"/>
+            <!-- greater curvature rugae hints -->
+            <path d="M134 318 C137 322,140 325,141 330" fill="none" stroke="rgba(80,220,120,0.3)" stroke-width="1" stroke-linecap="round"/>
+            <path d="M133 326 C136 330,139 334,139 340" fill="none" stroke="rgba(80,220,120,0.25)" stroke-width="1" stroke-linecap="round"/>
+            <!-- pylorus -->
+            <ellipse cx="163" cy="340" rx="5" ry="4" fill="#20a060" opacity="0.6"/>
           </g>
 
           <!-- PANCREAS -->
           <g class="organ" data-organ="Pancreas">
-            <path d="M145 348 C150 344,165 343,175 344 C185 345,195 348,198 355 C196 360,185 362,172 362 C158 362,148 358,145 348 Z" fill="url(#gPancreas)" opacity="0.9"/>
+            <path d="M148 356 C153 350,168 349,180 350 C192 351,204 354,207 362 C205 368,193 371,178 371 C163 371,151 366,148 356 Z"
+              fill="url(#gPancreas)" opacity="0.88" filter="url(#fInnerDepth)"/>
+            <!-- surface lobulation hint -->
+            <path d="M155 358 C160 354,168 352,175 354" fill="none" stroke="rgba(250,180,80,0.35)" stroke-width="0.9" stroke-linecap="round"/>
+            <path d="M177 354 C185 352,196 354,202 360" fill="none" stroke="rgba(250,180,80,0.3)" stroke-width="0.9" stroke-linecap="round"/>
+            <!-- pancreatic duct -->
+            <path d="M155 362 C165 360,180 360,200 363" fill="none" stroke="rgba(200,130,40,0.4)" stroke-width="1.2" stroke-linecap="round" stroke-dasharray="2,2"/>
           </g>
 
-          <!-- LARGE INTESTINE (frame) -->
+          <!-- LARGE INTESTINE (haustra frame) -->
           <g class="organ" data-organ="LargeIntestine">
-            <path d="M125 365 C120 365,112 370,110 378 C108 390,110 405,112 418 C114 430,118 440,122 448 C126 456,132 460,138 460 L202 460 C208 460,214 456,218 448 C222 440,226 430,228 418 C230 405,232 390,230 378 C228 370,220 365,215 365 L125 365 Z"
-              fill="none" stroke="url(#gLargeInt)" stroke-width="10" opacity="0.8"/>
+            <!-- frame path with thick haustrated stroke -->
+            <path d="M128 374 C122 374,113 380,111 389 C109 402,111 418,113 432 C116 444,121 454,127 461 C133 468,141 470,148 467 L192 467 C199 470,207 468,213 461 C219 454,224 444,227 432 C229 418,231 402,229 389 C227 380,218 374,212 374 L128 374 Z"
+              fill="none" stroke="url(#gLargeInt)" stroke-width="11" opacity="0.82"/>
+            <!-- haustra (sacculation bumps) - ascending colon -->
+            <path d="M113 395 C110 395,108 398,110 401 C108 401,108 404,110 406 C108 406,109 410,112 411" fill="none" stroke="rgba(240,140,70,0.5)" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- haustra - descending colon -->
+            <path d="M227 395 C230 395,232 398,230 401 C232 401,232 404,230 406 C232 406,231 410,228 411" fill="none" stroke="rgba(240,140,70,0.5)" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- transverse colon haustra hints -->
+            <line x1="135" y1="374" x2="135" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="148" y1="374" x2="148" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="160" y1="374" x2="160" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="170" y1="374" x2="170" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="180" y1="374" x2="180" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="192" y1="374" x2="192" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
+            <line x1="205" y1="374" x2="205" y2="380" stroke="rgba(240,140,70,0.35)" stroke-width="2"/>
           </g>
 
-          <!-- SMALL INTESTINE (coils) -->
+          <!-- SMALL INTESTINE (layered coils) -->
           <g class="organ" data-organ="SmallIntestine">
-            <path d="M145 375 C152 370,162 368,170 370 C178 368,188 370,195 375 C200 382,198 392,192 396 C186 400,176 398,170 396 C164 398,154 400,148 396 C142 392,140 382,145 375 Z" fill="url(#gSmallInt)" opacity="0.75"/>
-            <path d="M148 400 C155 404,163 406,170 404 C177 406,185 404,192 400 C197 407,196 416,190 420 C184 424,176 422,170 420 C164 422,156 424,150 420 C144 416,143 407,148 400 Z" fill="url(#gSmallInt)" opacity="0.75"/>
-            <path d="M150 422 C157 426,163 428,170 426 C177 428,183 426,190 422 C194 428,192 436,186 440 C180 443,176 442,170 441 C164 442,160 443,154 440 C148 436,146 428,150 422 Z" fill="url(#gSmallInt)" opacity="0.75"/>
+            <!-- coil layer 1 -->
+            <path d="M143 383 C150 377,162 375,170 377 C178 375,190 377,197 383 C203 391,200 402,193 407 C186 412,176 410,170 408 C164 410,154 412,147 407 C140 402,137 391,143 383 Z"
+              fill="url(#gSmallInt)" opacity="0.76" filter="url(#fVascular)"/>
+            <!-- coil layer 2 -->
+            <path d="M146 410 C153 405,162 403,170 405 C178 403,187 405,194 410 C199 417,197 427,190 432 C184 436,176 434,170 432 C164 434,156 436,150 432 C143 427,141 417,146 410 Z"
+              fill="url(#gSmallInt)" opacity="0.73" filter="url(#fVascular)"/>
+            <!-- coil layer 3 -->
+            <path d="M148 434 C154 429,162 427,170 429 C178 427,186 429,192 434 C197 440,194 449,188 453 C182 457,176 455,170 453 C164 455,158 457,152 453 C146 449,143 440,148 434 Z"
+              fill="url(#gSmallInt)" opacity="0.70"/>
+            <!-- plicae circulares (mucosal folds) hints -->
+            <path d="M147 390 C155 388,165 388,170 390 C175 388,185 388,193 390" fill="none" stroke="rgba(240,200,60,0.3)" stroke-width="0.8"/>
+            <path d="M146 417 C154 415,163 415,170 417 C177 415,186 415,194 417" fill="none" stroke="rgba(240,200,60,0.25)" stroke-width="0.8"/>
           </g>
 
-          <!-- KIDNEYS -->
+          <!-- KIDNEYS (detailed bean shape) -->
           <g class="organ" data-organ="Kidneys">
-            <path d="M118 356 C113 352,107 354,106 360 C104 368,106 378,110 383 C114 388,120 388,124 383 C128 378,128 368,126 362 C124 358,121 356,118 356 Z" fill="url(#gKidneys)" opacity="0.9"/>
-            <path d="M222 356 C227 352,233 354,234 360 C236 368,234 378,230 383 C226 388,220 388,216 383 C212 378,212 368,214 362 C216 358,219 356,222 356 Z" fill="url(#gKidneys)" opacity="0.9"/>
+            <!-- Left kidney -->
+            <path d="M119 360 C113 356,106 358,104 365 C101 374,103 386,108 393 C113 400,121 401,127 396 C133 390,133 378,130 370 C127 363,123 360,119 360 Z"
+              fill="url(#gKidney)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <!-- Left kidney hilum (medial indentation) -->
+            <path d="M119 370 C121 375,121 382,119 388" fill="none" stroke="rgba(240,100,170,0.5)" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- Left kidney cortex/medulla hint -->
+            <path d="M108 372 C112 370,115 369,117 371" fill="none" stroke="rgba(255,150,200,0.3)" stroke-width="0.9"/>
+            <path d="M107 380 C111 378,114 377,116 379" fill="none" stroke="rgba(255,150,200,0.25)" stroke-width="0.9"/>
+            <!-- Left kidney specular -->
+            <ellipse cx="113" cy="366" rx="5" ry="3.5" fill="url(#gKidneySpec)" opacity="0.9"/>
+
+            <!-- Right kidney -->
+            <path d="M221 360 C227 356,234 358,236 365 C239 374,237 386,232 393 C227 400,219 401,213 396 C207 390,207 378,210 370 C213 363,217 360,221 360 Z"
+              fill="url(#gKidney)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <!-- Right kidney hilum -->
+            <path d="M221 370 C219 375,219 382,221 388" fill="none" stroke="rgba(240,100,170,0.5)" stroke-width="1.5" stroke-linecap="round"/>
+            <!-- Right kidney specular -->
+            <ellipse cx="227" cy="366" rx="5" ry="3.5" fill="url(#gKidneySpec)" opacity="0.9"/>
+
+            <!-- Ureters -->
+            <path d="M117 397 C116 415,115 440,116 460" stroke="#d06090" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.45"/>
+            <path d="M223 397 C224 415,225 440,224 460" stroke="#d06090" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.45"/>
           </g>
 
           <!-- URINARY BLADDER -->
-          <g class="organ" data-organ="UrinaryBladder">
-            <ellipse cx="170" cy="472" rx="22" ry="17" fill="url(#gBladder)" opacity="0.9"/>
+          <g class="organ" data-organ="UrinaryBladder" filter="url(#fOrganGlow)">
+            <!-- main dome -->
+            <ellipse cx="170" cy="476" rx="24" ry="18" fill="url(#gBladder)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <!-- specular -->
+            <ellipse cx="162" cy="467" rx="8" ry="5" fill="url(#gBladderSpec)" opacity="0.85"/>
+            <!-- surface rugae (contracted) -->
+            <path d="M150 472 C155 468,162 466,170 468 C178 466,185 468,190 472" fill="none" stroke="rgba(150,230,255,0.35)" stroke-width="0.9" stroke-linecap="round"/>
+            <path d="M148 478 C154 474,162 472,170 474 C178 472,186 474,192 478" fill="none" stroke="rgba(150,230,255,0.28)" stroke-width="0.9" stroke-linecap="round"/>
+            <!-- ureteral orifices -->
+            <circle cx="158" cy="483" r="2" fill="rgba(80,180,240,0.6)"/>
+            <circle cx="182" cy="483" r="2" fill="rgba(80,180,240,0.6)"/>
+            <!-- urethra stub -->
+            <line x1="170" y1="494" x2="170" y2="502" stroke="#2090c8" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
           </g>
 
           <!-- MALE REPRODUCTIVE -->
           <g class="organ sex-male" data-organ="ReproductiveMale">
-            <ellipse cx="160" cy="508" rx="9" ry="11" fill="url(#gRepro)" opacity="0.85"/>
-            <ellipse cx="180" cy="508" rx="9" ry="11" fill="url(#gRepro)" opacity="0.85"/>
-            <path d="M165 492 C165 488,170 485,175 488 C175 492,175 498,175 502" stroke="url(#gRepro)" stroke-width="6" fill="none" stroke-linecap="round" opacity="0.9"/>
+            <!-- testes -->
+            <ellipse cx="159" cy="516" rx="10" ry="12" fill="url(#gRepro)" opacity="0.88" filter="url(#fInnerDepth)"/>
+            <ellipse cx="181" cy="516" rx="10" ry="12" fill="url(#gRepro)" opacity="0.88" filter="url(#fInnerDepth)"/>
+            <!-- specular on testes -->
+            <ellipse cx="155" cy="510" rx="4" ry="3" fill="rgba(255,200,230,0.55)"/>
+            <ellipse cx="177" cy="510" rx="4" ry="3" fill="rgba(255,200,230,0.55)"/>
+            <!-- vas deferens/epididymis -->
+            <path d="M160 504 C158 498,160 494,163 490" stroke="#d070a0" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.55"/>
+            <path d="M180 504 C182 498,180 494,177 490" stroke="#d070a0" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.55"/>
+            <!-- shaft / penis (schematic) -->
+            <path d="M163 496 C163 489,168 484,170 482 C172 484,177 489,177 496" stroke="url(#gRepro)" stroke-width="7" fill="none" stroke-linecap="round" opacity="0.85"/>
           </g>
 
           <!-- FEMALE REPRODUCTIVE -->
           <g class="organ sex-female sex-hidden" data-organ="ReproductiveFemale">
-            <path d="M162 488 C160 480,162 474,170 472 C178 474,180 480,178 488 C176 494,173 498,170 498 C167 498,164 494,162 488 Z" fill="url(#gRepro)" opacity="0.9"/>
-            <ellipse cx="148" cy="480" rx="9" ry="7" fill="url(#gRepro)" opacity="0.85"/>
-            <ellipse cx="192" cy="480" rx="9" ry="7" fill="url(#gRepro)" opacity="0.85"/>
-            <path d="M157 477 C154 474,150 473,148 475" stroke="rgba(249,168,212,0.7)" stroke-width="1.5" fill="none"/>
-            <path d="M183 477 C186 474,190 473,192 475" stroke="rgba(249,168,212,0.7)" stroke-width="1.5" fill="none"/>
+            <!-- uterus (pear shape) -->
+            <path d="M162 490 C159 481,161 474,170 472 C179 474,181 481,178 490 C176 497,173 502,170 503 C167 502,164 497,162 490 Z"
+              fill="url(#gRepro)" opacity="0.92" filter="url(#fInnerDepth)"/>
+            <!-- cervix hint -->
+            <ellipse cx="170" cy="504" rx="5" ry="3.5" fill="#c04080" opacity="0.7"/>
+            <!-- ovaries -->
+            <ellipse cx="148" cy="481" rx="10" ry="7" fill="url(#gRepro)" opacity="0.87" filter="url(#fInnerDepth)"/>
+            <ellipse cx="192" cy="481" rx="10" ry="7" fill="url(#gRepro)" opacity="0.87" filter="url(#fInnerDepth)"/>
+            <!-- specular on ovaries -->
+            <ellipse cx="144" cy="477" rx="4" ry="2.5" fill="rgba(255,200,230,0.55)"/>
+            <ellipse cx="188" cy="477" rx="4" ry="2.5" fill="rgba(255,200,230,0.55)"/>
+            <!-- fallopian tubes (curved) -->
+            <path d="M157 478 C152 472,148 470,144 472" stroke="rgba(249,168,212,0.75)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <path d="M183 478 C188 472,192 470,196 472" stroke="rgba(249,168,212,0.75)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+            <!-- fimbriae hints -->
+            <path d="M144 472 C142 469,143 467,145 468 M144 472 C141 470,141 467,143 468 M144 472 C146 469,146 467,148 468" stroke="rgba(249,168,212,0.6)" stroke-width="0.9" fill="none"/>
+            <path d="M196 472 C198 469,197 467,195 468 M196 472 C199 470,199 467,197 468 M196 472 C194 469,194 467,192 468" stroke="rgba(249,168,212,0.6)" stroke-width="0.9" fill="none"/>
           </g>
 
-          <!-- LABELS (right side) -->
-          <g class="organ-label-group" data-label="Brain"><line x1="196" y1="44" x2="220" y2="44" stroke="#334155" stroke-width="0.8"/><circle cx="220" cy="44" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="225" y="48" class="organ-label-text">Brain</text></g>
-          <g class="organ-label-group" data-label="Thyroid"><line x1="181" y1="106" x2="225" y2="106" stroke="#334155" stroke-width="0.8"/><circle cx="225" cy="106" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="230" y="110" class="organ-label-text">Thyroid Gland</text></g>
-          <g class="organ-label-group" data-label="Trachea"><line x1="173" y1="130" x2="222" y2="130" stroke="#334155" stroke-width="0.8"/><circle cx="222" cy="130" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="227" y="127" class="organ-label-text">Trachea</text><text x="227" y="137" class="organ-label-text" style="fill:#475569;font-size:8px">+ Esophagus</text></g>
-          <g class="organ-label-group" data-label="Lungs"><line x1="230" y1="210" x2="260" y2="210" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="210" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="214" class="organ-label-text">Lungs</text></g>
-          <g class="organ-label-group" data-label="Diaphragm"><line x1="228" y1="272" x2="260" y2="272" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="272" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="276" class="organ-label-text">Diaphragm</text></g>
-          <g class="organ-label-group" data-label="Liver"><line x1="230" y1="308" x2="260" y2="308" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="308" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="312" class="organ-label-text">Liver</text></g>
-          <g class="organ-label-group" data-label="Gallbladder"><line x1="213" y1="337" x2="260" y2="337" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="337" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="341" class="organ-label-text">Gallbladder</text></g>
-          <g class="organ-label-group" data-label="Kidneys"><line x1="234" y1="372" x2="260" y2="372" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="372" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="376" class="organ-label-text">Kidneys</text></g>
-          <g class="organ-label-group" data-label="SmallIntestine"><line x1="192" y1="430" x2="260" y2="430" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="430" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="427" class="organ-label-text">Small</text><text x="265" y="437" class="organ-label-text">Intestine</text></g>
-          <g class="organ-label-group" data-label="UrinaryBladder"><line x1="192" y1="472" x2="260" y2="472" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="472" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="469" class="organ-label-text">Urinary</text><text x="265" y="479" class="organ-label-text">Bladder</text></g>
+          <!-- ═══ LABEL LINES (right side) ═══ -->
+          <g class="organ-label-group" data-label="Brain"><line x1="198" y1="42" x2="228" y2="42" stroke="#334155" stroke-width="0.8"/><circle cx="228" cy="42" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="233" y="46" class="organ-label-text">Brain</text></g>
+          <g class="organ-label-group" data-label="Thyroid"><line x1="183" y1="106" x2="228" y2="106" stroke="#334155" stroke-width="0.8"/><circle cx="228" cy="106" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="233" y="110" class="organ-label-text">Thyroid Gland</text></g>
+          <g class="organ-label-group" data-label="Trachea"><line x1="176" y1="129" x2="228" y2="129" stroke="#334155" stroke-width="0.8"/><circle cx="228" cy="129" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="233" y="126" class="organ-label-text">Trachea</text><text x="233" y="136" class="organ-label-text" style="fill:#475569;font-size:8px">+ Esophagus</text></g>
+          <g class="organ-label-group" data-label="Lungs"><line x1="231" y1="214" x2="260" y2="214" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="214" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="218" class="organ-label-text">Lungs</text></g>
+          <g class="organ-label-group" data-label="Diaphragm"><line x1="232" y1="284" x2="260" y2="284" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="284" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="288" class="organ-label-text">Diaphragm</text></g>
+          <g class="organ-label-group" data-label="Liver"><line x1="234" y1="315" x2="260" y2="315" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="315" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="319" class="organ-label-text">Liver</text></g>
+          <g class="organ-label-group" data-label="Gallbladder"><line x1="215" y1="349" x2="260" y2="349" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="349" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="353" class="organ-label-text">Gallbladder</text></g>
+          <g class="organ-label-group" data-label="Kidneys"><line x1="236" y1="380" x2="260" y2="380" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="380" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="384" class="organ-label-text">Kidneys</text></g>
+          <g class="organ-label-group" data-label="SmallIntestine"><line x1="194" y1="435" x2="260" y2="435" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="435" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="432" class="organ-label-text">Small</text><text x="265" y="442" class="organ-label-text">Intestine</text></g>
+          <g class="organ-label-group" data-label="UrinaryBladder"><line x1="194" y1="476" x2="260" y2="476" stroke="#334155" stroke-width="0.8"/><circle cx="260" cy="476" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="265" y="473" class="organ-label-text">Urinary</text><text x="265" y="483" class="organ-label-text">Bladder</text></g>
 
-          <!-- LABELS (left side) -->
-          <g class="organ-label-group" data-label="Heart"><line x1="147" y1="178" x2="108" y2="178" stroke="#334155" stroke-width="0.8"/><circle cx="108" cy="178" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="26" y="182" class="organ-label-text">Heart</text></g>
-          <g class="organ-label-group" data-label="Spleen"><line x1="111" y1="310" x2="80" y2="310" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="310" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="20" y="314" class="organ-label-text">Spleen</text></g>
-          <g class="organ-label-group" data-label="Stomach"><line x1="134" y1="318" x2="80" y2="318" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="318" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="18" y="322" class="organ-label-text">Stomach</text></g>
-          <g class="organ-label-group" data-label="Pancreas"><line x1="145" y1="354" x2="80" y2="354" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="354" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="18" y="358" class="organ-label-text">Pancreas</text></g>
-          <g class="organ-label-group" data-label="LargeIntestine"><line x1="110" y1="418" x2="80" y2="418" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="418" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="10" y="415" class="organ-label-text">Large</text><text x="10" y="425" class="organ-label-text">Intestine</text></g>
-          <g class="organ-label-group sex-male" data-label="ReproductiveMale"><line x1="151" y1="502" x2="80" y2="502" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="502" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="8" y="499" class="organ-label-text">Male</text><text x="8" y="509" class="organ-label-text">Repro.</text></g>
-          <g class="organ-label-group sex-female sex-hidden" data-label="ReproductiveFemale"><line x1="148" y1="484" x2="80" y2="484" stroke="#334155" stroke-width="0.8"/><circle cx="80" cy="484" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="8" y="481" class="organ-label-text">Female</text><text x="8" y="491" class="organ-label-text">Repro.</text></g>
-          <!-- Esophagus clickable label -->
-          <g class="organ-label-group" data-label="Esophagus" style="cursor:pointer"><line x1="166" y1="135" x2="222" y2="145" stroke="#334155" stroke-width="0.8" opacity="0"/><text x="0" y="0" style="display:none"/></g>
+          <!-- ═══ LABEL LINES (left side) ═══ -->
+          <g class="organ-label-group" data-label="Heart"><line x1="143" y1="182" x2="106" y2="182" stroke="#334155" stroke-width="0.8"/><circle cx="106" cy="182" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="24" y="186" class="organ-label-text">Heart</text></g>
+          <g class="organ-label-group" data-label="Spleen"><line x1="108" y1="316" x2="78" y2="316" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="316" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="18" y="320" class="organ-label-text">Spleen</text></g>
+          <g class="organ-label-group" data-label="Stomach"><line x1="133" y1="326" x2="78" y2="326" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="326" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="16" y="330" class="organ-label-text">Stomach</text></g>
+          <g class="organ-label-group" data-label="Pancreas"><line x1="148" y1="362" x2="78" y2="362" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="362" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="16" y="366" class="organ-label-text">Pancreas</text></g>
+          <g class="organ-label-group" data-label="LargeIntestine"><line x1="111" y1="422" x2="78" y2="422" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="422" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="8" y="419" class="organ-label-text">Large</text><text x="8" y="429" class="organ-label-text">Intestine</text></g>
+          <g class="organ-label-group sex-male" data-label="ReproductiveMale"><line x1="149" y1="510" x2="78" y2="510" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="510" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="6" y="507" class="organ-label-text">Male</text><text x="6" y="517" class="organ-label-text">Repro.</text></g>
+          <g class="organ-label-group sex-female sex-hidden" data-label="ReproductiveFemale"><line x1="148" y1="488" x2="78" y2="488" stroke="#334155" stroke-width="0.8"/><circle cx="78" cy="488" r="2.5" fill="#c9a84c" class="organ-dot"/><text x="6" y="485" class="organ-label-text">Female</text><text x="6" y="495" class="organ-label-text">Repro.</text></g>
+          <!-- Esophagus hidden label -->
+          <g class="organ-label-group" data-label="Esophagus" style="cursor:pointer"><line x1="163" y1="135" x2="163" y2="135" stroke="transparent" stroke-width="0"/></g>
         </svg>
       </div>
     </div>
