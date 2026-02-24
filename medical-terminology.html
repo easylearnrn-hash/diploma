@@ -442,7 +442,46 @@
  .dc-section{display:flex;flex-direction:column;gap:10px}
  .dc-section-title{font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);padding:10px 0 8px;border-bottom:2px solid rgba(201,168,76,0.35);margin-top:4px;line-height:1.2}
  .dc-pills{display:flex;flex-wrap:wrap;gap:7px}
- .dc-pill{font-size:12px;font-weight:600;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);line-height:1.5}
+ .dc-pill{font-size:12px;font-weight:600;padding:4px 12px;border-radius:99px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:var(--text);line-height:1.5;position:relative}
+ /* ── Abbreviation tooltip ── */
+ .dc-pill[data-abbrev]{cursor:default;text-decoration:underline dotted rgba(255,255,255,0.3);text-underline-offset:2px}
+ .dc-pill[data-abbrev]::after{
+  content:attr(data-abbrev);
+  position:absolute;
+  bottom:calc(100% + 7px);
+  left:50%;
+  transform:translateX(-50%);
+  background:#0d1e35;
+  color:#e8dfc5;
+  font-size:11px;
+  font-weight:500;
+  font-style:normal;
+  line-height:1.4;
+  white-space:nowrap;
+  padding:5px 10px;
+  border-radius:6px;
+  border:1px solid rgba(201,168,76,0.35);
+  box-shadow:0 4px 14px rgba(0,0,0,0.55);
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .15s ease;
+  z-index:999;
+ }
+ .dc-pill[data-abbrev]::before{
+  content:'';
+  position:absolute;
+  bottom:calc(100% + 2px);
+  left:50%;
+  transform:translateX(-50%);
+  border:5px solid transparent;
+  border-top-color:#0d1e35;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity .15s ease;
+  z-index:999;
+ }
+ .dc-pill[data-abbrev]:hover::after,
+ .dc-pill[data-abbrev]:hover::before{opacity:1}
  .dc-pill.gold{background:rgba(201,168,76,0.10);border-color:var(--border-gold);color:var(--gold-light)}
  .dc-pill.red{background:rgba(239,68,68,0.10);border-color:rgba(239,68,68,0.3);color:#fca5a5}
  .dc-pill.orange{background:rgba(251,146,60,0.10);border-color:rgba(251,146,60,0.3);color:#fdba74}
@@ -3030,8 +3069,251 @@ const DC_DATA = {
 };
 
 // ── Render helpers ───────────────────────────────────────────────────────────
+
+// Comprehensive medical abbreviation lookup map
+const ABBREV_MAP = {
+ // Infections & Organisms
+ 'UTI':'Urinary Tract Infection',
+ 'SSTI':'Skin and Soft Tissue Infection',
+ 'MRSA':'Methicillin-Resistant Staphylococcus aureus',
+ 'VRE':'Vancomycin-Resistant Enterococcus',
+ 'ESBL':'Extended-Spectrum Beta-Lactamase',
+ 'MSSA':'Methicillin-Susceptible Staphylococcus aureus',
+ 'PCP':'Pneumocystis jirovecii Pneumonia',
+ 'CMV':'Cytomegalovirus',
+ 'TB':'Tuberculosis',
+ 'HIV':'Human Immunodeficiency Virus',
+ 'AIDS':'Acquired Immunodeficiency Syndrome',
+ 'HPV':'Human Papillomavirus',
+ 'HBV':'Hepatitis B Virus',
+ 'HCV':'Hepatitis C Virus',
+ 'STI':'Sexually Transmitted Infection',
+ 'CAP':'Community-Acquired Pneumonia',
+ 'HAP':'Hospital-Acquired Pneumonia',
+ 'VAP':'Ventilator-Associated Pneumonia',
+ 'CDI':'Clostridioides difficile Infection',
+ // Cardiovascular
+ 'DVT':'Deep Vein Thrombosis',
+ 'PE':'Pulmonary Embolism',
+ 'ACS':'Acute Coronary Syndrome',
+ 'MI':'Myocardial Infarction',
+ 'STEMI':'ST-Elevation Myocardial Infarction',
+ 'NSTEMI':'Non-ST-Elevation Myocardial Infarction',
+ 'HF':'Heart Failure',
+ 'CHF':'Congestive Heart Failure',
+ 'AF':'Atrial Fibrillation',
+ 'AFib':'Atrial Fibrillation',
+ 'SVT':'Supraventricular Tachycardia',
+ 'VT':'Ventricular Tachycardia',
+ 'VF':'Ventricular Fibrillation',
+ 'HTN':'Hypertension',
+ 'BP':'Blood Pressure',
+ 'MAP':'Mean Arterial Pressure',
+ 'SVR':'Systemic Vascular Resistance',
+ 'CO':'Cardiac Output',
+ 'PCI':'Percutaneous Coronary Intervention',
+ 'CABG':'Coronary Artery Bypass Grafting',
+ 'TIA':'Transient Ischemic Attack',
+ 'CVA':'Cerebrovascular Accident (Stroke)',
+ 'PAD':'Peripheral Artery Disease',
+ 'DAPT':'Dual Antiplatelet Therapy',
+ 'TXA2':'Thromboxane A2',
+ 'HIT':'Heparin-Induced Thrombocytopenia',
+ 'HITT':'Heparin-Induced Thrombocytopenia with Thrombosis',
+ 'INR':'International Normalized Ratio',
+ 'aPTT':'Activated Partial Thromboplastin Time',
+ 'PT':'Prothrombin Time',
+ 'TTP':'Thrombotic Thrombocytopenic Purpura',
+ 'FFP':'Fresh Frozen Plasma',
+ 'PCC':'Prothrombin Complex Concentrate',
+ 'NTG':'Nitroglycerin',
+ 'SL':'Sublingual',
+ // Pulmonary
+ 'COPD':'Chronic Obstructive Pulmonary Disease',
+ 'SABA':'Short-Acting Beta-2 Agonist',
+ 'LABA':'Long-Acting Beta-2 Agonist',
+ 'FEV1':'Forced Expiratory Volume in 1 Second',
+ 'PDE':'Phosphodiesterase',
+ // Renal & Electrolytes
+ 'CKD':'Chronic Kidney Disease',
+ 'AKI':'Acute Kidney Injury',
+ 'BUN':'Blood Urea Nitrogen',
+ 'GFR':'Glomerular Filtration Rate',
+ 'TIBC':'Total Iron-Binding Capacity',
+ 'HCTZ':'Hydrochlorothiazide',
+ 'DCT':'Distal Convoluted Tubule',
+ // GI
+ 'GERD':'Gastroesophageal Reflux Disease',
+ 'IBD':'Inflammatory Bowel Disease',
+ 'IBS':'Irritable Bowel Syndrome',
+ 'GI':'Gastrointestinal',
+ // Endocrine / Metabolic
+ 'DKA':'Diabetic Ketoacidosis',
+ 'HHS':'Hyperglycemic Hyperosmolar State',
+ 'T1DM':'Type 1 Diabetes Mellitus',
+ 'T2DM':'Type 2 Diabetes Mellitus',
+ 'HbA1c':'Hemoglobin A1c (Glycated Hemoglobin)',
+ 'A1C':'Glycated Hemoglobin (3-month glucose average)',
+ 'TSH':'Thyroid-Stimulating Hormone',
+ 'GLP-1':'Glucagon-Like Peptide-1',
+ 'SGLT2':'Sodium-Glucose Cotransporter-2',
+ 'DPP-4':'Dipeptidyl Peptidase-4',
+ 'TZD':'Thiazolidinedione',
+ 'NODAT':'New-Onset Diabetes After Transplant',
+ 'PPARα':'Peroxisome Proliferator-Activated Receptor Alpha',
+ 'LDL':'Low-Density Lipoprotein',
+ 'HDL':'High-Density Lipoprotein',
+ 'TG':'Triglycerides',
+ 'RAI':'Radioactive Iodine',
+ 'PTU':'Propylthiouracil',
+ // Neurology / Psych
+ 'CNS':'Central Nervous System',
+ 'BBB':'Blood-Brain Barrier',
+ 'EPS':'Extrapyramidal Symptoms',
+ 'NMS':'Neuroleptic Malignant Syndrome',
+ 'TD':'Tardive Dyskinesia',
+ 'AMS':'Altered Mental Status',
+ 'RASS':'Richmond Agitation-Sedation Scale',
+ 'GAD':'Generalized Anxiety Disorder',
+ 'OCD':'Obsessive-Compulsive Disorder',
+ 'PTSD':'Post-Traumatic Stress Disorder',
+ 'ADHD':'Attention Deficit Hyperactivity Disorder',
+ 'MAOIs':'Monoamine Oxidase Inhibitors',
+ 'MAOI':'Monoamine Oxidase Inhibitor',
+ 'SSRI':'Selective Serotonin Reuptake Inhibitor',
+ 'SSRIs':'Selective Serotonin Reuptake Inhibitors',
+ 'SNRI':'Serotonin-Norepinephrine Reuptake Inhibitor',
+ 'SNRIs':'Serotonin-Norepinephrine Reuptake Inhibitors',
+ 'TCA':'Tricyclic Antidepressant',
+ 'TCAs':'Tricyclic Antidepressants',
+ 'NDRI':'Norepinephrine-Dopamine Reuptake Inhibitor',
+ 'CBT-I':'Cognitive Behavioral Therapy for Insomnia',
+ 'SIRVA':'Shoulder Injury Related to Vaccine Administration',
+ // Musculoskeletal / Pain
+ 'OUD':'Opioid Use Disorder',
+ 'OIC':'Opioid-Induced Constipation',
+ 'PCA':'Patient-Controlled Analgesia',
+ 'RA':'Rheumatoid Arthritis',
+ 'SLE':'Systemic Lupus Erythematosus',
+ 'MS':'Multiple Sclerosis',
+ 'SCI':'Spinal Cord Injury',
+ 'CP':'Cerebral Palsy',
+ // Oncology / Immune
+ 'RCC':'Renal Cell Carcinoma',
+ 'G-CSF':'Granulocyte Colony-Stimulating Factor',
+ 'GM-CSF':'Granulocyte-Macrophage Colony-Stimulating Factor',
+ 'ANC':'Absolute Neutrophil Count',
+ 'ART':'Antiretroviral Therapy',
+ 'PrEP':'Pre-Exposure Prophylaxis',
+ 'PEP':'Post-Exposure Prophylaxis',
+ 'IRIS':'Immune Reconstitution Inflammatory Syndrome',
+ 'GVHD':'Graft-Versus-Host Disease',
+ 'BCG':'Bacillus Calmette-Guérin',
+ // Labs & Monitoring
+ 'CBC':'Complete Blood Count',
+ 'CMP':'Comprehensive Metabolic Panel',
+ 'LFTs':'Liver Function Tests',
+ 'CPK':'Creatine Phosphokinase',
+ 'CRP':'C-Reactive Protein',
+ 'WBC':'White Blood Cell Count',
+ 'RBC':'Red Blood Cell Count',
+ 'Hgb':'Hemoglobin',
+ 'Hct':'Hematocrit',
+ 'AST':'Aspartate Aminotransferase',
+ 'ALT':'Alanine Aminotransferase',
+ 'ECG':'Electrocardiogram',
+ 'EEG':'Electroencephalogram',
+ 'IOP':'Intraocular Pressure',
+ 'LVEF':'Left Ventricular Ejection Fraction',
+ 'AUC':'Area Under the Curve',
+ 'QTc':'Corrected QT Interval',
+ 'QT':'QT Interval (cardiac)',
+ // Adverse Effects
+ 'SJS':'Stevens-Johnson Syndrome',
+ 'DRESS':'Drug Reaction with Eosinophilia and Systemic Symptoms',
+ 'TEN':'Toxic Epidermal Necrolysis',
+ 'PRIS':'Propofol Infusion Syndrome',
+ 'DIC':'Disseminated Intravascular Coagulation',
+ 'SAT':'Spontaneous Awakening Trial',
+ // Routes / Procedures
+ 'IV':'Intravenous',
+ 'IM':'Intramuscular',
+ 'SC':'Subcutaneous',
+ 'PO':'By Mouth (Per Os)',
+ 'SQ':'Subcutaneous',
+ 'NG':'Nasogastric',
+ 'IN':'Intranasal',
+ 'CPR':'Cardiopulmonary Resuscitation',
+ 'ACLS':'Advanced Cardiac Life Support',
+ // Pharmacology
+ 'PPIs':'Proton Pump Inhibitors',
+ 'PPI':'Proton Pump Inhibitor',
+ 'PDE-5':'Phosphodiesterase Type 5',
+ 'COX':'Cyclooxygenase',
+ 'COX-1':'Cyclooxygenase-1',
+ 'COX-2':'Cyclooxygenase-2',
+ 'ACEi':'Angiotensin-Converting Enzyme Inhibitor',
+ 'ARB':'Angiotensin Receptor Blocker',
+ 'ARBs':'Angiotensin Receptor Blockers',
+ 'CCB':'Calcium Channel Blocker',
+ 'CCBs':'Calcium Channel Blockers',
+ 'LMWH':'Low Molecular Weight Heparin',
+ 'UFH':'Unfractionated Heparin',
+ 'DOAC':'Direct Oral Anticoagulant',
+ 'DOACs':'Direct Oral Anticoagulants',
+ 'NRTI':'Nucleoside Reverse Transcriptase Inhibitor',
+ 'NRTIs':'Nucleoside Reverse Transcriptase Inhibitors',
+ 'NNRTI':'Non-Nucleoside Reverse Transcriptase Inhibitor',
+ 'NNRTIs':'Non-Nucleoside Reverse Transcriptase Inhibitors',
+ 'PI':'Protease Inhibitor',
+ 'PIs':'Protease Inhibitors',
+ 'INSTI':'Integrase Strand Transfer Inhibitor',
+ 'INSTIs':'Integrase Strand Transfer Inhibitors',
+ 'TKI':'Tyrosine Kinase Inhibitor',
+ 'HMG-CoA':'3-Hydroxy-3-Methylglutaryl Coenzyme A',
+ 'PCSK9':'Proprotein Convertase Subtilisin/Kexin Type 9',
+ 'BPH':'Benign Prostatic Hyperplasia',
+ 'PPD':'Purified Protein Derivative (TB Skin Test)',
+ 'REMS':'Risk Evaluation and Mitigation Strategy',
+ 'OTC':'Over the Counter',
+ 'Rx':'Prescription',
+ 'PRN':'As Needed (Pro Re Nata)',
+ 'qd':'Once Daily',
+ 'bid':'Twice Daily',
+ 'tid':'Three Times Daily',
+ 'qid':'Four Times Daily',
+ 'VAERS':'Vaccine Adverse Event Reporting System',
+ 'MMR':'Measles-Mumps-Rubella',
+ 'HPV':'Human Papillomavirus',
+ 'Tdap':'Tetanus-Diphtheria-Pertussis',
+ 'CIWA':'Clinical Institute Withdrawal Assessment for Alcohol',
+ 'COWS':'Clinical Opiate Withdrawal Scale',
+ 'AIMS':'Abnormal Involuntary Movement Scale',
+ 'BEERS':'Beers Criteria (AGS Inappropriate Medication List)',
+};
+
+// Detect abbreviations in pill text and wrap with tooltip attribute.
+// Looks for: all-caps tokens (2–6 chars), or known mixed-case keys.
+function abbrevify(text){
+ // Build a pattern from all known keys, longest first to avoid partial matches
+ const keys = Object.keys(ABBREV_MAP).sort((a,b)=>b.length-a.length);
+ const escaped = keys.map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+ const re = new RegExp(`(?<![\\w-])(${escaped.join('|')})(?![\\w-])`,'g');
+ let found = null;
+ let matched = null;
+ text.replace(re, (m) => { if(!matched){ matched=m; found=ABBREV_MAP[m]; } });
+ if(found){
+  return {abbrev: found};
+ }
+ return null;
+}
+
 function dcPills(arr, cls=''){
- return arr.map(t=>`<span class="dc-pill ${cls}">${t}</span>`).join('');
+ return arr.map(text => {
+  const hit = abbrevify(text);
+  const attr = hit ? ` data-abbrev="${hit.abbrev.replace(/"/g,'&quot;')}"` : '';
+  return `<span class="dc-pill ${cls}"${attr}>${text}</span>`;
+ }).join('');
 }
 function dcSection(title, content){
  return `<div class="dc-section"><div class="dc-section-title">${title}</div>${content}</div>`;
