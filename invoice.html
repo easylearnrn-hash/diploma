@@ -1292,6 +1292,7 @@ Payment must be made to the following account:
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/supabase-config.js"></script>
   <script src="./js/acnhs-logo-base64.js?v=20260215"></script>
+  <script src="./js/email-template.js"></script>
   <script>
     // Set logo on page load using centralized function
     document.addEventListener('DOMContentLoaded', function() {
@@ -3121,8 +3122,10 @@ Payment must be made to the following account:
       if (!studentId || !invoiceNumber) return;
       
       try {
-        // Use invoice_number instead of UUID for the URL
-        const invoiceUrl = `invoice-view.html?id=${invoiceNumber}`;
+        // Always store a fully-qualified, publicly-accessible URL so the student
+        // portal can open it from any device (not a localhost or file:// path).
+        const PORTAL_BASE = 'https://www.acnhs.am';
+        const invoiceUrl = `${PORTAL_BASE}/invoice-view.html?id=${invoiceNumber}`;
         
         const { error } = await invoiceSupabase
           .from('students')
@@ -3217,7 +3220,7 @@ Payment must be made to the following account:
         window.currentInvoices = invoices;
 
         invoicesList.innerHTML = invoices.map(invoice => {
-          const invoiceUrl = `${window.location.origin}${window.location.pathname.replace('invoice.html', 'invoice-view.html')}?id=${invoice.id}`;
+          const invoiceUrl = `https://www.acnhs.am/invoice-view.html?id=${invoice.id}`;
           
           // Calculate total from items if database total is 0
           let displayTotal = invoice.total;
@@ -4574,15 +4577,15 @@ Payment must be made to the following account:
     // Send invoice email
     window.sendInvoiceEmail = async function(invoiceId, studentName, invoiceUrl) {
       try {
-        // Fetch student email from students table
-        const { data: studentData, error: studentError } = await invoiceSupabase
+        // ── 1. Resolve student email ──────────────────────────────────────────
+        const { data: studentData } = await invoiceSupabase
           .from('students')
-          .select('email')
+          .select('email, student_id')
           .eq('student_id', invoiceId)
           .single();
 
-        // If not found, try to get from invoice
-        const { data: invoice, error: invoiceError } = await invoiceSupabase
+        // If not found by invoiceId directly, look up via the invoices table
+        const { data: invoiceRecord } = await invoiceSupabase
           .from('invoices')
           .select('student_id')
           .eq('id', invoiceId)
@@ -4590,12 +4593,11 @@ Payment must be made to the following account:
 
         let studentEmail = studentData?.email;
         
-        // If still no email, fetch from students by student_id
-        if (!studentEmail && invoice?.student_id) {
+        if (!studentEmail && invoiceRecord?.student_id) {
           const { data: studentByStudentId } = await invoiceSupabase
             .from('students')
             .select('email')
-            .eq('student_id', invoice.student_id)
+            .eq('student_id', invoiceRecord.student_id)
             .single();
           studentEmail = studentByStudentId?.email;
         }
@@ -4609,74 +4611,184 @@ Payment must be made to the following account:
           studentEmail = emailInput;
         }
 
-        // Prepare email content using ACNHS template
-        const subject = `Your Invoice from Armenian College of Nursing & Health Sciences`;
-        const emailBody = `
-          <div style="font-family: 'Inter', 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <!-- Header -->
-            <div style="background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); padding: 32px 24px; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Invoice Ready</h1>
-              <p style="margin: 8px 0 0 0; color: #cbd5e1; font-size: 14px;">Armenian College of Nursing & Health Sciences</p>
-            </div>
+        // ── 2. Build URLs ─────────────────────────────────────────────────────
+        // Always use the live production domain — never localhost or file://.
+        const PORTAL_BASE = 'https://www.acnhs.am';
 
-            <!-- Body -->
-            <div style="padding: 32px 24px;">
-              <p style="margin: 0 0 16px 0; color: #0f172a; font-size: 15px; line-height: 1.6;">
-                Dear <strong>${studentName}</strong>,
-              </p>
-              
-              <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6;">
-                Your invoice from Armenian College of Nursing & Health Sciences is now available for review. Please click the button below to view your invoice details and payment information.
-              </p>
+        // Canonical invoice viewer URL (absolute, publicly accessible)
+        const canonicalInvoiceUrl = invoiceUrl && invoiceUrl.startsWith('https://')
+          ? invoiceUrl
+          : `${PORTAL_BASE}/invoice-view.html?id=${invoiceId}`;
 
-              <!-- CTA Button -->
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${invoiceUrl}" style="display: inline-block; background: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-weight: 600; font-size: 15px; box-shadow: 0 4px 12px rgba(20, 184, 166, 0.3);">
-                  View Invoice
-                </a>
-              </div>
+        // Portal login URL — student logs in and lands on the Financial tab
+        // where their invoice is embedded.  The `tab=financial` query param
+        // lets Student-page.html auto-scroll to the invoice section.
+        const portalUrl = `${PORTAL_BASE}/Student-page.html`;
 
-              <p style="margin: 24px 0 16px 0; color: #475569; font-size: 14px; line-height: 1.6;">
-                If the button above doesn't work, copy and paste this link into your browser:
-              </p>
-              
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; word-break: break-all; font-family: 'Courier New', monospace; font-size: 13px; color: #475569;">
-                ${invoiceUrl}
-              </div>
+        // ── 3. Build the official ACNHS email body (HTML table layout) ───────
+        const today = new Date().toLocaleDateString('en-US', {
+          year: 'numeric', month: 'long', day: 'numeric'
+        });
 
-              <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid #e5e7eb;">
-                <p style="margin: 0 0 8px 0; color: #ef4444; font-size: 13px; font-weight: 600;">
-                  ⚠️ Important Payment Information:
-                </p>
-                <p style="margin: 0; color: #64748b; font-size: 13px; line-height: 1.5;">
-                  All tuition payments are final and non-refundable under any circumstances. Please review your invoice carefully before making payment.
-                </p>
-              </div>
-            </div>
+        // Resolve seal base64 from the globally-loaded helper if available
+        const sealSrc = (typeof window.ACNHS_LOGO_BASE64 !== 'undefined' && window.ACNHS_LOGO_BASE64)
+          ? window.ACNHS_LOGO_BASE64
+          : '{{ACNHS_SEAL_BASE64}}'; // Edge Function strips this token before storage
 
-            <!-- Footer -->
-            <div style="background: #f8fafc; padding: 24px; text-align: center; border-top: 1px solid #e5e7eb;">
-              <p style="margin: 0 0 8px 0; color: #0f172a; font-size: 14px; font-weight: 600;">
-                Armenian College of Nursing & Health Sciences
-              </p>
-              <p style="margin: 0 0 4px 0; color: #64748b; font-size: 13px;">
-                📧 info@acnhs.am | 🌐 www.acnhs.am
-              </p>
-              <p style="margin: 8px 0 0 0; color: #94a3b8; font-size: 12px;">
-                © ${new Date().getFullYear()} ACNHS. All rights reserved.
-              </p>
+        const bodyContent = `
+          <p style="margin:0 0 18px 0;font-size:15px;color:#2c2a25;line-height:1.75;">
+            Your tuition invoice from the Armenian College of Nursing &amp; Health Sciences is now
+            available for review. Please log in to the Student Portal to view your invoice,
+            verify the payment details, and submit your payment receipt.
+          </p>
+
+          <div style="background:#faf7f2;border:1px solid rgba(201,168,76,0.22);border-left:3px solid #c9a84c;
+                      padding:16px 20px;border-radius:8px;margin:0 0 24px 0;">
+            <div style="font-family:Georgia,serif;font-size:10px;font-weight:700;color:#8a8070;
+                        letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px;">Invoice Status</div>
+            <div style="font-family:Georgia,serif;font-size:16px;font-weight:700;color:#c9a84c;">
+              Ready for Payment
             </div>
           </div>
-        `;
 
-        // Send email via Supabase Edge Function (handles global BCC + Resend)
+          <!-- Primary CTA: Student Portal -->
+          <div style="text-align:center;margin:28px 0 16px;">
+            <a href="${portalUrl}"
+               style="display:inline-block;background:linear-gradient(135deg,#c9a84c 0%,#d4b56a 100%);
+                      color:#04111f;text-decoration:none;padding:14px 36px;border-radius:8px;
+                      font-family:Arial,sans-serif;font-size:13px;font-weight:700;
+                      letter-spacing:1px;text-transform:uppercase;
+                      box-shadow:0 4px 16px rgba(201,168,76,0.28);">
+              View Invoice in Student Portal
+            </a>
+          </div>
+          <p style="text-align:center;margin:0 0 24px;font-size:12px;color:#8a8070;line-height:1.6;">
+            Log in with your student credentials, then open the
+            <strong style="color:#5a4e3a;">Financial</strong> tab to see your full invoice.
+          </p>
+
+          <div style="height:1px;background:rgba(201,168,76,0.2);margin:24px 0;"></div>
+
+          <!-- Secondary: direct invoice link -->
+          <p style="margin:0 0 10px;font-size:13px;color:#5a4e3a;line-height:1.6;">
+            You may also view the invoice directly at the link below. You will be prompted to
+            log in if you are not already signed in.
+          </p>
+          <div style="background:#f5f1ea;border:1px solid rgba(201,168,76,0.25);border-radius:6px;
+                      padding:12px 16px;word-break:break-all;font-family:'Courier New',monospace;
+                      font-size:12px;color:#5a4e3a;">
+            ${canonicalInvoiceUrl}
+          </div>
+
+          <div style="margin-top:28px;background:#fdf9f2;border:1px solid rgba(201,168,76,0.15);
+                      padding:16px 20px;border-radius:8px;">
+            <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:#7a3a00;">
+              ⚠&nbsp; Important Payment Notice
+            </p>
+            <p style="margin:0;font-size:13px;color:#5a4e3a;line-height:1.6;">
+              All tuition payments to ACNHS are <strong>final and non-refundable</strong> under
+              any circumstances. Please review your invoice carefully before submitting payment.
+            </p>
+          </div>`;
+
+        // Compose using the official shared template if available on the page,
+        // otherwise fall back to the inline branded layout built above.
+        let emailHtml;
+        const signatureHtml = `
+          <div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;font-weight:700;color:#04111f;margin-bottom:3px;">Billing Office</div>
+          <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;color:#5a4e3a;margin-bottom:2px;">Finance &amp; Billing Department</div>
+          <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;color:#5a4e3a;margin-bottom:10px;">Armenian College of Nursing &amp; Health Sciences</div>
+          <div style="font-family:Arial,sans-serif;font-size:10px;color:#8a7a55;font-style:italic;margin-bottom:10px;">Graduates Receive Lifetime ANA-US, Inc. Membership</div>
+          <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+            <tr>
+              <td style="padding:0 10px 3px 0;vertical-align:middle;">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'/%3E%3C/svg%3E" width="14" height="14" alt="">
+              </td>
+              <td style="font-size:12px;padding:0 0 3px;white-space:nowrap;vertical-align:middle;">
+                <a href="mailto:billing@acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">billing@acnhs.am</a>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 10px 0 0;vertical-align:middle;">
+                <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E" width="14" height="14" alt="">
+              </td>
+              <td style="font-size:12px;padding:0;white-space:nowrap;vertical-align:middle;">
+                <a href="https://www.acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">www.acnhs.am</a>
+              </td>
+            </tr>
+          </table>`;
+
+        if (typeof window.EMAIL_HTML_TEMPLATE !== 'undefined') {
+          emailHtml = window.EMAIL_HTML_TEMPLATE
+            .replace(/\{\{SUBJECT\}\}/g, 'Your ACNHS Invoice Is Ready')
+            .replace(/\{\{EMAIL_TITLE\}\}/g, 'Your Invoice Is Ready')
+            .replace(/\{\{DATE\}\}/g, today)
+            .replace(/\{\{APPLICANT_NAME\}\}/g, studentName)
+            .replace(/\{\{BODY_CONTENT\}\}/g, bodyContent)
+            .replace(/\{\{STUDENT_INFO\}\}/g, '')
+            .replace(/\{\{SIGNATURE\}\}/g, signatureHtml)
+            .replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, sealSrc)
+            .replace(/\{\{YEAR\}\}/g, new Date().getFullYear().toString());
+        } else {
+          // Standalone fallback — identical structure, no external dependency
+          emailHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Your ACNHS Invoice Is Ready</title></head>
+<body style="margin:0;padding:0;background:#ffffff;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;">
+    <tr><td align="center" style="padding:32px 10px 48px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0"
+             style="width:600px;max-width:600px;border-radius:18px;overflow:hidden;background:#ffffff;
+                    box-shadow:0 8px 48px rgba(4,17,31,0.18);">
+        <!-- HEADER -->
+        <tr><td style="background:linear-gradient(135deg,#04111f 0%,#071b30 60%,#0c2444 100%);
+                       padding:28px 36px 24px;border-bottom:3px solid #c9a84c;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td valign="middle">
+                <div style="font-family:Georgia,serif;font-size:17px;color:#e2cc92;font-weight:700;">Armenian College of Nursing</div>
+                <div style="font-family:Georgia,serif;font-size:15px;color:#d4b56a;font-weight:600;">&amp; Health Sciences</div>
+                <div style="font-family:Arial,sans-serif;font-size:11px;color:rgba(200,191,178,0.65);letter-spacing:2px;text-transform:uppercase;margin-top:7px;">Yerevan, Republic of Armenia</div>
+              </td>
+            </tr>
+          </table>
+          <div style="height:1px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);margin:20px 0 18px;"></div>
+          <div style="font-family:Georgia,serif;font-size:24px;color:#f0e3bc;font-weight:700;">Your Invoice Is Ready</div>
+          <div style="font-family:Arial,sans-serif;font-size:11px;color:rgba(200,191,178,0.55);letter-spacing:1.5px;text-transform:uppercase;margin-top:8px;">${today}</div>
+        </td></tr>
+        <!-- BODY -->
+        <tr><td style="padding:36px 36px 28px;">
+          <div style="font-family:Georgia,serif;font-size:18px;color:#04111f;font-weight:700;margin-bottom:16px;">Dear ${studentName},</div>
+          <div style="font-family:Arial,sans-serif;font-size:15px;line-height:1.75;color:#2c2a25;">
+            ${bodyContent}
+          </div>
+          <div style="height:1px;background:linear-gradient(90deg,transparent,#c9a84c,transparent);margin:32px 0 28px;"></div>
+          <!-- Signature -->
+          <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;">
+            <tr><td valign="middle">${signatureHtml}</td></tr>
+          </table>
+        </td></tr>
+        <!-- FOOTER -->
+        <tr><td style="background:#04111f;padding:20px 36px;">
+          <div style="font-family:Arial,sans-serif;font-size:11px;color:rgba(200,191,178,0.50);line-height:1.7;">
+            &copy; ${new Date().getFullYear()} Armenian College of Nursing &amp; Health Sciences. All rights reserved.
+          </div>
+          <div style="font-family:Arial,sans-serif;font-size:10px;color:rgba(200,191,178,0.30);margin-top:4px;line-height:1.6;">
+            This message is intended solely for the named recipient.
+          </div>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+        }
+
+        // ── 4. Send via Edge Function ─────────────────────────────────────────
         const { error: sendError } = await invoiceSupabase.functions.invoke('send-email', {
           body: {
             to: studentEmail,
-            subject: subject,
-            html: emailBody,
+            subject: 'Your ACNHS Invoice Is Ready',
+            html: emailHtml,
             from: 'billing@acnhs.am',
-            fromName: 'ACNHS Billing'
+            fromName: 'Billing Office - ACNHS'
           }
         });
 
@@ -4684,32 +4796,25 @@ Payment must be made to the following account:
           throw new Error(sendError.message || 'Failed to send email');
         }
 
-        // Log email to database
+        // ── 5. Log to email_history ──────────────────────────────────────────
         await invoiceSupabase.from('email_history').insert({
           recipient: studentEmail,
           sender: 'billing@acnhs.am',
-          subject: subject,
-          body: `Invoice URL: ${invoiceUrl}`,
-          html_body: emailBody,
+          subject: 'Your ACNHS Invoice Is Ready',
+          body: `Invoice link: ${canonicalInvoiceUrl}\nPortal: ${portalUrl}`,
+          html_body: emailHtml,
           status: 'sent',
           sent_at: new Date().toISOString()
         });
 
-        // Show success notification
+        // ── 6. Success toast ─────────────────────────────────────────────────
         const notification = document.createElement('div');
         notification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: rgba(20, 184, 166, 0.95);
-          color: white;
-          padding: 16px 20px;
-          border-radius: 8px;
-          box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-          z-index: 10001;
-          font-size: 14px;
-          font-weight: 600;
-        `;
+          position:fixed;top:20px;right:20px;
+          background:rgba(20,184,166,0.95);color:white;
+          padding:16px 20px;border-radius:8px;
+          box-shadow:0 10px 40px rgba(0,0,0,0.3);
+          z-index:10001;font-size:14px;font-weight:600;`;
         notification.innerHTML = `✓ Invoice sent to ${studentEmail}`;
         document.body.appendChild(notification);
         setTimeout(() => notification.remove(), 4000);

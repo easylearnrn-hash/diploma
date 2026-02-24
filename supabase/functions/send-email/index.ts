@@ -147,6 +147,7 @@ serve(async (req: Request) => {
       'dean@acnhs.am': 'Office of the Dean - ACNHS',
       'academic@acnhs.am': 'Academic Affairs - ACNHS',
       'student-services@acnhs.am': 'Student Services - ACNHS',
+      'billing@acnhs.am': 'Billing Office - ACNHS',
       'legal@acnhs.am': 'Legal Affairs - ACNHS',
       'hr@acnhs.am': 'Human Resources - ACNHS',
       'it@acnhs.am': 'IT Support - ACNHS',
