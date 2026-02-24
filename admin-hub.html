@@ -8308,6 +8308,7 @@
         const { error } = await db.from('published_notes').delete().eq('note_id', noteId);
         if (error) throw error;
         document.querySelector('.modal-backdrop')?.remove();
+        _invalidateModuleCache();
         await renderNotesTable();
         showToast('Note unpublished from all students', 'success');
       } catch (err) {
@@ -8466,6 +8467,7 @@
 
         document.querySelector('.modal-backdrop')?.remove();
         deselectAllNoteCards();
+        _invalidateModuleCache();
         await renderNotesTable();
         showToast(`✓ ${noteIds.length} note${noteIds.length!==1?'s':''} published to ${studentIds.length} student${studentIds.length!==1?'s':''}`, 'success');
 
@@ -8572,173 +8574,215 @@
     const ALL_MODULES = HARDCODED_NOTES.filter(n => n.isModule);
     let CURRENT_MODULE_STATUS_FILTER = 'all';
 
-    async function loadModulesManagement() {
-      renderModulesGrid();
+    // ── Module data cache — fetched once, invalidated only on mutations ──────
+    let _moduleCache = null;           // { noteCounts:{}, uniqueStudents:Set, progressCount:0 }
+    let _moduleCacheLoading = false;   // guard against parallel fetches
+    let _moduleSearchTimer = null;     // debounce timer for search
+
+    async function _fetchModuleCache() {
+      if (_moduleCacheLoading) return;
+      _moduleCacheLoading = true;
+      try {
+        // Single query scoped to ONLY module IDs — no full-table scan
+        const moduleIds = ALL_MODULES.map(m => m.id);
+        const [pubRes, progRes] = await Promise.all([
+          db.from('published_notes')
+            .select('note_id, student_id')
+            .in('note_id', moduleIds),
+          db.from('module_progress')
+            .select('*', { count: 'exact', head: true })
+        ]);
+
+        const noteCounts = {};
+        const uniqueStudents = new Set();
+        if (pubRes.data) {
+          pubRes.data.forEach(r => {
+            noteCounts[r.note_id] = (noteCounts[r.note_id] || 0) + 1;
+            uniqueStudents.add(r.student_id);
+          });
+        }
+        _moduleCache = {
+          noteCounts,
+          uniqueStudents,
+          progressCount: progRes.count || 0
+        };
+      } catch(err) {
+        console.error('[modules] cache fetch failed:', err);
+        _moduleCache = { noteCounts:{}, uniqueStudents:new Set(), progressCount:0 };
+      } finally {
+        _moduleCacheLoading = false;
+      }
     }
 
-    async function renderModulesGrid() {
+    function _invalidateModuleCache() { _moduleCache = null; }
+
+    async function loadModulesManagement() {
+      // Show skeleton instantly, fetch in background
+      _renderModulesStats(null);
+      _renderModulesSkeleton();
+      await _fetchModuleCache();
+      _applyModuleRender();
+    }
+
+    function _renderModulesSkeleton() {
       const container = document.getElementById('modulesGridContainer');
       if (!container) return;
+      const skeletonCard = `
+        <div style="background:rgba(7,27,48,0.75);border:1px solid rgba(201,168,76,0.10);border-radius:var(--radius-lg);padding:50px 18px 18px;animation:pulse 1.4s ease-in-out infinite">
+          <div style="width:44px;height:44px;background:rgba(255,255,255,0.05);border-radius:12px;margin-bottom:14px"></div>
+          <div style="height:14px;background:rgba(255,255,255,0.06);border-radius:6px;margin-bottom:8px;width:75%"></div>
+          <div style="height:11px;background:rgba(255,255,255,0.04);border-radius:6px;margin-bottom:20px;width:45%"></div>
+          <div style="height:36px;background:rgba(255,255,255,0.04);border-radius:9px;margin-top:20px"></div>
+        </div>`;
+      container.innerHTML = Array(ALL_MODULES.length || 3).fill(skeletonCard).join('');
+    }
 
-      let filteredModules = ALL_MODULES;
+    function _renderModulesStats(cache) {
+      const el = id => document.getElementById(id);
+      if (!cache) {
+        // Placeholder dashes while loading
+        ['totalModulesCount','publishedModulesCount','modulesStudentsCount','modulesProgressCount']
+          .forEach(id => { const e = el(id); if (e) e.textContent = '—'; });
+        el('totalModulesCount') && (el('totalModulesCount').textContent = ALL_MODULES.length);
+        return;
+      }
+      const { noteCounts, uniqueStudents, progressCount } = cache;
+      const publishedCount = ALL_MODULES.filter(m => noteCounts[m.id] > 0).length;
+      el('totalModulesCount')     && (el('totalModulesCount').textContent     = ALL_MODULES.length);
+      el('publishedModulesCount') && (el('publishedModulesCount').textContent = publishedCount);
+      el('modulesStudentsCount')  && (el('modulesStudentsCount').textContent  = uniqueStudents.size);
+      el('modulesProgressCount')  && (el('modulesProgressCount').textContent  = progressCount);
+    }
 
-      // Apply search filter
-      const searchTerm = (document.getElementById('modulesSearchInput')?.value || '').toLowerCase();
-      if (searchTerm) {
-        filteredModules = filteredModules.filter(m =>
-          m.title.toLowerCase().includes(searchTerm) ||
-          m.category.toLowerCase().includes(searchTerm)
-        );
+    // Pure in-memory render — no DB call, uses _moduleCache
+    function _applyModuleRender() {
+      const container = document.getElementById('modulesGridContainer');
+      if (!container || !_moduleCache) return;
+
+      const { noteCounts } = _moduleCache;
+      const searchTerm = (document.getElementById('modulesSearchInput')?.value || '').toLowerCase().trim();
+
+      // 1 — search filter
+      let display = searchTerm
+        ? ALL_MODULES.filter(m =>
+            m.title.toLowerCase().includes(searchTerm) ||
+            m.category.toLowerCase().includes(searchTerm))
+        : ALL_MODULES.slice();
+
+      // 2 — publish-status filter
+      if (CURRENT_MODULE_STATUS_FILTER === 'published') {
+        display = display.filter(m => noteCounts[m.id] > 0);
+      } else if (CURRENT_MODULE_STATUS_FILTER === 'unpublished') {
+        display = display.filter(m => !noteCounts[m.id]);
       }
 
-      if (filteredModules.length === 0) {
+      // 3 — update stats from cache
+      _renderModulesStats(_moduleCache);
+
+      // 4 — empty state
+      if (display.length === 0) {
         container.innerHTML = `
           <div style="grid-column:1/-1;text-align:center;padding:72px 20px">
             <div style="width:64px;height:64px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.20);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(201,168,76,0.55)" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </div>
             <h3 style="margin:0 0 8px;font-size:16px;font-weight:800;color:var(--text-primary)">No modules found</h3>
-            <p style="margin:0;font-size:13px;color:var(--text-muted)">Try adjusting your search</p>
+            <p style="margin:0;font-size:13px;color:var(--text-muted)">Try adjusting your search or filter</p>
           </div>`;
         return;
       }
 
-      try {
-        const { data: publishedData, error } = await db.from('published_notes').select('note_id, student_id');
-        if (error) throw error;
+      // 5 — render cards (pure string concat, no async)
+      container.innerHTML = display.map(mod => {
+        const publishedCount = noteCounts[mod.id] || 0;
+        const isPublished    = publishedCount > 0;
+        const borderColor    = isPublished ? 'rgba(201,168,76,0.5)' : 'rgba(201,168,76,0.14)';
+        const bgColor        = isPublished
+          ? 'linear-gradient(135deg,rgba(201,168,76,0.10),rgba(12,36,68,0.85))'
+          : 'rgba(7,27,48,0.85)';
 
-        const noteCounts = {};
-        const uniqueStudents = new Set();
-        if (publishedData) {
-          publishedData.forEach(r => {
-            noteCounts[r.note_id] = (noteCounts[r.note_id] || 0) + 1;
-            uniqueStudents.add(r.student_id);
-          });
-        }
+        return `
+          <div class="module-card"
+               data-module-id="${mod.id}"
+               style="background:${bgColor};border:1px solid ${borderColor};border-radius:var(--radius-lg);padding:0;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s,transform 0.2s;cursor:pointer;position:relative;box-shadow:0 4px 16px rgba(0,0,0,0.25)"
+               onclick="toggleModuleCard(this)"
+               onmouseenter="this.style.boxShadow='0 8px 28px rgba(201,168,76,0.14)';this.style.transform='translateY(-2px)'"
+               onmouseleave="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.25)';this.style.transform='translateY(0)'">
 
-        // Progress tracking count
-        let progressCount = 0;
-        try {
-          const { data: progData } = await db.from('module_progress').select('student_id', { count: 'exact', head: true });
-          progressCount = progData ? progData.length : 0;
-          // Fetch proper count
-          const { count } = await db.from('module_progress').select('*', { count: 'exact', head: true });
-          progressCount = count || 0;
-        } catch(e) {}
+            <div style="position:absolute;top:14px;left:14px;z-index:2">
+              <input type="checkbox" class="module-checkbox" value="${mod.id}"
+                     onclick="event.stopPropagation()"
+                     onchange="updateModuleCardVisual(this)"
+                     style="width:17px;height:17px;cursor:pointer;accent-color:var(--gold-500)">
+            </div>
 
-        const publishedModuleIds = new Set(ALL_MODULES.map(m => m.id).filter(id => noteCounts[id] > 0));
+            <div style="position:absolute;top:13px;right:13px;z-index:2;display:flex;gap:6px;align-items:center">
+              <span style="background:linear-gradient(135deg,rgba(99,102,241,0.22),rgba(99,102,241,0.10));color:#a5b4fc;border:1px solid rgba(99,102,241,0.35);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">Module</span>
+              ${isPublished
+                ? `<span style="background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.10));color:var(--gold-300);border:1px solid rgba(201,168,76,0.45);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">✓ Published</span>`
+                : `<span style="background:rgba(100,116,139,0.15);color:var(--text-muted);border:1px solid rgba(100,116,139,0.25);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">● Draft</span>`
+              }
+            </div>
 
-        // Update stats
-        document.getElementById('totalModulesCount').textContent = ALL_MODULES.length;
-        document.getElementById('publishedModulesCount').textContent = publishedModuleIds.size;
-        document.getElementById('modulesStudentsCount').textContent = uniqueStudents.size;
-        document.getElementById('modulesProgressCount').textContent = progressCount;
-
-        // Apply publish-status filter
-        let displayModules = filteredModules;
-        if (CURRENT_MODULE_STATUS_FILTER === 'published') {
-          displayModules = filteredModules.filter(m => noteCounts[m.id] > 0);
-        } else if (CURRENT_MODULE_STATUS_FILTER === 'unpublished') {
-          displayModules = filteredModules.filter(m => !noteCounts[m.id]);
-        }
-
-        if (displayModules.length === 0) {
-          container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:56px 20px;color:var(--text-muted);font-size:13px;font-weight:600">No modules match the selected filter.</div>`;
-          return;
-        }
-
-        container.innerHTML = displayModules.map(mod => {
-          const publishedCount = noteCounts[mod.id] || 0;
-          const isPublished = publishedCount > 0;
-          const borderColor = isPublished ? 'rgba(201,168,76,0.5)'  : 'rgba(201,168,76,0.14)';
-          const bgColor     = isPublished
-            ? 'linear-gradient(135deg,rgba(201,168,76,0.10),rgba(12,36,68,0.85))'
-            : 'rgba(7,27,48,0.85)';
-
-          return `
-            <div class="module-card"
-                 data-module-id="${mod.id}"
-                 style="background:${bgColor};border:1px solid ${borderColor};border-radius:var(--radius-lg);padding:0;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s,transform 0.2s;cursor:pointer;position:relative;box-shadow:0 4px 16px rgba(0,0,0,0.25)"
-                 onclick="toggleModuleCard(this)"
-                 onmouseenter="this.style.boxShadow='0 8px 28px rgba(201,168,76,0.14)';this.style.transform='translateY(-2px)'"
-                 onmouseleave="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.25)';this.style.transform='translateY(0)'">
-
-              <!-- Checkbox -->
-              <div style="position:absolute;top:14px;left:14px;z-index:2">
-                <input type="checkbox" class="module-checkbox" value="${mod.id}"
-                       onclick="event.stopPropagation()"
-                       onchange="updateModuleCardVisual(this)"
-                       style="width:17px;height:17px;cursor:pointer;accent-color:var(--gold-500)">
+            <div style="padding:50px 18px 18px">
+              <div style="width:44px;height:44px;background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(99,102,241,0.06));border:1px solid rgba(99,102,241,0.30);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;flex-shrink:0">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.8">
+                  <rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="3"/>
+                </svg>
               </div>
 
-              <!-- Module badge top-right -->
-              <div style="position:absolute;top:13px;right:13px;z-index:2;display:flex;gap:6px;align-items:center">
-                <span style="background:linear-gradient(135deg,rgba(99,102,241,0.22),rgba(99,102,241,0.10));color:#a5b4fc;border:1px solid rgba(99,102,241,0.35);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">Module</span>
+              <h3 style="margin:0 0 10px;font-size:14px;font-weight:800;color:var(--text-primary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;letter-spacing:-0.1px">${mod.title}</h3>
+
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+                <span style="background:rgba(99,102,241,0.10);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700">${mod.category}</span>
                 ${isPublished
-                  ? `<span style="background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.10));color:var(--gold-300);border:1px solid rgba(201,168,76,0.45);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">✓ Published</span>`
-                  : `<span style="background:rgba(100,116,139,0.15);color:var(--text-muted);border:1px solid rgba(100,116,139,0.25);padding:3px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase">● Draft</span>`
+                  ? `<span style="color:var(--gold-500);font-size:12px;font-weight:700">👥 ${publishedCount} student${publishedCount !== 1 ? 's' : ''}</span>`
+                  : `<span style="color:#475569;font-size:12px;font-weight:600">Not published</span>`
                 }
               </div>
 
-              <!-- Card body -->
-              <div style="padding:50px 18px 18px">
-                <!-- Icon -->
-                <div style="width:44px;height:44px;background:linear-gradient(135deg,rgba(99,102,241,0.18),rgba(99,102,241,0.06));border:1px solid rgba(99,102,241,0.30);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;flex-shrink:0">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#a5b4fc" stroke-width="1.8">
-                    <rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/><line x1="12" y1="17" x2="12" y2="3"/>
+              <div style="border-top:1px solid rgba(255,255,255,0.06);margin-bottom:14px"></div>
+
+              <div style="display:flex;gap:8px">
+                <button class="btn primary" onclick="event.stopPropagation();publishNoteToStudents('${mod.id}')"
+                        style="flex:1;padding:9px 10px;font-size:12px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:6px">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
                   </svg>
-                </div>
-
-                <h3 style="margin:0 0 10px;font-size:14px;font-weight:800;color:var(--text-primary);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;letter-spacing:-0.1px">${mod.title}</h3>
-
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-                  <span style="background:rgba(99,102,241,0.10);color:#a5b4fc;border:1px solid rgba(99,102,241,0.25);padding:3px 9px;border-radius:6px;font-size:11px;font-weight:700">${mod.category}</span>
-                  ${isPublished
-                    ? `<span style="color:var(--gold-500);font-size:12px;font-weight:700">👥 ${publishedCount} student${publishedCount !== 1 ? 's' : ''}</span>`
-                    : `<span style="color:#475569;font-size:12px;font-weight:600">Not published</span>`
-                  }
-                </div>
-
-                <div style="border-top:1px solid rgba(255,255,255,0.06);margin-bottom:14px"></div>
-
-                <!-- Actions -->
-                <div style="display:flex;gap:8px">
-                  <button class="btn primary" onclick="event.stopPropagation();publishNoteToStudents('${mod.id}')"
-                          style="flex:1;padding:9px 10px;font-size:12px;border-radius:9px;display:flex;align-items:center;justify-content:center;gap:6px">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                      <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/>
-                    </svg>
-                    Publish
-                  </button>
-                  <button class="btn ghost" onclick="event.stopPropagation();window.open('${mod.htmlFile}','_blank')"
-                          style="padding:9px 11px;font-size:12px;border-radius:9px" title="Open module">
+                  Publish
+                </button>
+                <button class="btn ghost" onclick="event.stopPropagation();window.open('${mod.htmlFile}','_blank')"
+                        style="padding:9px 11px;font-size:12px;border-radius:9px" title="Open module">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+                ${isPublished ? `
+                  <button class="btn warning" onclick="event.stopPropagation();unpublishModule('${mod.id}')"
+                          style="padding:9px 11px;font-size:12px;border-radius:9px" title="Unpublish module">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                      <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
                     </svg>
                   </button>
-                  ${isPublished ? `
-                    <button class="btn warning" onclick="event.stopPropagation();unpublishModule('${mod.id}')"
-                            style="padding:9px 11px;font-size:12px;border-radius:9px" title="Unpublish module">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-                      </svg>
-                    </button>
-                  ` : ''}
-                </div>
+                ` : ''}
               </div>
             </div>
-          `;
-        }).join('');
+          </div>`;
+      }).join('');
+    }
 
-      } catch(err) {
-        console.error('Error loading modules:', err);
-        container.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:48px 20px;color:#fca5a5;font-size:13px;font-weight:700">Error loading modules: ${err.message}</div>`;
+    // Public re-render — pure in-memory, zero DB calls
+    function renderModulesGrid() {
+      if (!_moduleCache) {
+        loadModulesManagement();
+      } else {
+        _applyModuleRender();
       }
     }
 
     function toggleModuleCard(card) {
       const cb = card.querySelector('.module-checkbox');
-      if (cb) { cb.checked = !cb.checked; updateModuleCardVisual(cb); }
+      if (cb) { cb.checked = !cb.checked; updateModuleCardVisual(cb); updateModuleSelectionCounter(); }
     }
 
     function updateModuleCardVisual(cb) {
@@ -8748,16 +8792,21 @@
         card.style.borderColor = 'rgba(201,168,76,0.65)';
         card.style.boxShadow   = '0 0 0 2px rgba(201,168,76,0.22),0 4px 16px rgba(0,0,0,0.25)';
       } else {
-        card.style.borderColor = card.dataset.moduleId && HARDCODED_NOTES.find(n=>n.id===card.dataset.moduleId) ? 'rgba(201,168,76,0.14)' : 'rgba(201,168,76,0.14)';
+        const isPublished = _moduleCache?.noteCounts?.[card.dataset.moduleId] > 0;
+        card.style.borderColor = isPublished ? 'rgba(201,168,76,0.5)' : 'rgba(201,168,76,0.14)';
         card.style.boxShadow   = '0 4px 16px rgba(0,0,0,0.25)';
       }
     }
 
-    function searchModules() { renderModulesGrid(); }
+    // Debounced search — no DB hit, pure filter on cache
+    function searchModules() {
+      clearTimeout(_moduleSearchTimer);
+      _moduleSearchTimer = setTimeout(() => _applyModuleRender(), 120);
+    }
 
     function filterModulesByPublishStatus(val) {
       CURRENT_MODULE_STATUS_FILTER = val;
-      renderModulesGrid();
+      _applyModuleRender();
     }
 
     function resetModuleFilters() {
@@ -8766,7 +8815,7 @@
       if (inp) inp.value = '';
       if (sel) sel.value = 'all';
       CURRENT_MODULE_STATUS_FILTER = 'all';
-      renderModulesGrid();
+      _applyModuleRender();
     }
 
     function selectAllModuleCards() {
@@ -8796,7 +8845,9 @@
       try {
         const { error } = await db.from('published_notes').delete().eq('note_id', moduleId);
         if (error) throw error;
-        await renderModulesGrid();
+        _invalidateModuleCache();
+        await _fetchModuleCache();
+        _applyModuleRender();
         showToast('Module unpublished from all students', 'success');
       } catch(err) {
         showToast(`Error: ${err.message}`, 'error');
@@ -8806,8 +8857,6 @@
     async function bulkPublishModules() {
       const selectedIds = Array.from(document.querySelectorAll('.module-checkbox:checked')).map(cb => cb.value);
       if (selectedIds.length === 0) { showToast('Select at least one module to publish', 'warning'); return; }
-      // Re-use the same publishNoteToStudents modal (it sources from ALL_NOTES via find,
-      // which now includes isModule entries too since ALL_NOTES is notes-only — use ALL_MODULES lookup)
       if (selectedIds.length === 1) {
         publishNoteToStudents(selectedIds[0]);
       } else {
@@ -8822,8 +8871,10 @@
       try {
         const { error } = await db.from('published_notes').delete().in('note_id', selectedIds);
         if (error) throw error;
+        _invalidateModuleCache();
+        await _fetchModuleCache();
         deselectAllModuleCards();
-        await renderModulesGrid();
+        _applyModuleRender();
         showToast(`${selectedIds.length} module(s) unpublished`, 'success');
       } catch(err) {
         showToast(`Error: ${err.message}`, 'error');
