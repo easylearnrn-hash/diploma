@@ -58,7 +58,6 @@ const ACNHS_HEADER_HTML = `
 
     <div class="nav-actions">
       <button class="btn btn-ghost" type="button" data-action="student-login">Login</button>
-      <button class="btn btn-primary" type="button" data-action="apply-now">Apply Now</button>
     </div>
   </div>
 </header>
@@ -222,21 +221,6 @@ function wireHeaderInteractions(root) {
   root.querySelectorAll('[data-action="student-login"]').forEach(btn => {
     btn.addEventListener('click', () => {
       window.location.href = 'login.html';
-    });
-  });
-
-  // Apply now
-  root.querySelectorAll('[data-action="apply-now"]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      // Fire GA4 key event
-      if (typeof gtag !== 'undefined') {
-        gtag('event', 'apply_now_click', {
-          button_location: 'header',
-          page_path: window.location.pathname
-        });
-      }
-      // Match index behavior: open in popup window.
-      window.open('admission-form.html', '_blank', 'width=1200,height=900,scrollbars=yes,resizable=yes');
     });
   });
 
