@@ -3601,9 +3601,29 @@
         'Mental Health':       { c1:'#06b6d4', c2:'#0c4a6e', accent:'linear-gradient(90deg,#06b6d4,#0369a1)', prog:'linear-gradient(90deg,#06b6d4,#7dd3fc)' },
         'Community Health':    { c1:'#f59e0b', c2:'#78350f', accent:'linear-gradient(90deg,#f59e0b,#b45309)', prog:'linear-gradient(90deg,#f59e0b,#fde68a)' },
       };
+
+      // ── Progress reader — calculates 0-100 from localStorage saved data ──
+      function readModuleProgress(noteId) {
+        try {
+          const raw = localStorage.getItem('module_progress_' + noteId);
+          if (!raw) return 0;
+          const p = JSON.parse(raw);
+          const ha  = (p.ha  || []).length;
+          const sfx = (p.sfx || []).length;
+          const dc  = (p.dc  || []).length;
+          const ms  = p.ms || 0;
+          const haPts   = Math.min(ha  / 6,      1) * 40;
+          const sfxPts  = Math.min(sfx / 20,     1) * 20;
+          const dcPts   = Math.min(dc  / 20,     1) * 20;
+          const timePts = Math.min(ms  / 600000, 1) * 20;
+          return Math.round(haPts + sfxPts + dcPts + timePts);
+        } catch(e) { return 0; }
+      }
+
       publishedModules.forEach(note => {
         const cfg = catConfig[note.category] || { c1:'#6366f1', c2:'#1e1b4b', accent:'linear-gradient(90deg,#6366f1,#3730a3)', prog:'linear-gradient(90deg,#6366f1,#a5b4fc)' };
         const initials = note.title.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
+        const pct = readModuleProgress(note.id);
         html += `
           <div class="mod-card" onclick="window.location.href='${escapeAttr(note.htmlFile)}'">
             <div class="mod-card-accent" style="background:${cfg.accent}"></div>
@@ -3624,13 +3644,22 @@
             <div class="mod-card-divider"></div>
             <div class="mod-card-progress">
               <span class="mod-prog-label">Progress</span>
-              <div class="mod-prog-track"><div class="mod-prog-fill" style="width:0%;background:${cfg.prog}"></div></div>
-              <span class="mod-prog-pct">0%</span>
+              <div class="mod-prog-track"><div class="mod-prog-fill" data-target="${pct}" style="width:0%;background:${cfg.prog}"></div></div>
+              <span class="mod-prog-pct">${pct}%</span>
             </div>
           </div>`;
       });
 
       modulesList.innerHTML = html;
+
+      // Animate progress bars from 0 → real value after paint
+      requestAnimationFrame(() => {
+        modulesList.querySelectorAll('.mod-prog-fill[data-target]').forEach(fill => {
+          const target = fill.dataset.target || '0';
+          setTimeout(() => { fill.style.width = target + '%'; }, 80);
+        });
+      });
+
       console.log(`✅ Modules: ${semesterCourses.length} courses + ${publishedModules.length} published notes`);
     }
 
