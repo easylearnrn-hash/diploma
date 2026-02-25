@@ -26,10 +26,12 @@ CREATE POLICY "owner_select"
   ON saved_test_sessions
   FOR SELECT
   TO anon, authenticated
-  USING (student_id = current_setting('request.jwt.claims', true)::json->>'email'
-      OR student_id = (current_setting('request.headers', true)::json->>'x-owner-id')
-      OR TRUE);   -- ← fallback: keep permissive until JWT auth is wired
-                  --   Remove "OR TRUE" once student login issues JWT tokens.
+  USING (
+    student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 -- INSERT: a user may only create rows for themselves
 DROP POLICY IF EXISTS "owner_insert" ON saved_test_sessions;
@@ -37,7 +39,14 @@ CREATE POLICY "owner_insert"
   ON saved_test_sessions
   FOR INSERT
   TO anon, authenticated
-  WITH CHECK (student_id IS NOT NULL AND student_id <> 'guest');
+  WITH CHECK (
+    student_id IS NOT NULL
+    AND student_id <> 'guest'
+    AND student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 -- UPDATE: only own rows
 DROP POLICY IF EXISTS "owner_update" ON saved_test_sessions;
@@ -45,7 +54,12 @@ CREATE POLICY "owner_update"
   ON saved_test_sessions
   FOR UPDATE
   TO anon, authenticated
-  USING (student_id = student_id);  -- placeholder until JWT is wired
+  USING (
+    student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 -- DELETE: only own rows (enforced by app-layer .eq('student_id', getOwnerId()) too)
 DROP POLICY IF EXISTS "owner_delete" ON saved_test_sessions;
@@ -53,7 +67,12 @@ CREATE POLICY "owner_delete"
   ON saved_test_sessions
   FOR DELETE
   TO anon, authenticated
-  USING (student_id IS NOT NULL);
+  USING (
+    student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 
 -- ─── 2. test_attempts ────────────────────────────────────────
@@ -71,7 +90,12 @@ CREATE POLICY "owner_select"
   ON test_attempts
   FOR SELECT
   TO anon, authenticated
-  USING (student_id IS NOT NULL);  -- placeholder until JWT is wired
+  USING (
+    student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 -- INSERT: always allowed (student submitting their own attempt)
 DROP POLICY IF EXISTS "owner_insert" ON test_attempts;
@@ -79,7 +103,14 @@ CREATE POLICY "owner_insert"
   ON test_attempts
   FOR INSERT
   TO anon, authenticated
-  WITH CHECK (student_id IS NOT NULL AND student_id <> 'guest');
+  WITH CHECK (
+    student_id IS NOT NULL
+    AND student_id <> 'guest'
+    AND student_id = COALESCE(
+      auth.jwt()::json->>'email',
+      current_setting('request.headers', true)::json->>'x-owner-id'
+    )
+  );
 
 -- No UPDATE / DELETE on attempts (attempts are immutable audit records)
 

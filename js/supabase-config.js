@@ -38,6 +38,22 @@ const SUPABASE_CONFIG = {
 // Initialize Supabase client
 let supabaseClient = null;
 
+function setSupabaseOwnerHeader(ownerId) {
+  if (!ownerId) return;
+  SUPABASE_CONFIG.options.global = SUPABASE_CONFIG.options.global || {};
+  SUPABASE_CONFIG.options.global.headers = SUPABASE_CONFIG.options.global.headers || {};
+  SUPABASE_CONFIG.options.global.headers['x-owner-id'] = ownerId;
+
+  // If a client already exists, rebuild so new headers apply immediately.
+  if (supabaseClient && typeof window !== 'undefined' && window.supabase) {
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_CONFIG.url,
+      SUPABASE_CONFIG.anonKey,
+      SUPABASE_CONFIG.options
+    );
+  }
+}
+
 function initSupabase() {
   if (typeof window.supabase === 'undefined' || !window.supabase) {
     console.error('Supabase library not loaded. Please include the Supabase CDN script.');
@@ -57,5 +73,5 @@ function initSupabase() {
 
 // Export for use in other scripts
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { SUPABASE_CONFIG, initSupabase };
+  module.exports = { SUPABASE_CONFIG, initSupabase, setSupabaseOwnerHeader };
 }
