@@ -341,6 +341,79 @@ body{
   color: #0f172a;
 }
 
+/* ── LANGUAGE PICKER ── */
+.lang-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+}
+
+.lang-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.4px;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.lang-btn:hover {
+  background: rgba(255,255,255,0.07);
+  color: #f1f5f9;
+}
+
+.lang-btn.active {
+  background: linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.10));
+  border: 1px solid rgba(201,168,76,0.45);
+  color: var(--gold-primary);
+}
+
+.lang-btn .lang-flag {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Armenian text hint on question stem */
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  background: rgba(201,168,76,0.10);
+  color: var(--gold-primary);
+  border: 1px solid rgba(201,168,76,0.25);
+}
+
+/* No-translation notice */
+.no-translation-notice {
+  font-size: 13px;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.25);
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  display: none;
+}
+
 /* TEST LAYOUT */
 .test-layout {
   max-width: 1400px;
@@ -1743,6 +1816,18 @@ body{
           </svg>
           <span>Flag</span>
         </button>
+        <!-- LANGUAGE PICKER — visible to all users once a test session is active -->
+        <div class="lang-picker" id="langPicker" style="display:none" title="Switch language / Փոխել լեզուն">
+          <button class="lang-btn active" id="langBtnEn" onclick="switchLanguage('en')" title="English">
+            <span class="lang-flag">🇺🇸</span>
+            <span>EN</span>
+          </button>
+          <button class="lang-btn" id="langBtnHy" onclick="switchLanguage('hy')" title="Հայերեն">
+            <span class="lang-flag">🇦🇲</span>
+            <span>ՀԱՅ</span>
+          </button>
+        </div>
+
         <!-- TEACHER ONLY — removed from DOM entirely for students in applySessionRole() -->
         <button id="revealAllBtn" onclick="revealAllAnswers()"
           style="display:none;align-items:center;gap:7px;padding:8px 16px;border-radius:8px;border:2px solid rgba(201,168,76,0.6);background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.07));color:var(--gold-primary);font-weight:700;font-size:13px;cursor:pointer;letter-spacing:0.5px;transition:all 0.2s">
@@ -1796,6 +1881,11 @@ body{
       </div>
       
       <div class="question-stem" id="questionStem">Loading question...</div>
+      
+      <!-- No-translation notice shown when Armenian is selected but question lacks translation -->
+      <div class="no-translation-notice" id="noTranslationNotice">
+        ⚠️ Armenian translation not yet available for this question. Showing English.
+      </div>
       
       <div class="options-container" id="optionsContainer"></div>
       
@@ -2228,7 +2318,10 @@ async function createTeacherSession(testId, questionOrder) {
       test_config: TEST_CONFIG,
       total_questions: questionOrder.length,
       is_active: true,
-      last_heartbeat: new Date().toISOString()
+      last_heartbeat: new Date().toISOString(),
+      // Frozen bilingual snapshots — written once, never changed
+      session_snapshot_en: testState.snapshot.en || null,
+      session_snapshot_hy: testState.snapshot.hy || null
     };
     
     const { data, error } = await db
@@ -2313,6 +2406,16 @@ async function loadTeacherSessionState() {
     }
     
     console.log('📖 Loaded teacher session state:', data);
+
+    // ── Load the frozen bilingual snapshot (set once by teacher at session start) ──
+    if (data.session_snapshot_en) {
+      testState.snapshot = {
+        en: data.session_snapshot_en,
+        hy: data.session_snapshot_hy || null
+      };
+      applyLanguagePicker();
+      console.log('🌐 Bilingual snapshot loaded from teacher session');
+    }
     
     // Apply the session state
     if (data.question_order && data.question_order.length > 0) {
@@ -2776,7 +2879,14 @@ let testState = {
   sessionId: null,
   shuffleSeed: null,
   testConfig: null,
-  studentId: null
+  studentId: null,
+  // ── Bilingual session snapshot ────────────────────────────────────────
+  // Built once at session creation, never changes.
+  // snapshot.en  — array of {id,stem,options,correct,rationale,multi,points,category}
+  // snapshot.hy  — same array but with Armenian text (stem_hy / options_hy / rationale_hy)
+  //               null if no Armenian translations are available.
+  snapshot: { en: null, hy: null },
+  language: localStorage.getItem('acnhs_test_lang') || 'en' // persisted per device
 };
 
 // ============================================
@@ -2822,7 +2932,7 @@ async function loadQuestions(testId, categoryFilter = null, questionCount = null
   try {
     let query = db
       .from('test_questions')
-      .select('*')
+      .select('id, test_id, question_stem, question_stem_hy, options, options_hy, correct_answers, is_multiple_choice, rationale, rationale_hy, category, display_order, points, is_active, topic_id')
       .eq('test_id', testId)
       .eq('is_active', true)
       .order('display_order', { ascending: true });
@@ -2856,10 +2966,13 @@ async function loadQuestions(testId, categoryFilter = null, questionCount = null
     const parsedQuestions = finalQuestions.map(q => ({
       id: q.id,
       stem: q.question_stem,
+      stem_hy: q.question_stem_hy || null,
       options: q.options, // Already parsed by Supabase
+      options_hy: q.options_hy || null, // Armenian options (same id keys, translated text)
       correct: q.correct_answers, // Already parsed by Supabase
       multi: q.is_multiple_choice,
       rationale: q.rationale,
+      rationale_hy: q.rationale_hy || null,
       category: q.category,
       points: q.points || 1,
       displayOrder: q.display_order
@@ -2973,6 +3086,185 @@ function generateSessionId() {
   return 'test_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
+// ============================================
+// BILINGUAL SNAPSHOT
+// ============================================
+// Called ONCE at session creation after shuffling is applied.
+// Produces a permanent, frozen representation of the test in both languages.
+// The snapshot is stored in testState, localStorage, and (for teacher mode)
+// in the teacher_sessions DB row so every device always gets the exact same
+// question text and order regardless of when they join or what language they pick.
+//
+// Key invariant: correct_answers (option id letters a/b/c/d) are ALWAYS in English
+// keys and are shared across both language snapshots — correct checking never changes.
+
+function buildBilingualSnapshot(shuffledQuestions) {
+  // EN snapshot — canonical source of truth for IDs, order, correct answers
+  const en = shuffledQuestions.map(q => ({
+    id: q.id,
+    stem: q.stem,
+    options: q.options,       // [{id:'a',text:'…'},…]  (already shuffled)
+    correct: q.correct,       // e.g. ['b']
+    multi: q.multi,
+    rationale: q.rationale || '',
+    category: q.category,
+    points: q.points || 1
+  }));
+
+  // HY snapshot — same structure but with Armenian text where available.
+  // Falls back to English when a question or option lacks a translation.
+  const hy = shuffledQuestions.map(q => {
+    // Re-order options_hy to match the already-shuffled English option order
+    let hyOptions = null;
+    if (q.options_hy && Array.isArray(q.options_hy) && q.options_hy.length > 0) {
+      // Build a lookup {id → hy_text} so we can follow the shuffled EN order
+      const hyLookup = {};
+      q.options_hy.forEach(o => { hyLookup[String(o.id)] = o.text; });
+      // Follow the same shuffled order as EN options
+      hyOptions = q.options.map(enOpt => ({
+        id: enOpt.id,
+        text: hyLookup[String(enOpt.id)] || enOpt.text // fallback to EN text
+      }));
+    }
+    return {
+      id: q.id,
+      stem: q.stem_hy || null,         // null means "not translated yet"
+      options: hyOptions || q.options,  // fallback to EN options if no HY version
+      correct: q.correct,               // always EN letter keys — language-agnostic
+      multi: q.multi,
+      rationale: q.rationale_hy || q.rationale || '',
+      category: q.category,
+      points: q.points || 1,
+      _hasTranslation: !!(q.stem_hy && hyOptions)
+    };
+  });
+
+  // Check if at least one question has a full Armenian translation
+  const hasAnyHy = hy.some(q => q._hasTranslation);
+
+  return { en, hy: hasAnyHy ? hy : null };
+}
+
+// Apply the active language to the UI language picker
+function applyLanguagePicker() {
+  const picker = document.getElementById('langPicker');
+  if (picker) picker.style.display = 'flex';
+
+  const btnEn = document.getElementById('langBtnEn');
+  const btnHy = document.getElementById('langBtnHy');
+  if (!btnEn || !btnHy) return;
+
+  const hasHy = !!(testState.snapshot && testState.snapshot.hy);
+
+  // Reset disabled state first
+  btnHy.disabled = false;
+  btnHy.style.opacity = '';
+  btnHy.style.cursor = '';
+  btnHy.title = 'Հայերեն';
+
+  if (!hasHy) {
+    // No Armenian translations — disable the button and show a tooltip
+    btnHy.disabled = true;
+    btnHy.title = 'Հայերեն թարգմանություն դեռ հասանելի չէ';
+    btnHy.style.opacity = '0.35';
+    btnHy.style.cursor = 'not-allowed';
+  }
+
+  if (testState.language === 'hy' && hasHy) {
+    btnHy.classList.add('active');
+    btnEn.classList.remove('active');
+  } else {
+    btnEn.classList.add('active');
+    btnHy.classList.remove('active');
+  }
+}
+
+// Language switch — called by the picker buttons
+function switchLanguage(lang) {
+  if (lang === testState.language) return;
+
+  // Guard: if no Armenian snapshot, show a friendly alert and bail
+  if (lang === 'hy' && !(testState.snapshot && testState.snapshot.hy)) {
+    showNoTranslationAlert();
+    return;
+  }
+
+  testState.language = lang;
+  localStorage.setItem('acnhs_test_lang', lang);
+
+  // Update picker UI
+  const btnEn = document.getElementById('langBtnEn');
+  const btnHy = document.getElementById('langBtnHy');
+  if (btnEn) btnEn.classList.toggle('active', lang === 'en');
+  if (btnHy) btnHy.classList.toggle('active', lang === 'hy');
+
+  // Re-render current question in new language
+  renderQuestion();
+  showToast(lang === 'hy' ? '🇦🇲 Switched to Armenian' : '🇺🇸 Switched to English', 'info');
+}
+
+// Friendly alert when Armenian translations are not yet added to this test
+function showNoTranslationAlert() {
+  // Remove any existing alert first
+  const existing = document.getElementById('noHyAlertOverlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'noHyAlertOverlay';
+  overlay.style.cssText = `
+    position:fixed;inset:0;z-index:9999;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(2,6,23,0.82);padding:20px;
+  `;
+
+  overlay.innerHTML = `
+    <div style="
+      background:#0f172a;border:2px solid rgba(201,168,76,0.45);
+      border-radius:20px;padding:40px 36px;max-width:420px;width:100%;
+      text-align:center;box-shadow:0 24px 64px rgba(0,0,0,0.55);
+      animation:noHyPop 0.2s ease;
+    ">
+      <div style="font-size:52px;margin-bottom:16px">🇦🇲</div>
+      <h2 style="
+        font-family:'Playfair Display',serif;font-size:24px;font-weight:800;
+        color:#f8fafc;margin-bottom:12px;letter-spacing:-0.3px;
+      ">Oops! No Translation Yet</h2>
+      <p style="
+        color:#94a3b8;font-size:15px;line-height:1.65;margin-bottom:28px;
+      ">
+        Armenian translations haven't been added to this test yet.<br>
+        <span style="color:#c9a84c;font-weight:600;">Contact your instructor</span>
+        to request them.
+      </p>
+      <button onclick="document.getElementById('noHyAlertOverlay').remove()" style="
+        background:linear-gradient(135deg,#c9a84c,#d4b56a);
+        color:#020617;border:none;padding:12px 36px;
+        border-radius:10px;font-weight:800;font-size:15px;
+        cursor:pointer;letter-spacing:0.3px;
+        box-shadow:0 4px 16px rgba(201,168,76,0.3);
+        transition:transform 0.15s;
+      "
+      onmouseover="this.style.transform='translateY(-2px)'"
+      onmouseout="this.style.transform='translateY(0)'">
+        Got it
+      </button>
+    </div>
+    <style>
+      @keyframes noHyPop {
+        from { opacity:0; transform:scale(0.92); }
+        to   { opacity:1; transform:scale(1); }
+      }
+    </style>
+  `;
+
+  // Close on backdrop click
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) overlay.remove();
+  });
+
+  document.body.appendChild(overlay);
+}
+
 function saveToLocalStorage() {
   const saveData = {
     sessionId: testState.sessionId,
@@ -2984,7 +3276,9 @@ function saveToLocalStorage() {
     startTime: testState.startTime,
     questionIds: testState.questions.map(q => q.id),
     testId: TEST_CONFIG.testId,
-    selectedTopicIds: TEST_CONFIG.selectedTopicIds || []
+    selectedTopicIds: TEST_CONFIG.selectedTopicIds || [],
+    // Persist the frozen bilingual snapshot so resume always shows identical content
+    snapshot: testState.snapshot
   };
   // Key is scoped per user so in-progress sessions never bleed between accounts
   localStorage.setItem('acnhs_test_session_' + getOwnerId(), JSON.stringify(saveData));
@@ -3715,13 +4009,21 @@ async function initializeNewTest() {
     testState.questions = [...questions];
   }
   
-  // Shuffle options for each question if enabled
+  // Shuffle options for each question if enabled (applied to EN options;
+  // buildBilingualSnapshot will re-align HY options to the shuffled EN order)
   if (TEST_CONFIG.shuffleOptions) {
     testState.questions = testState.questions.map(q => ({
       ...q,
       options: shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0))
     }));
   }
+
+  // ── Build the frozen bilingual snapshot (once, permanent for this session) ──
+  testState.snapshot = buildBilingualSnapshot(testState.questions);
+  console.log('🌐 Bilingual snapshot built:', {
+    en: testState.snapshot.en?.length + ' questions',
+    hy: testState.snapshot.hy ? testState.snapshot.hy.length + ' questions' : 'no Armenian translations'
+  });
   
   // ============================================
   // TEACHER MODE: Create session if teacher
@@ -3741,6 +4043,7 @@ async function initializeNewTest() {
   
   // Initialize UI
   document.getElementById('testTitle').textContent = TEST_CONFIG.testTitle;
+  applyLanguagePicker();
   initializeTimer();
   renderQuestionNavigator();
   renderQuestion();
@@ -3780,8 +4083,20 @@ async function resumeTest(saved) {
       options: shuffleArray(q.options, saved.shuffleSeed + q.id.toString().charCodeAt(0))
     }));
   }
+
+  // ── Restore bilingual snapshot (preferred from localStorage for speed;
+  //    rebuild from freshly loaded questions as fallback) ─────────────────
+  if (saved.snapshot && saved.snapshot.en) {
+    testState.snapshot = saved.snapshot;
+    console.log('🌐 Bilingual snapshot restored from saved session');
+  } else {
+    // Fallback: rebuild snapshot from the re-loaded questions
+    testState.snapshot = buildBilingualSnapshot(testState.questions);
+    console.log('🌐 Bilingual snapshot rebuilt on resume');
+  }
   
   document.getElementById('testTitle').textContent = TEST_CONFIG.testTitle;
+  applyLanguagePicker();
   initializeTimer();
   renderQuestionNavigator();
   renderQuestion();
@@ -3899,7 +4214,38 @@ function toggleExtraQuestions() {
 }
 
 function renderQuestion() {
-  const question = testState.questions[testState.currentIndex];
+  // ── LANGUAGE-AWARE QUESTION RESOLUTION ─────────────────────────────────
+  // Always use the frozen snapshot for text so language switching never
+  // changes question/answer order or correct answers.
+  // Fall back gracefully: if HY is active but this specific question lacks
+  // a translation, show EN text and display the notice banner.
+  const baseQuestion = testState.questions[testState.currentIndex]; // carries id, correct, multi, etc.
+  
+  let displayQuestion; // the object whose .stem / .options we show
+  let showNoTranslation = false;
+
+  if (testState.snapshot.en && testState.snapshot.hy && testState.language === 'hy') {
+    const hyQ = testState.snapshot.hy[testState.currentIndex];
+    if (hyQ && hyQ._hasTranslation) {
+      displayQuestion = hyQ;
+    } else {
+      // This specific question is not translated — fall back to EN silently shown with a banner
+      displayQuestion = testState.snapshot.en[testState.currentIndex];
+      showNoTranslation = true;
+    }
+  } else if (testState.snapshot.en) {
+    displayQuestion = testState.snapshot.en[testState.currentIndex];
+  } else {
+    // No snapshot yet (e.g. student loading mid-stream) — use raw question data
+    displayQuestion = baseQuestion;
+  }
+
+  // Show/hide the no-translation notice
+  const noTransNotice = document.getElementById('noTranslationNotice');
+  if (noTransNotice) noTransNotice.style.display = showNoTranslation ? 'block' : 'none';
+
+  // Use the canonical baseQuestion for logic (answers, correct checks, id)
+  const question = baseQuestion;
   
   // Update question number
   document.getElementById('questionNumber').textContent = 
@@ -3909,24 +4255,25 @@ function renderQuestion() {
   document.getElementById('questionType').textContent = 
     question.multi ? 'Multiple Answer' : 'Single Answer';
   
-  // Update question stem
-  document.getElementById('questionStem').textContent = question.stem;
+  // Update question stem (from active language)
+  document.getElementById('questionStem').textContent = displayQuestion.stem;
   
-  // Render options
+  // Render options (text from active language, id/value always from EN for correct-check)
   const container = document.getElementById('optionsContainer');
   container.innerHTML = '';
   
   const inputType = question.multi ? 'checkbox' : 'radio';
   const inputName = 'question_' + question.id;
   
-  question.options.forEach(option => {
+  // displayQuestion.options preserves the same shuffled order with language text swapped
+  displayQuestion.options.forEach(option => {
     const div = document.createElement('div');
     div.className = 'option';
     
     const input = document.createElement('input');
     input.type = inputType;
     input.name = inputName;
-    input.value = String(option.id); // Ensure string type for consistent comparison
+    input.value = String(option.id); // Always EN letter keys (a/b/c/d) — language-agnostic
     input.id = `option_${question.id}_${option.id}`;
     
     // Check if this option was previously selected
@@ -3945,7 +4292,7 @@ function renderQuestion() {
     const label = document.createElement('label');
     label.htmlFor = input.id;
     label.className = 'option-text';
-    label.textContent = option.text;
+    label.textContent = option.text; // Language-specific text
     
     div.appendChild(input);
     div.appendChild(label);
@@ -3980,6 +4327,8 @@ function renderQuestion() {
     document.getElementById('checkAnswerBtn').style.display = 'none';
   } else {
     const existingStatus = testState.answerStatus[question.id];
+    // Rationale text in the active language (falls back to EN)
+    const rationaleText = displayQuestion.rationale || question.rationale || '';
 
     if (existingStatus) {
       // This question was already checked — re-apply the visual state
@@ -3996,8 +4345,8 @@ function renderQuestion() {
           <div style="display:flex;align-items:center;gap:12px">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
             <div>
-              <div style="font-size:18px;margin-bottom:4px">✅ Correct!</div>
-              ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#166534;margin-top:8px">${question.rationale}</div>` : ''}
+              <div style="font-size:18px;margin-bottom:4px">✅ ${testState.language === 'hy' ? 'Ճիշտ է!' : 'Correct!'}</div>
+              ${rationaleText ? `<div style="font-weight:400;font-size:14px;color:#166534;margin-top:8px">${rationaleText}</div>` : ''}
             </div>
           </div>
         `;
@@ -4009,8 +4358,8 @@ function renderQuestion() {
           <div style="display:flex;align-items:center;gap:12px">
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             <div>
-              <div style="font-size:18px;margin-bottom:4px">❌ Incorrect</div>
-              ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#7f1d1d;margin-top:8px"><strong>Explanation:</strong> ${question.rationale}</div>` : ''}
+              <div style="font-size:18px;margin-bottom:4px">❌ ${testState.language === 'hy' ? 'Սխալ է' : 'Incorrect'}</div>
+              ${rationaleText ? `<div style="font-weight:400;font-size:14px;color:#7f1d1d;margin-top:8px"><strong>${testState.language === 'hy' ? 'Բացատրություն' : 'Explanation'}:</strong> ${rationaleText}</div>` : ''}
             </div>
           </div>
         `;
@@ -4125,6 +4474,18 @@ function checkAnswer() {
   // Show feedback
   const feedbackEl = document.getElementById('answerFeedback');
   feedbackEl.style.display = 'block';
+
+  // Get rationale in the active language
+  let rationaleText = '';
+  if (testState.snapshot.en) {
+    const activeSnapshot = (testState.language === 'hy' && testState.snapshot.hy)
+      ? testState.snapshot.hy
+      : testState.snapshot.en;
+    const snapQ = activeSnapshot[testState.currentIndex];
+    rationaleText = (snapQ && snapQ.rationale) ? snapQ.rationale : (question.rationale || '');
+  } else {
+    rationaleText = question.rationale || '';
+  }
   
   if (isCorrect) {
     feedbackEl.style.background = 'linear-gradient(135deg, rgba(34,197,94,0.15), rgba(34,197,94,0.05))';
@@ -4136,8 +4497,8 @@ function checkAnswer() {
           <polyline points="20 6 9 17 4 12"/>
         </svg>
         <div>
-          <div style="font-size:18px;margin-bottom:4px">✅ Correct!</div>
-          ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#166534;margin-top:8px">${question.rationale}</div>` : ''}
+          <div style="font-size:18px;margin-bottom:4px">✅ ${testState.language === 'hy' ? 'Ճիշտ է!' : 'Correct!'}</div>
+          ${rationaleText ? `<div style="font-weight:400;font-size:14px;color:#166534;margin-top:8px">${rationaleText}</div>` : ''}
         </div>
       </div>
     `;
@@ -4151,8 +4512,8 @@ function checkAnswer() {
           <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
         </svg>
         <div>
-          <div style="font-size:18px;margin-bottom:4px">❌ Incorrect</div>
-          ${question.rationale ? `<div style="font-weight:400;font-size:14px;color:#7f1d1d;margin-top:8px"><strong>Explanation:</strong> ${question.rationale}</div>` : ''}
+          <div style="font-size:18px;margin-bottom:4px">❌ ${testState.language === 'hy' ? 'Սխալ է' : 'Incorrect'}</div>
+          ${rationaleText ? `<div style="font-weight:400;font-size:14px;color:#7f1d1d;margin-top:8px"><strong>${testState.language === 'hy' ? 'Բացատրություն' : 'Explanation'}:</strong> ${rationaleText}</div>` : ''}
         </div>
       </div>
     `;
@@ -4347,7 +4708,10 @@ async function saveTestSession() {
       start_time: new Date(testState.startTime).toISOString(), // Convert timestamp to ISO string
       total_questions: totalQuestions,
       answered_questions: answeredCount,
-      progress_percent: progressPercent
+      progress_percent: progressPercent,
+      // Persist the frozen bilingual snapshot for seamless resume
+      session_snapshot_en: testState.snapshot.en || null,
+      session_snapshot_hy: testState.snapshot.hy || null
     };
     
     const { data, error } = await db
@@ -4527,6 +4891,21 @@ async function loadSavedSession(sessionId) {
   // Restore test config
   const parsedConfig = parseSessionField(session.test_config, {});
   Object.assign(TEST_CONFIG, parsedConfig || {});
+
+  // ── Rebuild the bilingual snapshot from the restored questions ──────────
+  // Prefer snapshot columns if they were saved (post-feature sessions),
+  // otherwise rebuild from the questions array that was persisted.
+  if (session.session_snapshot_en) {
+    testState.snapshot = {
+      en: session.session_snapshot_en,
+      hy: session.session_snapshot_hy || null
+    };
+    console.log('🌐 Bilingual snapshot restored from saved_test_sessions');
+  } else {
+    testState.snapshot = buildBilingualSnapshot(testState.questions);
+    console.log('🌐 Bilingual snapshot rebuilt from saved questions');
+  }
+  applyLanguagePicker();
     
     // Show test container
     document.getElementById('startScreen').style.display = 'none';
