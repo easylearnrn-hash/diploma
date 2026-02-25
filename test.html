@@ -3808,20 +3808,54 @@ function filterSubjectSearch(query) {
   rows.forEach(row => {
     const subjectName = row.dataset.subjectName || '';
     const topicNames  = row.dataset.topicNames  || '';
-    const match = !q || subjectName.includes(q) || topicNames.includes(q);
-    row.classList.toggle('search-hidden', !match);
-    if (match) anyVisible = true;
 
-    // If query matches a topic inside a subject, auto-expand the subject
-    if (q && !subjectName.includes(q) && topicNames.includes(q)) {
-      row.classList.add('expanded');
-      // Dim non-matching topic rows
+    if (!q) {
+      // No search — show everything, reset all topic rows to visible
+      row.classList.remove('search-hidden');
+      row.querySelectorAll('.topic-row').forEach(tr => {
+        tr.style.display = '';
+        tr.style.opacity = '1';
+      });
+      anyVisible = true;
+      return;
+    }
+
+    const subjectMatches = subjectName.includes(q);
+    const topicMatches   = topicNames.includes(q);
+
+    if (subjectMatches) {
+      // Whole subject matches — show it and all its topics
+      row.classList.remove('search-hidden');
+      row.querySelectorAll('.topic-row').forEach(tr => {
+        tr.style.display = '';
+        tr.style.opacity = '1';
+      });
+      anyVisible = true;
+    } else if (topicMatches) {
+      // Subject doesn't match by name but has matching topics — show subject, hide non-matching topics
+      row.classList.remove('search-hidden');
+      row.classList.add('expanded'); // auto-expand to show matches
+      let matchingTopics = 0;
       row.querySelectorAll('.topic-row').forEach(tr => {
         const topicName = tr.dataset.topicName || '';
-        tr.style.opacity = topicName.includes(q) ? '1' : '0.35';
+        if (topicName.includes(q)) {
+          tr.style.display = '';
+          tr.style.opacity = '1';
+          matchingTopics++;
+        } else {
+          // Hide non-matching topics completely (not just dim)
+          tr.style.display = 'none';
+        }
       });
+      if (matchingTopics > 0) anyVisible = true;
+      else row.classList.add('search-hidden');
     } else {
-      row.querySelectorAll('.topic-row').forEach(tr => { tr.style.opacity = '1'; });
+      // No match at all — hide entire subject row
+      row.classList.add('search-hidden');
+      row.querySelectorAll('.topic-row').forEach(tr => {
+        tr.style.display = '';
+        tr.style.opacity = '1';
+      });
     }
   });
 
