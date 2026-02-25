@@ -2860,7 +2860,9 @@ const TEST_CONFIG = {
   allowReview: true,
   passingScorePercent: 70,
   testId: null, // Will be loaded from Supabase or URL parameter
-  categoryFilter: null // Optional: filter questions by category
+  categoryFilter: null, // Optional: filter questions by category
+  selectedTopicIds: [],   // Topic UUIDs chosen by the user
+  selectedTopicNames: []  // Human-readable names — persisted so title works after resume
 };
 
 // ============================================
@@ -3277,6 +3279,7 @@ function saveToLocalStorage() {
     questionIds: testState.questions.map(q => q.id),
     testId: TEST_CONFIG.testId,
     selectedTopicIds: TEST_CONFIG.selectedTopicIds || [],
+    selectedTopicNames: TEST_CONFIG.selectedTopicNames || [],
     // Persist the frozen bilingual snapshot so resume always shows identical content
     snapshot: testState.snapshot
   };
@@ -3642,6 +3645,11 @@ async function startFromSubjectModal() {
     return;
   }
 
+  // User is actively starting a NEW test based on the current modal selection.
+  // Don't allow a previously-saved session (possibly for different topics like Cranial Nerves)
+  // to bleed into this run.
+  clearLocalStorage();
+
   // If subject selected but no topics explicitly picked, auto-select all its topics
   selectedSubjects.forEach(subjectId => {
     const subjectTopics = availableTopics.filter(t => t.subject_id === subjectId);
@@ -3662,6 +3670,10 @@ async function startFromSubjectModal() {
   TEST_CONFIG.shuffleOptions   = mixQAToggle ? mixQAToggle.checked : true;
   TEST_CONFIG.questionCount    = limitInput && limitInput.value ? parseInt(limitInput.value) : null;
   TEST_CONFIG.selectedTopicIds = Array.from(selectedTopics);
+  // Store human-readable names so the header title is correct during the test AND after resume
+  TEST_CONFIG.selectedTopicNames = TEST_CONFIG.selectedTopicIds
+    .map(id => availableTopics.find(t => t.id === id)?.name)
+    .filter(Boolean);
 
   document.getElementById('subjectModal').classList.add('hidden');
 
@@ -3676,14 +3688,9 @@ async function startFromSubjectModal() {
       </div>
     `;
 
-    const saved = loadFromLocalStorage();
-    if (saved && saved.sessionId && saved.testId === TEST_CONFIG.testId) {
-      const shouldResume = await showResumeTestModal();
-      if (shouldResume) { await resumeTest(saved); }
-      else              { await initializeNewTest(); }
-    } else {
-      await initializeNewTest();
-    }
+    // If the user came from the subject/topic picker, we always start fresh.
+    // Resume is only offered on page-load flows that didn't involve a new selection.
+    await initializeNewTest();
 
     document.getElementById('startScreen').style.display = 'none';
     document.getElementById('testContainer').style.display = 'block';
@@ -4042,7 +4049,7 @@ async function initializeNewTest() {
   }
   
   // Initialize UI
-  document.getElementById('testTitle').textContent = TEST_CONFIG.testTitle;
+  document.getElementById('testTitle').textContent = getDisplayTestTitle();
   applyLanguagePicker();
   initializeTimer();
   renderQuestionNavigator();
@@ -4061,9 +4068,12 @@ async function resumeTest(saved) {
   testState.answerStatus = saved.answerStatus || {};
   testState.flagged = new Set(saved.flagged);
   
-  // Restore selected topic IDs so question loading uses the same filter
+  // Restore selected topic IDs + names so question loading and the header title are both correct
   if (saved.selectedTopicIds && saved.selectedTopicIds.length > 0) {
     TEST_CONFIG.selectedTopicIds = saved.selectedTopicIds;
+  }
+  if (saved.selectedTopicNames && saved.selectedTopicNames.length > 0) {
+    TEST_CONFIG.selectedTopicNames = saved.selectedTopicNames;
   }
 
   // Load questions from Supabase using the saved topic filter
@@ -4095,13 +4105,35 @@ async function resumeTest(saved) {
     console.log('🌐 Bilingual snapshot rebuilt on resume');
   }
   
-  document.getElementById('testTitle').textContent = TEST_CONFIG.testTitle;
+  document.getElementById('testTitle').textContent = getDisplayTestTitle();
   applyLanguagePicker();
   initializeTimer();
   renderQuestionNavigator();
   renderQuestion();
   
   showToast('Resumed previous session', 'info');
+}
+
+// ============================================
+// DISPLAY TITLE (TEST + TOPIC)
+// ============================================
+
+function getDisplayTestTitle() {
+  // Use the stored topic names (set at selection time + persisted in localStorage).
+  // This works both during a fresh test AND after page-reload resume — no dependency
+  // on availableTopics being populated.
+  const names = (TEST_CONFIG.selectedTopicNames && TEST_CONFIG.selectedTopicNames.length)
+    ? TEST_CONFIG.selectedTopicNames
+    : [];
+
+  // Single topic → show just the topic name (e.g., "Stroke")
+  if (names.length === 1) return names[0];
+
+  // Multiple topics → show comma-joined list (e.g., "Stroke, Cranial Nerves")
+  if (names.length > 1) return names.join(', ');
+
+  // Fallback: base title from test_configs (shown before any topic is selected)
+  return TEST_CONFIG.testTitle || 'Practice Test';
 }
 
 function handleBeforeUnload(e) {
