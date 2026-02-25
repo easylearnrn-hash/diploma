@@ -8757,6 +8757,15 @@
                     <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
                   </svg>
                 </button>
+                <button onclick="event.stopPropagation();resetModuleProgress('${mod.id}')"
+                        title="Reset student progress"
+                        style="padding:9px 11px;font-size:12px;border-radius:9px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.30);color:#fca5a5;cursor:pointer;transition:all 0.2s;font-family:inherit;"
+                        onmouseover="this.style.background='rgba(239,68,68,0.22)';this.style.borderColor='rgba(239,68,68,0.55)'"
+                        onmouseout="this.style.background='rgba(239,68,68,0.10)';this.style.borderColor='rgba(239,68,68,0.30)'">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                    <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/>
+                  </svg>
+                </button>
                 ${isPublished ? `
                   <button class="btn warning" onclick="event.stopPropagation();unpublishModule('${mod.id}')"
                           style="padding:9px 11px;font-size:12px;border-radius:9px" title="Unpublish module">
@@ -8851,6 +8860,219 @@
         showToast('Module unpublished from all students', 'success');
       } catch(err) {
         showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    // ── Reset module progress for selected students ────────────────────────────
+    async function resetModuleProgress(moduleId) {
+      const mod = ALL_MODULES.find(m => m.id === moduleId);
+      if (!mod) return;
+
+      const modal = document.createElement('div');
+      modal.className = 'modal-backdrop';
+      modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto;animation:fadeIn 0.2s ease;';
+
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = 'background:rgba(7,27,48,0.97);border:1px solid rgba(239,68,68,0.28);border-radius:20px;max-width:720px;width:100%;position:relative;box-shadow:0 30px 70px rgba(0,0,0,0.65);max-height:88vh;display:flex;flex-direction:column;animation:slideUp 0.3s ease;';
+
+      modalContent.innerHTML = `
+        <style>
+          @keyframes fadeIn  { from{opacity:0} to{opacity:1} }
+          @keyframes slideUp { from{transform:translateY(22px);opacity:0} to{transform:translateY(0);opacity:1} }
+          .rp-row { transition:background 0.15s,border-color 0.15s; }
+          .rp-row:hover { background:rgba(239,68,68,0.07) !important; }
+          .rp-row.is-checked { background:rgba(239,68,68,0.10) !important; border-color:rgba(239,68,68,0.45) !important; }
+        </style>
+
+        <!-- Header -->
+        <div style="padding:28px 32px 22px;border-bottom:1px solid rgba(239,68,68,0.14);position:relative;background:rgba(4,17,31,0.55);border-radius:20px 20px 0 0;">
+          <button onclick="this.closest('.modal-backdrop').remove()"
+                  style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.2s;font-family:inherit;"
+                  onmouseover="this.style.background='rgba(239,68,68,0.18)';this.style.borderColor='rgba(239,68,68,0.35)'"
+                  onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(255,255,255,0.10)'">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ece3" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px;">
+            <div style="width:52px;height:52px;background:linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.06));border:1px solid rgba(239,68,68,0.35);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            </div>
+            <div>
+              <h2 style="margin:0 0 3px;color:#f0ece3;font-size:20px;font-weight:800;letter-spacing:-0.3px;">Reset Module Progress</h2>
+              <p style="margin:0;color:#8a8070;font-size:13px;">Select students whose progress should be wiped back to 0</p>
+            </div>
+          </div>
+
+          <!-- Module info strip -->
+          <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.18);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:12px;">
+            <div style="width:36px;height:36px;background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.22);border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fca5a5" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <div style="color:#f0ece3;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${mod.title}</div>
+              <div style="color:#8a8070;font-size:12px;margin-top:1px;">${mod.category}</div>
+            </div>
+            <span style="background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.35);color:#fca5a5;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase;flex-shrink:0;">Destructive</span>
+          </div>
+        </div>
+
+        <!-- Actions bar -->
+        <div style="padding:16px 32px;background:rgba(4,17,31,0.35);border-bottom:1px solid rgba(239,68,68,0.10);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+          <div style="display:flex;gap:10px;">
+            <button onclick="document.querySelectorAll('#rpStudentList .rp-cb').forEach(cb=>{cb.checked=true;const row=cb.closest('label');row.style.background='rgba(239,68,68,0.10)';row.style.borderColor='rgba(239,68,68,0.45)';row.classList.add('is-checked')});document.getElementById('rpCounter').textContent=document.querySelectorAll('#rpStudentList .rp-cb:checked').length+' selected'"
+                    style="background:linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.08));color:#fca5a5;border:1px solid rgba(239,68,68,0.40);padding:8px 18px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;transition:all 0.2s;font-family:inherit;"
+                    onmouseover="this.style.background='linear-gradient(135deg,rgba(239,68,68,0.28),rgba(239,68,68,0.14))';this.style.borderColor='rgba(239,68,68,0.65)'"
+                    onmouseout="this.style.background='linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.08))';this.style.borderColor='rgba(239,68,68,0.40)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+              Select All
+            </button>
+            <button onclick="document.querySelectorAll('#rpStudentList .rp-cb').forEach(cb=>{cb.checked=false;const row=cb.closest('label');row.style.background='rgba(255,255,255,0.03)';row.style.borderColor='rgba(255,255,255,0.07)';row.classList.remove('is-checked')});document.getElementById('rpCounter').textContent='0 selected'"
+                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.10);padding:8px 18px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.09)';this.style.borderColor='rgba(255,255,255,0.18)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.10)'">
+              Clear All
+            </button>
+          </div>
+          <span id="rpCounter" style="color:#8a8070;font-size:12.5px;">Loading…</span>
+        </div>
+
+        <!-- Student list -->
+        <div style="padding:20px 24px;flex:1;overflow-y:auto;">
+          <div id="rpStudentList" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="text-align:center;padding:48px 20px;color:#8a8070;">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin:0 auto 14px;display:block;opacity:0.4;animation:spin 1.4s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+              <div style="color:#c8bfb2;font-weight:600;font-size:13px;">Loading students…</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div style="padding:18px 32px;border-top:1px solid rgba(239,68,68,0.14);background:rgba(4,17,31,0.55);display:flex;justify-content:space-between;align-items:center;gap:12px;border-radius:0 0 20px 20px;">
+          <div style="color:#8a8070;font-size:12.5px;">
+            ⚠️ This permanently wipes progress from the database.
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button onclick="this.closest('.modal-backdrop').remove()"
+                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:11px 24px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;transition:all 0.2s;font-family:inherit;"
+                    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">Cancel</button>
+            <button id="rpConfirmBtn" onclick="confirmResetProgress('${moduleId}', this)"
+                    style="background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;border:none;padding:11px 28px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px;transition:all 0.2s;box-shadow:0 4px 14px rgba(239,68,68,0.28);letter-spacing:0.1px;font-family:inherit;"
+                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(239,68,68,0.42)'"
+                    onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(239,68,68,0.28)'">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+              Reset Selected
+            </button>
+          </div>
+        </div>
+      `;
+
+      modal.appendChild(modalContent);
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+
+      // Load students who have progress rows for this module
+      setTimeout(async () => {
+        const listEl = document.getElementById('rpStudentList');
+        const counterEl = document.getElementById('rpCounter');
+        if (!listEl) return;
+
+        try {
+          // Fetch all progress rows for this module
+          const { data: progressRows, error: progErr } = await db
+            .from('module_progress')
+            .select('student_id, ha, sfx, dc, ms, clicks')
+            .eq('note_id', moduleId);
+          if (progErr) throw progErr;
+
+          // Also get all active students (so admin can reset even if no DB row exists yet)
+          const students = allStudents.filter(s => s.enrollment_status === 'active');
+          const progressByStudentId = {};
+          (progressRows || []).forEach(r => { progressByStudentId[r.student_id] = r; });
+
+          if (students.length === 0) {
+            listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#8a8070;">No active students found.</div>';
+            if (counterEl) counterEl.textContent = '0 students';
+            return;
+          }
+
+          if (counterEl) counterEl.textContent = '0 selected';
+
+          listEl.innerHTML = students.map(s => {
+            const row = progressByStudentId[s.id];
+            const hasProgress = !!row;
+            const score = hasProgress
+              ? Math.round(
+                  Math.min((row.ha||[]).length / 6, 1) * 40 +
+                  Math.min((row.sfx||[]).length / 20, 1) * 20 +
+                  Math.min((row.dc||[]).length / 20, 1) * 20 +
+                  Math.min((row.ms||0) / 432000000, 1) * 20 +
+                  Math.min((row.clicks||0) * 0.0001, 5)
+                )
+              : 0;
+            const initials = s.full_name.split(' ').map(n => n[0]).join('').substring(0,2).toUpperCase();
+            const progressBarW = Math.round(score);
+            return `
+              <label class="rp-row ${hasProgress && score > 0 ? '' : ''}"
+                     style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:12px;cursor:pointer;border:1px solid ${hasProgress && score > 0 ? 'rgba(239,68,68,0.30)' : 'rgba(255,255,255,0.07)'};background:${hasProgress && score > 0 ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.03)'};transition:all 0.15s;position:relative;overflow:hidden;">
+                <input type="checkbox" class="rp-cb" value="${s.id}" ${hasProgress && score > 0 ? 'checked' : ''}
+                       style="width:18px;height:18px;cursor:pointer;accent-color:#ef4444;flex-shrink:0;"
+                       onchange="
+                         const row=this.closest('label');
+                         if(this.checked){row.style.background='rgba(239,68,68,0.10)';row.style.borderColor='rgba(239,68,68,0.45)';row.classList.add('is-checked');}
+                         else{row.style.background='rgba(255,255,255,0.03)';row.style.borderColor='rgba(255,255,255,0.07)';row.classList.remove('is-checked');}
+                         const n=document.querySelectorAll('#rpStudentList .rp-cb:checked').length;
+                         document.getElementById('rpCounter').textContent=n+' selected';">
+                <div style="width:42px;height:42px;background:linear-gradient(135deg,rgba(239,68,68,0.14),rgba(239,68,68,0.06));border:1px solid rgba(239,68,68,0.22);border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fca5a5;flex-shrink:0;letter-spacing:-0.5px;">${initials}</div>
+                <div style="flex:1;min-width:0;">
+                  <div style="color:#f0ece3;font-weight:700;font-size:14px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.full_name}</div>
+                  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="color:#8a8070;font-size:12px;">${s.student_id}</span>
+                    ${hasProgress && score > 0
+                      ? `<div style="display:flex;align-items:center;gap:7px;">
+                           <div style="width:90px;height:5px;background:rgba(255,255,255,0.08);border-radius:3px;overflow:hidden;">
+                             <div style="width:${progressBarW}%;height:100%;background:linear-gradient(90deg,#ef4444,#f97316);border-radius:3px;"></div>
+                           </div>
+                           <span style="color:#fca5a5;font-size:11.5px;font-weight:700;">${score}%</span>
+                         </div>`
+                      : `<span style="color:#475569;font-size:12px;">No progress recorded</span>`
+                    }
+                  </div>
+                </div>
+              </label>`;
+          }).join('');
+
+          // Update counter to reflect pre-checked items
+          const preChecked = listEl.querySelectorAll('.rp-cb:checked').length;
+          if (counterEl) counterEl.textContent = preChecked + ' selected';
+
+        } catch(err) {
+          listEl.innerHTML = '<div style="text-align:center;padding:40px;color:#fca5a5;">Failed to load students: ' + err.message + '</div>';
+        }
+      }, 0);
+    }
+
+    async function confirmResetProgress(moduleId, btn) {
+      const selectedIds = Array.from(document.querySelectorAll('#rpStudentList .rp-cb:checked')).map(cb => cb.value);
+      if (selectedIds.length === 0) {
+        showToast('Select at least one student to reset', 'warning');
+        return;
+      }
+      const orig = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Resetting…';
+      try {
+        // Zero out module_progress rows for selected students
+        const zero = { ha: [], sfx: [], dc: [], ms: 0, clicks: 0, updated_at: new Date().toISOString() };
+        const upsertRows = selectedIds.map(sid => ({ student_id: sid, note_id: moduleId, ...zero }));
+        const { error } = await db.from('module_progress').upsert(upsertRows, { onConflict: 'student_id,note_id' });
+        if (error) throw error;
+        btn.closest('.modal-backdrop').remove();
+        showToast('Progress reset for ' + selectedIds.length + ' student' + (selectedIds.length !== 1 ? 's' : ''), 'success');
+      } catch(err) {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        showToast('Reset failed: ' + err.message, 'error');
       }
     }
 
