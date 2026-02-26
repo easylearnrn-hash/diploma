@@ -4205,7 +4205,7 @@ async function showSubjectSelection() {
     ] = await Promise.all([
       db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
       db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order'),
-      db.from('test_questions').select('topic_id')
+      db.from('test_questions').select('topic_id').eq('is_active', true).limit(10000)
     ]);
 
     if (subjectError) throw subjectError;
@@ -4215,9 +4215,12 @@ async function showSubjectSelection() {
     const topicQuestionCounts = {};
     if (!qCountError && qCountRows) {
       qCountRows.forEach(row => {
-        topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
+        if (row.topic_id) {
+          topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
+        }
       });
     }
+    console.log(`[Topic Counts] fetched ${qCountRows?.length ?? 0} active questions, mapped ${Object.keys(topicQuestionCounts).length} topics`, topicQuestionCounts);
 
     allSubjects = subjects;
     availableTopics = allTopicsRaw || [];
