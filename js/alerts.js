@@ -117,20 +117,30 @@
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (!alerts || alerts.length === 0) return;
+      if (!alerts || alerts.length === 0) {
+        console.log('Alert engine: No active alerts found in DB.');
+        return;
+      }
 
       const studentId = currentStudent?.id || null;
+      console.log('Alert engine: Checking alerts for studentId:', studentId);
 
       // Filter alerts that apply to this student or public visitors
       const applicableAlerts = alerts.filter(alert => {
-        return isAlertTargetedToStudent(alert, studentId);
+        const isTargeted = isAlertTargetedToStudent(alert, studentId);
+        console.log(`Alert engine: Alert ${alert.id} targeted to student?`, isTargeted);
+        return isTargeted;
       });
 
-      if (applicableAlerts.length === 0) return;
+      if (applicableAlerts.length === 0) {
+        console.log('Alert engine: No alerts targeted to this user/visitor.');
+        return;
+      }
 
       // Evaluate each alert's schedule and display rules
       for (const alert of applicableAlerts) {
         const shouldShow = await shouldShowAlert(alert, studentId);
+        console.log(`Alert engine: Alert ${alert.id} shouldShow?`, shouldShow);
         if (shouldShow) {
           await showAlert(alert);
           break; // Only show one alert at a time
@@ -183,17 +193,20 @@
 
       // 0. Page-specific rules
       if (!doesAlertMatchPage(triggerRules)) {
+        console.log(`Alert engine: Alert ${alert.id} rejected by page match.`);
         return false;
       }
 
       // 0b. Session dismissal rule
       const allowSessionRepeat = interactionRules.allow_session_repeat === true;
       if (!allowSessionRepeat && isDismissedThisSession(alert.id)) {
+        console.log(`Alert engine: Alert ${alert.id} rejected by session dismissal.`);
         return false;
       }
 
       // 1. Check schedule rules (date/time windows)
       if (!isWithinScheduleWindow(scheduleRules, alert)) {
+        console.log(`Alert engine: Alert ${alert.id} rejected by schedule window.`);
         return false;
       }
 
@@ -209,6 +222,7 @@
           .limit(1);
 
         if (responses && responses.length > 0) {
+          console.log(`Alert engine: Alert ${alert.id} rejected by response already given.`);
           return false; // Already responded
         }
       }
@@ -234,6 +248,7 @@
 
       // Use new frequency_rules if available, fallback to old display_mode
       const capType = frequencyRules.cap_type || alert.display_mode || 'once_ever';
+      console.log(`Alert engine: Alert ${alert.id} capType: ${capType}, impressionCount: ${impressionCount}`);
 
       switch (capType) {
         case 'once_ever':
@@ -634,12 +649,23 @@
   function normalizePageValue(value) {
     if (!value) return '';
     let normalized = String(value).trim();
-    // Strip protocol/domain if a full URL is provided
+    // Strip protocol/domain if a full URL is provided (http, https, file)
+    try {
+      if (normalized.includes('://')) {
+        const parsed = new URL(normalized);
+        normalized = parsed.pathname || normalized;
+      }
+    } catch (error) {
+      // If URL parsing fails, fall back to string normalization
+    }
     normalized = normalized.replace(/^https?:\/\/[^/]+/i, '');
+    normalized = normalized.replace(/^file:\/\/+/i, '/');
     // Remove query string and hash
     normalized = normalized.split('?')[0].split('#')[0];
     // Remove leading slash and make lowercase for safe matching
-    return normalized.replace(/^\//, '').toLowerCase();
+    const result = normalized.replace(/^\/+/, '').toLowerCase();
+    console.log(`Alert engine: normalizePageValue("${value}") -> "${result}"`);
+    return result;
   }
 
   function getCurrentPageVariants() {
@@ -654,6 +680,7 @@
       variants.add(val);
       variants.add(`/${val}`);
     });
+    console.log('Alert engine: Current page variants:', Array.from(variants));
     return variants;
   }
 
@@ -664,10 +691,12 @@
     }
 
     const currentVariants = getCurrentPageVariants();
-    return pages.some((page) => {
+    const matches = pages.some((page) => {
       const normalized = normalizePageValue(page);
       return currentVariants.has(normalized) || currentVariants.has(`/${normalized}`);
     });
+    console.log('Alert engine: doesAlertMatchPage?', matches, 'Whitelist:', pages);
+    return matches;
   }
 
   function normalizeRules(value) {
