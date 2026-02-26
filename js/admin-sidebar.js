@@ -86,6 +86,12 @@
         permission: 'view_applications'
       },
       { 
+        href: 'admin-payments.html', 
+        icon: '💳', 
+        text: 'Payments', 
+        permission: 'view_applications'
+      },
+      { 
         href: 'admin-hub.html', 
         icon: '🎯', 
         text: 'Admin Hub', 

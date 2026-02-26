@@ -605,6 +605,23 @@ serve(async (req: Request) => {
 
     console.log('Attachments processed:', storedAttachments.length)
 
+    // ── DEDUPLICATION: skip if this resend_id was already stored ──────────
+    if (emailId) {
+      const { data: existingRecord } = await supabase
+        .from('email_history')
+        .select('id')
+        .eq('resend_id', emailId)
+        .maybeSingle()
+
+      if (existingRecord) {
+        console.log(`⚠️ Duplicate webhook: email_id ${emailId} already stored — skipping insert and forward`)
+        return new Response(
+          JSON.stringify({ success: true, message: 'Duplicate — already processed' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        )
+      }
+    }
+
     const { data, error } = await supabase
       .from('email_history')
       .insert([{ 
@@ -635,7 +652,38 @@ serve(async (req: Request) => {
       // Check if recipient is an ACNHS email address
       if (normalizedRecipient?.endsWith('@acnhs.am')) {
         console.log('📧 Checking auto-forwarding rules for recipient:', normalizedRecipient)
-        
+
+        // ── LOOP-BREAK GUARD 1: never forward system-generated emails ──
+        // Emails sent BY the system (hub@acnhs.am, do-not-reply@acnhs.am, etc.) or
+        // BETWEEN ACNHS addresses must never be forwarded — doing so causes infinite loops
+        // because the forwarded copy arrives back at an @acnhs.am inbox and triggers again.
+        const senderIsAcnhsDomain = normalizedSender?.endsWith('@acnhs.am') ?? false
+        const isSystemSender = [
+          'hub@acnhs.am',
+          'do-not-reply@acnhs.am',
+          'noreply@acnhs.am',
+          'admissions@acnhs.am',
+          'info@acnhs.am',
+          'student-services@acnhs.am',
+        ].includes(normalizedSender || '')
+
+        if (senderIsAcnhsDomain || isSystemSender) {
+          console.log(`⏭️ Skipping forward — sender is ACNHS address (${normalizedSender}). Forwarding this would cause a loop.`)
+          // Fall through to normal response — no forwarding
+        } else {
+
+        // ── LOOP-BREAK GUARD 2: never forward already-forwarded emails ──
+        // If the inbound email already carries X-Forwarded-From (set by us when we forward),
+        // it is a forwarded copy arriving back via the recipient's own inbox — skip it.
+        const alreadyForwarded = !!(
+          findHeaderValue(emailData as Record<string, unknown>, 'x-forwarded-from') ||
+          findHeaderValue(emailData as Record<string, unknown>, 'x-acnhs-forwarded')
+        )
+
+        if (alreadyForwarded) {
+          console.log('⏭️ Skipping forward — email already carries X-Forwarded-From header (forwarding loop detected)')
+        } else {
+
         // Look up forwarding rule for this specific ACNHS email
         const { data: forwardingRule, error: ruleError } = await supabase
           .from('email_forwarding_rules')
@@ -694,7 +742,8 @@ serve(async (req: Request) => {
             headers: {
               'X-Forwarded-From': normalizedRecipient,
               'X-Original-Sender': originalFromAddress,
-              'X-Forwarded-To': recipientEmail
+              'X-Forwarded-To': recipientEmail,
+              'X-ACNHS-Forwarded': 'true'
             }
           }
 
@@ -730,6 +779,9 @@ serve(async (req: Request) => {
         } else {
           console.log('⏭️ No auto-forwarding rule enabled for this recipient')
         }
+
+        } // end: !alreadyForwarded
+        } // end: !senderIsAcnhsDomain && !isSystemSender
       }
     } catch (forwardError) {
       console.error('⚠️ Error in auto-forwarding logic (non-fatal):', forwardError)

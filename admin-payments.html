@@ -1,0 +1,2378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Status | Armenian College of Nursing & Health Sciences (ACNHS)</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon.svg">
+  <link rel="shortcut icon" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <script src="js/acnhs-logo-base64.js"></script>
+  <style>
+    :root {
+      --navy-deep:    #020617;
+      --navy-primary: #0f172a;
+      --navy-light:   #1e293b;
+      --navy-border:  #334155;
+      --gold-primary: #c9a84c;
+      --gold-light:   #d4b56a;
+      --gold-dim:     rgba(201,168,76,0.35);
+      --gold-glow:    rgba(201,168,76,0.12);
+      --primary:      #c9a84c;
+      --primary-dark: #b8942f;
+      --bg-dark:      #020617;
+      --bg-card:      #0c1a32;
+      --bg-hover:     #16284a;
+      --text:         #e8edf5;
+      --text-muted:   #8a9ec0;
+      --border:       rgba(255,255,255,0.07);
+      --shadow:       rgba(0,0,0,0.5);
+
+      /* Status colours — no amounts, just identity */
+      --paid-bg:      rgba(34, 197, 94, 0.10);
+      --paid-border:  rgba(34, 197, 94, 0.28);
+      --paid-text:    #4ade80;
+      --paid-badge-bg:    rgba(34, 197, 94, 0.18);
+      --paid-badge-border: rgba(34, 197, 94, 0.45);
+
+      --due-bg:       rgba(239, 68, 68, 0.10);
+      --due-border:   rgba(239, 68, 68, 0.28);
+      --due-text:     #f87171;
+      --due-badge-bg:    rgba(239, 68, 68, 0.18);
+      --due-badge-border: rgba(239, 68, 68, 0.45);
+
+      /* ── Amber / Partial ── */
+      --partial-bg:          rgba(245, 158, 11, 0.09);
+      --partial-border:      rgba(245, 158, 11, 0.28);
+      --partial-text:        #fbbf24;
+      --partial-badge-bg:    rgba(245, 158, 11, 0.18);
+      --partial-badge-border:rgba(245, 158, 11, 0.50);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(ellipse at 15% 25%, rgba(201,168,76,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 80%, rgba(15,23,42,0.9) 0%, transparent 60%),
+        linear-gradient(160deg, #020a1a 0%, #0a1628 45%, #050d1e 100%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .main-content {
+      padding: 40px 44px 60px;
+      min-height: 100vh;
+    }
+
+    /* ── PAGE HEADER ── */
+    header {
+      margin-bottom: 36px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      animation: fadeUpIn 0.4s ease both;
+    }
+
+    header::after {
+      content: '';
+      position: absolute;
+      bottom: -1px; left: 0;
+      width: 72px; height: 2px;
+      background: linear-gradient(90deg, var(--gold-primary), transparent);
+    }
+
+    .header-breadcrumb {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .header-breadcrumb span { color: var(--gold-primary); }
+
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      animation: fadeUpIn 0.45s 0.05s ease both;
+    }
+
+    .search-box {
+      position: relative;
+      flex: 1;
+      min-width: 220px;
+      max-width: 360px;
+    }
+
+    .search-box svg {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+      flex-shrink: 0;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 10px 14px 10px 42px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13.5px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .search-box input:focus {
+      border-color: rgba(201,168,76,0.4);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.08);
+    }
+
+    .search-box input::placeholder { color: var(--text-muted); }
+
+    .filter-select {
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .filter-select:focus { border-color: rgba(201,168,76,0.4); }
+
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-left: auto;
+    }
+
+    /* ── SUMMARY PILLS ── */
+    .summary-row {
+      display: flex;
+      gap: 14px;
+      margin-bottom: 28px;
+      flex-wrap: wrap;
+      animation: fadeUpIn 0.45s 0.08s ease both;
+    }
+
+    .summary-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 20px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      transition: background 0.2s;
+    }
+
+    .summary-pill .pill-count {
+      font-size: 22px;
+      font-weight: 800;
+      line-height: 1;
+    }
+
+    .summary-pill.pill-total   { color: var(--text); }
+    .summary-pill.pill-paid    { border-color: var(--paid-border);    background: var(--paid-bg);    color: var(--paid-text); }
+    .summary-pill.pill-partial { border-color: var(--partial-border); background: var(--partial-bg); color: var(--partial-text); }
+    .summary-pill.pill-due     { border-color: var(--due-border);     background: var(--due-bg);     color: var(--due-text); }
+
+    /* ── SECTION HEADERS (green / red zone labels) ── */
+    .zone-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0 12px;
+      margin-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+      animation: fadeUpIn 0.4s ease both;
+    }
+
+    .zone-header .zone-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .zone-header .zone-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .zone-header .zone-count {
+      margin-left: auto;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+
+    .zone-green .zone-dot   { background: var(--paid-text);    box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+    .zone-green .zone-label { color: var(--paid-text); }
+    .zone-amber .zone-dot   { background: var(--partial-text); box-shadow: 0 0 6px rgba(251,191,36,0.5); }
+    .zone-amber .zone-label { color: var(--partial-text); }
+    .zone-red   .zone-dot   { background: var(--due-text);     box-shadow: 0 0 6px rgba(248,113,113,0.5); }
+    .zone-red   .zone-label { color: var(--due-text); }
+
+    /* ── STUDENT GRID ── */
+    .student-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    /* ── STUDENT CARD ── */
+    .student-card {
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      padding: 20px 22px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      background: rgba(255,255,255,0.025);
+      transition: background 0.2s, transform 0.18s, box-shadow 0.18s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .student-card::before {
+      content: '';
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 3px;
+    }
+
+    .student-card.card-paid {
+      border-color: var(--paid-border);
+      background: var(--paid-bg);
+    }
+    .student-card.card-paid::before   { background: var(--paid-text); }
+
+    .student-card.card-partial {
+      border-color: var(--partial-border);
+      background: var(--partial-bg);
+    }
+    .student-card.card-partial::before { background: var(--partial-text); }
+
+    .student-card.card-due {
+      border-color: var(--due-border);
+      background: var(--due-bg);
+    }
+    .student-card.card-due::before    { background: var(--due-text); }
+
+    .student-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+      background: rgba(255,255,255,0.04);
+    }
+    .student-card.card-paid:hover    { background: rgba(34,197,94,0.13); }
+    .student-card.card-partial:hover { background: rgba(245,158,11,0.13); }
+    .student-card.card-due:hover     { background: rgba(239,68,68,0.13); }
+
+    /* Avatar initials */
+    .student-avatar {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; font-weight: 800;
+      flex-shrink: 0;
+      letter-spacing: 0.5px;
+    }
+
+    .card-paid     .student-avatar { background: rgba(34,197,94,0.18);  color: var(--paid-text);    border: 1px solid var(--paid-border); }
+    .card-partial  .student-avatar { background: rgba(245,158,11,0.18); color: var(--partial-text); border: 1px solid var(--partial-border); }
+    .card-due      .student-avatar { background: rgba(239,68,68,0.18);  color: var(--due-text);     border: 1px solid var(--due-border); }
+
+    /* Info block */
+    .student-info { flex: 1; min-width: 0; }
+
+    .student-name {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-bottom: 3px;
+    }
+
+    .student-id {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      margin-bottom: 6px;
+    }
+
+    .student-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .meta-tag {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    /* Status badge — clickable button */
+    .status-badge {
+      flex-shrink: 0;
+      padding: 6px 13px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      align-self: flex-start;
+      margin-top: 1px;
+      cursor: pointer;
+      border: 1px solid transparent;
+      background: transparent;
+      font-family: 'Inter', sans-serif;
+      transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+    .status-badge:hover  { transform: scale(1.07); opacity: 0.88; box-shadow: 0 3px 10px rgba(0,0,0,0.3); }
+    .status-badge:active { transform: scale(0.96); }
+    /* small chevron hint */
+    .status-badge::after { content: ' ▾'; font-size: 9px; opacity: 0.6; vertical-align: middle; }
+
+    .badge-paid {
+      background: var(--paid-badge-bg);
+      border-color: var(--paid-badge-border);
+      color: var(--paid-text);
+    }
+
+    .badge-partial {
+      background: var(--partial-badge-bg);
+      border-color: var(--partial-badge-border);
+      color: var(--partial-text);
+    }
+
+    .badge-due {
+      background: var(--due-badge-bg);
+      border-color: var(--due-badge-border);
+      color: var(--due-text);
+    }
+
+    /* ── CHANGE-STATUS DRAWER ── */
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,0.72);
+      backdrop-filter: blur(5px);
+      z-index: 9000;
+      display: none;
+      animation: fadein 0.2s ease;
+    }
+    .drawer-overlay.open { display: block; }
+
+    .drawer {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      background: linear-gradient(180deg, #0c1a32 0%, #070f1e 100%);
+      border-top: 1px solid rgba(201,168,76,0.18);
+      border-radius: 20px 20px 0 0;
+      z-index: 9001;
+      transform: translateY(100%);
+      transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+      max-width: 580px;
+      margin: 0 auto;
+      max-height: 88vh;
+      overflow-y: auto;
+    }
+    .drawer.open { transform: translateY(0); }
+
+    .drawer-handle {
+      width: 40px; height: 4px;
+      background: rgba(201,168,76,0.28);
+      border-radius: 2px;
+      margin: 14px auto 0;
+    }
+
+    .drawer-header {
+      padding: 18px 28px 16px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .drawer-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+    .drawer-subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .drawer-close {
+      position: absolute;
+      top: 16px; right: 20px;
+      width: 30px; height: 30px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .drawer-close:hover { background: rgba(239,68,68,0.14); color: #f87171; }
+
+    .drawer-options {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      padding: 22px 28px 30px;
+    }
+
+    .status-option {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 18px 10px;
+      border-radius: 14px;
+      border: 1.5px solid transparent;
+      background: rgba(255,255,255,0.03);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      position: relative;
+    }
+    .status-option:hover { transform: translateY(-3px); }
+
+    .status-option .opt-dot {
+      width: 38px; height: 38px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .status-option .opt-label {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+    .status-option .opt-desc {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      text-align: center;
+      line-height: 1.45;
+    }
+
+    .opt-paid    { border-color: var(--paid-border); }
+    .opt-paid:hover    { background: rgba(34,197,94,0.10);  border-color: var(--paid-text);    box-shadow: 0 6px 20px rgba(34,197,94,0.14); }
+    .opt-paid    .opt-dot  { background: rgba(34,197,94,0.18); }
+    .opt-paid    .opt-label { color: var(--paid-text); }
+
+    .opt-partial { border-color: var(--partial-border); }
+    .opt-partial:hover { background: rgba(245,158,11,0.10); border-color: var(--partial-text); box-shadow: 0 6px 20px rgba(245,158,11,0.14); }
+    .opt-partial .opt-dot  { background: rgba(245,158,11,0.18); }
+    .opt-partial .opt-label { color: var(--partial-text); }
+
+    .opt-unpaid  { border-color: var(--due-border); }
+    .opt-unpaid:hover  { background: rgba(239,68,68,0.10);  border-color: var(--due-text);     box-shadow: 0 6px 20px rgba(239,68,68,0.14); }
+    .opt-unpaid  .opt-dot  { background: rgba(239,68,68,0.18); }
+    .opt-unpaid  .opt-label { color: var(--due-text); }
+
+    .status-option.is-current { border-width: 2px; }
+    .status-option.is-current::after {
+      content: 'Current';
+      position: absolute;
+      top: 7px; right: 9px;
+      font-size: 9px; font-weight: 700; letter-spacing: 0.05em; opacity: 0.7;
+    }
+    .opt-paid.is-current    { border-color: var(--paid-text);    background: rgba(34,197,94,0.09); }
+    .opt-paid.is-current::after    { color: var(--paid-text); }
+    .opt-partial.is-current { border-color: var(--partial-text); background: rgba(245,158,11,0.09); }
+    .opt-partial.is-current::after { color: var(--partial-text); }
+    .opt-unpaid.is-current  { border-color: var(--due-text);     background: rgba(239,68,68,0.09); }
+    .opt-unpaid.is-current::after  { color: var(--due-text); }
+
+    .status-option.saving { opacity: 0.5; pointer-events: none; }
+
+    /* ── ITEM BREAKDOWN PANEL ── */
+    .drawer-breakdown {
+      margin: 0 28px 4px;
+      padding: 16px 18px;
+      background: rgba(245,158,11,0.05);
+      border: 1px solid rgba(245,158,11,0.18);
+      border-radius: 12px;
+    }
+    .breakdown-title {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--partial-text);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .breakdown-title::before {
+      content: '';
+      display: inline-block;
+      width: 3px; height: 11px;
+      background: var(--partial-text);
+      border-radius: 2px;
+    }
+    .breakdown-list {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .breakdown-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 9px 12px;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .breakdown-row-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      flex: 1;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .breakdown-pill {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 999px;
+      flex-shrink: 0;
+    }
+    .pill-full    { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.35);  color: #4ade80; }
+    .pill-partial { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.40); color: #fbbf24; }
+    .pill-unpaid  { background: rgba(239,68,68,0.12);  border: 1px solid rgba(239,68,68,0.30);  color: #f87171; }
+
+    /* ── TOAST ── */
+    .toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(70px);
+      background: #0c1a32;
+      border: 1px solid rgba(201,168,76,0.3);
+      border-radius: 12px;
+      padding: 12px 22px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      z-index: 9999;
+      pointer-events: none;
+      transition: transform 0.28s ease, opacity 0.28s ease;
+      opacity: 0;
+      white-space: nowrap;
+    }
+    .toast.show    { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.success { border-color: var(--paid-border);    color: var(--paid-text); }
+    .toast.error   { border-color: var(--due-border);     color: var(--due-text); }
+
+    @keyframes fadein { from{opacity:0} to{opacity:1} }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center;
+      padding: 56px 24px;
+      color: var(--text-muted);
+      animation: fadeUpIn 0.4s ease both;
+    }
+
+    .empty-state svg { opacity: 0.25; margin-bottom: 16px; }
+    .empty-state p   { font-size: 14px; }
+
+    /* ── SKELETON LOADER ── */
+    .skeleton-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 36px;
+    }
+
+    .skeleton-card {
+      height: 88px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .skeleton-card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+      animation: shimmer 1.6s infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    @keyframes fadeUpIn {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── REFRESH BUTTON ── */
+    .refresh-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 10px 18px;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      border-radius: 10px;
+      color: var(--gold-primary);
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      white-space: nowrap;
+    }
+
+    .refresh-btn:hover {
+      background: rgba(201,168,76,0.18);
+      transform: translateY(-1px);
+    }
+
+    .refresh-btn.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+
+    /* ── LAST UPDATED BADGE ── */
+    .last-updated {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* ── NO INVOICES NOTICE ── */
+    .no-invoice-note {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 3px;
+      font-style: italic;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      .main-content  { padding: 24px 20px 48px; }
+      h1             { font-size: 26px; }
+      .toolbar       { gap: 10px; }
+      .search-box    { max-width: none; }
+      .student-grid  { grid-template-columns: 1fr; }
+      .summary-row   { gap: 10px; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       PRINT MODAL
+    ═══════════════════════════════════════════════════════════════ */
+
+    /* Trigger button subtle distinction */
+    .print-trigger-btn {
+      background: rgba(201,168,76,0.08);
+    }
+    .print-trigger-btn:hover {
+      background: rgba(201,168,76,0.18);
+    }
+
+    /* Full-screen overlay */
+    .pm-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 2000;
+      background: rgba(2,6,23,0.92);
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
+      align-items: stretch;
+    }
+    .pm-overlay.open { display: flex; }
+
+    /* Two-panel wrapper */
+    .pm-shell {
+      display: flex;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
+    /* ── LEFT CONFIG PANEL ── */
+    .pm-config {
+      width: 320px;
+      min-width: 290px;
+      max-width: 340px;
+      background: #0d1526;
+      border-right: 1px solid rgba(201,168,76,0.18);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .pm-config-header {
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0;
+    }
+    .pm-config-header h3 {
+      font-family: 'Playfair Display', serif;
+      font-size: 17px;
+      color: #e8d5a3;
+      margin: 0 0 3px;
+    }
+    .pm-config-header p {
+      font-size: 11.5px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+    .pm-config-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .pm-config-body::-webkit-scrollbar { width: 4px; }
+    .pm-config-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+
+    .pm-section-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold-primary);
+      margin-bottom: 8px;
+    }
+    .pm-section { display: flex; flex-direction: column; gap: 0; }
+
+    /* Text & select inputs */
+    .pm-input {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 7px;
+      color: #e2e8f0;
+      font-size: 13px;
+      padding: 8px 11px;
+      width: 100%;
+      box-sizing: border-box;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .pm-input:focus { border-color: rgba(201,168,76,0.5); }
+    .pm-input-row { display: flex; gap: 8px; }
+    .pm-input-row .pm-input { flex: 1; }
+
+    /* Checkbox rows */
+    .pm-check-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 6px 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .pm-check-row:hover .pm-cb-box { border-color: var(--gold-primary); }
+    .pm-cb-box {
+      width: 17px; height: 17px;
+      border: 1.5px solid rgba(255,255,255,0.25);
+      border-radius: 4px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: border-color .2s, background .2s;
+    }
+    .pm-cb-box.checked {
+      background: var(--gold-primary);
+      border-color: var(--gold-primary);
+    }
+    .pm-cb-box.checked svg { display: block; }
+    .pm-cb-box svg { display: none; }
+    .pm-check-label {
+      font-size: 13px;
+      color: #cbd5e1;
+      flex: 1;
+    }
+    .pm-check-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+    }
+
+    /* Status checkboxes colored dots */
+    .pm-status-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .pm-dot-paid    { background: #4ade80; }
+    .pm-dot-partial { background: #fbbf24; }
+    .pm-dot-due     { background: #f87171; }
+
+    /* Student search + checklist */
+    .pm-student-search {
+      position: relative;
+      margin-bottom: 8px;
+    }
+    .pm-student-search svg {
+      position: absolute;
+      left: 9px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+    .pm-student-search .pm-input {
+      padding-left: 32px;
+    }
+    .pm-student-list {
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 7px;
+      background: rgba(255,255,255,0.03);
+    }
+    .pm-student-list::-webkit-scrollbar { width: 4px; }
+    .pm-student-list::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 2px; }
+    .pm-student-item {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 10px;
+      cursor: pointer;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background .15s;
+    }
+    .pm-student-item:last-child { border-bottom: none; }
+    .pm-student-item:hover { background: rgba(255,255,255,0.05); }
+    .pm-student-item-info { flex: 1; min-width: 0; }
+    .pm-student-item-name { font-size: 12.5px; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pm-student-item-id   { font-size: 11px; color: var(--text-muted); }
+    .pm-status-mini {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .pm-status-mini.paid    { background: rgba(74,222,128,0.15); color: #4ade80; }
+    .pm-status-mini.partial { background: rgba(251,191,36,0.15);  color: #fbbf24; }
+    .pm-status-mini.due     { background: rgba(248,113,113,0.15); color: #f87171; }
+
+    /* Select-all / Deselect-all bar */
+    .pm-sel-bar {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .pm-sel-btn {
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 5px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: #94a3b8;
+      cursor: pointer;
+      transition: border-color .2s, color .2s;
+    }
+    .pm-sel-btn:hover { border-color: var(--gold-primary); color: var(--gold-primary); }
+
+    .pm-sel-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-left: auto;
+      align-self: center;
+    }
+
+    /* Config footer actions */
+    .pm-config-footer {
+      padding: 14px 22px;
+      border-top: 1px solid rgba(255,255,255,0.07);
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    /* Save PDF — primary gold button */
+    .pm-btn-pdf {
+      flex: 1;
+      min-width: 0;
+      background: var(--gold-primary);
+      color: #0a0e1a;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: background .2s, opacity .2s;
+      white-space: nowrap;
+    }
+    .pm-btn-pdf:hover:not(:disabled) { background: #e0bb6a; }
+    .pm-btn-pdf:disabled { opacity: .6; cursor: not-allowed; }
+    @keyframes pm-spin { to { transform: rotate(360deg); } }
+    /* Print — secondary outline button */
+    .pm-btn-print-only {
+      padding: 10px 13px;
+      background: rgba(255,255,255,0.05);
+      color: #cbd5e1;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background .2s, border-color .2s;
+      white-space: nowrap;
+    }
+    .pm-btn-print-only:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.25); }
+    /* Keep legacy class for @media print targeting */
+    .pm-btn-print { display: none; }
+    .pm-btn-cancel {
+      padding: 10px 14px;
+      background: rgba(255,255,255,0.06);
+      color: #94a3b8;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background .2s;
+      white-space: nowrap;
+    }
+    .pm-btn-cancel:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+
+    /* ── RIGHT PREVIEW PANEL ── */
+    .pm-preview {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: #f1f5f9;
+      overflow: hidden;
+    }
+    .pm-preview-topbar {
+      background: #1e293b;
+      padding: 10px 18px;
+      font-size: 11.5px;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+    }
+    .pm-preview-topbar strong { color: #e2e8f0; }
+    .pm-preview-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #4ade80;
+      animation: pm-pulse 2s ease-in-out infinite;
+    }
+    @keyframes pm-pulse {
+      0%,100% { opacity: 1; }
+      50%      { opacity: 0.4; }
+    }
+    .pm-preview-scroll {
+      flex: 1;
+      overflow-y: auto;
+      padding: 28px 32px 48px;
+    }
+    .pm-preview-scroll::-webkit-scrollbar { width: 6px; }
+    .pm-preview-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+
+    /* ── PRINT DOCUMENT (inside preview + actual print) ── */
+    #pmDocument {
+      background: #fff;
+      max-width: 860px;
+      margin: 0 auto;
+      border-radius: 6px;
+      box-shadow: 0 4px 32px rgba(0,0,0,0.12);
+      overflow: hidden;
+      font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+    }
+    .pmd-header {
+      background: #0f172a;
+      color: #fff;
+      padding: 28px 36px 22px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+    .pmd-logo-wrap img,
+    .pmd-logo-wrap canvas { width: 56px; height: 56px; object-fit: contain; }
+    .pmd-title-block { flex: 1; }
+    .pmd-school-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: #c9a84c;
+      letter-spacing: .03em;
+    }
+    .pmd-report-title {
+      font-size: 13px;
+      color: #94a3b8;
+      margin-top: 3px;
+      font-weight: 500;
+    }
+    .pmd-meta {
+      text-align: right;
+      font-size: 11.5px;
+      color: #64748b;
+    }
+    .pmd-meta strong { color: #94a3b8; }
+
+    .pmd-stats-bar {
+      background: #f8fafc;
+      border-bottom: 2px solid #e2e8f0;
+      padding: 12px 36px;
+      display: flex;
+      gap: 28px;
+      flex-wrap: wrap;
+    }
+    .pmd-stat {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      color: #475569;
+    }
+    .pmd-stat-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+    }
+    .pmd-stat-num { font-weight: 700; font-size: 15px; color: #1e293b; }
+
+    .pmd-table-wrap { padding: 22px 36px 32px; }
+    .pmd-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    .pmd-table thead tr {
+      background: #0f172a;
+    }
+    .pmd-table thead th {
+      color: #c9a84c;
+      font-size: 10.5px;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 10px 12px;
+      text-align: left;
+      border: none;
+    }
+    .pmd-table tbody tr:nth-child(even) { background: #f8fafc; }
+    .pmd-table tbody tr { border-bottom: 1px solid #e2e8f0; }
+    .pmd-table tbody td {
+      padding: 9px 12px;
+      color: #334155;
+      vertical-align: middle;
+    }
+    .pmd-badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .pmd-badge-paid    { background: #dcfce7; color: #166534; }
+    .pmd-badge-partial { background: #fef9c3; color: #854d0e; }
+    .pmd-badge-due     { background: #fee2e2; color: #991b1b; }
+    .pmd-footer {
+      background: #f8fafc;
+      border-top: 2px solid #e2e8f0;
+      padding: 12px 36px;
+      font-size: 11px;
+      color: #94a3b8;
+      text-align: center;
+    }
+    .pmd-empty {
+      text-align: center;
+      padding: 40px 0;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+
+    /* ── PRINT MEDIA: hide everything except the document ── */
+    @media print {
+      html, body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      body > * { display: none !important; }
+      #pmPrintTarget {
+        display: block !important;
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #pmPrintTarget #pmDocument {
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        max-width: 100% !important;
+      }
+      #pmPrintTarget .pmd-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #pmPrintTarget .pmd-table thead tr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar injected by admin-sidebar.js -->
+
+  <main class="main-content">
+    <header>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div>
+          <div class="header-breadcrumb">
+            Admin Portal <span>›</span> Payments
+          </div>
+          <h1>Payment Status</h1>
+          <p class="subtitle">Student payment standing — up to date or outstanding</p>
+        </div>
+        <span class="last-updated" id="lastUpdated"></span>
+      </div>
+    </header>
+
+    <!-- TOOLBAR -->
+    <div class="toolbar">
+      <div class="search-box">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" stroke-linecap="round"/>
+        </svg>
+        <input
+          type="text"
+          id="searchInput"
+          placeholder="Search by name, ID, or group…"
+          oninput="applyFilters()"
+        >
+      </div>
+
+      <select class="filter-select" id="statusFilter" onchange="applyFilters()">
+        <option value="all">All Statuses</option>
+        <option value="paid">Paid only</option>
+        <option value="partial">Partial Paid only</option>
+        <option value="due">Due / Unpaid only</option>
+      </select>
+
+      <select class="filter-select" id="groupFilter" onchange="applyFilters()">
+        <option value="">All Groups</option>
+      </select>
+
+      <div class="toolbar-right">
+        <button class="refresh-btn" id="refreshBtn" onclick="loadPaymentStatus()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M1 4v6h6M23 20v-6h-6" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Refresh
+        </button>
+        <button class="refresh-btn print-trigger-btn" id="printBtn" onclick="openPrintModal()">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+            <polyline points="6 9 6 2 18 2 18 9" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="6" y="14" width="12" height="8" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          Print
+        </button>
+      </div>
+    </div>
+
+    <!-- SUMMARY PILLS -->
+    <div class="summary-row" id="summaryRow">
+      <div class="summary-pill pill-total">
+        <span class="pill-count" id="countTotal">—</span>
+        <span>Total students</span>
+      </div>
+      <div class="summary-pill pill-paid">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span class="pill-count" id="countPaid">—</span>
+        <span>Paid</span>
+      </div>
+      <div class="summary-pill pill-partial">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2" stroke-linecap="round"/>
+        </svg>
+        <span class="pill-count" id="countPartial">—</span>
+        <span>Partial</span>
+      </div>
+      <div class="summary-pill pill-due">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/>
+        </svg>
+        <span class="pill-count" id="countDue">—</span>
+        <span>Due / Unpaid</span>
+      </div>
+    </div>
+
+    <!-- SKELETON while loading -->
+    <div id="skeletonLoader">
+      <div class="skeleton-grid">
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+        <div class="skeleton-card"></div>
+      </div>
+    </div>
+
+    <!-- CONTENT (hidden until loaded) -->
+    <div id="paymentsContent" style="display:none;">
+      <!-- GREEN ZONE -->
+      <div class="zone-header zone-green" id="greenZoneHeader">
+        <div class="zone-dot"></div>
+        <span class="zone-label">Green Zone — Up to Date</span>
+        <span class="zone-count" id="greenZoneCount"></span>
+      </div>
+      <div class="student-grid" id="paidGrid"></div>
+
+      <!-- AMBER ZONE -->
+      <div class="zone-header zone-amber" id="amberZoneHeader" style="display:none;">
+        <div class="zone-dot"></div>
+        <span class="zone-label">Amber Zone — Partially Paid</span>
+        <span class="zone-count" id="amberZoneCount"></span>
+      </div>
+      <div class="student-grid" id="partialGrid"></div>
+
+      <!-- RED ZONE -->
+      <div class="zone-header zone-red" id="redZoneHeader">
+        <div class="zone-dot"></div>
+        <span class="zone-label">Red Zone — Outstanding</span>
+        <span class="zone-count" id="redZoneCount"></span>
+      </div>
+      <div class="student-grid" id="dueGrid"></div>
+
+      <!-- EMPTY STATE (shown when filters match nothing) -->
+      <div class="empty-state" id="emptyState" style="display:none;">
+        <svg width="56" height="56" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10"/><path d="M8 12h8M8 8h8M8 16h4" stroke-linecap="round"/>
+        </svg>
+        <p>No students match your current filter.</p>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/admin-sidebar.js"></script>
+
+  <!-- ════════════════════════════════════════
+       CHANGE-STATUS DRAWER
+  ═════════════════════════════════════════ -->
+  <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+
+  <div class="drawer" id="statusDrawer" role="dialog" aria-modal="true" aria-label="Change payment status">
+    <div class="drawer-handle"></div>
+
+    <div class="drawer-header">
+      <button class="drawer-close" onclick="closeDrawer()" aria-label="Close">×</button>
+      <div class="drawer-title" id="drawerStudentName">Student Name</div>
+      <div class="drawer-subtitle" id="drawerStudentId">Select new payment status</div>
+    </div>
+
+    <!-- ITEM BREAKDOWN — shown only for partial students -->
+    <div class="drawer-breakdown" id="drawerBreakdown" style="display:none;">
+      <div class="breakdown-title">Payment Breakdown</div>
+      <div class="breakdown-list" id="breakdownList"></div>
+    </div>
+
+    <div class="drawer-options">
+      <!-- PAID -->
+      <button class="status-option opt-paid" id="optPaid" onclick="commitStatus('paid')">
+        <div class="opt-dot">
+          <svg width="18" height="18" fill="none" stroke="#4ade80" stroke-width="2.5" viewBox="0 0 24 24">
+            <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <span class="opt-label">Paid</span>
+        <span class="opt-desc">Up to date —<br>no balance owed</span>
+      </button>
+
+      <!-- PARTIAL -->
+      <button class="status-option opt-partial" id="optPartial" onclick="commitStatus('partial')">
+        <div class="opt-dot">
+          <svg width="18" height="18" fill="none" stroke="#fbbf24" stroke-width="2.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 6v6l4 2" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="opt-label">Partial</span>
+        <span class="opt-desc">Deposit or partial<br>payment received</span>
+      </button>
+
+      <!-- UNPAID -->
+      <button class="status-option opt-unpaid" id="optUnpaid" onclick="commitStatus('unpaid')">
+        <div class="opt-dot">
+          <svg width="18" height="18" fill="none" stroke="#f87171" stroke-width="2.5" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M12 8v4m0 4h.01" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <span class="opt-label">Unpaid</span>
+        <span class="opt-desc">No payment on<br>record</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       PRINT MODAL
+  ════════════════════════════════════════════════════════════ -->
+  <div class="pm-overlay" id="pmOverlay" role="dialog" aria-modal="true" aria-label="Print Payment Status">
+    <div class="pm-shell">
+
+      <!-- ── LEFT: Configuration Panel ── -->
+      <aside class="pm-config">
+        <div class="pm-config-header">
+          <h3>Print Options</h3>
+          <p>Configure what to include in the printed report</p>
+        </div>
+
+        <div class="pm-config-body">
+
+          <!-- Report details -->
+          <div class="pm-section">
+            <div class="pm-section-label">Report Details</div>
+            <input class="pm-input" id="pmTitle" type="text" value="Payment Status Report" oninput="updatePrintPreview()" placeholder="Report title">
+            <div style="margin-top:8px;display:flex;gap:8px;">
+              <input class="pm-input" id="pmDate" type="date" oninput="updatePrintPreview()" style="flex:1;">
+              <input class="pm-input" id="pmPreparedBy" type="text" value="" oninput="updatePrintPreview()" placeholder="Prepared by (optional)" style="flex:1.4;">
+            </div>
+          </div>
+
+          <!-- Payment status filter -->
+          <div class="pm-section">
+            <div class="pm-section-label">Include Status</div>
+
+            <label class="pm-check-row" onclick="pmToggle('chkPaid')">
+              <div class="pm-cb-box checked" id="chkPaid">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="pm-status-dot pm-dot-paid"></div>
+              <span class="pm-check-label">Paid</span>
+              <span class="pm-check-sub" id="chkPaidCount">0</span>
+            </label>
+
+            <label class="pm-check-row" onclick="pmToggle('chkPartial')">
+              <div class="pm-cb-box checked" id="chkPartial">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="pm-status-dot pm-dot-partial"></div>
+              <span class="pm-check-label">Partial</span>
+              <span class="pm-check-sub" id="chkPartialCount">0</span>
+            </label>
+
+            <label class="pm-check-row" onclick="pmToggle('chkDue')">
+              <div class="pm-cb-box checked" id="chkDue">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <div class="pm-status-dot pm-dot-due"></div>
+              <span class="pm-check-label">Unpaid / Due</span>
+              <span class="pm-check-sub" id="chkDueCount">0</span>
+            </label>
+          </div>
+
+          <!-- Group filter -->
+          <div class="pm-section">
+            <div class="pm-section-label">Group</div>
+            <select class="pm-input" id="pmGroupFilter" onchange="pmRebuildList(); updatePrintPreview()">
+              <option value="">All Groups</option>
+            </select>
+          </div>
+
+          <!-- Column visibility -->
+          <div class="pm-section">
+            <div class="pm-section-label">Columns to Show</div>
+            <label class="pm-check-row" onclick="pmToggle('colName')">
+              <div class="pm-cb-box checked" id="colName">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Student Name</span>
+            </label>
+            <label class="pm-check-row" onclick="pmToggle('colId')">
+              <div class="pm-cb-box checked" id="colId">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Student ID</span>
+            </label>
+            <label class="pm-check-row" onclick="pmToggle('colGroup')">
+              <div class="pm-cb-box checked" id="colGroup">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Group / Program</span>
+            </label>
+            <label class="pm-check-row" onclick="pmToggle('colStatus')">
+              <div class="pm-cb-box checked" id="colStatus">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Payment Status</span>
+            </label>
+            <label class="pm-check-row" onclick="pmToggle('colNo')">
+              <div class="pm-cb-box checked" id="colNo">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label"># Row Number</span>
+            </label>
+          </div>
+
+          <!-- Student selector -->
+          <div class="pm-section">
+            <div class="pm-section-label">Students</div>
+            <div class="pm-sel-bar">
+              <button class="pm-sel-btn" onclick="pmSelectAll()">Select All</button>
+              <button class="pm-sel-btn" onclick="pmDeselectAll()">Deselect All</button>
+              <span class="pm-sel-count" id="pmSelCount">0 selected</span>
+            </div>
+            <div class="pm-student-search">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35" stroke-linecap="round"/>
+              </svg>
+              <input class="pm-input" id="pmStudentSearch" type="text" placeholder="Filter students…" oninput="pmFilterList()">
+            </div>
+            <div class="pm-student-list" id="pmStudentList"></div>
+          </div>
+
+        </div><!-- /pm-config-body -->
+
+        <div class="pm-config-footer">
+          <button class="pm-btn-pdf" id="pmSavePdfBtn" onclick="exportPdf()">
+            <svg id="pmPdfIcon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke-linecap="round" stroke-linejoin="round"/>
+              <polyline points="7 10 12 15 17 10" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="12" y1="15" x2="12" y2="3" stroke-linecap="round"/>
+            </svg>
+            <svg id="pmPdfSpinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:none;animation:pm-spin .7s linear infinite;">
+              <circle cx="12" cy="12" r="10" stroke-opacity=".25"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+            </svg>
+            <span id="pmPdfLabel">Save PDF</span>
+          </button>
+          <button class="pm-btn-print-only" onclick="executePrint()">
+            <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+              <polyline points="6 9 6 2 18 2 18 9" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="6" y="14" width="12" height="8" rx="1" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Print
+          </button>
+          <button class="pm-btn-cancel" onclick="closePrintModal()">Cancel</button>
+        </div>
+      </aside>
+
+      <!-- ── RIGHT: Live Preview Panel ── -->
+      <div class="pm-preview">
+        <div class="pm-preview-topbar">
+          <div class="pm-preview-dot"></div>
+          <strong>Live Preview</strong>
+          &nbsp;— updates as you change options
+          <span style="margin-left:auto;font-size:11px;" id="pmPreviewCount"></span>
+        </div>
+        <div class="pm-preview-scroll">
+          <div id="pmDocument"><!-- rendered by updatePrintPreview() --></div>
+        </div>
+      </div>
+
+    </div><!-- /pm-shell -->
+  </div><!-- /pm-overlay -->
+
+  <!-- Hidden div used only during window.print() — injected then removed -->
+  <div id="pmPrintTarget" style="display:none;"></div>
+
+  <script>
+    // ── Auth guard ──────────────────────────────────────────────────────
+    const isAdmin  = sessionStorage.getItem('isAdmin')   === 'true' || localStorage.getItem('isAdmin')   === 'true';
+    const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+    if (!isLoggedIn || !isAdmin) {
+      window.location.href = 'login.html';
+    }
+
+    // ── State ────────────────────────────────────────────────────────────
+    // { name, studentId, group, program, status:'paid'|'partial'|'due', hasInvoice, invoiceIds:[] }
+    let allStudentStatuses = [];
+    let drawerStudentId    = null;
+    let drawerCurrentStatus = null;
+
+    // ── Status resolution ────────────────────────────────────────────────
+    // Priority: paid > partial > anything else → 'due'
+    function bestStatus(statuses) {
+      const s = statuses.map(x => (x || '').toLowerCase());
+      if (s.includes('paid'))    return 'paid';
+      if (s.includes('partial')) return 'partial';
+      return 'due';
+    }
+
+    // ── Load data ────────────────────────────────────────────────────────
+    async function loadPaymentStatus() {
+      const btn = document.getElementById('refreshBtn');
+      btn.classList.add('spinning');
+
+  try {
+        const db = initSupabase();
+        if (!db) throw new Error('Supabase not initialised');
+
+        const { data: students, error: studErr } = await db
+          .from('students')
+          .select('full_name, student_id, group, program, id')
+          .order('full_name', { ascending: true });
+        if (studErr) throw studErr;
+
+        const { data: invoices, error: invErr } = await db
+          .from('invoices')
+          .select('id, student_id, status');
+        if (invErr) throw invErr;
+
+        // Build lookup: studentId → { statuses[], ids[] }
+        const invoiceMap = {};
+        (invoices || []).forEach(inv => {
+          const sid = (inv.student_id || '').trim();
+          if (!sid) return;
+          if (!invoiceMap[sid]) invoiceMap[sid] = { statuses: [], ids: [] };
+          invoiceMap[sid].statuses.push((inv.status || '').toLowerCase());
+          invoiceMap[sid].ids.push(inv.id);
+        });
+
+        allStudentStatuses = (students || []).map(s => {
+          const sid   = (s.student_id || '').trim();
+          const entry = invoiceMap[sid];
+          return {
+            name:       s.full_name || 'Unknown',
+            studentId:  sid,
+            group:      s.group   || '',
+            program:    s.program || '',
+            status:     entry ? bestStatus(entry.statuses) : 'due',
+            hasInvoice: !!entry,
+            invoiceIds: entry ? entry.ids : [],
+          };
+        });
+
+        populateGroupFilter();
+        applyFilters();
+
+        document.getElementById('lastUpdated').textContent =
+          'Updated ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+      } catch (err) {
+        console.error('Failed to load payment status:', err);
+        showToast('Failed to load data — check console', 'error');
+      } finally {
+        btn.classList.remove('spinning');
+        document.getElementById('skeletonLoader').style.display  = 'none';
+        document.getElementById('paymentsContent').style.display = 'block';
+      }
+    }
+
+    // ── Populate group dropdown ───────────────────────────────────────────
+    function populateGroupFilter() {
+      const sel  = document.getElementById('groupFilter');
+      const prev = sel.value;
+      sel.innerHTML = '<option value="">All Groups</option>';
+      const groups = [...new Set(allStudentStatuses.map(s => s.group).filter(Boolean))].sort();
+      groups.forEach(g => {
+        const opt = document.createElement('option');
+        opt.value = g; opt.textContent = g;
+        sel.appendChild(opt);
+      });
+      sel.value = prev;
+    }
+
+    // ── Filter + render ───────────────────────────────────────────────────
+    function applyFilters() {
+      const search = document.getElementById('searchInput').value.trim().toLowerCase();
+      const status = document.getElementById('statusFilter').value;
+      const group  = document.getElementById('groupFilter').value;
+
+      const filtered = allStudentStatuses.filter(s => {
+        const matchSearch = !search ||
+          s.name.toLowerCase().includes(search) ||
+          s.studentId.toLowerCase().includes(search) ||
+          s.group.toLowerCase().includes(search);
+        const matchStatus = status === 'all' || s.status === status;
+        const matchGroup  = !group || s.group === group;
+        return matchSearch && matchStatus && matchGroup;
+      });
+
+      // Summary pills — always reflect TOTAL dataset
+      document.getElementById('countTotal').textContent   = allStudentStatuses.length;
+      document.getElementById('countPaid').textContent    = allStudentStatuses.filter(s => s.status === 'paid').length;
+      document.getElementById('countPartial').textContent = allStudentStatuses.filter(s => s.status === 'partial').length;
+      document.getElementById('countDue').textContent     = allStudentStatuses.filter(s => s.status === 'due').length;
+
+      const paid    = filtered.filter(s => s.status === 'paid');
+      const partial = filtered.filter(s => s.status === 'partial');
+      const due     = filtered.filter(s => s.status === 'due');
+
+      document.getElementById('greenZoneCount').textContent = paid.length    + ' student' + (paid.length    !== 1 ? 's' : '');
+      document.getElementById('amberZoneCount').textContent = partial.length + ' student' + (partial.length !== 1 ? 's' : '');
+      document.getElementById('redZoneCount').textContent   = due.length     + ' student' + (due.length     !== 1 ? 's' : '');
+
+      renderGrid('paidGrid',    paid,    'paid');
+      renderGrid('partialGrid', partial, 'partial');
+      renderGrid('dueGrid',     due,     'due');
+
+      document.getElementById('greenZoneHeader').style.display = paid.length    ? 'flex' : 'none';
+      document.getElementById('amberZoneHeader').style.display = partial.length ? 'flex' : 'none';
+      document.getElementById('redZoneHeader').style.display   = due.length     ? 'flex' : 'none';
+      document.getElementById('emptyState').style.display      = filtered.length ? 'none' : 'block';
+    }
+
+    // ── Render student cards ─────────────────────────────────────────────
+    function renderGrid(gridId, students, zone) {
+      const grid = document.getElementById(gridId);
+      if (!students.length) { grid.innerHTML = ''; return; }
+
+      const badgeCfg = {
+        paid:    { cls: 'badge-paid',    label: 'PAID' },
+        partial: { cls: 'badge-partial', label: 'PARTIAL' },
+        due:     { cls: 'badge-due',     label: 'UNPAID' },
+      };
+
+      grid.innerHTML = students.map(s => {
+        const initials  = s.name.split(' ').filter(Boolean).map(w => w[0]).join('').toUpperCase().slice(0, 2) || '??';
+        const { cls, label } = badgeCfg[zone];
+        const groupTag   = s.group   ? `<span class="meta-tag">${escHtml(s.group)}</span>`   : '';
+        const programTag = s.program ? `<span class="meta-tag">${escHtml(s.program)}</span>` : '';
+        const noInvNote  = !s.hasInvoice ? `<div class="no-invoice-note">No invoice on record</div>` : '';
+
+        // Safely encode studentId and name for the onclick attribute
+        const safeId   = escHtml(s.studentId);
+        const safeName = escHtml(s.name).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+
+        return `
+          <div class="student-card card-${zone}">
+            <div class="student-avatar">${initials}</div>
+            <div class="student-info">
+              <div class="student-name">${escHtml(s.name)}</div>
+              <div class="student-id">${safeId || '—'}</div>
+              <div class="student-meta">${groupTag}${programTag}</div>
+              ${noInvNote}
+            </div>
+            <button
+              class="status-badge ${cls}"
+              title="Click to change status"
+              onclick="openDrawer('${safeId}', '${safeName}', '${zone}')">
+              ${label}
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ── Drawer ─────────────────────────────────────────────────────────────
+    function openDrawer(studentId, studentName, currentStatus) {
+      drawerStudentId     = studentId;
+      drawerCurrentStatus = currentStatus;
+
+      document.getElementById('drawerStudentName').textContent = studentName;
+      document.getElementById('drawerStudentId').textContent   = (studentId || '—') + '  ·  Select new payment status';
+
+      // Highlight current
+      ['optPaid', 'optPartial', 'optUnpaid'].forEach(id =>
+        document.getElementById(id).classList.remove('is-current')
+      );
+      const map = { paid: 'optPaid', partial: 'optPartial', due: 'optUnpaid' };
+      if (map[currentStatus]) document.getElementById(map[currentStatus]).classList.add('is-current');
+
+      // ── Show item breakdown for partial students ──────────────────────
+      const breakdownEl   = document.getElementById('drawerBreakdown');
+      const breakdownList = document.getElementById('breakdownList');
+
+      if (currentStatus === 'partial') {
+        const student = allStudentStatuses.find(s => s.studentId === studentId);
+
+        // Show loading state immediately, then fetch full invoice data
+        breakdownList.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:8px 0;text-align:center;">Loading breakdown…</div>`;
+        breakdownEl.style.display = 'block';
+
+        if (student && student.invoiceIds && student.invoiceIds.length > 0) {
+          // Fetch full invoice data (items + notes) fresh from DB — need prices to compare
+          const db = initSupabase();
+          db.from('invoices')
+            .select('items, notes, status')
+            .in('id', student.invoiceIds)
+            .then(({ data: invoices, error }) => {
+              if (error || !invoices || invoices.length === 0) {
+                breakdownList.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">Could not load invoice details.</div>`;
+                return;
+              }
+
+              // Merge all items and notes across invoices for this student
+              let allItems = [];
+              let combinedNotes = '';
+              invoices.forEach(inv => {
+                let parsed = [];
+                try { parsed = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch(e) {}
+                allItems.push(...parsed);
+                if (inv.notes) combinedNotes += '\n' + inv.notes;
+              });
+
+              const validItems = allItems.filter(item => item && item.description && item.description.trim());
+
+              if (validItems.length === 0) {
+                breakdownList.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No line items on invoice yet.</div>`;
+                return;
+              }
+
+              // ── Parse payment records from notes ──────────────────────
+              // Each block: "--- PARTIAL PAYMENT RECORDED ---\nDate:...\nAmount: $X\nApplied To: <item name>"
+              // Build map: item description (lowercased) → total paid amount (number)
+              const paidAmountByItem = {}; // key: item desc lowercase → summed amount paid
+              const blocks = combinedNotes.split('--- PARTIAL PAYMENT RECORDED ---');
+              blocks.forEach((block, i) => {
+                if (i === 0) return; // first chunk is the original notes text
+                const appliedToMatch = block.match(/Applied To:\s*(.+?)(?=\n|$)/);
+                const amountMatch    = block.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+                if (appliedToMatch && amountMatch) {
+                  const itemKey = appliedToMatch[1].trim().toLowerCase();
+                  const paid    = parseFloat(amountMatch[1].replace(/,/g, '')) || 0;
+                  paidAmountByItem[itemKey] = (paidAmountByItem[itemKey] || 0) + paid;
+                }
+              });
+
+              // ── Render each item with correct status ──────────────────
+              // Match item description against paidAmountByItem keys (fuzzy: either contains the other)
+              breakdownList.innerHTML = validItems.map(item => {
+                const desc     = item.description.trim();
+                const descLow  = desc.toLowerCase();
+
+                // Calculate item price (qty × price − discount)
+                const qty      = parseFloat(item.qty || item.quantity || 1);
+                const price    = parseFloat(item.price || 0);
+                const disc     = parseFloat(item.discount || 0);
+                const itemTotal = qty * price * (1 - disc / 100);
+
+                // Find matching payment record
+                const matchKey = Object.keys(paidAmountByItem).find(k =>
+                  k === descLow || k.includes(descLow) || descLow.includes(k)
+                );
+                const amountPaid = matchKey ? paidAmountByItem[matchKey] : 0;
+
+                // Determine status:
+                // Full  → paid amount ≥ item total (or item total is 0 and a record exists)
+                // Partial → some payment made but less than item total
+                // Unpaid → no payment record for this item
+                let pillClass, pillLabel;
+                if (amountPaid <= 0) {
+                  pillClass = 'pill-unpaid';  pillLabel = 'Unpaid';
+                } else if (itemTotal > 0 && amountPaid < itemTotal - 0.01) {
+                  pillClass = 'pill-partial'; pillLabel = 'Partial';
+                } else {
+                  pillClass = 'pill-full';    pillLabel = 'Full';
+                }
+
+                return `
+                  <div class="breakdown-row">
+                    <span class="breakdown-row-name">${escHtml(desc)}</span>
+                    <span class="breakdown-pill ${pillClass}">${pillLabel}</span>
+                  </div>
+                `;
+              }).join('');
+            });
+        } else {
+          breakdownList.innerHTML = `<div style="font-size:12px;color:var(--text-muted);padding:6px 0;">No invoice on record for this student.</div>`;
+        }
+      } else {
+        breakdownEl.style.display = 'none';
+      }
+
+      document.getElementById('drawerOverlay').classList.add('open');
+      document.getElementById('statusDrawer').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawerOverlay').classList.remove('open');
+      document.getElementById('statusDrawer').classList.remove('open');
+      document.body.style.overflow = '';
+      drawerStudentId = null;
+      drawerCurrentStatus = null;
+    }
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+
+    // ── Commit status change ───────────────────────────────────────────────
+    async function commitStatus(newStatus) {
+      if (!drawerStudentId) return;
+      if (newStatus === drawerCurrentStatus) { closeDrawer(); return; }
+
+      const student = allStudentStatuses.find(s => s.studentId === drawerStudentId);
+      if (!student) return;
+
+      // Disable options while saving
+      ['optPaid', 'optPartial', 'optUnpaid'].forEach(id =>
+        document.getElementById(id).classList.add('saving')
+      );
+
+      // Map display zone → DB status value
+      const dbStatus = newStatus === 'due' ? 'unpaid' : newStatus;
+
+      try {
+        const db = initSupabase();
+        if (!db) throw new Error('Supabase not initialised');
+
+        if (student.invoiceIds.length > 0) {
+          const { error } = await db
+            .from('invoices')
+            .update({ status: dbStatus })
+            .in('id', student.invoiceIds);
+          if (error) throw error;
+        } else {
+          // No invoice exists — insert a minimal record
+          const { error } = await db
+            .from('invoices')
+            .insert([{
+              student_id:     student.studentId,
+              student_name:   student.name,
+              status:         dbStatus,
+              invoice_number: 'STATUS-' + student.studentId + '-' + Date.now(),
+              invoice_date:   new Date().toISOString().slice(0, 10),
+            }]);
+          if (error) throw error;
+        }
+
+        // Optimistic local update
+        student.status     = newStatus;
+        student.hasInvoice = true;
+
+        closeDrawer();
+        applyFilters();
+        showToast('Status updated to ' + newStatus.toUpperCase(), 'success');
+
+        // If we inserted a new invoice, reload to get real ids
+        if (student.invoiceIds.length === 0) loadPaymentStatus();
+
+      } catch (err) {
+        console.error('Failed to update status:', err);
+        showToast('Failed to save — ' + (err.message || 'check console'), 'error');
+        ['optPaid', 'optPartial', 'optUnpaid'].forEach(id =>
+          document.getElementById(id).classList.remove('saving')
+        );
+      }
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────────────
+    let _toastTimer = null;
+    function showToast(msg, type = '') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className   = 'toast ' + type + ' show';
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => { t.className = 'toast ' + type; }, 3000);
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+    function escHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str || '';
+      return d.innerHTML;
+    }
+
+    // ── Boot ───────────────────────────────────────────────────────────────
+    loadPaymentStatus();
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // PRINT MODAL
+    // ═══════════════════════════════════════════════════════════════════════
+
+    // Internal state for the print modal
+    const pmState = {
+      selectedIds: new Set(),   // studentId strings of selected students
+      listFiltered: [],         // currently visible items in the checklist (after search)
+    };
+
+    // ── Open modal ─────────────────────────────────────────────────────────
+    function openPrintModal() {
+      if (!allStudentStatuses.length) {
+        showToast('No student data loaded yet — click Refresh first', 'error');
+        return;
+      }
+
+      // Set today's date
+      document.getElementById('pmDate').value = new Date().toISOString().slice(0, 10);
+
+      // Populate group filter
+      const pmGroup = document.getElementById('pmGroupFilter');
+      const prevGroup = pmGroup.value;
+      pmGroup.innerHTML = '<option value="">All Groups</option>';
+      const groups = [...new Set(allStudentStatuses.map(s => s.group).filter(Boolean))].sort();
+      groups.forEach(g => {
+        const o = document.createElement('option');
+        o.value = g; o.textContent = g; pmGroup.appendChild(o);
+      });
+      pmGroup.value = prevGroup;
+
+      // Update status counts
+      document.getElementById('chkPaidCount').textContent    = allStudentStatuses.filter(s => s.status === 'paid').length;
+      document.getElementById('chkPartialCount').textContent = allStudentStatuses.filter(s => s.status === 'partial').length;
+      document.getElementById('chkDueCount').textContent     = allStudentStatuses.filter(s => s.status === 'due').length;
+
+      // Select all students by default
+      pmState.selectedIds = new Set(allStudentStatuses.map(s => s.studentId));
+
+      // Build checklist and preview
+      pmRebuildList();
+      updatePrintPreview();
+
+      document.getElementById('pmOverlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    // ── Close modal ────────────────────────────────────────────────────────
+    function closePrintModal() {
+      document.getElementById('pmOverlay').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // Close on Escape (extend existing keydown listener logic)
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeDrawer();
+        closePrintModal();
+      }
+    });
+
+    // ── Toggle a checkbox (status or column) ───────────────────────────────
+    function pmToggle(id) {
+      const box = document.getElementById(id);
+      if (!box) return;
+      const isChecked = box.classList.toggle('checked');
+      // Show/hide checkmark svg
+      const svg = box.querySelector('svg');
+      if (svg) svg.style.display = isChecked ? 'block' : 'none';
+      // Rebuild student list if a status filter changed
+      if (['chkPaid','chkPartial','chkDue'].includes(id)) pmRebuildList();
+      updatePrintPreview();
+    }
+
+    // Helper: is a checkbox checked?
+    function pmIsChecked(id) {
+      return document.getElementById(id)?.classList.contains('checked') ?? false;
+    }
+
+    // ── Get students that pass the current config filters ──────────────────
+    function pmGetFilteredStudents() {
+      const group   = document.getElementById('pmGroupFilter').value;
+      const wantPaid    = pmIsChecked('chkPaid');
+      const wantPartial = pmIsChecked('chkPartial');
+      const wantDue     = pmIsChecked('chkDue');
+
+      return allStudentStatuses.filter(s => {
+        if (!pmState.selectedIds.has(s.studentId)) return false;
+        if (group && s.group !== group) return false;
+        if (s.status === 'paid'    && !wantPaid)    return false;
+        if (s.status === 'partial' && !wantPartial) return false;
+        if (s.status === 'due'     && !wantDue)     return false;
+        return true;
+      });
+    }
+
+    // ── Rebuild the student checklist (left panel) ─────────────────────────
+    function pmRebuildList() {
+      const group       = document.getElementById('pmGroupFilter').value;
+      const wantPaid    = pmIsChecked('chkPaid');
+      const wantPartial = pmIsChecked('chkPartial');
+      const wantDue     = pmIsChecked('chkDue');
+      const search      = (document.getElementById('pmStudentSearch')?.value || '').trim().toLowerCase();
+
+      pmState.listFiltered = allStudentStatuses.filter(s => {
+        if (group && s.group !== group) return false;
+        if (s.status === 'paid'    && !wantPaid)    return false;
+        if (s.status === 'partial' && !wantPartial) return false;
+        if (s.status === 'due'     && !wantDue)     return false;
+        if (search && !s.name.toLowerCase().includes(search) && !s.studentId.toLowerCase().includes(search)) return false;
+        return true;
+      });
+
+      const list = document.getElementById('pmStudentList');
+      if (!pmState.listFiltered.length) {
+        list.innerHTML = '<div style="padding:14px;text-align:center;font-size:12px;color:#8a9ec0;">No students match current filters</div>';
+        document.getElementById('pmSelCount').textContent = '0 selected';
+        return;
+      }
+
+      list.innerHTML = pmState.listFiltered.map(s => {
+        const checked = pmState.selectedIds.has(s.studentId);
+        const sLabel  = s.status === 'paid' ? 'paid' : s.status === 'partial' ? 'partial' : 'due';
+        return `
+          <div class="pm-student-item" onclick="pmToggleStudent('${escHtml(s.studentId).replace(/'/g,"\\'")}')">
+            <div class="pm-cb-box${checked ? ' checked' : ''}" id="pm-cb-${escHtml(s.studentId)}">
+              <svg width="10" height="10" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24" style="display:${checked?'block':'none'}"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="pm-student-item-info">
+              <div class="pm-student-item-name">${escHtml(s.name)}</div>
+              <div class="pm-student-item-id">${escHtml(s.studentId) || '—'}</div>
+            </div>
+            <span class="pm-status-mini ${sLabel}">${sLabel === 'due' ? 'unpaid' : sLabel}</span>
+          </div>
+        `;
+      }).join('');
+
+      pmUpdateSelCount();
+    }
+
+    function pmFilterList() { pmRebuildList(); updatePrintPreview(); }
+
+    function pmToggleStudent(sid) {
+      if (pmState.selectedIds.has(sid)) {
+        pmState.selectedIds.delete(sid);
+      } else {
+        pmState.selectedIds.add(sid);
+      }
+      // Update checkbox visual
+      const box = document.getElementById('pm-cb-' + sid);
+      if (box) {
+        const isNowChecked = pmState.selectedIds.has(sid);
+        box.classList.toggle('checked', isNowChecked);
+        const svg = box.querySelector('svg');
+        if (svg) svg.style.display = isNowChecked ? 'block' : 'none';
+      }
+      pmUpdateSelCount();
+      updatePrintPreview();
+    }
+
+    function pmSelectAll() {
+      pmState.listFiltered.forEach(s => pmState.selectedIds.add(s.studentId));
+      pmRebuildList();
+      updatePrintPreview();
+    }
+
+    function pmDeselectAll() {
+      pmState.listFiltered.forEach(s => pmState.selectedIds.delete(s.studentId));
+      pmRebuildList();
+      updatePrintPreview();
+    }
+
+    function pmUpdateSelCount() {
+      // Count how many of the listFiltered students are selected
+      const n = pmState.listFiltered.filter(s => pmState.selectedIds.has(s.studentId)).length;
+      document.getElementById('pmSelCount').textContent = n + ' selected';
+    }
+
+    // ── Build the print document HTML string ───────────────────────────────
+    function buildPrintDocument() {
+      const title      = document.getElementById('pmTitle').value || 'Payment Status Report';
+      const dateVal    = document.getElementById('pmDate').value;
+      const prepBy     = document.getElementById('pmPreparedBy').value.trim();
+      const showName   = pmIsChecked('colName');
+      const showId     = pmIsChecked('colId');
+      const showGroup  = pmIsChecked('colGroup');
+      const showStatus = pmIsChecked('colStatus');
+      const showNo     = pmIsChecked('colNo');
+
+      const students   = pmGetFilteredStudents();
+
+      // Format date
+      let dateFmt = '—';
+      if (dateVal) {
+        dateFmt = new Date(dateVal + 'T12:00:00').toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+      }
+
+      // Logo — convert raw base64 to a proper data-URI (same resilient pattern used elsewhere)
+      const _rawLogo = (typeof window.ACNHS_LOGO_BASE64 !== 'undefined' && window.ACNHS_LOGO_BASE64)
+        || (typeof window.ACNHS_LOGO_DATA_URL !== 'undefined' && window.ACNHS_LOGO_DATA_URL)
+        || null;
+      const _toDataUrl = (v) => {
+        if (!v || typeof v !== 'string') return null;
+        if (v.startsWith('data:image')) return v;          // already a data-URI — use as-is
+        const isJpeg = v.startsWith('/9j');
+        return `data:${isJpeg ? 'image/jpeg' : 'image/png'};base64,${v}`;
+      };
+      const _logoDataUri = _toDataUrl(_rawLogo);
+      const logoSrc = _logoDataUri
+        ? `<img src="${_logoDataUri}" alt="ACNHS" style="width:56px;height:56px;object-fit:contain;">`
+        : `<div style="width:56px;height:56px;border:2px solid #c9a84c;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:serif;font-size:18px;font-weight:700;color:#c9a84c;">A</div>`;
+
+      // Summary counts from selected students
+      const totalCount   = students.length;
+      const paidCount    = students.filter(s => s.status === 'paid').length;
+      const partialCount = students.filter(s => s.status === 'partial').length;
+      const dueCount     = students.filter(s => s.status === 'due').length;
+
+      // Build table headers
+      const headers = [];
+      if (showNo)     headers.push('<th style="width:36px;">#</th>');
+      if (showName)   headers.push('<th>Student Name</th>');
+      if (showId)     headers.push('<th>Student ID</th>');
+      if (showGroup)  headers.push('<th>Group</th><th>Program</th>');
+      if (showStatus) headers.push('<th>Status</th>');
+
+      // Build table rows
+      const rows = students.map((s, i) => {
+        const statusLabel = s.status === 'paid' ? 'PAID' : s.status === 'partial' ? 'PARTIAL' : 'UNPAID';
+        const badgeCls    = s.status === 'paid' ? 'pmd-badge-paid' : s.status === 'partial' ? 'pmd-badge-partial' : 'pmd-badge-due';
+        const cells = [];
+        if (showNo)     cells.push(`<td style="color:#64748b;font-size:11px;">${i+1}</td>`);
+        if (showName)   cells.push(`<td><strong>${escHtml(s.name)}</strong></td>`);
+        if (showId)     cells.push(`<td style="font-family:monospace;font-size:11.5px;">${escHtml(s.studentId) || '—'}</td>`);
+        if (showGroup)  cells.push(`<td>${escHtml(s.group) || '—'}</td><td>${escHtml(s.program) || '—'}</td>`);
+        if (showStatus) cells.push(`<td><span class="pmd-badge ${badgeCls}">${statusLabel}</span></td>`);
+        return `<tr>${cells.join('')}</tr>`;
+      }).join('');
+
+      const tableContent = students.length
+        ? `<table class="pmd-table"><thead><tr>${headers.join('')}</tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="pmd-empty">No students match the selected filters.</div>`;
+
+      return `
+        <div class="pmd-header">
+          <div class="pmd-logo-wrap">${logoSrc}</div>
+          <div class="pmd-title-block">
+            <div class="pmd-school-name">Armenian College of Nursing and Health Sciences — ACNHS</div>
+            <div class="pmd-report-title">${escHtml(title)}</div>
+          </div>
+          <div class="pmd-meta">
+            <div><strong>Date:</strong> ${dateFmt}</div>
+            ${prepBy ? `<div><strong>Prepared by:</strong> ${escHtml(prepBy)}</div>` : ''}
+          </div>
+        </div>
+        <div class="pmd-stats-bar">
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#94a3b8;"></div><span class="pmd-stat-num">${totalCount}</span>&nbsp;Total</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#166534;"></div><span class="pmd-stat-num" style="color:#166534;">${paidCount}</span>&nbsp;Paid</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#854d0e;"></div><span class="pmd-stat-num" style="color:#854d0e;">${partialCount}</span>&nbsp;Partial</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#991b1b;"></div><span class="pmd-stat-num" style="color:#991b1b;">${dueCount}</span>&nbsp;Unpaid</div>
+        </div>
+        <div class="pmd-table-wrap">${tableContent}</div>
+        <div class="pmd-footer">Generated on ${new Date().toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })} · Armenian College of Nursing and Health Sciences</div>
+      `;
+    }
+
+    // ── Update live preview ────────────────────────────────────────────────
+    function updatePrintPreview() {
+      const doc = document.getElementById('pmDocument');
+      if (!doc) return;
+      doc.innerHTML = buildPrintDocument();
+
+      const n = pmGetFilteredStudents().length;
+      document.getElementById('pmPreviewCount').textContent = n + ' student' + (n !== 1 ? 's' : '') + ' in report';
+    }
+
+    // ── Execute browser print (dialog) ────────────────────────────────────
+    function executePrint() {
+      const target = document.getElementById('pmPrintTarget');
+
+      // Inject document styles needed for print (fonts + pmd- classes)
+      target.innerHTML = `
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@400;500;600;700&display=swap');
+          body { margin: 0; padding: 0; font-family: 'Inter', Arial, sans-serif; }
+          #pmDocument { max-width: 100%; font-family: 'Inter', Arial, sans-serif; }
+          .pmd-header { background: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #fff; padding: 28px 36px 22px; display: flex; align-items: center; gap: 20px; }
+          .pmd-school-name { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: #c9a84c; letter-spacing: .03em; }
+          .pmd-report-title { font-size: 13px; color: #94a3b8; margin-top: 3px; }
+          .pmd-title-block { flex: 1; }
+          .pmd-meta { text-align: right; font-size: 11.5px; color: #64748b; }
+          .pmd-meta strong { color: #94a3b8; }
+          .pmd-stats-bar { background: #f8fafc; border-bottom: 2px solid #e2e8f0; padding: 12px 36px; display: flex; gap: 28px; flex-wrap: wrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-stat { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #475569; }
+          .pmd-stat-dot { width: 9px; height: 9px; border-radius: 50%; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-stat-num { font-weight: 700; font-size: 15px; color: #1e293b; }
+          .pmd-table-wrap { padding: 22px 36px 32px; }
+          .pmd-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+          .pmd-table thead tr { background: #0f172a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-table thead th { color: #c9a84c; font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 10px 12px; text-align: left; border: none; }
+          .pmd-table tbody tr:nth-child(even) { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-table tbody tr { border-bottom: 1px solid #e2e8f0; }
+          .pmd-table tbody td { padding: 9px 12px; color: #334155; vertical-align: middle; }
+          .pmd-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; text-transform: uppercase; letter-spacing: .05em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-badge-paid    { background: #dcfce7; color: #166534; }
+          .pmd-badge-partial { background: #fef9c3; color: #854d0e; }
+          .pmd-badge-due     { background: #fee2e2; color: #991b1b; }
+          .pmd-footer { background: #f8fafc; border-top: 2px solid #e2e8f0; padding: 12px 36px; font-size: 11px; color: #94a3b8; text-align: center; }
+          .pmd-logo-wrap img { width: 56px; height: 56px; object-fit: contain; }
+          .pmd-empty { text-align: center; padding: 40px 0; color: #94a3b8; font-size: 13px; }
+        </style>
+        <div id="pmDocument">${buildPrintDocument()}</div>
+      `;
+      target.style.display = 'block';
+
+      // Close overlay before printing so it's clean
+      document.getElementById('pmOverlay').classList.remove('open');
+
+      requestAnimationFrame(() => {
+        window.print();
+        // Clean up after print dialog closes
+        setTimeout(() => {
+          target.style.display = 'none';
+          target.innerHTML = '';
+        }, 500);
+      });
+    }
+
+    // ── Export PDF: html2canvas → jsPDF pixel-perfect capture ─────────────
+    async function exportPdf() {
+      const btn     = document.getElementById('pmSavePdfBtn');
+      const icon    = document.getElementById('pmPdfIcon');
+      const spinner = document.getElementById('pmPdfSpinner');
+      const label   = document.getElementById('pmPdfLabel');
+
+      // Set loading state
+      btn.disabled = true;
+      icon.style.display    = 'none';
+      spinner.style.display = 'block';
+      label.textContent     = 'Generating…';
+
+      try {
+        // Lazy-load html2pdf bundle (bundles html2canvas + jsPDF — ~500 KB)
+        if (typeof html2pdf === 'undefined') {
+          await new Promise((resolve, reject) => {
+            const s = document.createElement('script');
+            s.src = 'js/html2pdf.bundle.min.js';
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Could not load html2pdf.bundle.min.js'));
+            document.head.appendChild(s);
+          });
+        }
+
+        // The live preview document node — this is what we capture
+        const sourceNode = document.getElementById('pmDocument');
+        if (!sourceNode) throw new Error('Preview element not found');
+
+        // Build a clean report title for the filename
+        const reportTitle = (document.getElementById('pmTitle')?.value || 'Payment-Status-Report')
+          .replace(/[^a-zA-Z0-9\-_ ]/g, '')
+          .trim()
+          .replace(/\s+/g, '-');
+        const dateStr = (document.getElementById('pmDate')?.value || new Date().toISOString().slice(0, 10));
+        const filename = `${reportTitle}_${dateStr}.pdf`;
+
+        const docW = Math.ceil(sourceNode.scrollWidth);
+        const docH = Math.ceil(sourceNode.scrollHeight);
+
+        await html2pdf()
+          .set({
+            margin: 0,
+            filename,
+            image:      { type: 'png', quality: 1.0 },
+            html2canvas: {
+              scale:           3,
+              useCORS:         true,
+              allowTaint:      false,
+              backgroundColor: '#ffffff',
+              logging:         false,
+              scrollX:         0,
+              scrollY:         0,
+              x:               0,
+              y:               0,
+              windowWidth:     docW,
+              windowHeight:    docH,
+              width:           docW,
+              height:          docH,
+              onclone: (doc) => {
+                const cloned = doc.getElementById('pmDocument');
+                if (cloned) {
+                  cloned.style.margin = '0';
+                  cloned.style.boxShadow = 'none';
+                  cloned.style.background = '#ffffff';
+                }
+                doc.body.style.background = '#ffffff';
+              },
+            },
+            jsPDF: {
+              unit:        'px',
+              format:      [docW, docH],
+              orientation: docH >= docW ? 'portrait' : 'landscape',
+              compress:    true,
+              hotfixes:    ['px_scaling'],
+            },
+          })
+          .from(sourceNode)
+          .save();
+
+        showToast('PDF saved — ' + filename, 'success');
+
+      } catch (err) {
+        console.error('PDF export failed:', err);
+        showToast('PDF export failed — ' + (err.message || 'check console'), 'error');
+      } finally {
+        btn.disabled          = false;
+        icon.style.display    = 'block';
+        spinner.style.display = 'none';
+        label.textContent     = 'Save PDF';
+      }
+    }
+  </script>
+</body>
+</html>
