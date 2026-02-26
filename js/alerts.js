@@ -84,14 +84,18 @@
       // If no stored data, try to get from students table by email in session
       const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
       if (userEmail) {
-        const { data, error } = await supabase
-          .from('students')
-          .select('id, student_id, full_name, email')
-          .eq('email', userEmail)
-          .single();
-        
-        if (data && !error) {
-          return data;
+        try {
+          const { data, error } = await supabase
+            .from('students')
+            .select('id, student_id, full_name, email')
+            .eq('email', userEmail)
+            .maybeSingle(); // Use maybeSingle instead of single to avoid 406 errors if 0 rows
+          
+          if (data && !error) {
+            return data;
+          }
+        } catch (e) {
+          console.warn('Alert engine: Could not fetch student by email, continuing as public visitor.', e);
         }
       }
 
