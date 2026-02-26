@@ -3903,14 +3903,27 @@ async function showSubjectSelection() {
 
     await loadTestConfiguration(testId);
 
-    // Load subjects AND topics in parallel
-    const [{ data: subjects, error: subjectError }, { data: allTopicsRaw, error: topicError }] = await Promise.all([
+    // Load subjects, topics, and per-topic question counts in parallel
+    const [
+      { data: subjects, error: subjectError },
+      { data: allTopicsRaw, error: topicError },
+      { data: qCountRows, error: qCountError }
+    ] = await Promise.all([
       db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
-      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order')
+      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order'),
+      db.from('test_questions').select('topic_id').eq('test_id', testId)
     ]);
 
     if (subjectError) throw subjectError;
     if (!subjects || subjects.length === 0) throw new Error('No subjects available for this test');
+
+    // Build a map: topic_id → question count
+    const topicQuestionCounts = {};
+    if (!qCountError && qCountRows) {
+      qCountRows.forEach(row => {
+        topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
+      });
+    }
 
     allSubjects = subjects;
     availableTopics = allTopicsRaw || [];
@@ -3932,15 +3945,19 @@ async function showSubjectSelection() {
       const hasTopics = topics.length > 0;
       const iconSvg = getSubjectIcon(subject.name);
 
-      const topicRows = topics.map(topic => `
+      const topicRows = topics.map(topic => {
+        const qCount = topicQuestionCounts[topic.id] || 0;
+        return `
         <div class="topic-row" id="topic-row-${topic.id}"
              data-topic-name="${topic.name.toLowerCase()}"
              onclick="toggleTopicInline('${topic.id}', '${subject.id}')">
           <input type="checkbox" id="topic-cb-${topic.id}"
             onclick="event.stopPropagation();toggleTopicInline('${topic.id}','${subject.id}')">
           <span class="topic-row-name">${topic.name}</span>
+          ${qCount > 0 ? `<span style="margin-left:auto;flex-shrink:0;font-size:10px;font-weight:700;color:#94a3b8;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.10);border-radius:5px;padding:2px 7px;letter-spacing:0.3px">${qCount} Q</span>` : ''}
         </div>
-      `).join('');
+      `;
+      }).join('');
 
       return `
         <div class="subject-row" id="subject-row-${subject.id}"
