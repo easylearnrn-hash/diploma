@@ -23,6 +23,7 @@
   };
 
   const SESSION_DISMISS_PREFIX = 'acnhs_alert_dismissed_';
+  const SESSION_IMPRESSION_PREFIX = 'acnhs_alert_impression_';
 
   // Global state
   let currentStudent = null;
@@ -45,11 +46,10 @@
       // Get current student from session
       currentStudent = await getCurrentStudent();
       if (!currentStudent) {
-        console.log('Alert engine: No student logged in');
-        return;
+        console.log('Alert engine: No student logged in; public alerts only');
+      } else {
+        console.log('Alert engine initialized for student:', currentStudent.id);
       }
-
-      console.log('Alert engine initialized for student:', currentStudent.id);
 
       // Check for alerts immediately
       await checkAndShowAlerts();
@@ -106,8 +106,7 @@
   // MAIN ALERT CHECK & DISPLAY LOGIC
   // ==========================================
   async function checkAndShowAlerts() {
-    if (isShowingAlert) return; // Don't interrupt current alert
-    if (!currentStudent) return;
+  if (isShowingAlert) return; // Don't interrupt current alert
 
     try {
       // Fetch active alerts
@@ -120,16 +119,18 @@
       if (error) throw error;
       if (!alerts || alerts.length === 0) return;
 
-      // Filter alerts that apply to this student
+      const studentId = currentStudent?.id || null;
+
+      // Filter alerts that apply to this student or public visitors
       const applicableAlerts = alerts.filter(alert => {
-        return isAlertTargetedToStudent(alert, currentStudent.id);
+        return isAlertTargetedToStudent(alert, studentId);
       });
 
       if (applicableAlerts.length === 0) return;
 
       // Evaluate each alert's schedule and display rules
       for (const alert of applicableAlerts) {
-        const shouldShow = await shouldShowAlert(alert, currentStudent.id);
+        const shouldShow = await shouldShowAlert(alert, studentId);
         if (shouldShow) {
           await showAlert(alert);
           break; // Only show one alert at a time
@@ -145,14 +146,23 @@
   // TARGETING CHECK
   // ==========================================
   function isAlertTargetedToStudent(alert, studentId) {
-    if (alert.target_type === 'all') {
+    const targetingRules = normalizeRules(alert.targeting_rules);
+    const triggerRules = normalizeRules(alert.trigger_rules);
+
+    if (alert.target_type === 'public' || targetingRules.mode === 'public' || triggerRules.audience === 'public') {
       return true;
     }
 
-    if (alert.target_type === 'individual') {
-      const targetIds = Array.isArray(alert.target_student_ids) 
-        ? alert.target_student_ids 
-        : [];
+    if (!studentId) return false;
+
+    if (alert.target_type === 'all' || targetingRules.mode === 'all') {
+      return true;
+    }
+
+    if (alert.target_type === 'individual' || targetingRules.mode === 'include') {
+      const targetIds = Array.isArray(alert.target_student_ids)
+        ? alert.target_student_ids
+        : (targetingRules.include_students || []);
       return targetIds.includes(studentId);
     }
 
@@ -165,11 +175,11 @@
   async function shouldShowAlert(alert, studentId) {
     try {
       // Use new JSON rules if available, fallback to old columns
-      const frequencyRules = alert.frequency_rules || {};
-      const scheduleRules = alert.schedule_rules || {};
-      const targetingRules = alert.targeting_rules || {};
-      const triggerRules = alert.trigger_rules || {};
-      const interactionRules = alert.interaction_rules || {};
+  const frequencyRules = normalizeRules(alert.frequency_rules);
+  const scheduleRules = normalizeRules(alert.schedule_rules);
+  const targetingRules = normalizeRules(alert.targeting_rules);
+  const triggerRules = normalizeRules(alert.trigger_rules);
+  const interactionRules = normalizeRules(alert.interaction_rules);
 
       // 0. Page-specific rules
       if (!doesAlertMatchPage(triggerRules)) {
@@ -187,8 +197,10 @@
         return false;
       }
 
+      const hasStudent = !!studentId;
+
       // 2. Check if student has already responded (blocks re-display)
-      if (interactionRules.required_response || alert.requires_response) {
+      if (hasStudent && (interactionRules.required_response || alert.requires_response)) {
         const { data: responses } = await supabase
           .from('portal_alert_responses')
           .select('id')
@@ -202,14 +214,23 @@
       }
 
       // 3. Check frequency rules
-      const { data: impressions } = await supabase
-        .from('portal_alert_impressions')
-        .select('*')
-        .eq('alert_id', alert.id)
-        .eq('student_id', studentId)
-        .order('shown_at', { ascending: false });
+      let impressionCount = 0;
+      let impressions = [];
 
-      const impressionCount = impressions ? impressions.length : 0;
+      if (hasStudent) {
+        const { data: fetchedImpressions } = await supabase
+          .from('portal_alert_impressions')
+          .select('*')
+          .eq('alert_id', alert.id)
+          .eq('student_id', studentId)
+          .order('shown_at', { ascending: false });
+
+        impressions = fetchedImpressions || [];
+        impressionCount = impressions.length;
+      } else {
+        const sessionData = getSessionImpressionData(alert.id);
+        impressionCount = sessionData.count;
+      }
 
       // Use new frequency_rules if available, fallback to old display_mode
       const capType = frequencyRules.cap_type || alert.display_mode || 'once_ever';
@@ -224,14 +245,21 @@
 
         case 'daily':
         case 'daily_first_login':
-          return !hasImpressionToday(impressions);
+          return hasStudent
+            ? !hasImpressionToday(impressions)
+            : !hasSessionImpressionToday(alert.id);
 
         case 'weekly':
-          return !hasImpressionThisWeek(impressions);
+          return hasStudent
+            ? !hasImpressionThisWeek(impressions)
+            : !hasSessionImpressionThisWeek(alert.id);
 
         case 'cooldown':
           if (impressionCount === 0) return true;
-          const lastImpression = new Date(impressions[0].shown_at);
+          const lastImpression = hasStudent
+            ? new Date(impressions[0].shown_at)
+            : getSessionLastShownAt(alert.id);
+          if (!lastImpression) return true;
           const hoursSince = (Date.now() - lastImpression) / (1000 * 60 * 60);
           return hoursSince >= (frequencyRules.cooldown_hours || 24);
 
@@ -369,7 +397,11 @@
       el.classList.add('show');
     });
 
-    await recordImpression(alert.id, currentStudent.id);
+    if (currentStudent?.id) {
+      await recordImpression(alert.id, currentStudent.id);
+    } else {
+      recordSessionImpression(alert.id);
+    }
     setupAlertEventListeners(el, alert);
   }
 
@@ -425,7 +457,7 @@
     modal.id = `alert-${alert.id}`;
     modal.dataset.alertId = alert.id;
 
-    const needsResponse = alert.requires_response && alert.response_type === 'yes_no';
+  const needsResponse = alert.requires_response && alert.response_type === 'yes_no';
     
     // Replace template variables in message and title
     const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
@@ -561,15 +593,19 @@
 
       if (yesBtn) {
         yesBtn.addEventListener('click', async () => {
-          await recordResponse(alertId, currentStudent.id, 'yes');
-            dismissAlert(modal, alert);
+          if (currentStudent?.id) {
+            await recordResponse(alertId, currentStudent.id, 'yes');
+          }
+          dismissAlert(modal, alert);
         });
       }
 
       if (noBtn) {
         noBtn.addEventListener('click', async () => {
-          await recordResponse(alertId, currentStudent.id, 'no');
-            dismissAlert(modal, alert);
+          if (currentStudent?.id) {
+            await recordResponse(alertId, currentStudent.id, 'no');
+          }
+          dismissAlert(modal, alert);
         });
       }
     }
@@ -596,22 +632,28 @@
   }
 
   function normalizePageValue(value) {
-    return (value || '').trim().replace(/^\//, '');
+    if (!value) return '';
+    let normalized = String(value).trim();
+    // Strip protocol/domain if a full URL is provided
+    normalized = normalized.replace(/^https?:\/\/[^/]+/i, '');
+    // Remove query string and hash
+    normalized = normalized.split('?')[0].split('#')[0];
+    // Remove leading slash and make lowercase for safe matching
+    return normalized.replace(/^\//, '').toLowerCase();
   }
 
   function getCurrentPageVariants() {
     const rawPath = window.location.pathname || '';
+    const rawHref = window.location.href || '';
     const normalizedPath = normalizePageValue(rawPath);
+    const normalizedHref = normalizePageValue(rawHref);
     const fileName = normalizedPath.split('/').pop() || normalizedPath;
     const variants = new Set();
-    if (normalizedPath) {
-      variants.add(normalizedPath);
-      variants.add(`/${normalizedPath}`);
-    }
-    if (fileName) {
-      variants.add(fileName);
-      variants.add(`/${fileName}`);
-    }
+    [normalizedPath, normalizedHref, fileName].forEach((val) => {
+      if (!val) return;
+      variants.add(val);
+      variants.add(`/${val}`);
+    });
     return variants;
   }
 
@@ -628,6 +670,18 @@
     });
   }
 
+  function normalizeRules(value) {
+    if (!value) return {};
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (error) {
+        return {};
+      }
+    }
+    return value;
+  }
+
   function isDismissedThisSession(alertId) {
     try {
       return sessionStorage.getItem(`${SESSION_DISMISS_PREFIX}${alertId}`) === 'true';
@@ -642,6 +696,61 @@
     } catch (error) {
       console.warn('Unable to persist session dismissal state:', error);
     }
+  }
+
+  function getSessionImpressionData(alertId) {
+    try {
+      const raw = sessionStorage.getItem(`${SESSION_IMPRESSION_PREFIX}${alertId}`);
+      if (!raw) return { count: 0, lastShownDate: null, lastShownAt: null };
+      const parsed = JSON.parse(raw);
+      return {
+        count: parsed.count || 0,
+        lastShownDate: parsed.lastShownDate || null,
+        lastShownAt: parsed.lastShownAt || null
+      };
+    } catch (error) {
+      return { count: 0, lastShownDate: null, lastShownAt: null };
+    }
+  }
+
+  function setSessionImpressionData(alertId, data) {
+    try {
+      sessionStorage.setItem(`${SESSION_IMPRESSION_PREFIX}${alertId}`, JSON.stringify(data));
+    } catch (error) {
+      console.warn('Unable to persist session impressions:', error);
+    }
+  }
+
+  function recordSessionImpression(alertId) {
+    const today = getTodayLocalDate();
+    const nowIso = new Date().toISOString();
+    const data = getSessionImpressionData(alertId);
+    setSessionImpressionData(alertId, {
+      count: (data.count || 0) + 1,
+      lastShownDate: today,
+      lastShownAt: nowIso
+    });
+  }
+
+  function hasSessionImpressionToday(alertId) {
+    const data = getSessionImpressionData(alertId);
+    return data.lastShownDate === getTodayLocalDate();
+  }
+
+  function hasSessionImpressionThisWeek(alertId) {
+    const data = getSessionImpressionData(alertId);
+    if (!data.lastShownAt) return false;
+    const lastShown = new Date(data.lastShownAt);
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    weekStart.setHours(0, 0, 0, 0);
+    return lastShown >= weekStart;
+  }
+
+  function getSessionLastShownAt(alertId) {
+    const data = getSessionImpressionData(alertId);
+    return data.lastShownAt ? new Date(data.lastShownAt) : null;
   }
 
   // ==========================================

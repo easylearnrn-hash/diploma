@@ -999,6 +999,7 @@
               <label>Target Audience *</label>
               <select id="alert-target-type">
                 <option value="all">All Students</option>
+                <option value="public">Anyone (Public Visitors)</option>
                 <option value="group">By Group</option>
                 <option value="individual">Specific Students</option>
               </select>
@@ -1422,7 +1423,9 @@
 
           // Show new rule-based targeting
           let targetText = 'All Students';
-          if (alert.targeting_rules) {
+          if (alert.target_type === 'public' || alert.targeting_rules?.mode === 'public') {
+            targetText = 'Public (Anyone)';
+          } else if (alert.targeting_rules) {
             const rules = alert.targeting_rules;
             if (rules.mode === 'include' && rules.include_students?.length > 0) {
               targetText = `${rules.include_students.length} Specific Students`;
@@ -1867,11 +1870,17 @@
           showNotification('Alert created successfully!', 'success');
         }
 
-        // Reset form
-        document.getElementById('create-alert-form').reset();
-        const editor = document.getElementById('alert-message-editor');
-        if (editor) editor.innerHTML = '';
-        setSelectedPages([]);
+  // Reset form
+  document.getElementById('create-alert-form').reset();
+  const editor = document.getElementById('alert-message-editor');
+  if (editor) editor.innerHTML = '';
+  setSelectedPages([]);
+  toggleStudentSelector();
+  toggleDisplayOptions();
+  toggleDateOptions();
+  toggleResponseOptions();
+  const submitBtn = document.querySelector('#create-alert-form button[type="submit"]');
+  if (submitBtn) submitBtn.textContent = 'Publish Alert';
         await loadAlerts();
 
         // Switch to manage tab
@@ -1900,7 +1909,7 @@
 
       // Build targeting_rules JSON
       const targeting_rules = {
-        mode: targetType === 'individual' ? 'include' : targetType === 'group' ? 'complex' : 'all',
+        mode: targetType === 'public' ? 'public' : targetType === 'individual' ? 'include' : targetType === 'group' ? 'complex' : 'all',
         include_students: targetStudentIds,
         exclude_students: [],
         groups: targetGroups,
@@ -1955,7 +1964,8 @@
         pages_whitelist: pageTargets,
         pages_blacklist: [],
         display_position: displayPosition,
-        time_window: null
+        time_window: null,
+        audience: targetType === 'public' ? 'public' : 'students'
       };
 
       // Build interaction_rules JSON
@@ -1989,7 +1999,7 @@
         trigger_rules,
         interaction_rules,
         // Keep old columns for backward compatibility
-        target_type: targetType,
+  target_type: targetType === 'public' ? 'all' : targetType,
         target_student_ids: targetStudentIds,
         target_group: targetGroups[0] || null,
         display_mode: displayMode,
@@ -2189,15 +2199,20 @@
         const titleField = document.getElementById('alert-title');
         const messageField = document.getElementById('alert-message');
         const severityField = document.getElementById('alert-severity');
-        const requiresResponseField = document.getElementById('alert-requires-response');
+  const requiresResponseField = document.getElementById('alert-requires-response');
+  const yesLabelField = document.getElementById('alert-yes-label');
+  const noLabelField = document.getElementById('alert-no-label');
         
         if (titleField) titleField.value = alert.title || '';
         // Restore message into the rich-text editor
         const editorEl = document.getElementById('alert-message-editor');
         if (editorEl) editorEl.innerHTML = alert.message_html || '';
         if (messageField) messageField.value = alert.message_html || '';
-        if (severityField) severityField.value = alert.severity || 'info';
-        if (requiresResponseField) requiresResponseField.checked = alert.requires_response || false;
+  if (severityField) severityField.value = alert.severity || 'info';
+  const requiresResponse = alert.requires_response ?? alert.interaction_rules?.required_response ?? false;
+  if (requiresResponseField) requiresResponseField.checked = !!requiresResponse;
+  if (yesLabelField) yesLabelField.value = alert.yes_label || 'Yes';
+  if (noLabelField) noLabelField.value = alert.no_label || 'No';
 
         // Restore display position
         const positionField = document.getElementById('alert-display-position');
@@ -2213,40 +2228,62 @@
 
         // Targeting - use the select dropdown
         const targetTypeField = document.getElementById('alert-target-type');
+        let targetTypeValue = 'all';
+        const targetingRules = alert.targeting_rules || {};
         if (targetTypeField) {
-          const targetingRules = alert.targeting_rules || {};
-          if (targetingRules.mode === 'all') {
-            targetTypeField.value = 'all';
+          const triggerAudience = alert.trigger_rules?.audience;
+          if (targetingRules.mode === 'public' || triggerAudience === 'public') {
+            targetTypeValue = 'public';
+          } else if (targetingRules.mode === 'all') {
+            targetTypeValue = 'all';
           } else if (targetingRules.mode === 'include') {
-            targetTypeField.value = 'individual';
+            targetTypeValue = 'individual';
           } else if (targetingRules.mode === 'complex') {
-            targetTypeField.value = 'group';
+            targetTypeValue = 'group';
+          } else if (alert.target_type) {
+            targetTypeValue = alert.target_type;
           }
+          targetTypeField.value = targetTypeValue;
+        }
+        toggleStudentSelector();
+
+        if (targetTypeValue === 'group') {
+          const groupField = document.getElementById('alert-group-selector');
+          const groupValue = targetingRules.groups?.[0] || alert.target_group || '';
+          if (groupField) groupField.value = groupValue;
+        }
+
+        if (targetTypeValue === 'individual') {
+          const selectedStudents = targetingRules.include_students || alert.target_student_ids || [];
+          document.querySelectorAll('#student-selector input[type="checkbox"]').forEach(cb => {
+            cb.checked = selectedStudents.includes(cb.value);
+          });
         }
 
         // Frequency - use the select dropdown
         const displayModeField = document.getElementById('alert-display-mode');
         if (displayModeField) {
           const frequencyRules = alert.frequency_rules || {};
-          const capType = frequencyRules.cap_type || 'once_ever';
+          const capType = frequencyRules.cap_type || alert.display_mode || 'once_ever';
           displayModeField.value = capType;
-          
+
           // Populate additional fields if needed
-          if (capType === 'times_limit' && frequencyRules.max_displays) {
+          if (capType === 'times_limit' && (frequencyRules.max_displays || alert.max_displays)) {
             const maxDisplaysField = document.getElementById('alert-max-displays');
-            if (maxDisplaysField) maxDisplaysField.value = frequencyRules.max_displays;
+            if (maxDisplaysField) maxDisplaysField.value = frequencyRules.max_displays || alert.max_displays;
           }
         }
+        toggleDisplayOptions();
 
         // Schedule - use the select dropdown
         const dateRuleField = document.getElementById('alert-date-rule');
         if (dateRuleField) {
           const scheduleRules = alert.schedule_rules || {};
-          const recurrenceType = scheduleRules.recurrence_type || 'always';
-          
-          if (recurrenceType === 'one_time') {
+          const recurrenceType = scheduleRules.recurrence_type || alert.date_rule_type || 'always';
+
+          if (recurrenceType === 'one_time' || recurrenceType === 'date_range') {
             dateRuleField.value = 'date_range';
-          } else if (recurrenceType === 'monthly') {
+          } else if (recurrenceType === 'monthly' || recurrenceType === 'monthly_range') {
             dateRuleField.value = 'monthly_range';
           } else if (recurrenceType === 'custom_dates') {
             dateRuleField.value = 'custom_dates';
@@ -2255,22 +2292,28 @@
           }
 
           // Populate date fields
-          if (recurrenceType === 'one_time') {
-            if (scheduleRules.start_datetime) {
+          if (recurrenceType === 'one_time' || recurrenceType === 'date_range') {
+            const startDate = scheduleRules.start_datetime || alert.start_date;
+            const endDate = scheduleRules.end_datetime || alert.end_date;
+            if (startDate) {
               const startField = document.getElementById('alert-start-date');
-              if (startField) startField.value = scheduleRules.start_datetime.slice(0, 16);
+              if (startField) startField.value = startDate.slice(0, 16);
             }
-            if (scheduleRules.end_datetime) {
+            if (endDate) {
               const endField = document.getElementById('alert-end-date');
-              if (endField) endField.value = scheduleRules.end_datetime.slice(0, 16);
+              if (endField) endField.value = endDate.slice(0, 16);
             }
-          } else if (recurrenceType === 'monthly' && scheduleRules.monthly_pattern?.day_range) {
+          } else if ((recurrenceType === 'monthly' || recurrenceType === 'monthly_range') && scheduleRules.monthly_pattern?.day_range) {
             const monthlyStartField = document.getElementById('alert-monthly-start');
             const monthlyEndField = document.getElementById('alert-monthly-end');
             if (monthlyStartField) monthlyStartField.value = scheduleRules.monthly_pattern.day_range[0];
             if (monthlyEndField) monthlyEndField.value = scheduleRules.monthly_pattern.day_range[1];
+          } else if (recurrenceType === 'custom_dates') {
+            const customInput = document.getElementById('alert-custom-dates');
+            if (customInput) customInput.value = (scheduleRules.custom_dates || []).join(', ');
           }
         }
+        toggleDateOptions();
 
         // Page targeting — restore into multi-page picker
         const pages = alert.trigger_rules?.pages_whitelist || [];
@@ -2279,8 +2322,10 @@
         // Session repeat behavior
         const sessionRepeatField = document.getElementById('alert-allow-session-repeat');
         if (sessionRepeatField) {
-          sessionRepeatField.checked = !!alert.interaction_rules?.allow_session_repeat;
+          sessionRepeatField.checked = !!(alert.interaction_rules?.allow_session_repeat ?? alert.allow_session_repeat);
         }
+
+        toggleResponseOptions();
 
         // Store the alert ID for updating
         const form = document.getElementById('create-alert-form');
@@ -2663,7 +2708,11 @@
 
         // Fill form with template data
         document.getElementById('alert-title').value = data.title;
-        document.getElementById('alert-message').value = (data.message_html || '').replace(/<br\s*\/?>/gi, '\n');
+  const templateMessage = data.message_html || '';
+  const editorEl = document.getElementById('alert-message-editor');
+  if (editorEl) editorEl.innerHTML = templateMessage;
+  document.getElementById('alert-message').value = templateMessage;
+  syncEditorToTextarea();
         document.getElementById('alert-severity').value = data.severity;
         document.getElementById('alert-requires-response').checked = data.requires_response;
         document.getElementById('alert-yes-label').value = data.yes_label;
