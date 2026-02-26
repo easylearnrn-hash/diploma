@@ -1946,6 +1946,89 @@ body{
   font-weight: 700;
   letter-spacing: 0.2px;
 }
+
+/* ── Correct / Wrong answer buttons ── */
+.cc-answer-btns {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.cc-correct-btn, .cc-wrong-btn {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.cc-correct-btn {
+  background: rgba(16,185,129,0.15);
+  border: 1px solid rgba(16,185,129,0.35);
+  color: #34d399;
+}
+.cc-correct-btn:hover { background: rgba(16,185,129,0.25); }
+.cc-wrong-btn {
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #f87171;
+}
+.cc-wrong-btn:hover { background: rgba(239,68,68,0.22); }
+.cc-correct-btn:disabled, .cc-wrong-btn:disabled {
+  opacity: 0.4; cursor: default; transform: none;
+}
+
+/* ── End Session button ── */
+.cc-end-session-btn {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #f87171;
+  font-size: 11.5px;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 7px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s;
+  width: 100%;
+  justify-content: center;
+  margin-top: 4px;
+}
+.cc-end-session-btn:hover {
+  background: rgba(239,68,68,0.18);
+}
+
+/* ── Answer recorded badge ── */
+.cc-answered-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 7px;
+  margin-top: 8px;
+}
+.cc-answered-badge.correct {
+  background: rgba(16,185,129,0.1);
+  border: 1px solid rgba(16,185,129,0.25);
+  color: #34d399;
+}
+.cc-answered-badge.wrong {
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #f87171;
+}
 </style>
 </head>
 <body>
@@ -2268,7 +2351,44 @@ body{
           </button>
         </div>
 
+        <!-- End Session button (shown once first pick is made) -->
+        <div class="cc-reset-row" id="ccEndSessionRow" style="display:none">
+          <button class="cc-end-session-btn" id="ccEndSessionBtn" onclick="coldCallEndSession()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+            End Session &amp; View Stats
+          </button>
+        </div>
+
       </div><!-- /#coldCallPanel -->
+
+      <!-- COLD CALL STATS MODAL -->
+      <div id="coldCallStatsModal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.82);align-items:center;justify-content:center;padding:20px">
+        <div style="background:#1a1f2e;border:1px solid rgba(201,168,76,0.25);border-radius:16px;width:100%;max-width:680px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.6)">
+          <!-- Header -->
+          <div style="padding:24px 28px 0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,0.07);padding-bottom:18px">
+            <div>
+              <div style="font-size:18px;font-weight:700;color:#f1f5f9">Cold Call Session Results</div>
+              <div id="ccStatsSubtitle" style="font-size:12px;color:#64748b;margin-top:3px"></div>
+            </div>
+            <button onclick="coldCallCloseStats()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:#94a3b8;width:32px;height:32px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">&times;</button>
+          </div>
+
+          <!-- Top / Weakest badges -->
+          <div id="ccStatsHighlights" style="display:flex;gap:12px;padding:20px 28px 0"></div>
+
+          <!-- Per-student table -->
+          <div style="padding:16px 28px 28px">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.6px;color:#475569;margin-bottom:10px">Student Breakdown</div>
+            <div id="ccStatsTable"></div>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:16px 28px 24px;border-top:1px solid rgba(255,255,255,0.07);display:flex;justify-content:flex-end;gap:10px">
+            <button onclick="coldCallStartNewSession()" style="background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);color:var(--gold-primary,#c9a84c);border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer">Start New Session</button>
+            <button onclick="coldCallCloseStats()" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.1);color:#94a3b8;border-radius:8px;padding:8px 18px;font-size:13px;font-weight:600;cursor:pointer">Close</button>
+          </div>
+        </div>
+      </div>
 
       <!-- QUESTION NAVIGATOR -->
       <div class="question-nav">
@@ -6405,7 +6525,13 @@ const coldCallState = {
   isRolling: false,
   cycleComplete: false,
   // Cache: groupName → student array
-  studentCache: new Map()
+  studentCache: new Map(),
+  // ── Analytics ────────────────────────────────────────────────
+  sessionId: null,         // UUID of current cold_call_sessions row
+  sessionStarted: false,
+  // Map: student.id → { name, correct: 0, wrong: 0, questions: [] }
+  analytics: new Map(),
+  currentPickAnswered: false  // whether correct/wrong has been pressed for the current pick
 };
 
 // ─── Initialise (called on DOMContentLoaded) ─────────────────────────────────
@@ -6565,6 +6691,7 @@ async function coldCallPickStudent() {
 function coldCallAnimatePick(finalName) {
   return new Promise(resolve => {
     coldCallState.isRolling = true;
+    coldCallState.currentPickAnswered = false;
     const display = document.getElementById('ccNameDisplay');
     const pickBtn = document.getElementById('ccPickBtn');
     if (pickBtn) pickBtn.disabled = true;
@@ -6573,7 +6700,7 @@ function coldCallAnimatePick(finalName) {
     display.className = 'cc-name-display rolling';
     display.innerHTML = '<div class="cc-rolling-dots"><span>·</span><span>·</span><span>·</span></div>';
 
-    // After 700ms show the name
+    // After 700ms show the name + correct/wrong buttons
     setTimeout(() => {
       display.className = 'cc-name-display revealed';
       display.innerHTML = `
@@ -6582,11 +6709,107 @@ function coldCallAnimatePick(finalName) {
           Called on
         </div>
         <div class="cc-name-text animate-in">${escapeHtml(finalName)}</div>
+        <div class="cc-answer-btns" id="ccAnswerBtns">
+          <button class="cc-correct-btn" id="ccCorrectBtn" onclick="coldCallRecordAnswer(true)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+            Correct
+          </button>
+          <button class="cc-wrong-btn" id="ccWrongBtn" onclick="coldCallRecordAnswer(false)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            Wrong
+          </button>
+        </div>
       `;
       coldCallState.isRolling = false;
       if (pickBtn) pickBtn.disabled = false;
       resolve();
     }, 700);
+  });
+}
+
+// ─── Get current question stem (first 200 chars) ─────────────────────────────
+function coldCallGetCurrentQuestionStem() {
+  try {
+    if (!testState || !testState.questions || testState.questions.length === 0) return null;
+    const idx = testState.currentQuestionIndex || 0;
+    const q = testState.questions[idx];
+    if (!q) return null;
+    const stem = q.stem || '';
+    return stem.substring(0, 200);
+  } catch(e) { return null; }
+}
+
+// ─── Ensure a session row exists in Supabase ─────────────────────────────────
+async function coldCallEnsureSession() {
+  if (coldCallState.sessionId) return coldCallState.sessionId;
+  try {
+    const sdb = initSupabase();
+    const subjectName = (testState && testState.testConfig && testState.testConfig.subject_name)
+      ? testState.testConfig.subject_name : null;
+    const { data, error } = await sdb.from('cold_call_sessions').insert({
+      teacher_email: SESSION_ROLE.userEmail || 'unknown',
+      group_name: coldCallState.selectedGroup || 'Unknown',
+      subject_name: subjectName,
+      session_date: new Date().toISOString().split('T')[0],
+      started_at: new Date().toISOString()
+    }).select('id').single();
+    if (error) throw error;
+    coldCallState.sessionId = data.id;
+    coldCallState.sessionStarted = true;
+    return data.id;
+  } catch(e) {
+    console.error('coldCallEnsureSession error:', e);
+    return null;
+  }
+}
+
+// ─── Record correct / wrong answer ───────────────────────────────────────────
+async function coldCallRecordAnswer(isCorrect) {
+  if (coldCallState.currentPickAnswered) return;
+  coldCallState.currentPickAnswered = true;
+
+  const student = coldCallState.lastPicked;
+  if (!student) return;
+
+  // Update local analytics map
+  const key = student.id || student.full_name;
+  if (!coldCallState.analytics.has(key)) {
+    coldCallState.analytics.set(key, { name: student.full_name, id: student.id, correct: 0, wrong: 0, questions: [] });
+  }
+  const rec = coldCallState.analytics.get(key);
+  if (isCorrect) rec.correct++; else rec.wrong++;
+  const stem = coldCallGetCurrentQuestionStem();
+  if (stem) rec.questions.push({ stem, correct: isCorrect });
+
+  // Update UI — replace buttons with badge
+  const answerBtns = document.getElementById('ccAnswerBtns');
+  if (answerBtns) {
+    answerBtns.outerHTML = `
+      <div class="cc-answered-badge ${isCorrect ? 'correct' : 'wrong'}">
+        ${isCorrect
+          ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Correct'
+          : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Wrong'}
+      </div>`;
+  }
+
+  // Show End Session button
+  const endRow = document.getElementById('ccEndSessionRow');
+  if (endRow) endRow.style.display = 'block';
+
+  // Persist to Supabase (fire-and-forget)
+  coldCallEnsureSession().then(sessionId => {
+    if (!sessionId) return;
+    const sdb = initSupabase();
+    sdb.from('cold_call_responses').insert({
+      session_id: sessionId,
+      student_id: String(student.id || ''),
+      student_name: student.full_name,
+      question_stem: stem,
+      question_order: testState ? (testState.currentQuestionIndex || 0) : 0,
+      is_correct: isCorrect
+    }).then(({ error }) => {
+      if (error) console.error('coldCallRecordAnswer save error:', error);
+    });
   });
 }
 
@@ -6654,10 +6877,132 @@ function coldCallUpdateUI() {
 // ─── Reset cycle manually ────────────────────────────────────────────────────
 function coldCallReset() {
   coldCallStartNewCycle();
+  coldCallState.currentPickAnswered = false;
   const display = document.getElementById('ccNameDisplay');
   if (display) {
     display.className = 'cc-name-display';
     display.innerHTML = '<div class="cc-idle-text">Cycle reset — press Pick to start</div>';
+  }
+  coldCallUpdateUI();
+}
+
+// ─── End Session → save totals + show stats ──────────────────────────────────
+async function coldCallEndSession() {
+  // Update ended_at and total_picks on the session row
+  if (coldCallState.sessionId) {
+    try {
+      const sdb = initSupabase();
+      const totalPicks = coldCallState.analytics.size > 0
+        ? Array.from(coldCallState.analytics.values()).reduce((s, r) => s + r.correct + r.wrong, 0)
+        : 0;
+      await sdb.from('cold_call_sessions').update({
+        ended_at: new Date().toISOString(),
+        total_picks: totalPicks
+      }).eq('id', coldCallState.sessionId);
+    } catch(e) { console.error('coldCallEndSession save error:', e); }
+  }
+  coldCallShowStats();
+}
+
+// ─── Build and show the stats modal ──────────────────────────────────────────
+function coldCallShowStats() {
+  const modal = document.getElementById('coldCallStatsModal');
+  if (!modal) return;
+
+  const entries = Array.from(coldCallState.analytics.values());
+
+  // Sort by % correct desc
+  entries.sort((a, b) => {
+    const pctA = (a.correct + a.wrong) > 0 ? a.correct / (a.correct + a.wrong) : 0;
+    const pctB = (b.correct + b.wrong) > 0 ? b.correct / (b.correct + b.wrong) : 0;
+    return pctB - pctA;
+  });
+
+  // Subtitle
+  const subtitle = document.getElementById('ccStatsSubtitle');
+  if (subtitle) {
+    const d = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    subtitle.textContent = `${coldCallState.selectedGroup || 'Group'} · ${d}`;
+  }
+
+  // Top & weakest highlights
+  const highlights = document.getElementById('ccStatsHighlights');
+  if (highlights && entries.length > 0) {
+    const top = entries[0];
+    const weak = entries[entries.length - 1];
+    const topPct  = (top.correct + top.wrong) > 0 ? Math.round(top.correct  / (top.correct  + top.wrong)  * 100) : 0;
+    const weakPct = (weak.correct + weak.wrong) > 0 ? Math.round(weak.correct / (weak.correct + weak.wrong) * 100) : 0;
+    const isSame = top.name === weak.name;
+
+    highlights.innerHTML = `
+      <div style="flex:1;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.22);border-radius:10px;padding:14px 16px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.7px;color:#34d399;margin-bottom:6px">⭐ Top Student</div>
+        <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:2px">${escapeHtml(top.name)}</div>
+        <div style="font-size:12px;color:#64748b">${top.correct} correct · ${top.wrong} wrong · <strong style="color:#34d399">${topPct}%</strong></div>
+      </div>
+      ${!isSame ? `
+      <div style="flex:1;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.22);border-radius:10px;padding:14px 16px">
+        <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.7px;color:#f87171;margin-bottom:6px">📉 Needs Support</div>
+        <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:2px">${escapeHtml(weak.name)}</div>
+        <div style="font-size:12px;color:#64748b">${weak.correct} correct · ${weak.wrong} wrong · <strong style="color:#f87171">${weakPct}%</strong></div>
+      </div>` : ''}
+    `;
+  } else if (highlights) {
+    highlights.innerHTML = '<div style="color:#64748b;font-size:13px;padding:8px 0">No answers recorded yet.</div>';
+  }
+
+  // Per-student table
+  const table = document.getElementById('ccStatsTable');
+  if (table) {
+    if (entries.length === 0) {
+      table.innerHTML = '<div style="color:#475569;font-size:13px;text-align:center;padding:20px">No responses recorded in this session.</div>';
+    } else {
+      table.innerHTML = entries.map((e, idx) => {
+        const total = e.correct + e.wrong;
+        const pct = total > 0 ? Math.round(e.correct / total * 100) : 0;
+        const barColor = pct >= 70 ? '#34d399' : pct >= 40 ? '#f59e0b' : '#f87171';
+        return `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+            <div style="width:22px;text-align:center;font-size:11px;font-weight:700;color:#475569">${idx + 1}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(e.name)}</div>
+              <div style="height:4px;background:rgba(255,255,255,0.07);border-radius:2px;margin-top:5px;overflow:hidden">
+                <div style="height:100%;width:${pct}%;background:${barColor};border-radius:2px;transition:width 0.4s"></div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:13px;font-weight:700;color:${barColor}">${pct}%</div>
+              <div style="font-size:10px;color:#475569">${e.correct}✓ ${e.wrong}✗</div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+  }
+
+  // Show modal as flex
+  modal.style.display = 'flex';
+}
+
+// ─── Close stats modal ───────────────────────────────────────────────────────
+function coldCallCloseStats() {
+  const modal = document.getElementById('coldCallStatsModal');
+  if (modal) modal.style.display = 'none';
+}
+
+// ─── Start a brand-new session (clear analytics state) ───────────────────────
+function coldCallStartNewSession() {
+  coldCallCloseStats();
+  coldCallState.sessionId = null;
+  coldCallState.sessionStarted = false;
+  coldCallState.analytics = new Map();
+  coldCallState.currentPickAnswered = false;
+  const endRow = document.getElementById('ccEndSessionRow');
+  if (endRow) endRow.style.display = 'none';
+  coldCallStartNewCycle();
+  const display = document.getElementById('ccNameDisplay');
+  if (display) {
+    display.className = 'cc-name-display';
+    display.innerHTML = '<div class="cc-idle-text">New session started — press Pick to begin</div>';
   }
   coldCallUpdateUI();
 }
