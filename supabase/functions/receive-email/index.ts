@@ -18,6 +18,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA') || Deno.env.get('RESEND_API_KEY') || ''
 const RESEND_WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET') // Optional: for signature verification
 const ATTACHMENTS_BUCKET = 'email-attachments'
+const DISABLE_EMAIL_FORWARDING = (Deno.env.get('DISABLE_EMAIL_FORWARDING') || '').toLowerCase() === 'true'
 
 function normalizeEmailAddress(value?: string | null) {
   if (!value) return value
@@ -649,8 +650,9 @@ serve(async (req: Request) => {
     // AUTO-FORWARDING LOGIC FOR INCOMING EMAILS
     // ========================================
     try {
-      // Check if recipient is an ACNHS email address
-      if (normalizedRecipient?.endsWith('@acnhs.am')) {
+      if (DISABLE_EMAIL_FORWARDING) {
+        console.log('⛔ Auto-forwarding disabled via DISABLE_EMAIL_FORWARDING=true')
+      } else if (normalizedRecipient?.endsWith('@acnhs.am')) {
         console.log('📧 Checking auto-forwarding rules for recipient:', normalizedRecipient)
 
         // ── LOOP-BREAK GUARD 1: never forward system-generated emails ──
@@ -694,6 +696,19 @@ serve(async (req: Request) => {
 
         if (!ruleError && forwardingRule && forwardingRule.forward_to_email) {
           console.log(`⤴️ Auto-forwarding enabled for ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
+
+          const forwardToNormalized = normalizeEmailAddress(forwardingRule.forward_to_email)
+          const forwardToIsAcnhs = forwardToNormalized?.endsWith('@acnhs.am') ?? false
+          const isSelfForward = forwardToNormalized === normalizedRecipient
+          const isSenderForward = forwardToNormalized === normalizedSender
+
+          if (forwardToIsAcnhs || isSelfForward || isSenderForward) {
+            console.log('⛔ Skipping forward — unsafe target (ACNHS domain or self/sender).', {
+              forwardTo: forwardToNormalized,
+              normalizedRecipient,
+              normalizedSender
+            })
+          } else {
           
           // Forward the email via Resend API - preserving original sender identity
           const forwardFromEmail = normalizedRecipient || 'admissions@acnhs.am'
@@ -775,6 +790,7 @@ serve(async (req: Request) => {
               }])
           } else {
             console.error('❌ Auto-forward failed:', forwardData)
+          }
           }
         } else {
           console.log('⏭️ No auto-forwarding rule enabled for this recipient')
