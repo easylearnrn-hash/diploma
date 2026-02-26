@@ -741,7 +741,7 @@
       border-radius: 16px;
       width: 90%;
       max-width: 1200px;
-      max-height: 90vh;
+      height: 90vh;
       display: flex;
       flex-direction: column;
       box-shadow: 0 32px 80px rgba(0,0,0,0.7);
@@ -951,6 +951,104 @@
       align-items: center;
       gap: 6px;
     }
+
+    /* ── Invoice Modal Tabs ── */
+    .inv-tabs {
+      display: flex;
+      gap: 4px;
+    }
+    .inv-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      letter-spacing: 0.01em;
+    }
+    .inv-tab:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+    .inv-tab.active {
+      color: var(--gold-primary);
+      background: rgba(201,168,76,0.1);
+      border-color: rgba(201,168,76,0.25);
+    }
+
+    /* ── Payment Summary Panel ── */
+    .inv-summary-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .ps-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .ps-table thead th {
+      padding: 8px 14px;
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(201,168,76,0.15);
+      text-align: left;
+      white-space: nowrap;
+    }
+    .ps-table thead th:not(:first-child) { text-align: center; }
+    .ps-table tbody tr {
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      transition: background 0.15s;
+    }
+    .ps-table tbody tr:last-child { border-bottom: none; }
+    .ps-table tbody tr:hover { background: rgba(201,168,76,0.04); }
+    .ps-table td {
+      padding: 11px 14px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    .ps-table td:not(:first-child) { text-align: center; }
+
+    .ps-student-name {
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .ps-invoice-num {
+      font-size: 11px;
+      color: var(--gold-primary);
+      font-family: monospace;
+      margin-top: 2px;
+    }
+
+    /* Item status pills */
+    .ps-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .ps-pill-paid    { background: rgba(34,197,94,0.12);  color:#22c55e; border:1px solid rgba(34,197,94,0.25); }
+    .ps-pill-partial { background: rgba(201,168,76,0.12); color:#c9a84c; border:1px solid rgba(201,168,76,0.28); }
+    .ps-pill-unpaid  { background: rgba(239,68,68,0.10);  color:#f87171; border:1px solid rgba(239,68,68,0.22); }
+    .ps-pill-na      { background: rgba(255,255,255,0.04);color:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.08); font-weight:500; }
+    .ps-amount {
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .ps-amount-paid   { color: #22c55e; }
+    .ps-amount-partial{ color: #c9a84c; }
+    .ps-amount-unpaid { color: #f87171; }
 
     /* ==========================================
        LOGIN MODAL STYLES
@@ -1422,23 +1520,49 @@ Please include your Student ID in the payment reference or memo to ensure proper
   <div id="invoicesModal" class="modal-overlay" style="display: none;">
     <div class="modal-content">
       <div class="modal-header">
-        <h2 id="invoicesHeader">All Invoices</h2>
-        <button class="modal-close" onclick="document.getElementById('invoicesModal').style.display='none'">&times;</button>
+        <div style="display:flex;flex-direction:column;gap:12px;flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <h2 id="invoicesHeader">All Invoices</h2>
+            <button class="modal-close" onclick="document.getElementById('invoicesModal').style.display='none'">&times;</button>
+          </div>
+          <!-- Tabs -->
+          <div class="inv-tabs">
+            <button class="inv-tab active" id="tabInvoices" onclick="switchInvTab('invoices')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              All Invoices
+            </button>
+            <button class="inv-tab" id="tabSummary" onclick="switchInvTab('summary')">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18M3 9h18M3 15h12M3 21h8"/></svg>
+              Payment Summary
+            </button>
+          </div>
+        </div>
       </div>
       <div class="modal-body">
-        <div class="invoices-filters">
-          <input type="text" id="searchInvoices" placeholder="Search by student name or invoice number...">
-          <select id="filterStatus">
-            <option value="">All Status</option>
-            <option value="unpaid">Unpaid</option>
-            <option value="paid">Paid</option>
-            <option value="partial">Partial</option>
-            <option value="overdue">Overdue</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+        <!-- TAB: Invoices -->
+        <div id="panelInvoices">
+          <div class="invoices-filters">
+            <input type="text" id="searchInvoices" placeholder="Search by student name or invoice number...">
+            <select id="filterStatus">
+              <option value="">All Status</option>
+              <option value="unpaid">Unpaid</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
+              <option value="overdue">Overdue</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div id="invoicesList" class="invoices-list">
+            <p>Loading invoices...</p>
+          </div>
         </div>
-        <div id="invoicesList" class="invoices-list">
-          <p>Loading invoices...</p>
+        <!-- TAB: Payment Summary -->
+        <div id="panelSummary" style="display:none;">
+          <div class="inv-summary-toolbar">
+            <input type="text" id="searchSummary" placeholder="Search student..." oninput="renderPaymentSummary()" style="flex:1;padding:10px 14px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:8px;color:var(--text);font-size:13px;">
+            <span id="summaryCount" style="font-size:12px;color:var(--text-muted);white-space:nowrap;"></span>
+          </div>
+          <div id="paymentSummaryTable"></div>
         </div>
       </div>
     </div>
@@ -3476,6 +3600,232 @@ Please include your Student ID in the payment reference or memo to ensure proper
       loadAllInvoices(searchTerm, statusFilter);
     });
 
+    // ── Tab switching ─────────────────────────────────────────────────────
+    window.switchInvTab = function switchInvTab(tab) {
+      const isInvoices = tab === 'invoices';
+      document.getElementById('panelInvoices').style.display = isInvoices ? '' : 'none';
+      document.getElementById('panelSummary').style.display  = isInvoices ? 'none' : '';
+      document.getElementById('tabInvoices').classList.toggle('active', isInvoices);
+      document.getElementById('tabSummary').classList.toggle('active', !isInvoices);
+      if (!isInvoices) renderPaymentSummary();
+    }
+
+    // ── Payment Summary helpers ───────────────────────────────────────────
+    const MONTHS = ['January','February','March','April','May','June',
+                    'July','August','September','October','November','December'];
+
+    function parseItemLineTotal(item) {
+      const qty = item.qty || item.quantity || 1;
+      const price = parseFloat(item.price) || 0;
+      const disc  = parseFloat(item.discount) || 0;
+      const sub   = qty * price;
+      return sub - (sub * disc / 100);
+    }
+
+    function parsePartialPayments(notes) {
+      // Returns array of { amount, appliedTo } parsed from notes
+      if (!notes) return [];
+      const sections = notes.split('--- PARTIAL PAYMENT RECORDED ---');
+      const result = [];
+      sections.forEach((sec, i) => {
+        if (i === 0 && !sec.includes('Date:')) return;
+        const amtMatch = sec.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+        const appMatch = sec.match(/Applied To:\s*(.+?)(?=\n|$)/);
+        if (amtMatch && appMatch) {
+          result.push({
+            amount:    parseFloat(amtMatch[1].replace(/,/g, '')) || 0,
+            appliedTo: appMatch[1].trim()
+          });
+        }
+      });
+      return result;
+    }
+
+    function classifyItem(description) {
+      if (!description) return { type: 'other', label: description || '—' };
+      const desc = description.toLowerCase();
+      if (desc.includes('enrollment') || desc.includes('down payment') || desc.includes('registration fee')) {
+        return { type: 'enrollment', label: 'Enrollment' };
+      }
+      for (const m of MONTHS) {
+        if (desc.includes(m.toLowerCase())) return { type: 'month', label: m };
+      }
+      return { type: 'other', label: description };
+    }
+
+    function pillHtml(status, paidAmt, totalAmt) {
+      const fmt = v => v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+      if (status === 'paid') {
+        return `<span class="ps-pill ps-pill-paid">✓ Paid<span class="ps-amount ps-amount-paid"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
+      }
+      if (status === 'partial') {
+        return `<span class="ps-pill ps-pill-partial">⬤ Partial<span class="ps-amount ps-amount-partial"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
+      }
+      if (status === 'unpaid') {
+        return `<span class="ps-pill ps-pill-unpaid">✕ Unpaid<span class="ps-amount ps-amount-unpaid"> $0/$${fmt(totalAmt)}</span></span>`;
+      }
+      return `<span class="ps-pill ps-pill-na">—</span>`;
+    }
+
+    function buildStudentSummaryRow(invoice) {
+      const items     = invoice.items || [];
+      const partials  = parsePartialPayments(invoice.notes);
+      const invStatus = invoice.status; // paid | partial | unpaid | overdue | cancelled
+
+      // Build a map: label → { total, paid }
+      const itemMap = {};
+      items.forEach(item => {
+        const { type, label } = classifyItem(item.description);
+        const total = parseItemLineTotal(item);
+        if (!itemMap[label]) itemMap[label] = { total: 0, paid: 0, type };
+        itemMap[label].total += total;
+      });
+
+      // If fully paid, credit all items
+      if (invStatus === 'paid') {
+        Object.values(itemMap).forEach(v => { v.paid = v.total; });
+      }
+
+      // Apply partial payment records to matching items
+      if (invStatus === 'partial' || partials.length > 0) {
+        // First try to match by appliedTo string → item label
+        const unmatchedPool = [...partials];
+        unmatchedPool.forEach(p => {
+          const key = Object.keys(itemMap).find(k =>
+            k.toLowerCase().includes(p.appliedTo.toLowerCase()) ||
+            p.appliedTo.toLowerCase().includes(k.toLowerCase())
+          );
+          if (key) {
+            itemMap[key].paid = Math.min(itemMap[key].total, (itemMap[key].paid || 0) + p.amount);
+          }
+        });
+      }
+
+      // Classify each item's status
+      const categorised = Object.entries(itemMap).map(([label, { total, paid, type }]) => {
+        let st;
+        if (invStatus === 'paid') {
+          st = 'paid';
+        } else if (paid >= total && total > 0) {
+          st = 'paid';
+        } else if (paid > 0) {
+          st = 'partial';
+        } else if (invStatus === 'overdue') {
+          st = 'unpaid';
+        } else {
+          st = invStatus === 'cancelled' ? 'na' : 'unpaid';
+        }
+        return { label, total, paid, type, status: st };
+      });
+
+      return { invoice, categorised };
+    }
+
+    window.renderPaymentSummary = function renderPaymentSummary() {
+      const container = document.getElementById('paymentSummaryTable');
+      const invoices  = window.currentInvoices || [];
+      const search    = (document.getElementById('searchSummary')?.value || '').toLowerCase();
+
+      if (!invoices.length) {
+        container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px 0;">No data — open All Invoices first.</p>';
+        return;
+      }
+
+      // Group by student name (latest invoice wins for metadata)
+      const byStudent = {};
+      invoices.forEach(inv => {
+        const name = inv.student_name || 'Unknown';
+        if (!byStudent[name]) byStudent[name] = [];
+        byStudent[name].push(inv);
+      });
+
+      // Filter
+      const filtered = Object.entries(byStudent).filter(([name]) =>
+        !search || name.toLowerCase().includes(search)
+      );
+
+      document.getElementById('summaryCount').textContent = `${filtered.length} student${filtered.length !== 1 ? 's' : ''}`;
+
+      if (!filtered.length) {
+        container.innerHTML = '<p style="color:var(--text-muted);text-align:center;padding:32px 0;">No students match.</p>';
+        return;
+      }
+
+      // Collect all unique item labels across all invoices to build consistent columns
+      const allLabels = new Set();
+      filtered.forEach(([, invList]) => {
+        invList.forEach(inv => {
+          (inv.items || []).forEach(item => {
+            const { label } = classifyItem(item.description);
+            if (label && label !== '—') allLabels.add(label);
+          });
+        });
+      });
+
+      // Sort columns: Enrollment first, then months in order, then others
+      const sortedLabels = [...allLabels].sort((a, b) => {
+        const ai = classifyItem(a), bi = classifyItem(b);
+        if (ai.type === 'enrollment' && bi.type !== 'enrollment') return -1;
+        if (bi.type === 'enrollment' && ai.type !== 'enrollment') return  1;
+        if (ai.type === 'month' && bi.type === 'month') {
+          return MONTHS.indexOf(a) - MONTHS.indexOf(b);
+        }
+        return a.localeCompare(b);
+      });
+
+      const headerCols = sortedLabels.map(l =>
+        `<th>${l}</th>`
+      ).join('');
+
+      const rows = filtered.map(([studentName, invList]) => {
+        // Merge all invoices for this student into one item map
+        const mergedMap = {};
+        invList.forEach(inv => {
+          const { categorised } = buildStudentSummaryRow(inv);
+          categorised.forEach(c => {
+            if (!mergedMap[c.label]) mergedMap[c.label] = { total: 0, paid: 0, status: 'unpaid' };
+            mergedMap[c.label].total += c.total;
+            mergedMap[c.label].paid  += c.paid;
+          });
+        });
+        // Re-classify after merge
+        Object.values(mergedMap).forEach(v => {
+          if (v.paid >= v.total && v.total > 0) v.status = 'paid';
+          else if (v.paid > 0) v.status = 'partial';
+          else v.status = 'unpaid';
+        });
+
+        const latestInv = invList[0];
+        const cols = sortedLabels.map(label => {
+          const d = mergedMap[label];
+          if (!d) return `<td><span class="ps-pill ps-pill-na">—</span></td>`;
+          return `<td>${pillHtml(d.status, d.paid, d.total)}</td>`;
+        }).join('');
+
+        return `
+          <tr>
+            <td>
+              <div class="ps-student-name">${studentName}</div>
+              <div class="ps-invoice-num">${latestInv.invoice_number || ''}</div>
+            </td>
+            ${cols}
+          </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div style="overflow-x:auto;">
+          <table class="ps-table">
+            <thead>
+              <tr>
+                <th>Student</th>
+                ${headerCols}
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    }
+
     // Load invoice from database
     window.loadInvoiceFromDB = async function(invoiceId) {
       try {
@@ -4407,7 +4757,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
                   Click "Add Expense" to add salaries or other monthly costs.
                 </div>
               ` : expenses.map((expense) => `
-                <div style="
+                <div id="expense-row-${expense.id}" style="
                   background: rgba(0,0,0,0.3);
                   border: 1px solid rgba(255,255,255,0.1);
                   border-radius: 8px;
@@ -4415,23 +4765,57 @@ Please include your Student ID in the payment reference or memo to ensure proper
                   display: flex;
                   justify-content: space-between;
                   align-items: center;
+                  gap: 12px;
+                  transition: border-color 0.2s;
                 ">
-                  <div>
-                    <div style="font-size: 14px; font-weight: 600; color: white; margin-bottom: 4px;">${expense.name}</div>
-                    <div style="font-size: 12px; color: rgba(255,255,255,0.5);">$${parseFloat(expense.amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per month × ${numberOfMonths} months = $${(parseFloat(expense.amount) * numberOfMonths).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                  <div style="flex:1;min-width:0;">
+                    <input
+                      id="exp-name-${expense.id}"
+                      value="${expense.name.replace(/"/g, '&quot;')}"
+                      onblur="saveExpenseEdit('${expense.id}')"
+                      onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.orig;this.blur()}"
+                      onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
+                      style="
+                        width:100%;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);
+                        color:white;font-size:14px;font-weight:600;padding:2px 0;margin-bottom:6px;
+                        outline:none;cursor:text;transition:border-color 0.2s;
+                      "
+                      title="Click to edit name"
+                    />
+                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.5);">
+                      $<input
+                        id="exp-amt-${expense.id}"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value="${parseFloat(expense.amount).toFixed(2)}"
+                        onblur="saveExpenseEdit('${expense.id}')"
+                        onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.orig;this.blur()}"
+                        onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
+                        style="
+                          width:90px;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);
+                          color:rgba(255,255,255,0.7);font-size:12px;padding:1px 0;outline:none;cursor:text;
+                          transition:border-color 0.2s;
+                        "
+                        title="Click to edit amount"
+                      /> per month × ${numberOfMonths} months = $${(parseFloat(expense.amount) * numberOfMonths).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </div>
                   </div>
-                  <button onclick="removeExpense('${expense.id}')" style="
-                    background: transparent;
-                    border: 1px solid #ef4444;
-                    color: #ef4444;
-                    padding: 6px 12px;
-                    border-radius: 4px;
-                    font-size: 12px;
-                    cursor: pointer;
-                    transition: all 0.2s;
-                  " onmouseover="this.style.background='#ef4444'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#ef4444'">
-                    🗑️ Delete
-                  </button>
+                  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                    <span id="exp-saving-${expense.id}" style="font-size:11px;color:#c9a84c;display:none;">Saving…</span>
+                    <button onclick="removeExpense('${expense.id}')" style="
+                      background: transparent;
+                      border: 1px solid #ef4444;
+                      color: #ef4444;
+                      padding: 6px 12px;
+                      border-radius: 4px;
+                      font-size: 12px;
+                      cursor: pointer;
+                      transition: all 0.2s;
+                    " onmouseover="this.style.background='#ef4444'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#ef4444'">
+                      🗑️ Delete
+                    </button>
+                  </div>
                 </div>
               `).join('')}
             </div>
@@ -4677,6 +5061,62 @@ Please include your Student ID in the payment reference or memo to ensure proper
       
       // Focus on name input
       setTimeout(() => document.getElementById('expenseName').focus(), 100);
+    };
+
+    // Inline edit save function
+    window.saveExpenseEdit = async function(expenseId) {
+      const nameEl  = document.getElementById(`exp-name-${expenseId}`);
+      const amtEl   = document.getElementById(`exp-amt-${expenseId}`);
+      const saveInd = document.getElementById(`exp-saving-${expenseId}`);
+      const rowEl   = document.getElementById(`expense-row-${expenseId}`);
+
+      if (!nameEl || !amtEl) return;
+
+      const newName   = nameEl.value.trim();
+      const newAmount = parseFloat(amtEl.value);
+
+      // Restore border
+      if (rowEl) rowEl.style.borderColor = 'rgba(255,255,255,0.1)';
+
+      // Skip if nothing changed
+      if (newName === nameEl.dataset.orig && amtEl.value === amtEl.dataset.orig) return;
+
+      // Validate
+      if (!newName || isNaN(newAmount) || newAmount <= 0) {
+        nameEl.value  = nameEl.dataset.orig  || nameEl.value;
+        amtEl.value   = amtEl.dataset.orig   || amtEl.value;
+        showNotification('Invalid name or amount — changes reverted', 'error');
+        return;
+      }
+
+      if (saveInd) saveInd.style.display = 'inline';
+      nameEl.disabled = true;
+      amtEl.disabled  = true;
+
+      try {
+        const { error } = await invoiceSupabase
+          .from('monthly_expenses')
+          .update({ name: newName, amount: newAmount })
+          .eq('id', expenseId);
+
+        if (error) throw error;
+
+        showNotification('✅ Expense updated', 'success');
+        // Update stored originals so a second blur doesn't re-save
+        nameEl.dataset.orig = newName;
+        amtEl.dataset.orig  = newAmount.toFixed(2);
+        // Refresh breakdown to recalculate totals
+        setTimeout(() => showMonthlyBreakdown(), 400);
+      } catch (err) {
+        console.error('Error updating expense:', err);
+        nameEl.value  = nameEl.dataset.orig || nameEl.value;
+        amtEl.value   = amtEl.dataset.orig  || amtEl.value;
+        showNotification('Failed to update expense', 'error');
+      } finally {
+        nameEl.disabled = false;
+        amtEl.disabled  = false;
+        if (saveInd) saveInd.style.display = 'none';
+      }
     };
 
     // Remove expense function
