@@ -848,9 +848,14 @@
   // ==========================================
   // AUTO-INITIALIZE ON PAGE LOAD
   // ==========================================
+  console.log('Alert engine script loaded. document.readyState:', document.readyState);
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAlertEngine);
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Alert engine: DOMContentLoaded fired');
+      initAlertEngine();
+    });
   } else {
+    console.log('Alert engine: Document already loaded, initializing immediately');
     initAlertEngine();
   }
 
