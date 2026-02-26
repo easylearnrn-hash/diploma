@@ -2095,41 +2095,6 @@ body{
   </div>
 </div>
 
-<!-- ENGLISH DISCLAIMER MODAL -->
-<div class="modal-overlay hidden" id="englishDisclaimerModal" style="z-index:9999;backdrop-filter:blur(6px);background:rgba(0,0,0,0.75)">
-  <div class="modal-box" style="max-width:680px;border:1px solid rgba(201,168,76,0.30);background:linear-gradient(160deg,#1a1d2e 0%,#12141f 100%)">
-    <div class="modal-header" style="padding:28px 32px 20px;border-bottom:1px solid rgba(201,168,76,0.14)">
-      <div style="display:flex;align-items:center;gap:14px">
-        <div style="flex-shrink:0;width:44px;height:44px;border-radius:12px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.28);display:flex;align-items:center;justify-content:center">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold-primary)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-        <div>
-          <h2 class="modal-title" style="font-size:20px;margin:0 0 3px;color:#f1f5f9">Disclaimer</h2>
-          <p style="margin:0;font-size:12px;color:#64748b;font-weight:500">Please read before beginning this assessment</p>
-        </div>
-      </div>
-    </div>
-    <div class="modal-body" style="padding:24px 32px 8px;max-height:55vh;overflow-y:auto">
-      <p style="font-size:14.5px;color:#cbd5e1;line-height:1.75;margin:0 0 16px">
-        This assessment is designed primarily to evaluate and strengthen students' ability to comprehend complex English language structures. The purpose of this test is <strong style="color:#f1f5f9">not</strong> to measure advanced medical knowledge or mastery of clinical procedures and conditions.
-      </p>
-      <p style="font-size:14.5px;color:#cbd5e1;line-height:1.75;margin:0 0 16px">
-        The instructor does not expect students to know all medical answers presented in the questions. The medical content included is intentionally basic and foundational. The true objective of this examination is to develop students' skills in <strong style="color:#f1f5f9">analyzing sentence structure</strong>, interpreting context, identifying qualifiers and conditions, recognizing numerical phrasing, and accurately determining what the question is actually asking.
-      </p>
-      <p style="font-size:14.5px;color:#cbd5e1;line-height:1.75;margin:0 0 16px">
-        Students are expected to <strong style="color:#f1f5f9">actively dissect each question stem</strong>. As part of the learning process, you should be prepared to translate the question and explain to your instructor — in your own language or in English — what the question is requesting and how the structure guides you toward the correct answer. If the question contains a linguistic <em style="color:var(--gold-primary)">"trap"</em> (such as misleading phrasing, layered clauses, double negatives, numerical wording like "two pairs," conditional qualifiers, or embedded modifiers), you should clearly identify and explain how that structure could create confusion and how you logically resolved it.
-      </p>
-      <p style="font-size:14.5px;color:#cbd5e1;line-height:1.75;margin:0">
-        This examination is therefore a structured exercise in <strong style="color:#f1f5f9">advanced English comprehension</strong>, analytical reasoning, and syntactic interpretation rather than an evaluation of clinical expertise.
-      </p>
-    </div>
-    <div class="modal-footer" style="padding:20px 32px 26px;display:flex;justify-content:flex-end;gap:12px;border-top:1px solid rgba(255,255,255,0.06);margin-top:20px">
-      <button onclick="document.getElementById('englishDisclaimerModal').classList.add('hidden');document.getElementById('subjectModal').classList.remove('hidden')" class="btn-outline" style="font-size:13px;padding:10px 20px;color:#94a3b8">← Go Back</button>
-      <button onclick="_proceedAfterDisclaimer()" class="btn btn-primary" style="padding:11px 28px;font-size:14px">I Understand — Begin Test</button>
-    </div>
-  </div>
-</div>
-
 <!-- TEST CONTAINER -->
 <div class="test-container" id="testContainer">
   
@@ -4189,23 +4154,6 @@ function updateSubjectStats() {
   }
 }
 
-// English subject topic ID prefix — all English topic IDs start with this subject UUID
-const ENGLISH_SUBJECT_ID = '10000000-0000-0000-0000-000000000025';
-
-// Checks whether any selected topic belongs to the English subject
-function _isEnglishSubjectSelected() {
-  return Array.from(selectedTopics).some(topicId => {
-    const topic = availableTopics.find(t => t.id === topicId);
-    return topic && topic.subject_id === ENGLISH_SUBJECT_ID;
-  }) || selectedSubjects.has(ENGLISH_SUBJECT_ID);
-}
-
-// Called by the "I Understand — Begin Test" button in the disclaimer modal
-async function _proceedAfterDisclaimer() {
-  document.getElementById('englishDisclaimerModal').classList.add('hidden');
-  await _doStartFromSubjectModal();
-}
-
 // "Start Test →" button in the subject modal
 async function startFromSubjectModal() {
   if (selectedTopics.size === 0 && selectedSubjects.size === 0) {
@@ -4213,17 +4161,6 @@ async function startFromSubjectModal() {
     return;
   }
 
-  // If English is among the selected subjects/topics, show the disclaimer first
-  if (_isEnglishSubjectSelected()) {
-    document.getElementById('subjectModal').classList.add('hidden');
-    document.getElementById('englishDisclaimerModal').classList.remove('hidden');
-    return; // _proceedAfterDisclaimer() will call _doStartFromSubjectModal()
-  }
-
-  await _doStartFromSubjectModal();
-}
-
-async function _doStartFromSubjectModal() {
   // User is actively starting a NEW test based on the current modal selection.
   // Don't allow a previously-saved session (possibly for different topics like Cranial Nerves)
   // to bleed into this run.
@@ -4600,6 +4537,35 @@ async function startTest() {
   }
 }
 
+// ============================================
+// ENGLISH DISCLAIMER QUESTION
+// Always shown as Question 1 for the English subject.
+// Not counted in scoring.
+// ============================================
+const ENGLISH_SUBJECT_ID = '10000000-0000-0000-0000-000000000025';
+
+function buildEnglishDisclaimerQuestion() {
+  return {
+    id: 'english-disclaimer-q0',
+    isDisclaimer: true,
+    stem: 'Disclaimer\n\nThis assessment is designed primarily to evaluate and strengthen students\' ability to comprehend complex English language structures. The purpose of this test is not to measure advanced medical knowledge or mastery of clinical procedures and conditions.\n\nThe instructor does not expect students to know all medical answers presented in the questions. The medical content included is intentionally basic and foundational. The true objective of this examination is to develop students\' skills in analyzing sentence structure, interpreting context, identifying qualifiers and conditions, recognizing numerical phrasing, and accurately determining what the question is actually asking.\n\nStudents are expected to actively dissect each question stem. As part of the learning process, you should be prepared to translate the question and explain to your instructor — in your own language or in English — what the question is requesting and how the structure guides you toward the correct answer. If the question contains a linguistic "trap" (such as misleading phrasing, layered clauses, double negatives, numerical wording like "two pairs," conditional qualifiers, or embedded modifiers), you should clearly identify and explain how that structure could create confusion and how you logically resolved it.\n\nThis examination is therefore a structured exercise in advanced English comprehension, analytical reasoning, and syntactic interpretation rather than an evaluation of clinical expertise.',
+    options: [{ id: 'a', text: 'Got it.' }],
+    correct: ['a'],
+    multi: false,
+    rationale: 'Correct. Now click next question to start the test.',
+    category: 'Disclaimer',
+    points: 0,
+    displayOrder: 0,
+    stem_hy: null,
+    options_hy: null,
+    rationale_hy: null
+  };
+}
+
+function isEnglishSubject() {
+  return testState.testConfig && testState.testConfig.subject_id === ENGLISH_SUBJECT_ID;
+}
+
 async function initializeNewTest() {
   clearLocalStorage();
   
@@ -4636,6 +4602,11 @@ async function initializeNewTest() {
       ...q,
       options: shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0))
     }));
+  }
+
+  // Prepend the English disclaimer as Question 1 (after shuffle, always first)
+  if (isEnglishSubject()) {
+    testState.questions = [buildEnglishDisclaimerQuestion(), ...testState.questions];
   }
 
   // ── Build the frozen bilingual snapshot (once, permanent for this session) ──
@@ -4705,6 +4676,11 @@ async function resumeTest(saved) {
       ...q,
       options: shuffleArray(q.options, saved.shuffleSeed + q.id.toString().charCodeAt(0))
     }));
+  }
+
+  // Re-prepend English disclaimer if not already present (always first)
+  if (isEnglishSubject() && (!testState.questions[0] || testState.questions[0].id !== 'english-disclaimer-q0')) {
+    testState.questions = [buildEnglishDisclaimerQuestion(), ...testState.questions];
   }
 
   // ── Restore bilingual snapshot (preferred from localStorage for speed;
@@ -4916,7 +4892,18 @@ function renderQuestion() {
     question.multi ? 'Multiple Answer' : 'Single Answer';
   
   // Update question stem (from active language)
-  document.getElementById('questionStem').textContent = displayQuestion.stem;
+  // Disclaimer question: render with paragraph formatting instead of plain text
+  const stemEl = document.getElementById('questionStem');
+  if (question.isDisclaimer) {
+    const paragraphs = displayQuestion.stem.split('\n\n');
+    stemEl.innerHTML = paragraphs.map((p, i) =>
+      i === 0
+        ? `<strong style="font-size:1.1em;display:block;margin-bottom:12px">${p}</strong>`
+        : `<p style="margin:0 0 10px 0;line-height:1.65">${p}</p>`
+    ).join('');
+  } else {
+    stemEl.textContent = displayQuestion.stem;
+  }
   
   // Render options (text from active language, id/value always from EN for correct-check)
   const container = document.getElementById('optionsContainer');
@@ -6177,6 +6164,18 @@ function calculateResults() {
   let skipped = 0;
   
   const details = testState.questions.map(q => {
+    // Skip the English disclaimer question from scoring
+    if (q.isDisclaimer) {
+      return {
+        question: q,
+        userAnswer: testState.answers[q.id] || null,
+        correctAnswer: q.correct,
+        isCorrect: true,
+        status: 'correct',
+        isDisclaimer: true
+      };
+    }
+
     const userAnswer = testState.answers[q.id];
     let isCorrect = false;
     let status = 'skipped';
@@ -6209,8 +6208,8 @@ function calculateResults() {
     };
   });
   
-  const totalQuestions = testState.questions.length;
-  const scorePercent = Math.round((correct / totalQuestions) * 100);
+  const totalQuestions = testState.questions.filter(q => !q.isDisclaimer).length;
+  const scorePercent = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
   const passed = scorePercent >= TEST_CONFIG.passingScorePercent;
   const timeUsed = Math.floor((testState.endTime - testState.startTime) / 1000);
   
