@@ -407,7 +407,7 @@
       color: var(--due-text);
     }
 
-    /* ── CHANGE-STATUS DRAWER ── */
+    /* ── CHANGE-STATUS DRAWER (Now a centered modal) ── */
     .drawer-overlay {
       position: fixed;
       inset: 0;
@@ -421,25 +421,29 @@
 
     .drawer {
       position: fixed;
-      bottom: 0; left: 0; right: 0;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%) scale(0.95);
+      opacity: 0;
       background: linear-gradient(180deg, #0c1a32 0%, #070f1e 100%);
-      border-top: 1px solid rgba(201,168,76,0.18);
-      border-radius: 20px 20px 0 0;
+      border: 1px solid rgba(201,168,76,0.18);
+      border-radius: 20px;
       z-index: 9001;
-      transform: translateY(100%);
-      transition: transform 0.3s cubic-bezier(0.32,0.72,0,1);
+      transition: transform 0.3s cubic-bezier(0.32,0.72,0,1), opacity 0.3s ease;
+      width: 90%;
       max-width: 580px;
-      margin: 0 auto;
+      margin: 0;
       max-height: 88vh;
       overflow-y: auto;
+      pointer-events: none;
     }
-    .drawer.open { transform: translateY(0); }
+    .drawer.open { 
+      transform: translate(-50%, -50%) scale(1); 
+      opacity: 1; 
+      pointer-events: auto;
+    }
 
     .drawer-handle {
-      width: 40px; height: 4px;
-      background: rgba(201,168,76,0.28);
-      border-radius: 2px;
-      margin: 14px auto 0;
+      display: none; /* Hidden for centered modal */
     }
 
     .drawer-header {
@@ -546,6 +550,196 @@
 
     .status-option.saving { opacity: 0.5; pointer-events: none; }
 
+    .drawer-footer {
+      padding: 0 28px 26px;
+      display: flex;
+      justify-content: flex-end;
+    }
+
+    .reminder-btn {
+      background: linear-gradient(135deg, #c9a84c, #d4b56a);
+      color: #0a0e1a;
+      border: none;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      padding: 10px 16px;
+      cursor: pointer;
+      box-shadow: 0 8px 20px rgba(201,168,76,0.25);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .reminder-btn:hover { transform: translateY(-1px); box-shadow: 0 12px 24px rgba(201,168,76,0.3); }
+
+    /* ── PAYMENT REMINDER MODAL ── */
+    .reminder-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(2,6,23,0.72);
+      backdrop-filter: blur(6px);
+      z-index: 9100;
+      display: none;
+      align-items: stretch;
+      justify-content: stretch;
+      padding: 0;
+    }
+    .reminder-overlay.open { display: flex; }
+
+    .reminder-modal {
+      width: min(1100px, 95vw);
+      max-height: 90vh;
+      background: #0b1426;
+      border: 1px solid rgba(201,168,76,0.2);
+      border-radius: 16px;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: row;
+      overflow: hidden;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
+    }
+
+    .reminder-config {
+      width: 320px;
+      background: #070f1e;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .reminder-config h3 {
+      font-size: 15px;
+      color: var(--text);
+      margin-bottom: 16px;
+    }
+
+    .reminder-config label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: block;
+      font-weight: 600;
+    }
+
+    .reminder-var-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .reminder-var-btn {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--text-muted);
+      padding: 6px 12px;
+      border-radius: 8px;
+      font-size: 11.5px;
+      cursor: pointer;
+      transition: all 0.2s;
+      flex: 1 1 calc(33.333% - 8px);
+      text-align: center;
+    }
+
+    .reminder-var-btn:hover {
+      background: rgba(255,255,255,0.1);
+      color: var(--text);
+    }
+
+    .reminder-var-btn.active {
+      background: rgba(201,168,76,0.15);
+      border-color: rgba(201,168,76,0.4);
+      color: var(--gold-primary);
+    }
+
+    .reminder-textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      resize: vertical;
+      min-height: 100px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .reminder-textarea:focus {
+      border-color: rgba(201,168,76,0.4);
+    }
+
+    .reminder-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .reminder-header {
+      padding: 18px 22px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .reminder-header h3 {
+      margin: 0;
+      font-size: 16px;
+      color: var(--text);
+    }
+    .reminder-header p {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .reminder-preview-wrap {
+      background: #ffffff;
+      margin: 16px 18px 0;
+      border-radius: 12px;
+      border: 1px solid rgba(15,23,42,0.1);
+      flex: 1;
+      min-height: 420px;
+      height: 55vh;
+      overflow: auto;
+    }
+
+    .reminder-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      padding: 16px 18px 20px;
+    }
+
+    .reminder-cancel {
+      background: rgba(255,255,255,0.06);
+      color: var(--text-muted);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 10px;
+      padding: 9px 14px;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+
+    .reminder-send {
+      background: linear-gradient(135deg, #c9a84c, #d4b56a);
+      color: #0a0e1a;
+      border: none;
+      border-radius: 10px;
+      padding: 9px 16px;
+      font-size: 12.5px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .reminder-send:disabled { opacity: 0.6; cursor: not-allowed; }
+
     /* ── ITEM BREAKDOWN PANEL ── */
     .drawer-breakdown {
       margin: 0 28px 4px;
@@ -605,6 +799,7 @@
       padding: 3px 10px;
       border-radius: 999px;
       flex-shrink: 0;
+      white-space: nowrap;
     }
     .pill-full    { background: rgba(34,197,94,0.15);  border: 1px solid rgba(34,197,94,0.35);  color: #4ade80; }
     .pill-partial { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.40); color: #fbbf24; }
@@ -1337,6 +1532,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/acnhs-seal-base64.js"></script>
+  <script src="js/email-template.js"></script>
   <script src="js/admin-sidebar.js"></script>
 
   <!-- ════════════════════════════════════════
@@ -1394,6 +1591,71 @@
         <span class="opt-label">Unpaid</span>
         <span class="opt-desc">No payment on<br>record</span>
       </button>
+    </div>
+
+    <div class="drawer-footer">
+      <button class="reminder-btn" onclick="openReminderModal()">
+        Send Payment Reminder
+      </button>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════
+       PAYMENT REMINDER MODAL
+  ════════════════════════════════════════════════════════════ -->
+  <div class="reminder-overlay" id="reminderOverlay" role="dialog" aria-modal="true" aria-label="Payment Reminder Email">
+    <div class="reminder-modal">
+      <aside class="reminder-config">
+        <h3>Email Options</h3>
+        
+        <p style="font-size:11px;color:var(--text-muted);margin:0 0 10px;">Select one or more items. Changes update the preview instantly.</p>
+
+        <label style="font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;display:block;">Special Fees</label>
+        <div class="reminder-var-grid" style="margin-bottom:18px;">
+          <button class="reminder-var-btn" data-val="Enrollment Fee" onclick="toggleReminderTag(this)">Enrollment Fee</button>
+        </div>
+
+        <label style="font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;display:block;">Quick Select</label>
+        <div class="reminder-var-grid" style="margin-bottom:18px;">
+          <button class="reminder-var-btn" data-val="This Month" onclick="toggleReminderTag(this)">This Month</button>
+          <button class="reminder-var-btn" data-val="Next Month" onclick="toggleReminderTag(this)">Next Month</button>
+        </div>
+
+        <label style="font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;display:block;">Specific Month(s)</label>
+        <div class="reminder-var-grid" style="margin-bottom:20px;">
+          <button class="reminder-var-btn" data-val="January"   onclick="toggleReminderTag(this)">Jan</button>
+          <button class="reminder-var-btn" data-val="February"  onclick="toggleReminderTag(this)">Feb</button>
+          <button class="reminder-var-btn" data-val="March"     onclick="toggleReminderTag(this)">Mar</button>
+          <button class="reminder-var-btn" data-val="April"     onclick="toggleReminderTag(this)">Apr</button>
+          <button class="reminder-var-btn" data-val="May"       onclick="toggleReminderTag(this)">May</button>
+          <button class="reminder-var-btn" data-val="June"      onclick="toggleReminderTag(this)">Jun</button>
+          <button class="reminder-var-btn" data-val="July"      onclick="toggleReminderTag(this)">Jul</button>
+          <button class="reminder-var-btn" data-val="August"    onclick="toggleReminderTag(this)">Aug</button>
+          <button class="reminder-var-btn" data-val="September" onclick="toggleReminderTag(this)">Sep</button>
+          <button class="reminder-var-btn" data-val="October"   onclick="toggleReminderTag(this)">Oct</button>
+          <button class="reminder-var-btn" data-val="November"  onclick="toggleReminderTag(this)">Nov</button>
+          <button class="reminder-var-btn" data-val="December"  onclick="toggleReminderTag(this)">Dec</button>
+        </div>
+
+        <div id="reminderTagsRow" style="display:none;flex-wrap:wrap;gap:6px;padding:10px 12px;background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.2);border-radius:10px;margin-bottom:18px;"></div>
+
+        <label style="font-size:11px;color:var(--text-muted);font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;display:block;">Additional Note (Optional)</label>
+        <textarea class="reminder-textarea" id="reminderCustomMessage" placeholder="Add any additional context or instructions..." oninput="updateReminderPreview()"></textarea>
+      </aside>
+
+      <div class="reminder-main">
+        <div class="reminder-header">
+          <h3>Payment Reminder Email</h3>
+          <p id="reminderSubtitle">Preview the exact email before sending.</p>
+        </div>
+        <div class="reminder-preview-wrap" id="reminderPreviewWrap">
+          <!-- Shadow DOM will be injected here -->
+        </div>
+        <div class="reminder-actions">
+          <button class="reminder-cancel" onclick="closeReminderModal()">Cancel</button>
+          <button class="reminder-send" id="reminderSendBtn" onclick="confirmSendReminder()">Send Email</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1597,7 +1859,7 @@
 
         const { data: students, error: studErr } = await db
           .from('students')
-          .select('full_name, student_id, group, program, id')
+          .select('full_name, student_id, group, program, id, email')
           .order('full_name', { ascending: true });
         if (studErr) throw studErr;
 
@@ -1624,6 +1886,7 @@
             studentId:  sid,
             group:      s.group   || '',
             program:    s.program || '',
+            email:      s.email   || '',
             status:     entry ? bestStatus(entry.statuses) : 'due',
             hasInvoice: !!entry,
             invoiceIds: entry ? entry.ids : [],
@@ -1839,7 +2102,8 @@
                 if (amountPaid <= 0) {
                   pillClass = 'pill-unpaid';  pillLabel = 'Unpaid';
                 } else if (itemTotal > 0 && amountPaid < itemTotal - 0.01) {
-                  pillClass = 'pill-partial'; pillLabel = 'Partial';
+                  const pct = Math.round((amountPaid / itemTotal) * 100);
+                  pillClass = 'pill-partial'; pillLabel = `Partial (${pct}%)`;
                 } else {
                   pillClass = 'pill-full';    pillLabel = 'Full';
                 }
@@ -1872,7 +2136,330 @@
       drawerCurrentStatus = null;
     }
 
-    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDrawer(); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        closeDrawer();
+        closeReminderModal();
+      }
+    });
+
+    // ── Payment reminder email ───────────────────────────────────────────
+    let reminderStudent = null;
+    let reminderEmailHtml = '';
+    let reminderEmailSubject = '';
+    const reminderSelectedTags = new Set(); // multi-select
+
+    function toggleReminderTag(btn) {
+      const val = btn.getAttribute('data-val');
+      
+      // "This Month" and "Next Month" are mutually exclusive with each other
+      if (val === 'This Month' && reminderSelectedTags.has('Next Month')) {
+        reminderSelectedTags.delete('Next Month');
+        document.querySelector('[data-val="Next Month"]')?.classList.remove('active');
+      }
+      if (val === 'Next Month' && reminderSelectedTags.has('This Month')) {
+        reminderSelectedTags.delete('This Month');
+        document.querySelector('[data-val="This Month"]')?.classList.remove('active');
+      }
+
+      if (reminderSelectedTags.has(val)) {
+        reminderSelectedTags.delete(val);
+        btn.classList.remove('active');
+      } else {
+        reminderSelectedTags.add(val);
+        btn.classList.add('active');
+      }
+
+      renderReminderTags();
+      updateReminderPreview();
+    }
+
+    function renderReminderTags() {
+      const row = document.getElementById('reminderTagsRow');
+      if (!row) return;
+      if (reminderSelectedTags.size === 0) {
+        row.style.display = 'none';
+        row.innerHTML = '';
+        return;
+      }
+      row.style.display = 'flex';
+      row.innerHTML = [...reminderSelectedTags].map(t =>
+        `<span style="background:rgba(201,168,76,0.18);border:1px solid rgba(201,168,76,0.35);color:#c9a84c;
+          font-size:10.5px;font-weight:700;padding:3px 10px;border-radius:999px;">${t}</span>`
+      ).join('');
+    }
+
+    // Build a professional "payment for" phrase from selected tags
+    function buildPaymentForPhrase(tags) {
+      if (tags.size === 0) return null;
+
+      const months = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+      
+      const hasEnrollment = tags.has('Enrollment Fee');
+      const hasThisMonth  = tags.has('This Month');
+      const hasNextMonth  = tags.has('Next Month');
+      const selectedMonths = months.filter(m => tags.has(m));
+
+      const parts = [];
+      if (hasEnrollment)         parts.push('the Enrollment Fee');
+      if (hasThisMonth)          parts.push('this month\'s tuition');
+      if (hasNextMonth)          parts.push('next month\'s tuition');
+      if (selectedMonths.length === 1) {
+        parts.push(`the month of ${selectedMonths[0]}`);
+      } else if (selectedMonths.length === 2) {
+        parts.push(`the months of ${selectedMonths[0]} and ${selectedMonths[1]}`);
+      } else if (selectedMonths.length >= 3) {
+        const last = selectedMonths[selectedMonths.length - 1];
+        const rest = selectedMonths.slice(0, -1);
+        parts.push(`the months of ${rest.join(', ')}, and ${last}`);
+      }
+
+      if (parts.length === 0) return null;
+      if (parts.length === 1) return parts[0];
+      const last = parts[parts.length - 1];
+      const rest = parts.slice(0, -1);
+      return `${rest.join(', ')} and ${last}`;
+    }
+
+    // Build a professional bullet list for the email body
+    function buildPaymentItemList(tags) {
+      const months = ['January','February','March','April','May','June',
+                      'July','August','September','October','November','December'];
+      
+      const items = [];
+      if (tags.has('Enrollment Fee'))  items.push('Enrollment Fee');
+      if (tags.has('This Month'))      items.push('Current Month\'s Tuition');
+      if (tags.has('Next Month'))      items.push('Upcoming Month\'s Tuition');
+      months.filter(m => tags.has(m)).forEach(m => items.push(`${m} Tuition`));
+
+      if (items.length < 2) return ''; // only show list when 2+ items
+      return `
+        <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 22px;border-collapse:collapse;width:100%;">
+          ${items.map(i => `
+          <tr>
+            <td style="padding:7px 14px;background:#fffbf2;border:1px solid #e8d9a8;border-radius:6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#3a2e1a;letter-spacing:0.01em;">
+              <span style="display:inline-block;width:7px;height:7px;background:#c9a84c;border-radius:50%;vertical-align:middle;margin-right:10px;"></span>${i}
+            </td>
+          </tr>
+          <tr><td style="height:6px;"></td></tr>`).join('')}
+        </table>
+      `;
+    }
+
+    function updateReminderPreview() {
+      if (!reminderStudent) return;
+      const built = buildPaymentReminderEmail(reminderStudent);
+      reminderEmailHtml = built.html;
+      reminderEmailSubject = built.subject;
+
+      const wrap = document.getElementById('reminderPreviewWrap');
+      let shadow = wrap.shadowRoot;
+      if (!shadow) {
+        shadow = wrap.attachShadow({ mode: 'open' });
+      }
+      shadow.innerHTML = reminderEmailHtml;
+    }
+
+    function buildPaymentReminderEmail(student) {
+      const tags = reminderSelectedTags;
+      const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const customMsg = document.getElementById('reminderCustomMessage')?.value.trim() || '';
+
+      const phrase = buildPaymentForPhrase(tags);
+      const itemList = buildPaymentItemList(tags);
+      const customMsgHtml = customMsg
+        ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#92400e;">${escHtml(customMsg).replace(/\n/g, '<br>')}</p>`
+        : '';
+
+      // Subject line adapts to selection
+      const multiItems = tags.size > 1;
+      const subject = phrase
+        ? `Payment Reminder — ${multiItems ? 'Outstanding Balances' : phrase.replace(/^the\s/i,'').replace(/^the months? of\s/i,'') + ' Payment'} — Action Required`
+        : 'Payment Reminder — Action Required';
+
+      // Opening sentence
+      let openingSentence;
+      if (!phrase) {
+        openingSentence = 'This is a formal reminder that your student account currently reflects an outstanding balance. Please remit payment at your earliest convenience.';
+      } else if (multiItems) {
+        openingSentence = `This is a formal reminder that your student account currently reflects outstanding balances for the following items:`;
+      } else {
+        openingSentence = `This is a formal reminder that your payment for <strong>${phrase}</strong> remains outstanding. Please remit payment at your earliest convenience.`;
+      }
+
+      const bodyContent = `
+        <p style="margin:0 0 ${multiItems && itemList ? '6px' : '20px'};font-weight:600;">
+          ${openingSentence}
+        </p>
+        ${itemList}
+        ${!phrase ? '' : `<p style="margin:0 0 20px;">Please ensure that full payment is submitted promptly to avoid any disruption to your enrollment or access to academic resources.</p>`}
+        ${customMsgHtml}
+        <p style="margin:0 0 20px;">
+          Please note that if payment is not received within <strong>24 hours</strong>, you may be subject to academic consequences, including <strong>failure of the course</strong> and/or <strong>temporary suspension of access to the online portal</strong>.
+        </p>
+        <hr style="border:none;border-top:1px solid #c9a84c;opacity:0.35;margin:0 0 20px;">
+        <p style="margin:0 0 16px;">
+          If you have already submitted your payment, please log in to your portal, click on <strong>Financial</strong>, and upload your payment receipt. You may then disregard this notice.
+        </p>
+        <p style="margin:0;">
+          Should you have any questions regarding your balance, please do not hesitate to contact the Billing Office directly at <a href="mailto:billing@acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">billing@acnhs.am</a>.
+        </p>
+      `.trim();
+
+      const studentInfo = student.studentId
+        ? `<div style="font-family:Arial,sans-serif;font-size:11px;color:rgba(200,191,178,0.75);text-align:right;">ID: ${escHtml(student.studentId)}</div>`
+        : '';
+
+      const sealRaw = (typeof ACNHS_SEAL_BASE64 !== 'undefined' && ACNHS_SEAL_BASE64)
+        || (typeof window.ACNHS_SEAL_BASE64 !== 'undefined' && window.ACNHS_SEAL_BASE64)
+        || null;
+      const sealSrc = sealRaw ? `data:image/png;base64,${sealRaw}` : '';
+
+      const signatureHtml = `
+        <div style="font-family:Georgia,'Times New Roman',serif;font-size:15px;font-weight:700;color:#04111f;margin-bottom:3px;">Billing Department</div>
+        <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;color:#5a4e3a;margin-bottom:2px;">Office of Billing &amp; Finance</div>
+        <div style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;color:#5a4e3a;margin-bottom:8px;">Armenian College of Nursing &amp; Health Sciences</div>
+        <div style="font-family:Arial,sans-serif;font-size:11px;color:#7c6d55;margin-bottom:6px;">Yerevan, Armenia</div>
+        <div style="font-family:Arial,sans-serif;font-size:10px;color:#8a7a55;font-style:italic;margin-bottom:10px;">Graduates Receive Lifetime ANA-US, Inc. Membership</div>
+        <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+          <tr>
+            <td style="padding:0 10px 3px 0;vertical-align:middle;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.87 9.84 19.79 19.79 0 0 1 1.9 1.26 2 2 0 0 1 3.87 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z'/%3E%3C/svg%3E" width="13" height="13" alt="" style="display:block;">
+            </td>
+            <td style="font-family:Arial,sans-serif;font-size:11px;color:#8a7a55;padding:0 0 3px;white-space:nowrap;">+374 93 798879</td>
+          </tr>
+          <tr>
+            <td style="padding:0 10px 3px 0;vertical-align:middle;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.87 9.84 19.79 19.79 0 0 1 1.9 1.26 2 2 0 0 1 3.87 0h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 7.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z'/%3E%3C/svg%3E" width="13" height="13" alt="" style="display:block;">
+            </td>
+            <td style="font-family:Arial,sans-serif;font-size:11px;color:#8a7a55;padding:0 0 3px;white-space:nowrap;">+1 (707) 717-4440</td>
+          </tr>
+          <tr>
+            <td style="padding:0 10px 3px 0;vertical-align:middle;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2' y='4' width='20' height='16' rx='2'/%3E%3Cpath d='m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7'/%3E%3C/svg%3E" width="13" height="13" alt="" style="display:block;">
+            </td>
+            <td style="font-family:Arial,sans-serif;font-size:11px;padding:0 0 3px;white-space:nowrap;"><a href="mailto:billing@acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">billing@acnhs.am</a></td>
+          </tr>
+          <tr>
+            <td style="padding:0 10px 0 0;vertical-align:middle;">
+              <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpath d='M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/%3E%3C/svg%3E" width="13" height="13" alt="" style="display:block;">
+            </td>
+            <td style="font-family:Arial,sans-serif;font-size:11px;padding:0;white-space:nowrap;"><a href="https://www.acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">www.acnhs.am</a></td>
+          </tr>
+        </table>
+      `.trim();
+
+      if (typeof window.EMAIL_HTML_TEMPLATE !== 'undefined') {
+        const emailTitle = tags.size > 1 ? 'Payment Reminder — Outstanding Balances' : 'Payment Reminder';
+        const html = window.EMAIL_HTML_TEMPLATE
+          .replace(/\{\{SUBJECT\}\}/g, subject)
+          .replace(/\{\{EMAIL_TITLE\}\}/g, emailTitle)
+          .replace(/\{\{DATE\}\}/g, today)
+          .replace(/\{\{APPLICANT_NAME\}\}/g, escHtml(student.name))
+          .replace(/\{\{BODY_CONTENT\}\}/g, bodyContent)
+          .replace(/\{\{STUDENT_INFO\}\}/g, studentInfo)
+          .replace(/\{\{SIGNATURE\}\}/g, signatureHtml)
+          .replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, sealSrc)
+          .replace(/\{\{YEAR\}\}/g, new Date().getFullYear().toString());
+        return { html, subject };
+      }
+
+      const fallbackHtml = `<!doctype html><html><head><meta charset="utf-8"><title>${subject}</title></head>
+      <body style="font-family:Arial,sans-serif;line-height:1.6;color:#111;">
+        <h2>Payment Reminder</h2>
+        <p>Dear ${escHtml(student.name)},</p>
+        ${bodyContent}
+        <p style="margin-top:20px;">ACNHS Billing Office</p>
+      </body></html>`;
+      return { html: fallbackHtml, subject };
+    }
+
+    function openReminderModal() {
+      if (!drawerStudentId) return;
+      const student = allStudentStatuses.find(s => s.studentId === drawerStudentId);
+      if (!student) return;
+      if (!student.email) {
+        showToast('No email on file for this student.', 'error');
+        return;
+      }
+
+      reminderStudent = student;
+      
+      // Reset state
+      reminderSelectedTags.clear();
+      document.getElementById('reminderCustomMessage').value = '';
+      document.querySelectorAll('.reminder-var-btn').forEach(b => b.classList.remove('active'));
+      renderReminderTags();
+
+      const built = buildPaymentReminderEmail(student);
+      reminderEmailHtml = built.html;
+      reminderEmailSubject = built.subject;
+
+      const subtitle = `${student.name} · ${student.email}`;
+      document.getElementById('reminderSubtitle').textContent = subtitle;
+
+      const wrap = document.getElementById('reminderPreviewWrap');
+      let shadow = wrap.shadowRoot;
+      if (!shadow) {
+        shadow = wrap.attachShadow({ mode: 'open' });
+      }
+      shadow.innerHTML = reminderEmailHtml;
+
+      document.getElementById('reminderOverlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeReminderModal() {
+      document.getElementById('reminderOverlay').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    async function confirmSendReminder() {
+      if (!reminderStudent) return;
+      const shouldSend = confirm(`Send payment reminder to ${reminderStudent.name} (${reminderStudent.email})?`);
+      if (!shouldSend) return;
+
+      const sendBtn = document.getElementById('reminderSendBtn');
+      sendBtn.disabled = true;
+      sendBtn.textContent = 'Sending...';
+
+      try {
+        const db = initSupabase();
+        if (!db) throw new Error('Supabase not initialised');
+
+        const { error: sendError } = await db.functions.invoke('send-email', {
+          body: {
+            to: reminderStudent.email,
+            subject: reminderEmailSubject,
+            html: reminderEmailHtml,
+            from: 'billing@acnhs.am',
+            fromName: 'ACNHS Billing Department'
+          }
+        });
+
+        if (sendError) throw new Error(sendError.message || 'Failed to send email');
+
+        await db.from('email_history').insert({
+          recipient: reminderStudent.email,
+          sender: 'billing@acnhs.am',
+          subject: reminderEmailSubject,
+          body: 'Payment reminder email',
+          html_body: reminderEmailHtml,
+          status: 'sent',
+          sent_at: new Date().toISOString()
+        });
+
+        showToast(`Reminder sent to ${reminderStudent.email}`, 'success');
+        closeReminderModal();
+      } catch (err) {
+        console.error('Failed to send reminder:', err);
+        showToast('Failed to send reminder — ' + (err.message || 'check console'), 'error');
+      } finally {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send Email';
+      }
+    }
 
     // ── Commit status change ───────────────────────────────────────────────
     async function commitStatus(newStatus) {
@@ -2172,6 +2759,17 @@
       const partialCount = students.filter(s => s.status === 'partial').length;
       const dueCount     = students.filter(s => s.status === 'due').length;
 
+      const abbreviateProgram = (program) => {
+        if (!program) return '—';
+        const match = program.match(/\(([^)]+)\)/);
+        if (match && match[1]) return match[1].trim();
+        const upper = program.toUpperCase();
+        if (upper.includes('BSN') || upper.includes('BACHELOR')) return 'BSN';
+        if (upper.includes('ASN') || upper.includes('ASSOCIATE')) return 'ASN';
+        if (upper.includes('RN BRIDGE')) return 'RN Bridge';
+        return program;
+      };
+
       // Build table headers
       const headers = [];
       if (showNo)     headers.push('<th style="width:36px;">#</th>');
@@ -2188,7 +2786,7 @@
         if (showNo)     cells.push(`<td style="color:#64748b;font-size:11px;">${i+1}</td>`);
         if (showName)   cells.push(`<td><strong>${escHtml(s.name)}</strong></td>`);
         if (showId)     cells.push(`<td style="font-family:monospace;font-size:11.5px;">${escHtml(s.studentId) || '—'}</td>`);
-        if (showGroup)  cells.push(`<td>${escHtml(s.group) || '—'}</td><td>${escHtml(s.program) || '—'}</td>`);
+  if (showGroup)  cells.push(`<td>${escHtml(s.group) || '—'}</td><td>${escHtml(abbreviateProgram(s.program))}</td>`);
         if (showStatus) cells.push(`<td><span class="pmd-badge ${badgeCls}">${statusLabel}</span></td>`);
         return `<tr>${cells.join('')}</tr>`;
       }).join('');
@@ -2196,6 +2794,17 @@
       const tableContent = students.length
         ? `<table class="pmd-table"><thead><tr>${headers.join('')}</tr></thead><tbody>${rows}</tbody></table>`
         : `<div class="pmd-empty">No students match the selected filters.</div>`;
+
+      const statsBar = showStatus
+        ? `
+        <div class="pmd-stats-bar">
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#94a3b8;"></div><span class="pmd-stat-num">${totalCount}</span>&nbsp;Total</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#166534;"></div><span class="pmd-stat-num" style="color:#166534;">${paidCount}</span>&nbsp;Paid</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#854d0e;"></div><span class="pmd-stat-num" style="color:#854d0e;">${partialCount}</span>&nbsp;Partial</div>
+          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#991b1b;"></div><span class="pmd-stat-num" style="color:#991b1b;">${dueCount}</span>&nbsp;Unpaid</div>
+        </div>
+        `
+        : '';
 
       return `
         <div class="pmd-header">
@@ -2209,12 +2818,7 @@
             ${prepBy ? `<div><strong>Prepared by:</strong> ${escHtml(prepBy)}</div>` : ''}
           </div>
         </div>
-        <div class="pmd-stats-bar">
-          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#94a3b8;"></div><span class="pmd-stat-num">${totalCount}</span>&nbsp;Total</div>
-          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#166534;"></div><span class="pmd-stat-num" style="color:#166534;">${paidCount}</span>&nbsp;Paid</div>
-          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#854d0e;"></div><span class="pmd-stat-num" style="color:#854d0e;">${partialCount}</span>&nbsp;Partial</div>
-          <div class="pmd-stat"><div class="pmd-stat-dot" style="background:#991b1b;"></div><span class="pmd-stat-num" style="color:#991b1b;">${dueCount}</span>&nbsp;Unpaid</div>
-        </div>
+        ${statsBar}
         <div class="pmd-table-wrap">${tableContent}</div>
         <div class="pmd-footer">Generated on ${new Date().toLocaleString('en-US', { dateStyle:'long', timeStyle:'short' })} · Armenian College of Nursing and Health Sciences</div>
       `;
