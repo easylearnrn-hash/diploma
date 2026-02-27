@@ -84,18 +84,14 @@
       // If no stored data, try to get from students table by email in session
       const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
       if (userEmail) {
-        try {
-          const { data, error } = await supabase
-            .from('students')
-            .select('id, student_id, full_name, email')
-            .eq('email', userEmail)
-            .maybeSingle(); // Use maybeSingle instead of single to avoid 406 errors if 0 rows
-          
-          if (data && !error) {
-            return data;
-          }
-        } catch (e) {
-          console.warn('Alert engine: Could not fetch student by email, continuing as public visitor.', e);
+        const { data, error } = await supabase
+          .from('students')
+          .select('id, student_id, full_name, email')
+          .eq('email', userEmail)
+          .single();
+        
+        if (data && !error) {
+          return data;
         }
       }
 
@@ -121,30 +117,20 @@
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (!alerts || alerts.length === 0) {
-        console.log('Alert engine: No active alerts found in DB.');
-        return;
-      }
+      if (!alerts || alerts.length === 0) return;
 
       const studentId = currentStudent?.id || null;
-      console.log('Alert engine: Checking alerts for studentId:', studentId);
 
       // Filter alerts that apply to this student or public visitors
       const applicableAlerts = alerts.filter(alert => {
-        const isTargeted = isAlertTargetedToStudent(alert, studentId);
-        console.log(`Alert engine: Alert ${alert.id} targeted to student?`, isTargeted);
-        return isTargeted;
+        return isAlertTargetedToStudent(alert, studentId);
       });
 
-      if (applicableAlerts.length === 0) {
-        console.log('Alert engine: No alerts targeted to this user/visitor.');
-        return;
-      }
+      if (applicableAlerts.length === 0) return;
 
       // Evaluate each alert's schedule and display rules
       for (const alert of applicableAlerts) {
         const shouldShow = await shouldShowAlert(alert, studentId);
-        console.log(`Alert engine: Alert ${alert.id} shouldShow?`, shouldShow);
         if (shouldShow) {
           await showAlert(alert);
           break; // Only show one alert at a time
@@ -197,20 +183,17 @@
 
       // 0. Page-specific rules
       if (!doesAlertMatchPage(triggerRules)) {
-        console.log(`Alert engine: Alert ${alert.id} rejected by page match.`);
         return false;
       }
 
       // 0b. Session dismissal rule
       const allowSessionRepeat = interactionRules.allow_session_repeat === true;
       if (!allowSessionRepeat && isDismissedThisSession(alert.id)) {
-        console.log(`Alert engine: Alert ${alert.id} rejected by session dismissal.`);
         return false;
       }
 
       // 1. Check schedule rules (date/time windows)
       if (!isWithinScheduleWindow(scheduleRules, alert)) {
-        console.log(`Alert engine: Alert ${alert.id} rejected by schedule window.`);
         return false;
       }
 
@@ -226,7 +209,6 @@
           .limit(1);
 
         if (responses && responses.length > 0) {
-          console.log(`Alert engine: Alert ${alert.id} rejected by response already given.`);
           return false; // Already responded
         }
       }
@@ -252,7 +234,6 @@
 
       // Use new frequency_rules if available, fallback to old display_mode
       const capType = frequencyRules.cap_type || alert.display_mode || 'once_ever';
-      console.log(`Alert engine: Alert ${alert.id} capType: ${capType}, impressionCount: ${impressionCount}`);
 
       switch (capType) {
         case 'once_ever':
@@ -428,20 +409,20 @@
   // TEMPLATE VARIABLE REPLACEMENT
   // ==========================================
   function replaceTemplateVariables(message, student) {
-    if (!message || !student) return message;
+    if (!message) return message;
 
     const now = new Date();
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                     'July', 'August', 'September', 'October', 'November', 'December'];
     
     const variables = {
-      '{student_name}': student.full_name || 'Student',
-      '{student_id}': student.student_id || 'N/A',
-      '{email}': student.email || '',
+      '{student_name}': student?.full_name || 'Student',
+      '{student_id}': student?.student_id || 'N/A',
+      '{email}': student?.email || '',
       '{month}': months[now.getMonth()],
       '{year}': now.getFullYear().toString(),
       '{date}': now.toLocaleDateString('en-US'),
-      '{group}': student.enrollment_group || student.group || 'N/A'
+      '{group}': student?.enrollment_group || student?.group || 'N/A'
     };
 
     let result = message;
@@ -653,23 +634,12 @@
   function normalizePageValue(value) {
     if (!value) return '';
     let normalized = String(value).trim();
-    // Strip protocol/domain if a full URL is provided (http, https, file)
-    try {
-      if (normalized.includes('://')) {
-        const parsed = new URL(normalized);
-        normalized = parsed.pathname || normalized;
-      }
-    } catch (error) {
-      // If URL parsing fails, fall back to string normalization
-    }
+    // Strip protocol/domain if a full URL is provided
     normalized = normalized.replace(/^https?:\/\/[^/]+/i, '');
-    normalized = normalized.replace(/^file:\/\/+/i, '/');
     // Remove query string and hash
     normalized = normalized.split('?')[0].split('#')[0];
     // Remove leading slash and make lowercase for safe matching
-    const result = normalized.replace(/^\/+/, '').toLowerCase();
-    console.log(`Alert engine: normalizePageValue("${value}") -> "${result}"`);
-    return result;
+    return normalized.replace(/^\//, '').toLowerCase();
   }
 
   function getCurrentPageVariants() {
@@ -684,7 +654,6 @@
       variants.add(val);
       variants.add(`/${val}`);
     });
-    console.log('Alert engine: Current page variants:', Array.from(variants));
     return variants;
   }
 
@@ -695,12 +664,10 @@
     }
 
     const currentVariants = getCurrentPageVariants();
-    const matches = pages.some((page) => {
+    return pages.some((page) => {
       const normalized = normalizePageValue(page);
       return currentVariants.has(normalized) || currentVariants.has(`/${normalized}`);
     });
-    console.log('Alert engine: doesAlertMatchPage?', matches, 'Whitelist:', pages);
-    return matches;
   }
 
   function normalizeRules(value) {
@@ -852,14 +819,9 @@
   // ==========================================
   // AUTO-INITIALIZE ON PAGE LOAD
   // ==========================================
-  console.log('Alert engine script loaded. document.readyState:', document.readyState);
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('Alert engine: DOMContentLoaded fired');
-      initAlertEngine();
-    });
+    document.addEventListener('DOMContentLoaded', initAlertEngine);
   } else {
-    console.log('Alert engine: Document already loaded, initializing immediately');
     initAlertEngine();
   }
 

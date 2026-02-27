@@ -4200,27 +4200,41 @@ async function showSubjectSelection() {
     // Load subjects, topics, and per-topic question counts in parallel
     const [
       { data: subjects, error: subjectError },
-      { data: allTopicsRaw, error: topicError },
-      { data: qCountRows, error: qCountError }
+      { data: allTopicsRaw, error: topicError }
     ] = await Promise.all([
       db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
-      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order'),
-      db.from('test_questions').select('topic_id').eq('is_active', true).limit(10000)
+      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order')
     ]);
 
     if (subjectError) throw subjectError;
     if (!subjects || subjects.length === 0) throw new Error('No subjects available for this test');
 
     // Build a map: topic_id → question count
+    // Fetch all active questions without a test_id filter so every subject's questions
+    // are counted correctly regardless of which test_id they were inserted with.
+    // We paginate in 1000-row pages to stay within PostgREST's max-rows limit.
     const topicQuestionCounts = {};
-    if (!qCountError && qCountRows) {
-      qCountRows.forEach(row => {
+    let page = 0;
+    const PAGE_SIZE = 1000;
+    while (true) {
+      const from = page * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+      const { data: pageRows, error: pageError } = await db
+        .from('test_questions')
+        .select('topic_id')
+        .eq('is_active', true)
+        .range(from, to);
+      if (pageError) { console.warn('[Topic Counts] page error', pageError); break; }
+      if (!pageRows || pageRows.length === 0) break;
+      pageRows.forEach(row => {
         if (row.topic_id) {
           topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
         }
       });
+      if (pageRows.length < PAGE_SIZE) break; // last page
+      page++;
     }
-    console.log(`[Topic Counts] fetched ${qCountRows?.length ?? 0} active questions, mapped ${Object.keys(topicQuestionCounts).length} topics`, topicQuestionCounts);
+    console.log(`[Topic Counts] mapped ${Object.keys(topicQuestionCounts).length} topics`, topicQuestionCounts);
 
     allSubjects = subjects;
     availableTopics = allTopicsRaw || [];
@@ -4455,7 +4469,7 @@ function updateSubjectStats() {
   if (tCount > 0) {
     db.from('test_questions')
       .select('*', { count: 'exact', head: true })
-      .eq('test_id', TEST_CONFIG.testId)
+      .eq('is_active', true)
       .in('topic_id', Array.from(selectedTopics))
       .then(({ count, error }) => {
         const val = (!error && count != null) ? count : '—';
@@ -4603,7 +4617,7 @@ async function updateTopicStats() {
       const { count, error } = await db
         .from('test_questions')
         .select('*', { count: 'exact', head: true })
-        .eq('test_id', TEST_CONFIG.testId)
+        .eq('is_active', true)
         .in('topic_id', Array.from(selectedTopics));
       if (!error && qEl) qEl.textContent = count || 0;
     } catch (_) { if (qEl) qEl.textContent = '?'; }
