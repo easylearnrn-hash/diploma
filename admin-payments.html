@@ -2477,8 +2477,22 @@
                 if (inv.status === 'paid') {
                   paid = total > 0 ? total : 1; // treat paid invoice as fully paid regardless of item math
                 } else if (inv.status === 'partial') {
+                  const allMonths = ['january','february','march','april','may','june','july','august','september','october','november','december'];
                   partials.forEach(p => {
-                    if (desc.includes(p.appliedTo) || p.appliedTo.includes(desc)) {
+                    const at = p.appliedTo; // already lowercased
+                    // Direct containment match
+                    if (desc.includes(at) || at.includes(desc)) {
+                      paid += p.amount;
+                      return;
+                    }
+                    // Month-keyword match: both desc and appliedTo mention the same month
+                    const sharedMonth = allMonths.find(m => desc.includes(m) && at.includes(m));
+                    if (sharedMonth) {
+                      paid += p.amount;
+                      return;
+                    }
+                    // Enrollment keyword match
+                    if (desc.includes('enrollment') && at.includes('enrollment')) {
                       paid += p.amount;
                     }
                   });
