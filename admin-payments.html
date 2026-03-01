@@ -2446,6 +2446,7 @@
             .eq('student_id', drawerStudentId);
             
           if (allInvoices) {
+            console.log('[ReminderDebug] All invoices for student:', JSON.stringify(allInvoices.map(i => ({ status: i.status, items: i.items, notesSnippet: (i.notes || '').slice(0, 120) }))));
             allInvoices.forEach(inv => {
               let partials = [];
               if (inv.notes) {
@@ -2473,8 +2474,9 @@
                 const total = sub - (sub * (disc / 100));
 
                 let paid = 0;
-                if (inv.status === 'paid') paid = total;
-                else if (inv.status === 'partial') {
+                if (inv.status === 'paid') {
+                  paid = total > 0 ? total : 1; // treat paid invoice as fully paid regardless of item math
+                } else if (inv.status === 'partial') {
                   partials.forEach(p => {
                     if (desc.includes(p.appliedTo) || p.appliedTo.includes(desc)) {
                       paid += p.amount;
@@ -2483,18 +2485,18 @@
                 }
 
                 let mStatus = 'unpaid';
-                if (paid >= total && total > 0) mStatus = 'paid';
-                else if (paid > 0 && paid < total) mStatus = 'partial';
-                else if (inv.status === 'paid') mStatus = 'paid';
+                if (inv.status === 'paid') mStatus = 'paid';
+                else if (inv.status === 'partial' && paid >= total && total > 0) mStatus = 'paid';
+                else if (inv.status === 'partial' && paid > 0) mStatus = 'partial';
 
                 const processKey = (k) => { 
-                  // If we already have a status for this month, keep the "worst" one, or just overwrite it?
-                  // Unpaid overrides partial, partial overrides paid (to be safe and show debt)
+                  // Only allow status to worsen (paid → partial → unpaid), never improve
                   const current = monthStatuses[k];
-                  if (!current || (mStatus !== 'paid' && current === 'paid') || (mStatus === 'unpaid' && current === 'partial')) {
-                    monthStatuses[k] = mStatus; 
+                  const rank = { paid: 0, partial: 1, unpaid: 2 };
+                  if (!current || rank[mStatus] > rank[current]) {
+                    monthStatuses[k] = mStatus;
                   }
-                  if (mStatus !== 'paid') {
+                  if (monthStatuses[k] !== 'paid') {
                     if (!unpaidMonths.includes(k)) unpaidMonths.push(k);
                   }
                 };

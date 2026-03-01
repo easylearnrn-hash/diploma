@@ -6079,8 +6079,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
                 const total = sub - (sub * (disc / 100));
 
                 let paid = 0;
-                if (inv.status === 'paid') paid = total;
-                else if (inv.status === 'partial') {
+                if (inv.status === 'paid') {
+                  paid = total > 0 ? total : 1;
+                } else if (inv.status === 'partial') {
                   partials.forEach(p => {
                     if (desc.includes(p.appliedTo) || p.appliedTo.includes(desc)) {
                       paid += p.amount;
@@ -6089,16 +6090,18 @@ Please include your Student ID in the payment reference or memo to ensure proper
                 }
 
                 let mStatus = 'unpaid';
-                if (paid >= total && total > 0) mStatus = 'paid';
-                else if (paid > 0 && paid < total) mStatus = 'partial';
-                else if (inv.status === 'paid') mStatus = 'paid';
+                if (inv.status === 'paid') mStatus = 'paid';
+                else if (inv.status === 'partial' && paid >= total && total > 0) mStatus = 'paid';
+                else if (inv.status === 'partial' && paid > 0) mStatus = 'partial';
 
-                const processKey = (k) => { 
+                const processKey = (k) => {
+                  // Only allow status to worsen: paid → partial → unpaid
                   const current = monthStatuses[k];
-                  if (!current || (mStatus !== 'paid' && current === 'paid') || (mStatus === 'unpaid' && current === 'partial')) {
-                    monthStatuses[k] = mStatus; 
+                  const rank = { paid: 0, partial: 1, unpaid: 2 };
+                  if (!current || rank[mStatus] > rank[current]) {
+                    monthStatuses[k] = mStatus;
                   }
-                  if (mStatus !== 'paid') {
+                  if (monthStatuses[k] !== 'paid') {
                     if (!unpaidMonths.includes(k)) unpaidMonths.push(k);
                   }
                 };
