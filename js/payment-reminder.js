@@ -33,31 +33,55 @@
     return `${rest.join(', ')} and ${last}`;
   }
 
-  function buildPaymentItemList(tags) {
+  function buildPaymentItemList(tags, student) {
     const months = ['January','February','March','April','May','June',
                     'July','August','September','October','November','December'];
     const items = [];
-    if (tags.has('Enrollment Fee')) items.push('Enrollment Fee');
-    if (tags.has('This Month')) items.push("Current Month's Tuition");
-    if (tags.has('Next Month')) items.push("Upcoming Month's Tuition");
-    months.filter(m => tags.has(m)).forEach(m => items.push(`${m} Tuition`));
+    if (tags.has('Enrollment Fee')) items.push({ label: 'Enrollment Fee', key: 'Enrollment Fee' });
+    if (tags.has('This Month')) items.push({ label: "Current Month's Tuition", key: null });
+    if (tags.has('Next Month')) items.push({ label: "Upcoming Month's Tuition", key: null });
+    months.filter(m => tags.has(m)).forEach(m => items.push({ label: `${m} Tuition`, key: m }));
     if (items.length < 1) return '';
 
     return `
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 22px;border-collapse:collapse;width:100%;">
-        ${items.map(i => `
+        ${items.map(({ label, key }) => {
+          const st = (key && student && student.monthStatuses) ? (student.monthStatuses[key] || 'unpaid') : 'unpaid';
+          const isPaid    = st === 'paid';
+          const isPartial = st === 'partial';
+
+          // Calculate % remaining for partial items
+          let pctLabel = '';
+          if (isPartial && key && student && student.monthAmounts && student.monthAmounts[key]) {
+            const { paid, total } = student.monthAmounts[key];
+            if (total > 0) {
+              const remaining = total - paid;
+              const pctRemaining = Math.round((remaining / total) * 100);
+              pctLabel = ` (${pctRemaining}% left)`;
+            }
+          }
+
+          const bg      = isPaid ? '#f0fdf4' : isPartial ? '#fffbeb' : '#fef5f5';
+          const border  = isPaid ? '#bbf7d0' : isPartial ? '#fde68a' : '#fecaca';
+          const dotClr  = isPaid ? '#16a34a' : isPartial ? '#d97706' : '#dc2626';
+          const textClr = isPaid ? '#14532d' : isPartial ? '#78350f'  : '#991b1b';
+          const badgeClr= isPaid ? '#22c55e' : isPartial ? '#f59e0b'  : '#ef4444';
+          const badge   = isPaid ? 'PAID'    : isPartial ? `PARTIAL${pctLabel}` : 'UNPAID';
+          const shadow  = isPaid ? 'rgba(34,197,94,0.08)' : 'rgba(220,38,38,0.08)';
+          return `
         <tr>
-          <td style="padding:10px 14px;background:#fef5f5;border:1px solid #fecaca;border-radius:6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:#991b1b;letter-spacing:0.01em;box-shadow:0 0 10px rgba(220,38,38,0.08);">
+          <td style="padding:10px 14px;background:${bg};border:1px solid ${border};border-radius:6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:${textClr};letter-spacing:0.01em;box-shadow:0 0 10px ${shadow};">
             <div style="display:flex; justify-content:space-between; align-items:center;">
               <div>
-                <span style="display:inline-block;width:7px;height:7px;background:#dc2626;border-radius:50%;vertical-align:middle;margin-right:10px;box-shadow:0 0 5px rgba(220,38,38,0.5);"></span>
-                ${i}
+                <span style="display:inline-block;width:7px;height:7px;background:${dotClr};border-radius:50%;vertical-align:middle;margin-right:10px;box-shadow:0 0 5px ${dotClr}80;"></span>
+                ${label}
               </div>
-              <div style="font-size:11px; font-weight:700; color:#ef4444; letter-spacing:0.05em;">UNPAID</div>
+              <div style="font-size:11px; font-weight:700; color:${badgeClr}; letter-spacing:0.05em;">${badge}</div>
             </div>
           </td>
         </tr>
-        <tr><td style="height:8px;"></td></tr>`).join('')}
+        <tr><td style="height:8px;"></td></tr>`;
+        }).join('')}
       </table>
     `;
   }
@@ -66,32 +90,65 @@
     const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 
     const phrase = buildPaymentForPhrase(tags);
-    const itemList = buildPaymentItemList(tags);
+    const itemList = buildPaymentItemList(tags, student);
+
+    // Classify what's selected: all paid, all unpaid/partial, or mixed
+    const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const selectedKeys = [];
+    if (tags.has('Enrollment Fee')) selectedKeys.push('Enrollment Fee');
+    months.filter(m => tags.has(m)).forEach(m => selectedKeys.push(m));
+    const statuses = selectedKeys.map(k => (student && student.monthStatuses && student.monthStatuses[k]) || 'unpaid');
+    const allPaid    = statuses.length > 0 && statuses.every(s => s === 'paid');
+    const anyUnpaid  = statuses.some(s => s === 'unpaid' || s === 'partial');
+    const mixedPaid  = statuses.some(s => s === 'paid') && anyUnpaid;
+
     const customMsgHtml = customMsg
       ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#92400e;">${escHtml(customMsg).replace(/\n/g, '<br>')}</p>`
       : '';
 
     const multiItems = tags.size > 1;
-    const subject = phrase
-      ? `Payment Reminder — ${multiItems ? 'Outstanding Balances' : phrase.replace(/^the\s/i,'').replace(/^the months? of\s/i,'') + ' Payment'} — Action Required`
-      : 'Payment Reminder — Action Required';
 
+    // Subject line
+    let subject;
+    if (allPaid) {
+      subject = phrase
+        ? `Payment Confirmation — ${phrase.replace(/^the\s/i,'').replace(/^the months? of\s/i,'')} — Thank You`
+        : 'Payment Confirmation — Thank You';
+    } else {
+      subject = phrase
+        ? `Payment Reminder — ${multiItems ? 'Outstanding Balances' : phrase.replace(/^the\s/i,'').replace(/^the months? of\s/i,'') + ' Payment'} — Action Required`
+        : 'Payment Reminder — Action Required';
+    }
+
+    // Opening sentence
     let openingSentence;
     if (!phrase) {
       openingSentence = 'This is a formal reminder that your student account currently reflects an outstanding balance. Please remit payment at your earliest convenience.';
+    } else if (allPaid) {
+      openingSentence = 'We are pleased to confirm that we have received your payment for the following item(s). Your account has been updated accordingly:';
+    } else if (mixedPaid) {
+      openingSentence = 'This is a summary of your recent payment activity. Please review the status of each item below:';
     } else {
       openingSentence = 'This is a formal reminder that your student account currently reflects outstanding balances for the following items:';
     }
 
+    const urgencyParagraph = anyUnpaid
+      ? `<p style="margin:0 0 20px;">Please note that if payment is not received within <strong>24 hours</strong>, you may be subject to academic consequences, including <strong>failure of the course</strong> and/or <strong>temporary suspension of access to the online portal</strong>.</p>`
+      : '';
+
+    const balanceParagraph = anyUnpaid
+      ? `<p style="margin:0 0 20px;">Please ensure that full payment is submitted promptly to avoid any disruption to your enrollment or access to academic resources.</p>`
+      : `<p style="margin:0 0 20px;">Thank you for keeping your account in good standing. If you have any questions about your payment record, please contact our Billing Office.</p>`;
+
     const bodyContent = `
       <p style="margin:0 0 ${multiItems && itemList ? '6px' : '20px'};">${openingSentence}</p>
       ${itemList}
-      ${!phrase ? '' : `<p style="margin:0 0 20px;">Please ensure that full payment is submitted promptly to avoid any disruption to your enrollment or access to academic resources.</p>`}
+      ${!phrase ? '' : balanceParagraph}
       ${customMsgHtml}
-      <p style="margin:0 0 20px;">Please note that if payment is not received within <strong>24 hours</strong>, you may be subject to academic consequences, including <strong>failure of the course</strong> and/or <strong>temporary suspension of access to the online portal</strong>.</p>
+      ${urgencyParagraph}
       <hr style="border:none;border-top:1px solid #c9a84c;opacity:0.35;margin:0 0 20px;">
-      <p style="margin:0 0 16px;">If you have already submitted your payment, please log in to your portal, click on <strong>Financial</strong>, and upload your payment receipt. You may then disregard this notice.</p>
-      <p style="margin:0;">Should you have any questions regarding your balance, please do not hesitate to contact the Billing Office directly at <a href="mailto:billing@acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">billing@acnhs.am</a>.</p>
+      <p style="margin:0 0 16px;">If you have any questions regarding your account, please do not hesitate to contact the Billing Office directly at <a href="mailto:billing@acnhs.am" style="color:#c9a84c;font-weight:600;text-decoration:none;">billing@acnhs.am</a>.</p>
+      <p style="margin:0;">Should you wish to upload a payment receipt, please log in to your portal and navigate to the <strong>Financial</strong> section.</p>
     `.trim();
 
     const studentInfo = student.studentId
@@ -192,15 +249,31 @@
       ).join('');
     }
 
+    function applyGlowToBtn(btn) {
+      const val = btn.getAttribute('data-val');
+      btn.classList.remove('unpaid-glow', 'partial-glow', 'paid-glow');
+      if (student && student.monthStatuses && student.monthStatuses[val]) {
+        const st = student.monthStatuses[val];
+        if (st === 'unpaid') btn.classList.add('unpaid-glow');
+        else if (st === 'partial') btn.classList.add('partial-glow');
+        else if (st === 'paid') btn.classList.add('paid-glow');
+      } else if (student && student.unpaidMonths && student.unpaidMonths.includes(val)) {
+        btn.classList.add('unpaid-glow');
+      }
+    }
+
     function toggleTag(btn) {
       const val = btn.getAttribute('data-val');
+
       if (val === 'This Month' && tags.has('Next Month')) {
         tags.delete('Next Month');
-        document.querySelector(`${config.tagButtonSelector}[data-val="Next Month"]`)?.classList.remove('active');
+        const nmBtn = document.querySelector(`${config.tagButtonSelector}[data-val="Next Month"]`);
+        if (nmBtn) { nmBtn.classList.remove('active'); applyGlowToBtn(nmBtn); }
       }
       if (val === 'Next Month' && tags.has('This Month')) {
         tags.delete('This Month');
-        document.querySelector(`${config.tagButtonSelector}[data-val="This Month"]`)?.classList.remove('active');
+        const tmBtn = document.querySelector(`${config.tagButtonSelector}[data-val="This Month"]`);
+        if (tmBtn) { tmBtn.classList.remove('active'); applyGlowToBtn(tmBtn); }
       }
 
       if (tags.has(val)) {
@@ -210,6 +283,9 @@
         tags.add(val);
         btn.classList.add('active');
       }
+
+      // Always restore the glow after any toggle
+      applyGlowToBtn(btn);
 
       renderTags();
       updatePreview();
