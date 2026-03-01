@@ -1,1188 +1,406 @@
 /**
  * ACNHS Portal Alert Engine
- * Shared across all student portal pages
- * Handles fetching, scheduling, display logic, and response tracking
- * 
- * Usage: Include this script on every portal page:
- * <script src="js/supabase-config.js"></script>
- * <script src="js/alerts.js"></script>
- * 
- * The engine auto-initializes on page load.
+ * Reads portal_alerts from Supabase and shows modals/banners/toasts.
+ *
+ * Flat DB columns used:
+ *   target_type ('all'|'group'|'individual')
+ *   target_group, target_student_ids JSONB
+ *   display_mode ('every_load'|'once_ever'|'times_limit'|'daily'|'daily_first_login')
+ *   max_displays
+ *   date_rule_type ('always'|'date_range'|'monthly_range'|'custom_dates')
+ *   start_date, end_date, monthly_start_day, monthly_end_day, custom_dates
+ *   display_position ('modal'|'banner_top'|'banner_bottom'|'toast_tr'|'toast_tl'|'toast_br'|'toast_bl')
+ *   link_url, link_label, requires_response, response_type, yes_label, no_label
+ *   trigger_rules JSONB -> { pages_whitelist: [] }
+ *   frequency_rules JSONB -> { cap_type, max_displays }
+ *   schedule_rules JSONB -> { recurrence_type, start_datetime, end_datetime }
  */
-
-(function() {
+(function () {
   'use strict';
 
-  // ==========================================
-  // CONFIGURATION
-  // ==========================================
-  const ALERT_CONFIG = {
-    checkInterval: 30000, // Re-check for new alerts every 30 seconds
-    animationDuration: 300,
-    timezone: 'Asia/Yerevan'
-  };
+  var DISMISS_KEY = 'acnhs_dismissed_';
+  var SHOWN_KEY   = 'acnhs_shown_';
 
-  const SESSION_DISMISS_PREFIX = 'acnhs_alert_dismissed_';
-  const SESSION_IMPRESSION_PREFIX = 'acnhs_alert_impression_';
+  var db      = null;
+  var student = null;
+  var busy    = false;
 
-  // Global state
-  let currentStudent = null;
-  let alertQueue = [];
-  let isShowingAlert = false;
-  let supabase = null;
-
-  // ==========================================
-  // INITIALIZATION
-  // ==========================================
-  async function initAlertEngine() {
-    try {
-      // Initialize Supabase
-      supabase = initSupabase();
-      if (!supabase) {
-        console.warn('Alert engine: Supabase not initialized');
-        return;
-      }
-
-      // Get current student from session
-      currentStudent = await getCurrentStudent();
-      if (!currentStudent) {
-        console.log('Alert engine: No student logged in; public alerts only');
-      } else {
-        console.log('Alert engine initialized for student:', currentStudent.id);
-      }
-
-      // Check for alerts immediately
-      await checkAndShowAlerts();
-
-      // Set up periodic checking
-      setInterval(checkAndShowAlerts, ALERT_CONFIG.checkInterval);
-
-    } catch (error) {
-      console.error('Alert engine initialization error:', error);
-    }
+  /* ── boot ── */
+  function boot() {
+    if (typeof initSupabase === 'function') { db = initSupabase(); }
+    if (!db) { setTimeout(boot, 500); return; }
+    student = readStudent();
+    console.log('Alerts: ready. student=' + (student ? student.id : 'anon'));
+    run();
   }
 
-  // ==========================================
-  // GET CURRENT STUDENT SESSION
-  // ==========================================
-  async function getCurrentStudent() {
-    try {
-      // First try sessionStorage (most portal pages store student info here)
-      const studentData = sessionStorage.getItem('studentData');
-      if (studentData) {
-        const parsed = JSON.parse(studentData);
-        if (parsed.id) return parsed;
-      }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    setTimeout(boot, 0);
+  }
 
-      // Try localStorage as fallback
-      const storedStudent = localStorage.getItem('currentStudent');
-      if (storedStudent) {
-        const parsed = JSON.parse(storedStudent);
-        if (parsed.id) return parsed;
-      }
-
-      // If no stored data, try to get from students table by email in session
-      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-      if (userEmail) {
-        const { data, error } = await supabase
-          .from('students')
-          .select('id, student_id, full_name, email')
-          .eq('email', userEmail)
-          .single();
-        
-        if (data && !error) {
-          return data;
+  /* ── read student from session ── */
+  function readStudent() {
+    var keys = ['hubStudentData', 'studentData', 'currentStudent'];
+    for (var i = 0; i < keys.length; i++) {
+      try {
+        var raw = sessionStorage.getItem(keys[i]) || localStorage.getItem(keys[i]);
+        if (!raw) continue;
+        var p = JSON.parse(raw);
+        var id = p.id || p.student_id_pk;
+        if (id) {
+          return {
+            id: id,
+            student_id:       p.student_id       || p.studentId       || null,
+            full_name:        p.full_name         || p.fullName         || null,
+            email:            p.email             || null,
+            enrollment_group: p.enrollment_group  || p.enrollmentGroup  || null
+          };
         }
-      }
+      } catch(e) {}
+    }
+    return null;
+  }
 
-      return null;
-    } catch (error) {
-      console.error('Error getting current student:', error);
-      return null;
+  /* ── main run loop ── */
+  async function run() {
+    if (busy) return;
+    var res = await db.from('portal_alerts').select('*').eq('is_active', true).order('created_at', { ascending: false });
+    if (res.error) { console.error('Alerts fetch error:', res.error.message); return; }
+    var alerts = res.data || [];
+    console.log('Alerts: ' + alerts.length + ' active in DB');
+    for (var i = 0; i < alerts.length; i++) {
+      var reason = shouldBlock(alerts[i]);
+      if (reason) { console.log('skip "' + alerts[i].title + '": ' + reason); continue; }
+      await show(alerts[i]);
+      return;
     }
   }
 
-  // ==========================================
-  // MAIN ALERT CHECK & DISPLAY LOGIC
-  // ==========================================
-  async function checkAndShowAlerts() {
-  if (isShowingAlert) return; // Don't interrupt current alert
+  /* ── should we block this alert? ── */
+  function shouldBlock(a) {
+    if (!matchesPage(a))     return 'page mismatch';
+    if (!matchesAudience(a)) return 'audience mismatch';
+    if (!inDateWindow(a))    return 'outside date window';
 
-    try {
-      // Fetch active alerts
-      const { data: alerts, error } = await supabase
-        .from('portal_alerts')
-        .select('*')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+    var freq = safeJson(a.frequency_rules);
+    var cap  = freq.cap_type || a.display_mode || 'once_ever';
 
-      if (error) throw error;
-      if (!alerts || alerts.length === 0) return;
+    // 1. Session dismissing always trumps all other rules. If they clicked 'X', it stays closed until refresh.
+    if (sessionStorage.getItem(DISMISS_KEY + a.id) === '1') return 'dismissed this session';
 
-      const studentId = currentStudent?.id || null;
+    if (cap === 'every_load') return null;
 
-      // Filter alerts that apply to this student or public visitors
-      const applicableAlerts = alerts.filter(alert => {
-        return isAlertTargetedToStudent(alert, studentId);
-      });
+    var shown = getShownData(a.id);
 
-      if (applicableAlerts.length === 0) return;
-
-      // Evaluate each alert's schedule and display rules
-      for (const alert of applicableAlerts) {
-        const shouldShow = await shouldShowAlert(alert, studentId);
-        if (shouldShow) {
-          await showAlert(alert);
-          break; // Only show one alert at a time
-        }
-      }
-
-    } catch (error) {
-      console.error('Error checking alerts:', error);
+    if (cap === 'once_ever' && shown.count > 0)
+      return 'already shown (once_ever)';
+    if ((cap === 'daily' || cap === 'daily_first_login') && shown.today)
+      return 'already shown today';
+    if (cap === 'times_limit') {
+      var max = (freq.max_displays != null) ? freq.max_displays : (a.max_displays || 1);
+      if (shown.count >= max) return 'shown ' + shown.count + '/' + max;
     }
+    return null;
   }
 
-  // ==========================================
-  // TARGETING CHECK
-  // ==========================================
-  function isAlertTargetedToStudent(alert, studentId) {
-    const targetingRules = normalizeRules(alert.targeting_rules);
-    const triggerRules = normalizeRules(alert.trigger_rules);
-
-    if (alert.target_type === 'public' || targetingRules.mode === 'public' || triggerRules.audience === 'public') {
-      return true;
+  function matchesPage(a) {
+    var tr    = safeJson(a.trigger_rules);
+    var pages = Array.isArray(tr.pages_whitelist) ? tr.pages_whitelist : [];
+    if (!pages.length) return true;
+    var file  = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase().replace(/[?#].*/, '');
+    for (var i = 0; i < pages.length; i++) {
+      if (pages[i].toLowerCase() === file) return true;
     }
-
-    if (!studentId) return false;
-
-    if (alert.target_type === 'all' || targetingRules.mode === 'all') {
-      return true;
-    }
-
-    if (alert.target_type === 'individual' || targetingRules.mode === 'include') {
-      const targetIds = Array.isArray(alert.target_student_ids)
-        ? alert.target_student_ids
-        : (targetingRules.include_students || []);
-      return targetIds.includes(studentId);
-    }
-
     return false;
   }
 
-  // ==========================================
-  // SCHEDULE & DISPLAY RULES EVALUATION
-  // ==========================================
-  async function shouldShowAlert(alert, studentId) {
-    try {
-      // Use new JSON rules if available, fallback to old columns
-  const frequencyRules = normalizeRules(alert.frequency_rules);
-  const scheduleRules = normalizeRules(alert.schedule_rules);
-  const targetingRules = normalizeRules(alert.targeting_rules);
-  const triggerRules = normalizeRules(alert.trigger_rules);
-  const interactionRules = normalizeRules(alert.interaction_rules);
-
-      // 0. Page-specific rules
-      if (!doesAlertMatchPage(triggerRules)) {
-        return false;
-      }
-
-      // 0b. Session dismissal rule
-      const allowSessionRepeat = interactionRules.allow_session_repeat === true;
-      if (!allowSessionRepeat && isDismissedThisSession(alert.id)) {
-        return false;
-      }
-
-      // 1. Check schedule rules (date/time windows)
-      if (!isWithinScheduleWindow(scheduleRules, alert)) {
-        return false;
-      }
-
-      const hasStudent = !!studentId;
-
-      // 2. Check if student has already responded (blocks re-display)
-      if (hasStudent && (interactionRules.required_response || alert.requires_response)) {
-        const { data: responses } = await supabase
-          .from('portal_alert_responses')
-          .select('id')
-          .eq('alert_id', alert.id)
-          .eq('student_id', studentId)
-          .limit(1);
-
-        if (responses && responses.length > 0) {
-          return false; // Already responded
-        }
-      }
-
-      // 3. Check frequency rules
-      let impressionCount = 0;
-      let impressions = [];
-
-      if (hasStudent) {
-        const { data: fetchedImpressions } = await supabase
-          .from('portal_alert_impressions')
-          .select('*')
-          .eq('alert_id', alert.id)
-          .eq('student_id', studentId)
-          .order('shown_at', { ascending: false });
-
-        impressions = fetchedImpressions || [];
-        impressionCount = impressions.length;
-      } else {
-        const sessionData = getSessionImpressionData(alert.id);
-        impressionCount = sessionData.count;
-      }
-
-      // Use new frequency_rules if available, fallback to old display_mode
-      const capType = frequencyRules.cap_type || alert.display_mode || 'once_ever';
-
-      switch (capType) {
-        case 'once_ever':
-          return impressionCount === 0;
-
-        case 'times_limit':
-          const maxDisplays = frequencyRules.max_displays || alert.max_displays || 1;
-          return impressionCount < maxDisplays;
-
-        case 'daily':
-        case 'daily_first_login':
-          return hasStudent
-            ? !hasImpressionToday(impressions)
-            : !hasSessionImpressionToday(alert.id);
-
-        case 'weekly':
-          return hasStudent
-            ? !hasImpressionThisWeek(impressions)
-            : !hasSessionImpressionThisWeek(alert.id);
-
-        case 'cooldown':
-          if (impressionCount === 0) return true;
-          const lastImpression = hasStudent
-            ? new Date(impressions[0].shown_at)
-            : getSessionLastShownAt(alert.id);
-          if (!lastImpression) return true;
-          const hoursSince = (Date.now() - lastImpression) / (1000 * 60 * 60);
-          return hoursSince >= (frequencyRules.cooldown_hours || 24);
-
-        case 'until_response':
-          return impressionCount === 0 || impressionCount < (frequencyRules.max_displays || 5);
-
-        case 'every_load':
-          return true;
-
-        default:
-          return impressionCount === 0;
-      }
-
-    } catch (error) {
-      console.error('Error evaluating alert rules:', error);
-      return false;
+  function matchesAudience(a) {
+    var type = a.target_type || 'all';
+    if (type === 'all' || type === 'public') return true;
+    if (!student) return false;
+    if (type === 'individual') {
+      var ids = a.target_student_ids || [];
+      if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch(e) {} }
+      return Array.isArray(ids) && ids.indexOf(student.id) !== -1;
     }
-  }
-
-  // ==========================================
-  // DATE WINDOW CHECKS (Updated for new JSON rules)
-  // ==========================================
-  function isWithinScheduleWindow(scheduleRules, alert) {
-    const now = new Date();
-    const localDate = getTodayLocalDate();
-    const dayOfMonth = now.getDate();
-
-    // Use new schedule_rules if available, fallback to old date_rule_type
-    const recurrenceType = scheduleRules.recurrence_type || alert.date_rule_type || 'always';
-
-    switch (recurrenceType) {
-      case 'always':
-        return true;
-
-      case 'one_time':
-      case 'date_range':
-        const startDate = scheduleRules.start_datetime || alert.start_date;
-        const endDate = scheduleRules.end_datetime || alert.end_date;
-        if (!startDate || !endDate) return true;
-        return localDate >= startDate.split('T')[0] && localDate <= endDate.split('T')[0];
-
-      case 'monthly':
-        const monthlyPattern = scheduleRules.monthly_pattern;
-        if (monthlyPattern && monthlyPattern.day_range) {
-          const [start, end] = monthlyPattern.day_range;
-          return dayOfMonth >= start && dayOfMonth <= end;
-        }
-        // Fallback to old columns
-        if (alert.monthly_start_day && alert.monthly_end_day) {
-          return dayOfMonth >= alert.monthly_start_day && dayOfMonth <= alert.monthly_end_day;
-        }
-        return true;
-
-      case 'weekly':
-        const weeklyPattern = scheduleRules.weekly_pattern;
-        if (weeklyPattern && weeklyPattern.days) {
-          const dayName = now.toLocaleDateString('en-US', { weekday: 'lowercase' });
-          return weeklyPattern.days.includes(dayName);
-        }
-        return true;
-
-      case 'daily':
-        const dailyPattern = scheduleRules.daily_pattern;
-        if (dailyPattern && dailyPattern.every_n_days) {
-          // Check if today is within the interval
-          // For simplicity, always show (can be enhanced with start date tracking)
-          return true;
-        }
-        return true;
-
-      case 'custom_dates':
-        const customDates = scheduleRules.custom_dates || alert.custom_dates || [];
-        return customDates.includes(localDate);
-
-      default:
-        return true;
+    if (type === 'group') {
+      var g = a.target_group || '';
+      return !g || (student.enrollment_group || '') === g;
     }
+    return true;
   }
 
-  // Remove old isWithinDateWindow function and replace with isWithinScheduleWindow
-  function isWithinDateWindow(alert) {
-    // Fallback for old column-based alerts
-    return isWithinScheduleWindow({}, alert);
-  }
+  function inDateWindow(a) {
+    var sched = safeJson(a.schedule_rules);
+    var rule  = sched.recurrence_type || a.date_rule_type || 'always';
+    if (rule === 'always') return true;
 
-  function hasImpressionToday(impressions) {
-    if (!impressions || impressions.length === 0) return false;
-    const today = getTodayLocalDate();
-    return impressions.some(imp => imp.shown_date_local === today);
-  }
+    var today = localDate();
 
-  function hasImpressionThisWeek(impressions) {
-    if (!impressions || impressions.length === 0) return false;
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay()); // Sunday of current week
-    weekStart.setHours(0, 0, 0, 0);
-    
-    return impressions.some(imp => {
-      const impDate = new Date(imp.shown_at);
-      return impDate >= weekStart;
-    });
-  }
-
-  function getTodayLocalDate() {
-    // Return YYYY-MM-DD in local timezone
-    const now = new Date();
-    return now.toISOString().split('T')[0];
-  }
-
-  // ==========================================
-  // DISPLAY ALERT — position-aware dispatcher
-  // ==========================================
-  async function showAlert(alert) {
-    isShowingAlert = true;
-
-    const position = alert.display_position
-      || alert.trigger_rules?.display_position
-      || 'modal';
-
-    let el;
-    if (position === 'modal') {
-      el = createAlertModal(alert);
-    } else if (position === 'banner_top' || position === 'banner_bottom') {
-      el = createAlertBanner(alert, position);
-    } else if (position.startsWith('toast_')) {
-      el = createAlertToast(alert, position);
-    } else {
-      el = createAlertModal(alert); // fallback
-    }
-
-    document.body.appendChild(el);
-
-    requestAnimationFrame(() => {
-      el.classList.add('show');
-    });
-
-    if (currentStudent?.id) {
-      await recordImpression(alert.id, currentStudent.id);
-    } else {
-      recordSessionImpression(alert.id);
-    }
-    setupAlertEventListeners(el, alert);
-  }
-
-  // ==========================================
-  // TEMPLATE VARIABLE REPLACEMENT
-  // ==========================================
-  function replaceTemplateVariables(message, student) {
-    if (!message) return message;
-
-    const now = new Date();
-    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                    'July', 'August', 'September', 'October', 'November', 'December'];
-    
-    const variables = {
-      '{student_name}': student?.full_name || 'Student',
-      '{student_id}': student?.student_id || 'N/A',
-      '{email}': student?.email || '',
-      '{month}': months[now.getMonth()],
-      '{year}': now.getFullYear().toString(),
-      '{date}': now.toLocaleDateString('en-US'),
-      '{group}': student?.enrollment_group || student?.group || 'N/A'
-    };
-
-    let result = message;
-    for (const [variable, value] of Object.entries(variables)) {
-      result = result.replace(new RegExp(escapeRegex(variable), 'g'), value);
-    }
-
-    return result;
-  }
-
-  function escapeRegex(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function createAlertModal(alert) {
-    const severityIcons = {
-      info: '📘',
-      success: '✅',
-      warn: '⚠️',
-      critical: '🚨'
-    };
-
-    const severityColors = {
-      info: '#3b82f6',
-      success: '#10b981',
-      warn: '#f59e0b',
-      critical: '#ef4444'
-    };
-
-    const modal = document.createElement('div');
-    modal.className = 'acnhs-alert-overlay';
-    modal.id = `alert-${alert.id}`;
-    modal.dataset.alertId = alert.id;
-
-  const needsResponse = alert.requires_response && alert.response_type === 'yes_no';
-    
-    // Replace template variables in message and title
-    const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
-    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
-    // message_html is rich HTML — render as-is (no \n conversion needed)
-    const personalizedMessage = rawMessage;
-
-    // Optional click-through link button
-    const linkBtn = alert.link_url
-      ? `<div style="padding:0 40px 20px; text-align:center;">
-           <a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener"
-              style="display:inline-block; padding:10px 24px; background:transparent;
-                     border:1px solid ${severityColors[alert.severity]}; border-radius:8px;
-                     color:${severityColors[alert.severity]}; font-size:13px; font-weight:600;
-                     text-decoration:none; transition:background 0.2s;"
-              onmouseover="this.style.background='${severityColors[alert.severity]}20'"
-              onmouseout="this.style.background='transparent'">
-             ${escapeHtml(alert.link_label || 'Learn More')} ↗
-           </a>
-         </div>`
-      : '';
-
-    modal.innerHTML = `
-      <div class="acnhs-alert-modal" style="border-top: 4px solid ${severityColors[alert.severity]}">
-        <div class="acnhs-alert-header">
-          ${!needsResponse ? '<button class="acnhs-alert-close" aria-label="Close">&times;</button>' : ''}
-          <div style="display: flex; flex-direction: column; align-items: center; width: 100%;">
-            <div class="acnhs-alert-icon" style="background: ${severityColors[alert.severity]}20; color: ${severityColors[alert.severity]}">
-              ${severityIcons[alert.severity]}
-            </div>
-            <h3 class="acnhs-alert-title">${escapeHtml(personalizedTitle)}</h3>
-          </div>
-        </div>
-        <div class="acnhs-alert-body">
-          ${personalizedMessage}
-        </div>
-        ${linkBtn}
-        ${needsResponse ? `
-          <div class="acnhs-alert-actions">
-            <button class="acnhs-alert-btn acnhs-alert-btn-yes" data-answer="yes">
-              ${escapeHtml(alert.yes_label)}
-            </button>
-            <button class="acnhs-alert-btn acnhs-alert-btn-no" data-answer="no">
-              ${escapeHtml(alert.no_label)}
-            </button>
-          </div>
-        ` : ''}
-      </div>
-    `;
-
-    return modal;
-  }
-
-  // ── Banner (full-width top or bottom bar) ──
-  function createAlertBanner(alert, position) {
-    const severityColors = { info:'#3b82f6', success:'#10b981', warn:'#f59e0b', critical:'#ef4444' };
-    const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
-    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
-    const personalizedMessage = rawMessage.replace(/<[^>]*>/g, ' ').replace(/\s+/g,' ').trim();
-    const color = severityColors[alert.severity] || severityColors.info;
-    const linkBtn = alert.link_url
-      ? `<a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener" class="acnhs-alert-banner-link">${escapeHtml(alert.link_label || 'Learn More')}</a>`
-      : '';
-    const isTop = position === 'banner_top';
-
-    const el = document.createElement('div');
-    el.className = `acnhs-alert-banner acnhs-alert-banner-${isTop ? 'top' : 'bottom'}`;
-    el.id = `alert-${alert.id}`;
-    el.dataset.alertId = alert.id;
-    el.style.borderColor = color;
-
-    el.innerHTML = `
-      <div class="acnhs-alert-banner-inner">
-        <span class="acnhs-alert-banner-title" style="color:${color}">${escapeHtml(personalizedTitle)}</span>
-        <span class="acnhs-alert-banner-msg">${escapeHtml(personalizedMessage)}</span>
-        ${linkBtn}
-      </div>
-      <button class="acnhs-alert-close" aria-label="Close">&times;</button>
-    `;
-    return el;
-  }
-
-  // ── Toast (small corner notification) ──
-  function createAlertToast(alert, position) {
-    const severityColors = { info:'#3b82f6', success:'#10b981', warn:'#f59e0b', critical:'#ef4444' };
-    const severityIcons = { info:'📘', success:'✅', warn:'⚠️', critical:'🚨' };
-    const personalizedTitle = replaceTemplateVariables(alert.title, currentStudent);
-    const rawMessage = replaceTemplateVariables(alert.message_html, currentStudent);
-    const personalizedMessage = rawMessage.replace(/<[^>]*>/g, ' ').replace(/\s+/g,' ').trim();
-    const color = severityColors[alert.severity] || severityColors.info;
-    const linkBtn = alert.link_url
-      ? `<a href="${escapeHtml(alert.link_url)}" target="_blank" rel="noopener" class="acnhs-alert-toast-link">${escapeHtml(alert.link_label || 'Learn More')} ↗</a>`
-      : '';
-
-    const el = document.createElement('div');
-    el.className = `acnhs-alert-toast acnhs-alert-toast-${position.replace('toast_','')}`;
-    el.id = `alert-${alert.id}`;
-    el.dataset.alertId = alert.id;
-    el.style.borderLeftColor = color;
-
-    el.innerHTML = `
-      <div class="acnhs-alert-toast-header">
-        <span class="acnhs-alert-toast-icon">${severityIcons[alert.severity]}</span>
-        <span class="acnhs-alert-toast-title">${escapeHtml(personalizedTitle)}</span>
-        <button class="acnhs-alert-close" aria-label="Close">&times;</button>
-      </div>
-      <div class="acnhs-alert-toast-body">${escapeHtml(personalizedMessage)}</div>
-      ${linkBtn}
-    `;
-    return el;
-  }
-
-  function setupAlertEventListeners(modal, alert) {
-    const alertId = alert.id;
-    const needsResponse = alert.requires_response && alert.response_type === 'yes_no';
-
-    // Close button (X)
-    const closeBtn = modal.querySelector('.acnhs-alert-close');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', () => dismissAlert(modal, alert));
-    }
-
-    // Close button (footer)
-    const closeBtnFooter = modal.querySelector('.acnhs-alert-btn-close');
-    if (closeBtnFooter) {
-      closeBtnFooter.addEventListener('click', () => dismissAlert(modal, alert));
-    }
-
-    // Yes/No response buttons
-    if (needsResponse) {
-      const yesBtn = modal.querySelector('[data-answer="yes"]');
-      const noBtn = modal.querySelector('[data-answer="no"]');
-
-      if (yesBtn) {
-        yesBtn.addEventListener('click', async () => {
-          if (currentStudent?.id) {
-            await recordResponse(alertId, currentStudent.id, 'yes');
-          }
-          dismissAlert(modal, alert);
-        });
-      }
-
-      if (noBtn) {
-        noBtn.addEventListener('click', async () => {
-          if (currentStudent?.id) {
-            await recordResponse(alertId, currentStudent.id, 'no');
-          }
-          dismissAlert(modal, alert);
-        });
-      }
-    }
-
-    // Click outside to close (only if no response required)
-    if (!needsResponse) {
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-          dismissAlert(modal, alert);
-        }
-      });
-    }
-  }
-
-  function dismissAlert(modal, alert) {
-    if (alert && !alert.interaction_rules?.allow_session_repeat) {
-      markDismissedThisSession(alert.id);
-    }
-    modal.classList.remove('show');
-    setTimeout(() => {
-      modal.remove();
-      isShowingAlert = false;
-    }, ALERT_CONFIG.animationDuration);
-  }
-
-  function normalizePageValue(value) {
-    if (!value) return '';
-    let normalized = String(value).trim();
-    // Strip protocol/domain if a full URL is provided
-    normalized = normalized.replace(/^https?:\/\/[^/]+/i, '');
-    // Remove query string and hash
-    normalized = normalized.split('?')[0].split('#')[0];
-    // Remove leading slash and make lowercase for safe matching
-    return normalized.replace(/^\//, '').toLowerCase();
-  }
-
-  function getCurrentPageVariants() {
-    const rawPath = window.location.pathname || '';
-    const rawHref = window.location.href || '';
-    const normalizedPath = normalizePageValue(rawPath);
-    const normalizedHref = normalizePageValue(rawHref);
-    const fileName = normalizedPath.split('/').pop() || normalizedPath;
-    const variants = new Set();
-    [normalizedPath, normalizedHref, fileName].forEach((val) => {
-      if (!val) return;
-      variants.add(val);
-      variants.add(`/${val}`);
-    });
-    return variants;
-  }
-
-  function doesAlertMatchPage(triggerRules) {
-    const pages = triggerRules?.pages_whitelist || [];
-    if (!Array.isArray(pages) || pages.length === 0) {
+    if (rule === 'date_range' || rule === 'one_time') {
+      var start = (sched.start_datetime || a.start_date || '').substring(0, 10);
+      var end   = (sched.end_datetime   || a.end_date   || '').substring(0, 10);
+      if (!start && !end) return true;
+      if (start && today < start) return false;
+      if (end   && today > end)   return false;
       return true;
     }
-
-    const currentVariants = getCurrentPageVariants();
-    return pages.some((page) => {
-      const normalized = normalizePageValue(page);
-      return currentVariants.has(normalized) || currentVariants.has(`/${normalized}`);
-    });
+    if (rule === 'monthly_range' || rule === 'monthly') {
+      var day = new Date().getDate();
+      return day >= (a.monthly_start_day || 1) && day <= (a.monthly_end_day || 31);
+    }
+    if (rule === 'custom_dates') {
+      var dates = a.custom_dates || [];
+      if (typeof dates === 'string') { try { dates = JSON.parse(dates); } catch(e) {} }
+      return Array.isArray(dates) && dates.indexOf(today) !== -1;
+    }
+    return true;
   }
 
-  function normalizeRules(value) {
-    if (!value) return {};
-    if (typeof value === 'string') {
+  /* ── helpers ── */
+  function localDate() { return new Date().toISOString().substring(0, 10); }
+
+  function safeJson(v) {
+    if (!v) return {};
+    if (typeof v === 'object') return v;
+    try { return JSON.parse(v); } catch(e) { return {}; }
+  }
+
+  function getShownData(id) {
+    try { var r = sessionStorage.getItem(SHOWN_KEY + id); if (r) return JSON.parse(r); } catch(e) {}
+    return { count: 0, today: false };
+  }
+
+  function recordShown(id) {
+    var d = getShownData(id);
+    d.count++; d.today = true;
+    sessionStorage.setItem(SHOWN_KEY + id, JSON.stringify(d));
+  }
+
+  function markDismissed(id) { sessionStorage.setItem(DISMISS_KEY + id, '1'); }
+
+  /* ── display ── */
+  async function show(a) {
+    busy = true;
+    recordShown(a.id);
+    var pos = a.display_position || 'modal';
+    var el;
+    if      (pos === 'modal')                              el = buildModal(a);
+    else if (pos === 'banner_top' || pos === 'banner_bottom') el = buildBanner(a, pos);
+    else                                                   el = buildToast(a, pos);
+    document.body.appendChild(el);
+    requestAnimationFrame(function() { el.classList.add('acnhs-show'); });
+
+    if (student && student.id) {
       try {
-        return JSON.parse(value);
-      } catch (error) {
-        return {};
-      }
-    }
-    return value;
-  }
-
-  function isDismissedThisSession(alertId) {
-    try {
-      return sessionStorage.getItem(`${SESSION_DISMISS_PREFIX}${alertId}`) === 'true';
-    } catch (error) {
-      return false;
-    }
-  }
-
-  function markDismissedThisSession(alertId) {
-    try {
-      sessionStorage.setItem(`${SESSION_DISMISS_PREFIX}${alertId}`, 'true');
-    } catch (error) {
-      console.warn('Unable to persist session dismissal state:', error);
-    }
-  }
-
-  function getSessionImpressionData(alertId) {
-    try {
-      const raw = sessionStorage.getItem(`${SESSION_IMPRESSION_PREFIX}${alertId}`);
-      if (!raw) return { count: 0, lastShownDate: null, lastShownAt: null };
-      const parsed = JSON.parse(raw);
-      return {
-        count: parsed.count || 0,
-        lastShownDate: parsed.lastShownDate || null,
-        lastShownAt: parsed.lastShownAt || null
-      };
-    } catch (error) {
-      return { count: 0, lastShownDate: null, lastShownAt: null };
-    }
-  }
-
-  function setSessionImpressionData(alertId, data) {
-    try {
-      sessionStorage.setItem(`${SESSION_IMPRESSION_PREFIX}${alertId}`, JSON.stringify(data));
-    } catch (error) {
-      console.warn('Unable to persist session impressions:', error);
-    }
-  }
-
-  function recordSessionImpression(alertId) {
-    const today = getTodayLocalDate();
-    const nowIso = new Date().toISOString();
-    const data = getSessionImpressionData(alertId);
-    setSessionImpressionData(alertId, {
-      count: (data.count || 0) + 1,
-      lastShownDate: today,
-      lastShownAt: nowIso
-    });
-  }
-
-  function hasSessionImpressionToday(alertId) {
-    const data = getSessionImpressionData(alertId);
-    return data.lastShownDate === getTodayLocalDate();
-  }
-
-  function hasSessionImpressionThisWeek(alertId) {
-    const data = getSessionImpressionData(alertId);
-    if (!data.lastShownAt) return false;
-    const lastShown = new Date(data.lastShownAt);
-    const now = new Date();
-    const weekStart = new Date(now);
-    weekStart.setDate(now.getDate() - now.getDay());
-    weekStart.setHours(0, 0, 0, 0);
-    return lastShown >= weekStart;
-  }
-
-  function getSessionLastShownAt(alertId) {
-    const data = getSessionImpressionData(alertId);
-    return data.lastShownAt ? new Date(data.lastShownAt) : null;
-  }
-
-  // ==========================================
-  // DATABASE WRITES
-  // ==========================================
-  async function recordImpression(alertId, studentId) {
-    try {
-      const impressionData = {
-        alert_id: alertId,
-        student_id: studentId,
-        shown_date_local: getTodayLocalDate(),
-        page_path: window.location.pathname,
-        shown_at: new Date().toISOString()
-      };
-
-      // Use upsert to handle duplicate impressions gracefully
-      // This updates shown_at if the record already exists
-      const { error } = await supabase
-        .from('portal_alert_impressions')
-        .upsert(impressionData, {
-          onConflict: 'alert_id,student_id,shown_date_local',
-          ignoreDuplicates: false // Update the timestamp
+        await db.from('portal_alert_impressions').insert({
+          alert_id: a.id, student_id: student.id,
+          shown_date_local: localDate(),
+          page_path: window.location.pathname.split('/').pop()
         });
-
-      if (error) {
-        // In some environments RLS blocks anon writes (401/42501).
-        // Don't break alert UX or spam error noise for expected policy denials.
-        if (error.code === '42501') {
-          console.warn('Impression write skipped by RLS policy.');
-          return;
-        }
-        console.error('Error recording impression:', error);
-      }
-    } catch (error) {
-      console.error('Error recording impression:', error);
+      } catch(e) {}
     }
   }
 
-  async function recordResponse(alertId, studentId, answer) {
+  function dismiss(a, el) {
+    markDismissed(a.id);
+    el.classList.remove('acnhs-show');
+    setTimeout(function() {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      busy = false; run();
+    }, 300);
+  }
+  /* ── colours / icons ── */
+  var COL = { info:'#c9a84c', success:'#2dd4bf', warn:'#d4b56a', critical:'#ef4444' };
+  var ICO = {
+    info: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>',
+    success: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>',
+    warn: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>',
+    critical: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>'
+  };
+
+  function personalise(t) {
+    if (!t) return '';
+    var now = new Date();
+    var mo  = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    return t
+      .replace(/\{student_name\}/g, (student&&student.full_name)        || 'Student')
+      .replace(/\{student_id\}/g,   (student&&student.student_id)       || 'N/A')
+      .replace(/\{email\}/g,        (student&&student.email)            || '')
+      .replace(/\{group\}/g,        (student&&student.enrollment_group) || 'N/A')
+      .replace(/\{month\}/g, mo[now.getMonth()])
+      .replace(/\{year\}/g,  String(now.getFullYear()))
+      .replace(/\{date\}/g,  now.toLocaleDateString('en-US'));
+  }
+
+  function esc(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* Aggressive cleanup for rich-text artifacts to ensure perfect professional spacing */
+  function cleanHtml(html) {
+    if (!html) return '';
+    return html
+      .replace(/&nbsp;/gi, ' ')                     // Normalize non-breaking spaces
+      .replace(/\s*style="[^"]*"/gi, '')            // Strip chaotic inline CSS
+      .replace(/<p>(\s)*<\/p>/gi, '')               // Remove completely empty paragraphs
+      .replace(/<div>(\s)*<\/div>/gi, '')           // Remove completely empty divs
+      .replace(/<span>(\s)*<\/span>/gi, '')         // Remove completely empty spans
+      .replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>')  // Transform double breaks into proper paragraphs
+      .replace(/<p>\s*<br\s*\/?>/gi, '<p>')         // Trim breaks at start of paragraphs
+      .replace(/<br\s*\/?>\s*<\/p>/gi, '</p>')      // Trim breaks at end of paragraphs
+      .replace(/(<\/p>)\s*(<p>)/gi, '$1$2')         // Close gaps between paragraphs
+      .trim();
+  }
+
+  function on(el, sel, evt, fn) {
+    var nodes = el.querySelectorAll(sel);
+    for (var i = 0; i < nodes.length; i++) nodes[i].addEventListener(evt, fn);
+  }
+
+  function wire(el, a) {
+    on(el, '[data-dismiss]', 'click', function() { dismiss(a, el); });
+    if (el.classList.contains('acnhs-overlay')) {
+      el.addEventListener('click', function(ev) { if (ev.target === el) dismiss(a, el); });
+    }
+    var yes = el.querySelector('.acnhs-btn-yes');
+    var no  = el.querySelector('.acnhs-btn-no');
+    if (yes) yes.addEventListener('click', function() { recordResp(a,'yes'); dismiss(a,el); });
+    if (no)  no.addEventListener( 'click', function() { recordResp(a,'no');  dismiss(a,el); });
+  }
+
+  async function recordResp(a, ans) {
+    if (!student||!student.id) return;
     try {
-      const { error } = await supabase
-        .from('portal_alert_responses')
-        .insert({
-          alert_id: alertId,
-          student_id: studentId,
-          answer: answer,
-          page_path: window.location.pathname,
-          answered_at: new Date().toISOString()
-        });
-
-      if (error) console.error('Error recording response:', error);
-    } catch (error) {
-      console.error('Error recording response:', error);
-    }
+      await db.from('portal_alert_responses').insert({
+        alert_id: a.id, student_id: student.id, answer: ans,
+        page_path: window.location.pathname.split('/').pop()
+      });
+    } catch(e) {}
+  }
+  /* ── builders ── */
+  function buildModal(a) {
+    var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
+    var linkH = a.link_url
+      ? '<div style="padding:0 32px 20px;text-align:center"><a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="display:inline-block;padding:10px 28px;border:1.5px solid '+c+';border-radius:8px;color:'+c+';font-size:14px;font-weight:600;text-decoration:none;letter-spacing:0.03em">'+esc(a.link_label||'Learn More')+' ↗</a></div>'
+      : '';
+    var yesno = (a.requires_response && a.response_type === 'yes_no')
+      ? '<div class="acnhs-actions"><button class="acnhs-btn-yes" style="background:'+c+';box-shadow:0 4px 12px '+c+'40;color:#04111f">'+esc(a.yes_label||'Yes')+'</button><button class="acnhs-btn-no">'+esc(a.no_label||'No')+'</button></div>'
+      : '';
+    var el = document.createElement('div');
+    el.className = 'acnhs-overlay'; el.dataset.alertId = a.id;
+    el.innerHTML = '<div class="acnhs-box" style="border-top:4px solid '+c+'">'
+      + '<button class="acnhs-close" data-dismiss><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>'
+      + '<div class="acnhs-header"><span class="acnhs-icon" style="color:'+c+';background:'+c+'15;">'+ic+'</span><span class="acnhs-title" style="color:'+c+'">'+esc(personalise(a.title))+'</span></div>'
+      + '<div class="acnhs-body">'+cleanHtml(personalise(a.message_html))+'</div>'
+      + linkH + yesno + '</div>';
+    wire(el, a); injectCSS(); return el;
   }
 
-  // ==========================================
-  // UTILITIES
-  // ==========================================
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  function buildBanner(a, pos) {
+    var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
+    var linkH = a.link_url
+      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="color:'+c+';font-weight:600;margin-left:12px;text-decoration:underline">'+esc(a.link_label||'Learn More')+' ↗</a>'
+      : '';
+    var el = document.createElement('div');
+    el.className = 'acnhs-banner acnhs-banner-'+(pos==='banner_top'?'top':'bottom');
+    el.style.borderLeftColor = c; el.dataset.alertId = a.id;
+    el.innerHTML = '<span class="acnhs-banner-icon" style="color:'+c+';display:flex">'+ic+'</span>'
+      + '<span class="acnhs-banner-text">'+esc(personalise(a.title))+'</span>'
+      + linkH
+      + '<button class="acnhs-close" data-dismiss><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>';
+    wire(el, a); injectCSS(); return el;
   }
 
-  // ==========================================
-  // AUTO-INITIALIZE ON PAGE LOAD
-  // ==========================================
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initAlertEngine);
-  } else {
-    initAlertEngine();
+  function buildToast(a, pos) {
+    var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
+    var corners = { toast_tr:'top:80px;right:20px', toast_tl:'top:80px;left:20px', toast_br:'bottom:20px;right:20px', toast_bl:'bottom:20px;left:20px' };
+    var linkH = a.link_url
+      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="color:'+c+';font-size:13px;font-weight:600;text-decoration:none;display:inline-block;margin-top:8px">'+esc(a.link_label||'Learn More')+' ↗</a>'
+      : '';
+    var el = document.createElement('div');
+    el.className = 'acnhs-toast'; el.dataset.alertId = a.id;
+    el.style.cssText += ';' + (corners[pos]||corners.toast_tr) + ';border-left:4px solid '+c;
+    el.innerHTML = '<div style="display:flex;align-items:flex-start;gap:12px">'
+      + '<span style="color:'+c+';display:flex;margin-top:2px">'+ic+'</span>'
+      + '<div style="flex:1"><div style="font-family:\'Playfair Display\',Georgia,serif;font-weight:600;font-size:16px;line-height:1.2;margin-bottom:6px;color:'+c+'">'+esc(personalise(a.title))+'</div><div style="font-size:13px;line-height:1.5;color:#b8b0a0">'+cleanHtml(personalise(a.message_html))+'</div>'+linkH+'</div>'
+      + '<button data-dismiss class="acnhs-close" style="position:static;margin-left:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>'
+      + '</div>';
+    wire(el, a); injectCSS(); return el;
+  }
+  /* ── css ── */
+  var _css = false;
+  function injectCSS() {
+    if (_css) return; _css = true;
+    var s = document.createElement('style'); s.id = 'acnhs-alert-css';
+    s.textContent =
+      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);display:flex;align-items:center;justify-content:center;opacity:0;transition:all .4s ease;padding:24px;box-sizing:border-box}'
+      +'.acnhs-overlay.acnhs-show{opacity:1}'
+      +'.acnhs-box{background:#0a1220;background:linear-gradient(145deg, #071b30, #04111f);color:#f0ece3;border:1px solid rgba(201,168,76,.15);border-top:none;border-radius:12px;max-width:560px;width:100%;box-shadow:0 30px 60px -12px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02);position:relative;overflow:hidden;transform:scale(0.96) translateY(12px);transition:all .45s cubic-bezier(0.16,1,0.3,1);font-family:"Inter",system-ui,-apple-system,sans-serif}'
+      +'.acnhs-overlay.acnhs-show .acnhs-box{transform:scale(1) translateY(0)}'
+      +'.acnhs-header{display:flex;align-items:center;gap:16px;padding:32px 36px 16px}'
+      +'.acnhs-icon{width:46px;height:46px;display:flex;align-items:center;justify-content:center;border-radius:10px;flex-shrink:0}'
+      +'.acnhs-title{font-family:"Playfair Display",Georgia,serif;font-size:22px;font-weight:600;line-height:1.3;letter-spacing:0.02em;margin:0}'
+      +'.acnhs-body{padding:0 36px 36px;font-size:15px;line-height:1.7;color:#b8b0a0}'
+      +'.acnhs-body *{line-height:1.7;margin:0}'
+      +'.acnhs-body p{margin-bottom:16px}'
+      +'.acnhs-body p:last-child{margin-bottom:0}'
+      +'.acnhs-body ul,.acnhs-body ol{margin-bottom:16px;padding-left:24px}'
+      +'.acnhs-body li{margin-bottom:8px}'
+      +'.acnhs-body strong,.acnhs-body b{color:#f0ece3;font-weight:600}'
+      +'.acnhs-body a{color:#c9a84c;text-decoration:none;font-weight:500;border-bottom:1px solid rgba(201,168,76,.4);transition:all .2s;padding-bottom:1px}'
+      +'.acnhs-body a:hover{color:#d4b56a;border-bottom-color:#d4b56a}'
+      +'.acnhs-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);width:32px;height:32px;border-radius:50%;color:#7a7267;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;padding:0}'
+      +'.acnhs-close:hover{background:rgba(201,168,76,.1);color:#c9a84c;border-color:rgba(201,168,76,.3)}'
+      +'.acnhs-actions{display:flex;gap:12px;padding:0 36px 36px}'
+      +'.acnhs-btn-yes,.acnhs-btn-no{flex:1;padding:12px 0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center;border:none;letter-spacing:0.03em;text-transform:uppercase}'
+      +'.acnhs-btn-yes:hover{filter:brightness(1.1);transform:translateY(-1px)}'
+      +'.acnhs-btn-no{background:rgba(255,255,255,.04);color:#b8b0a0;border:1px solid rgba(255,255,255,.08)}'
+      +'.acnhs-btn-no:hover{background:rgba(255,255,255,.08);color:#f0ece3;border-color:rgba(255,255,255,.15)}'
+      +'.acnhs-banner{position:fixed;left:0;right:0;z-index:99999;background:linear-gradient(90deg, #071b30, #0a1728);color:#f0ece3;border-top:1px solid rgba(201,168,76,.15);border-bottom:1px solid rgba(201,168,76,.15);display:flex;align-items:center;gap:16px;padding:16px 28px;font-size:14.5px;font-family:"Inter",system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .4s,transform .4s}'
+      +'.acnhs-banner-top{top:0;transform:translateY(-100%);border-top:none}'
+      +'.acnhs-banner-bottom{bottom:0;transform:translateY(100%);border-bottom:none}'
+      +'.acnhs-banner.acnhs-show{opacity:1;transform:translateY(0)}'
+      +'.acnhs-banner-text{flex:1;font-weight:500}'
+      +'.acnhs-toast{position:fixed;z-index:99999;background:linear-gradient(145deg, #071b30, #04111f);color:#f0ece3;border:1px solid rgba(201,168,76,.15);border-radius:12px;padding:18px 22px;max-width:360px;width:calc(100% - 40px);box-shadow:0 20px 40px rgba(0,0,0,.6);opacity:0;transform:translateX(20px);transition:all .4s cubic-bezier(0.16,1,0.3,1);font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-toast.acnhs-show{opacity:1;transform:translateX(0)}';
+    document.head.appendChild(s);
   }
 
-  // ==========================================
-  // INJECT STYLES (auto-included)
-  // ==========================================
-  const styles = `
-    .acnhs-alert-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(11, 22, 41, 0.9);
-      backdrop-filter: blur(8px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 999999;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-      padding: 40px 20px;
-    }
-
-    .acnhs-alert-overlay.show {
-      opacity: 1;
-    }
-
-    .acnhs-alert-modal {
-      background: linear-gradient(135deg, #0f1f3a 0%, #162844 100%);
-      border-radius: 20px;
-      box-shadow: 0 25px 70px rgba(0, 0, 0, 0.6);
-      max-width: 580px;
-      width: 100%;
-      margin: auto;
-      overflow: hidden;
-      transform: scale(0.95) translateY(-20px);
-      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      position: relative;
-    }
-
-    .acnhs-alert-overlay.show .acnhs-alert-modal {
-      transform: scale(1) translateY(0);
-    }
-
-    .acnhs-alert-header {
-      padding: 28px 40px 24px 40px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      position: relative;
-      text-align: center;
-    }
-
-    .acnhs-alert-icon {
-      width: 56px;
-      height: 56px;
-      border-radius: 14px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 28px;
-      flex-shrink: 0;
-      margin: 0 auto 12px;
-    }
-
-    .acnhs-alert-title {
-      font-family: 'Inter', sans-serif;
-      font-size: 22px;
-      font-weight: 700;
-      color: #e2e8f0;
-      margin: 0;
-      text-align: center;
-      width: 100%;
-      padding: 0 50px;
-    }
-
-    .acnhs-alert-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      color: #94a3b8;
-      font-size: 26px;
-      line-height: 1;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-    }
-
-    .acnhs-alert-close:hover {
-      background: rgba(239, 68, 68, 0.2);
-      border-color: #ef4444;
-      color: #ef4444;
-      transform: scale(1.05);
-    }
-
-    .acnhs-alert-body {
-      padding: 32px 36px;
-      color: #cbd5e1;
-      font-family: 'Inter', sans-serif;
-      font-size: 15px;
-      line-height: 1.8;
-      text-align: left;
-      white-space: pre-wrap;
-    }
-
-    .acnhs-alert-body p {
-      margin: 0 0 16px 0;
-    }
-
-    .acnhs-alert-body p:last-child {
-      margin-bottom: 0;
-    }
-
-    .acnhs-alert-body strong {
-      color: #e2e8f0;
-      font-weight: 600;
-    }
-
-    .acnhs-alert-body em {
-      color: #94a3b8;
-      font-style: italic;
-    }
-
-    .acnhs-alert-body ul {
-      margin: 16px 0;
-      padding-left: 24px;
-    }
-
-    .acnhs-alert-body li {
-      margin-bottom: 10px;
-    }
-
-    .acnhs-alert-actions {
-      padding: 24px 36px 28px;
-      display: flex;
-      gap: 14px;
-      justify-content: center;
-      border-top: 1px solid rgba(255, 255, 255, 0.08);
-    }
-
-    .acnhs-alert-btn {
-      padding: 14px 32px;
-      border-radius: 12px;
-      font-family: 'Inter', sans-serif;
-      font-size: 15px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      border: none;
-      outline: none;
-      min-width: 120px;
-    }
-
-    .acnhs-alert-btn-yes {
-      background: linear-gradient(135deg, #2dd4bf 0%, #14b8a6 100%);
-      color: white;
-      box-shadow: 0 4px 12px rgba(45, 212, 191, 0.3);
-    }
-
-    .acnhs-alert-btn-yes:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(45, 212, 191, 0.4);
-    }
-
-    .acnhs-alert-btn-no {
-      background: rgba(148, 163, 184, 0.15);
-      color: #cbd5e1;
-      border: 1px solid rgba(148, 163, 184, 0.3);
-    }
-
-    .acnhs-alert-btn-no:hover {
-      background: rgba(148, 163, 184, 0.25);
-      border-color: rgba(148, 163, 184, 0.5);
-    }
-
-    .acnhs-alert-btn-close {
-      background: rgba(45, 212, 191, 0.15);
-      color: #2dd4bf;
-      border: 1px solid rgba(45, 212, 191, 0.3);
-    }
-
-    .acnhs-alert-btn-close:hover {
-      background: rgba(45, 212, 191, 0.25);
-      border-color: rgba(45, 212, 191, 0.5);
-    }
-
-    @media (max-width: 640px) {
-      .acnhs-alert-modal {
-        max-width: 100%;
-        margin: 0 10px;
-      }
-
-      .acnhs-alert-header {
-        padding: 20px;
-      }
-
-      .acnhs-alert-body {
-        padding: 20px;
-        font-size: 14px;
-      }
-
-      .acnhs-alert-actions {
-        flex-direction: column;
-        padding: 16px 20px 20px;
-      }
-
-      .acnhs-alert-btn {
-        width: 100%;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .acnhs-alert-overlay,
-      .acnhs-alert-modal,
-      .acnhs-alert-btn {
-        transition: none;
-      }
-    }
-
-    /* ── BANNER ALERTS ── */
-    .acnhs-alert-banner {
-      position: fixed;
-      left: 0;
-      right: 0;
-      z-index: 99999;
-      background: linear-gradient(135deg, #0f1f3a 0%, #162844 100%);
-      border-top: 3px solid;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 16px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-      transform: translateY(-100%);
-      opacity: 0;
-      transition: transform 0.35s cubic-bezier(0.34,1.2,0.64,1), opacity 0.3s ease;
-    }
-    .acnhs-alert-banner-bottom {
-      top: auto;
-      bottom: 0;
-      border-top: none;
-      border-bottom: 3px solid;
-      transform: translateY(100%);
-    }
-    .acnhs-alert-banner.show {
-      transform: translateY(0);
-      opacity: 1;
-    }
-    .acnhs-alert-banner-inner {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      flex: 1;
-      flex-wrap: wrap;
-      min-width: 0;
-    }
-    .acnhs-alert-banner-title {
-      font-weight: 700;
-      font-size: 14px;
-      white-space: nowrap;
-    }
-    .acnhs-alert-banner-msg {
-      font-size: 13px;
-      color: rgba(255,255,255,0.8);
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .acnhs-alert-banner-link {
-      display: inline-block;
-      padding: 5px 14px;
-      border: 1px solid currentColor;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 700;
-      text-decoration: none;
-      white-space: nowrap;
-      opacity: 0.9;
-      transition: opacity 0.2s;
-    }
-    .acnhs-alert-banner-link:hover { opacity: 1; }
-
-    /* ── TOAST ALERTS ── */
-    .acnhs-alert-toast {
-      position: fixed;
-      z-index: 99999;
-      width: 320px;
-      max-width: calc(100vw - 32px);
-      background: linear-gradient(135deg, #0f1f3a 0%, #162844 100%);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-left: 4px solid;
-      border-radius: 12px;
-      box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-      padding: 14px 16px;
-      opacity: 0;
-      transition: opacity 0.3s ease, transform 0.35s cubic-bezier(0.34,1.2,0.64,1);
-    }
-    .acnhs-alert-toast-tr { top: 20px; right: 20px; transform: translateX(120%); }
-    .acnhs-alert-toast-tl { top: 20px; left: 20px; transform: translateX(-120%); }
-    .acnhs-alert-toast-br { bottom: 20px; right: 20px; transform: translateX(120%); }
-    .acnhs-alert-toast-bl { bottom: 20px; left: 20px; transform: translateX(-120%); }
-    .acnhs-alert-toast.show {
-      opacity: 1;
-      transform: translateX(0);
-    }
-    .acnhs-alert-toast-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    .acnhs-alert-toast-icon { font-size: 18px; flex-shrink: 0; }
-    .acnhs-alert-toast-title {
-      font-size: 14px;
-      font-weight: 700;
-      color: #e2e8f0;
-      flex: 1;
-      min-width: 0;
-    }
-    .acnhs-alert-toast-body {
-      font-size: 13px;
-      color: rgba(255,255,255,0.75);
-      line-height: 1.55;
-      margin-bottom: 8px;
-    }
-    .acnhs-alert-toast-link {
-      display: inline-block;
-      font-size: 12px;
-      font-weight: 600;
-      color: #2dd4bf;
-      text-decoration: none;
-      opacity: 0.9;
-      transition: opacity 0.2s;
-    }
-    .acnhs-alert-toast-link:hover { opacity: 1; text-decoration: underline; }
-    /* The close button already styled by .acnhs-alert-close */
-  `;
-
-  // Inject styles into page
-  const styleSheet = document.createElement('style');
-  styleSheet.textContent = styles;
-  document.head.appendChild(styleSheet);
-
-  // Expose API for manual checking (optional)
+  /* ── public API ── */
   window.ACNHSAlerts = {
-    checkNow: checkAndShowAlerts,
-    getCurrentStudent: getCurrentStudent
+    reset: function() {
+      var rem = [];
+      for (var i = sessionStorage.length - 1; i >= 0; i--) {
+        var k = sessionStorage.key(i);
+        if (k && (k.indexOf(DISMISS_KEY)===0 || k.indexOf(SHOWN_KEY)===0)) {
+          sessionStorage.removeItem(k); rem.push(k);
+        }
+      }
+      busy = false;
+      console.log('ACNHSAlerts.reset(): cleared ' + rem.length + ' key(s)');
+      run();
+    },
+    debug: async function() {
+      if (!db) { console.warn('Supabase not ready'); return; }
+      var res = await db.from('portal_alerts').select('*').eq('is_active', true);
+      var list = res.data || [];
+      console.group('ACNHSAlerts.debug() — ' + list.length + ' active');
+      console.log('page:', window.location.pathname.split('/').pop()||'index.html');
+      console.log('student:', student ? student.id : 'anon');
+      for (var i = 0; i < list.length; i++) {
+        var a = list[i], b = shouldBlock(a);
+        var tr = safeJson(a.trigger_rules);
+        console.group((b?'🚫':'✅') + ' "' + a.title + '"');
+        console.log('target_type:', a.target_type, ' display_mode:', a.display_mode, ' date_rule_type:', a.date_rule_type);
+        console.log('pages_whitelist:', tr.pages_whitelist||'(all)');
+        console.log('result:', b || 'WILL SHOW');
+        console.groupEnd();
+      }
+      console.groupEnd();
+    }
   };
 
 })();

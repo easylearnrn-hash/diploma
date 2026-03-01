@@ -10,7 +10,7 @@
   <title>Faculty & Admin Hub | Armenian College of Nursing & Health Sciences (ACNHS)</title>
 
   <!-- Supabase Client -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/acnhs-logo-base64.js"></script>
 
@@ -2061,6 +2061,51 @@
 
         </div>
 
+        <!-- Class Schedule -->
+        <div style="margin-bottom:18px;padding:16px 18px;background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.2);border-radius:12px">
+          <label style="display:block;font-size:12px;font-weight:700;color:var(--text-secondary);letter-spacing:0.08em;text-transform:uppercase;margin-bottom:12px">
+            Class Schedule <span style="font-size:11px;font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">(optional — syncs to student hub)</span>
+          </label>
+          <div style="margin-bottom:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:8px">Class Days</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap" id="newCourseDaysRow">
+              <label id="newCourse_day_label_monday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_monday" value="monday" onchange="toggleNewCourseDayStyle('monday')"> Mon
+              </label>
+              <label id="newCourse_day_label_tuesday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_tuesday" value="tuesday" onchange="toggleNewCourseDayStyle('tuesday')"> Tue
+              </label>
+              <label id="newCourse_day_label_wednesday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_wednesday" value="wednesday" onchange="toggleNewCourseDayStyle('wednesday')"> Wed
+              </label>
+              <label id="newCourse_day_label_thursday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_thursday" value="thursday" onchange="toggleNewCourseDayStyle('thursday')"> Thu
+              </label>
+              <label id="newCourse_day_label_friday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_friday" value="friday" onchange="toggleNewCourseDayStyle('friday')"> Fri
+              </label>
+              <label id="newCourse_day_label_saturday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_saturday" value="saturday" onchange="toggleNewCourseDayStyle('saturday')"> Sat
+              </label>
+              <label id="newCourse_day_label_sunday" style="display:flex;align-items:center;gap:5px;padding:7px 12px;border:1px solid rgba(201,168,76,0.25);border-radius:8px;cursor:pointer;font-size:13px;color:var(--text-primary);transition:all 0.15s">
+                <input type="checkbox" id="newCourse_day_sunday" value="sunday" onchange="toggleNewCourseDayStyle('sunday')"> Sun
+              </label>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px">Start Time</label>
+              <input type="time" id="newCourseStartTime"
+                style="width:100%;padding:10px 12px;background:rgba(4,17,31,0.7);border:1px solid rgba(201,168,76,0.25);border-radius:10px;color:#f1f5f9;font-size:14px;outline:none">
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px">End Time</label>
+              <input type="time" id="newCourseEndTime"
+                style="width:100%;padding:10px 12px;background:rgba(4,17,31,0.7);border:1px solid rgba(201,168,76,0.25);border-radius:10px;color:#f1f5f9;font-size:14px;outline:none">
+            </div>
+          </div>
+        </div>
+
         <!-- Grade Items -->
         <div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -2104,10 +2149,65 @@
       </div>
       <div class="modal-body" style="padding:24px;max-height:70vh;overflow-y:auto">
         <div id="courseDetailsContent"></div>
+
+        <!-- ── Inline Schedule Editor (hidden until Edit Schedule clicked) ── -->
+        <div id="scheduleEditorPanel" style="display:none;margin-top:20px;padding:20px 22px;background:rgba(201,168,76,0.04);border:1px solid rgba(201,168,76,0.28);border-radius:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:32px;height:32px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.3);border-radius:9px;display:flex;align-items:center;justify-content:center">
+                <svg width="15" height="15" fill="none" stroke="var(--gold-400)" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
+              <div>
+                <div style="font-size:13px;font-weight:900;color:var(--gold-300)">Class Schedule</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:1px">Syncs to all enrolled student groups</div>
+              </div>
+            </div>
+            <button onclick="document.getElementById('scheduleEditorPanel').style.display='none'" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1;padding:4px">×</button>
+          </div>
+
+          <!-- Day Pills -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:10px">Class Days</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <label id="edit_day_label_monday"    style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_monday"    onchange="toggleEditDayStyle('monday')"    style="accent-color:#c9a84c"> Mon</label>
+              <label id="edit_day_label_tuesday"   style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_tuesday"   onchange="toggleEditDayStyle('tuesday')"   style="accent-color:#c9a84c"> Tue</label>
+              <label id="edit_day_label_wednesday" style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_wednesday" onchange="toggleEditDayStyle('wednesday')" style="accent-color:#c9a84c"> Wed</label>
+              <label id="edit_day_label_thursday"  style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_thursday"  onchange="toggleEditDayStyle('thursday')"  style="accent-color:#c9a84c"> Thu</label>
+              <label id="edit_day_label_friday"    style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_friday"    onchange="toggleEditDayStyle('friday')"    style="accent-color:#c9a84c"> Fri</label>
+              <label id="edit_day_label_saturday"  style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_saturday"  onchange="toggleEditDayStyle('saturday')"  style="accent-color:#c9a84c"> Sat</label>
+              <label id="edit_day_label_sunday"    style="display:flex;align-items:center;gap:5px;padding:8px 13px;border:1px solid rgba(201,168,76,0.25);border-radius:9px;cursor:pointer;font-size:13px;font-weight:600;color:var(--text-primary);transition:all 0.15s"><input type="checkbox" id="edit_day_sunday"    onchange="toggleEditDayStyle('sunday')"    style="accent-color:#c9a84c"> Sun</label>
+            </div>
+          </div>
+
+          <!-- Time Inputs -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+            <div>
+              <label style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:7px">Start Time</label>
+              <input type="time" id="editCourseStartTime" style="width:100%;padding:10px 12px;background:rgba(4,17,31,0.7);border:1px solid rgba(201,168,76,0.28);border-radius:10px;color:var(--text-primary);font-size:14px;outline:none;box-sizing:border-box">
+            </div>
+            <div>
+              <label style="display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-muted);margin-bottom:7px">End Time</label>
+              <input type="time" id="editCourseEndTime" style="width:100%;padding:10px 12px;background:rgba(4,17,31,0.7);border:1px solid rgba(201,168,76,0.28);border-radius:10px;color:var(--text-primary);font-size:14px;outline:none;box-sizing:border-box">
+            </div>
+          </div>
+
+          <!-- Save Row -->
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div id="scheduleEditorMsg" style="font-size:12px;font-weight:700"></div>
+            <button onclick="saveCourseSchedule()" id="saveScheduleBtn" style="display:flex;align-items:center;gap:7px;background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.12));border:1px solid rgba(201,168,76,0.5);border-radius:10px;color:var(--gold-300);padding:10px 22px;font-size:13px;font-weight:900;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.36),rgba(201,168,76,0.22))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.12))'">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+              Save Schedule
+            </button>
+          </div>
+        </div>
       </div>
       <div class="modal-foot" style="padding:18px 24px;border-top:1px solid var(--border-gold);display:flex;gap:12px;justify-content:space-between;align-items:center;background:rgba(4,17,31,0.60)">
         <div id="enrolledGroupsDisplay" style="font-size:12px;color:var(--text-muted);font-weight:600"></div>
         <div style="display:flex;gap:10px">
+          <button onclick="openCourseScheduleEditor()" id="editScheduleBtn" style="display:flex;align-items:center;gap:7px;background:rgba(201,168,76,0.10);border:1px solid rgba(201,168,76,0.30);border-radius:10px;color:var(--gold-300);padding:10px 18px;font-size:13px;font-weight:800;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background='rgba(201,168,76,0.22)'" onmouseout="this.style.background='rgba(201,168,76,0.10)'">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            Edit Schedule
+          </button>
           <button onclick="openEnrollGroupModal()" style="display:flex;align-items:center;gap:7px;background:rgba(201,168,76,0.14);border:1px solid rgba(201,168,76,0.40);border-radius:10px;color:var(--gold-400);padding:10px 18px;font-size:13px;font-weight:800;cursor:pointer;transition:background 0.2s" onmouseover="this.style.background='rgba(201,168,76,0.26)'" onmouseout="this.style.background='rgba(201,168,76,0.14)'">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
             Enroll Group
@@ -2401,18 +2501,6 @@
   </div>
 
   <script>
-    // Force cache-bust for file:// usage so updated JS loads
-    (function enforceCacheBust() {
-      try {
-        if (window.location.protocol === 'file:' && !/[?&]v=/.test(window.location.search)) {
-          const url = new URL(window.location.href);
-          url.searchParams.set('v', Date.now().toString());
-          window.location.replace(url.toString());
-        }
-      } catch (error) {
-        console.warn('Cache-bust check skipped:', error);
-      }
-    })();
 
     // Initialize Supabase client (use 'db' to avoid conflict with global supabaseClient)
     const db = initSupabase();
@@ -5251,7 +5339,7 @@
     // COURSE CATALOG VIEW
     // ============================================
     
-    function loadCourseCatalog() {
+    async function loadCourseCatalog() {
       // Update stats
       document.getElementById('totalCoursesCount').textContent = getTotalCourseCount();
       document.getElementById('totalSemestersCount').textContent = getAllSemesters().length;
@@ -5259,7 +5347,19 @@
       // Calculate total credits
       const totalCredits = getAllCourses().reduce((sum, course) => sum + (course.credits || 0), 0);
       document.getElementById('totalCreditsCount').textContent = totalCredits;
-      
+
+      // Fetch schedule data for all courses (one query)
+      let scheduleMap = {};
+      try {
+        const allCodes = getAllCourses().map(c => c.code);
+        if (allCodes.length > 0) {
+          const { data: sched } = await db.from('group_course_schedule')
+            .select('course_code,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_time,end_time')
+            .in('course_code', allCodes);
+          (sched || []).forEach(s => { if (!scheduleMap[s.course_code]) scheduleMap[s.course_code] = s; });
+        }
+      } catch(e) { /* non-fatal */ }
+
       // Render courses by semester
       const container = document.getElementById('courseCatalogContainer');
       let html = '';
@@ -5305,7 +5405,17 @@
                     </div>
                   </div>
                   <!-- Course name -->
-                  <h4 style="margin:0 0 16px 0;font-size:15px;font-weight:800;color:var(--text-primary);line-height:1.4">${course.name}</h4>
+                  <h4 style="margin:0 0 10px 0;font-size:15px;font-weight:800;color:var(--text-primary);line-height:1.4">${course.name}</h4>
+                  <!-- Schedule badge -->
+                  ${(() => {
+                    const s = scheduleMap[course.code];
+                    if (!s) return '';
+                    const DAY_KEYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+                    const days = DAY_KEYS.filter(d => s[d]).map(d => d.slice(0,1).toUpperCase() + d.slice(1,3)).join(' · ');
+                    const fmt = t => { if (!t) return ''; const [h,m] = t.split(':'); const hr = +h; return `${hr > 12 ? hr-12 : hr || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`; };
+                    const timeStr = s.start_time && s.end_time ? ` ${fmt(s.start_time)}–${fmt(s.end_time)}` : '';
+                    return days ? `<div style="font-size:11.5px;color:#c9a84c;font-weight:700;margin-bottom:12px">📅 ${days}${timeStr}</div>` : '';
+                  })()}
                   <!-- Bottom stats -->
                   <div style="display:flex;align-items:center;gap:8px;padding-top:14px;border-top:1px solid rgba(201,168,76,0.12)">
                     <div style="flex:1;text-align:center;padding:8px 6px;background:rgba(4,17,31,0.6);border:1px solid rgba(201,168,76,0.12);border-radius:10px">
@@ -5340,6 +5450,15 @@
       document.getElementById('courseCredits').value = '';
       document.getElementById('gradeItemsList').innerHTML = '';
       document.getElementById('gradeWeightTotal').textContent = 'Total: 0%';
+      // Reset schedule fields
+      ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'].forEach(d => {
+        const cb = document.getElementById(`newCourse_day_${d}`);
+        const lbl = document.getElementById(`newCourse_day_label_${d}`);
+        if (cb) cb.checked = false;
+        if (lbl) { lbl.style.background = ''; lbl.style.borderColor = 'rgba(201,168,76,0.25)'; lbl.style.color = 'var(--text-primary)'; }
+      });
+      document.getElementById('newCourseStartTime').value = '';
+      document.getElementById('newCourseEndTime').value = '';
       // Add default grade items
       const defaults = [
         { name: 'Attendance / Participation', weight: 30 },
@@ -5349,6 +5468,23 @@
         { name: 'Quizzes',                    weight: 10 }
       ];
       defaults.forEach(d => addGradeItem(d.name, d.weight));
+    }
+
+    function toggleNewCourseDayStyle(day) {
+      const cb  = document.getElementById(`newCourse_day_${day}`);
+      const lbl = document.getElementById(`newCourse_day_label_${day}`);
+      if (!cb || !lbl) return;
+      if (cb.checked) {
+        lbl.style.background    = 'rgba(201,168,76,0.18)';
+        lbl.style.borderColor   = 'rgba(201,168,76,0.7)';
+        lbl.style.color         = '#c9a84c';
+        lbl.style.fontWeight    = '700';
+      } else {
+        lbl.style.background    = '';
+        lbl.style.borderColor   = 'rgba(201,168,76,0.25)';
+        lbl.style.color         = 'var(--text-primary)';
+        lbl.style.fontWeight    = '';
+      }
     }
 
     function closeAddCourseModal() {
@@ -5461,6 +5597,14 @@
         return;
       }
 
+      // Read schedule fields
+      const SCHED_DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+      const scheduleDays = {};
+      SCHED_DAYS.forEach(d => { scheduleDays[d] = document.getElementById(`newCourse_day_${d}`)?.checked || false; });
+      const scheduleStartTime = document.getElementById('newCourseStartTime')?.value || null;
+      const scheduleEndTime = document.getElementById('newCourseEndTime')?.value || null;
+      const hasSchedule = SCHED_DAYS.some(d => scheduleDays[d]) || scheduleStartTime;
+
       // Create course object
       const course = {
         code,
@@ -5517,6 +5661,40 @@
         loadCourseCatalog();
         closeAddCourseModal();
         showSuccessModal(`Course "${code} — ${name}" added successfully to ${semester}!`);
+
+        // 4. Sync schedule to group_course_schedule for all enrolled groups
+        if (hasSchedule) {
+          try {
+            const enrollmentKey = `${semester}_${code}`;
+            const { data: enrollment } = await db
+              .from('course_enrollments')
+              .select('enrolled_group_ids')
+              .eq('enrollment_key', enrollmentKey)
+              .maybeSingle();
+            const enrolledGroupIds = enrollment?.enrolled_group_ids || [];
+            for (const groupId of enrolledGroupIds) {
+              await db.from('group_course_schedule').upsert([{
+                group_id: groupId,
+                course_code: code,
+                course_name: name,
+                semester,
+                monday: scheduleDays.monday,
+                tuesday: scheduleDays.tuesday,
+                wednesday: scheduleDays.wednesday,
+                thursday: scheduleDays.thursday,
+                friday: scheduleDays.friday,
+                saturday: scheduleDays.saturday,
+                sunday: scheduleDays.sunday,
+                start_time: scheduleStartTime || null,
+                end_time: scheduleEndTime || null,
+                created_by: adminEmail
+              }], { onConflict: 'group_id,course_code,semester' });
+            }
+            console.log(`✅ Schedule synced to ${enrolledGroupIds.length} group(s) for ${code}`);
+          } catch (schedErr) {
+            console.warn('Schedule sync failed (non-fatal):', schedErr.message);
+          }
+        }
 
       } catch (err) {
         console.error('❌ Failed to save course:', err);
@@ -5592,7 +5770,158 @@
 
     function closeCourseDetailsModal() {
       document.getElementById('courseDetailsModal').classList.remove('open');
+      // Hide schedule editor when modal closes
+      document.getElementById('scheduleEditorPanel').style.display = 'none';
       currentCourseForEnrollment = null;
+    }
+
+    // ── Schedule Editor ──────────────────────────────────────────────────────
+    const _EDIT_DAYS = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+
+    function toggleEditDayStyle(day) {
+      const cb  = document.getElementById(`edit_day_${day}`);
+      const lbl = document.getElementById(`edit_day_label_${day}`);
+      if (!cb || !lbl) return;
+      if (cb.checked) {
+        lbl.style.background      = 'rgba(201,168,76,0.18)';
+        lbl.style.borderColor     = 'rgba(201,168,76,0.6)';
+        lbl.style.color           = 'var(--gold-300)';
+        lbl.style.fontWeight      = '800';
+      } else {
+        lbl.style.background      = '';
+        lbl.style.borderColor     = 'rgba(201,168,76,0.25)';
+        lbl.style.color           = 'var(--text-primary)';
+        lbl.style.fontWeight      = '600';
+      }
+    }
+
+    async function openCourseScheduleEditor() {
+      if (!currentCourseForEnrollment) return;
+      const { semester, courseCode } = currentCourseForEnrollment;
+
+      const panel = document.getElementById('scheduleEditorPanel');
+      const msg   = document.getElementById('scheduleEditorMsg');
+
+      // Reset state
+      _EDIT_DAYS.forEach(d => {
+        const cb  = document.getElementById(`edit_day_${d}`);
+        const lbl = document.getElementById(`edit_day_label_${d}`);
+        if (cb)  cb.checked = false;
+        if (lbl) { lbl.style.background = ''; lbl.style.borderColor = 'rgba(201,168,76,0.25)'; lbl.style.color = 'var(--text-primary)'; lbl.style.fontWeight = '600'; }
+      });
+      document.getElementById('editCourseStartTime').value = '';
+      document.getElementById('editCourseEndTime').value   = '';
+      msg.textContent = '';
+      msg.style.color = '';
+
+      // Try to fetch existing schedule for this course (any group)
+      try {
+        const { data } = await db
+          .from('group_course_schedule')
+          .select('*')
+          .eq('course_code', courseCode)
+          .limit(1)
+          .maybeSingle();
+
+        if (data) {
+          _EDIT_DAYS.forEach(d => {
+            if (data[d]) {
+              const cb = document.getElementById(`edit_day_${d}`);
+              if (cb) { cb.checked = true; toggleEditDayStyle(d); }
+            }
+          });
+          if (data.start_time) document.getElementById('editCourseStartTime').value = data.start_time.slice(0, 5);
+          if (data.end_time)   document.getElementById('editCourseEndTime').value   = data.end_time.slice(0, 5);
+          msg.textContent = '✓ Existing schedule loaded — edit and save';
+          msg.style.color = 'var(--text-muted)';
+        }
+      } catch (e) { /* non-fatal — editor still opens blank */ }
+
+      // Scroll into view + show
+      panel.style.display = 'block';
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function saveCourseSchedule() {
+      if (!currentCourseForEnrollment) return;
+      const { semester, courseCode, course } = currentCourseForEnrollment;
+
+      const btn = document.getElementById('saveScheduleBtn');
+      const msg = document.getElementById('scheduleEditorMsg');
+
+      const days = {};
+      _EDIT_DAYS.forEach(d => { days[d] = document.getElementById(`edit_day_${d}`)?.checked || false; });
+      const startTime = document.getElementById('editCourseStartTime').value || null;
+      const endTime   = document.getElementById('editCourseEndTime').value   || null;
+
+      if (!_EDIT_DAYS.some(d => days[d]) && !startTime) {
+        msg.textContent = '⚠ Select at least one day or a start time';
+        msg.style.color = '#fb923c';
+        return;
+      }
+
+      btn.disabled    = true;
+      btn.textContent = 'Saving…';
+      msg.textContent = '';
+
+      try {
+        const adminEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || 'admin';
+
+        // Get enrolled groups for this course
+        const enrollmentKey = `${semester}_${courseCode}`;
+        const { data: enrollment } = await db
+          .from('course_enrollments')
+          .select('enrolled_group_ids')
+          .eq('enrollment_key', enrollmentKey)
+          .maybeSingle();
+        const enrolledGroupIds = enrollment?.enrolled_group_ids || [];
+
+        if (enrolledGroupIds.length === 0) {
+          // No groups enrolled yet — save a placeholder using course code as a marker
+          // so data exists in DB even before groups are added
+          msg.textContent = '⚠ No groups enrolled yet. Enroll a group first, then the schedule will sync.';
+          msg.style.color = '#fb923c';
+          btn.disabled    = false;
+          btn.innerHTML   = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Save Schedule';
+          return;
+        }
+
+        let saved = 0;
+        for (const groupId of enrolledGroupIds) {
+          const { error } = await db.from('group_course_schedule').upsert([{
+            group_id:    groupId,
+            course_code: courseCode,
+            course_name: course.name,
+            semester,
+            monday:      days.monday,
+            tuesday:     days.tuesday,
+            wednesday:   days.wednesday,
+            thursday:    days.thursday,
+            friday:      days.friday,
+            saturday:    days.saturday,
+            sunday:      days.sunday,
+            start_time:  startTime,
+            end_time:    endTime,
+            created_by:  adminEmail
+          }], { onConflict: 'group_id,course_code,semester' });
+          if (!error) saved++;
+        }
+
+        // Success
+        msg.textContent = `✅ Schedule saved to ${saved} group${saved !== 1 ? 's' : ''}`;
+        msg.style.color = '#4ade80';
+
+        // Refresh catalog cards (they now show schedule badges)
+        loadCourseCatalog();
+
+      } catch (err) {
+        console.error('Schedule save error:', err);
+        msg.textContent = `❌ ${err.message || 'Save failed'}`;
+        msg.style.color = '#f87171';
+      } finally {
+        btn.disabled  = false;
+        btn.innerHTML = '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg> Save Schedule';
+      }
     }
 
     function loadEnrolledGroups(semester, courseCode) {

@@ -21,6 +21,8 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<!-- file:// redirect removed — page must stay on file:// when opened directly -->
+
 <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon.svg">
@@ -376,6 +378,16 @@ body{
   background:linear-gradient(135deg,var(--gold-400),var(--gold-300));
   transform:translateY(-2px);box-shadow:0 8px 20px rgba(201,168,76,0.28);
 }
+
+/* ── LOGIN ALERT TOASTS ── */
+@keyframes loginAlertIn {
+  from { opacity:0; transform:translateX(-50%) translateY(18px) scale(0.96); }
+  to   { opacity:1; transform:translateX(-50%) translateY(0)     scale(1);   }
+}
+@keyframes loginAlertOut {
+  from { opacity:1; transform:translateX(-50%) translateY(0)     scale(1);   }
+  to   { opacity:0; transform:translateX(-50%) translateY(12px)  scale(0.97);}
+}
 </style>
 </head>
 
@@ -566,7 +578,7 @@ body{
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.min.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/main.js"></script>
 <script>
@@ -1435,81 +1447,140 @@ async function fetchApplicationForStatusLogin(supabase, username = '') {
   return null;
 }
 
-// Show custom styled alert matching design system
+// Show custom styled alert matching the ACNHS design system
 function showLoginAlert(message, type = 'info') {
+  // Remove any existing alert
   const existingAlert = document.getElementById('loginAlert');
   if (existingAlert) {
-    existingAlert.remove();
+    existingAlert.style.animation = 'loginAlertOut 0.25s ease forwards';
+    setTimeout(() => existingAlert.remove(), 250);
   }
 
-  const backgroundColor = type === 'success'
-    ? '#d4edda'
-    : type === 'error'
-      ? '#f8d7da'
-      : type === 'warning'
-        ? '#fff4e5'
-        : '#d1ecf1';
-  const borderColor = type === 'success'
-    ? '#c3e6cb'
-    : type === 'error'
-      ? '#f5c6cb'
-      : type === 'warning'
-        ? '#ffe5c0'
-        : '#bee5eb';
-  const textColor = type === 'success'
-    ? '#155724'
-    : type === 'error'
-      ? '#721c24'
-      : type === 'warning'
-        ? '#8a4a0a'
-        : '#0c5460';
-  const icon = type === 'success'
-    ? '✓'
-    : type === 'error'
-      ? '✕'
-      : type === 'warning'
-        ? '⚠'
-        : 'ℹ';
+  const config = {
+    success: {
+      bg:         'rgba(7,27,48,0.97)',
+      border:     'rgba(201,168,76,0.55)',
+      accentLine: 'linear-gradient(90deg,#c9a84c,#d4b56a)',
+      iconBg:     'linear-gradient(135deg,#c9a84c,#d4b56a)',
+      iconColor:  '#04111f',
+      iconSvg:    `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 7L5.5 10.5L12 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      textColor:  '#e2cc92',
+      subColor:   '#c8bfb2',
+      glow:       '0 0 32px rgba(201,168,76,0.18)',
+      label:      'Access Granted',
+    },
+    error: {
+      bg:         'rgba(7,14,26,0.97)',
+      border:     'rgba(239,68,68,0.45)',
+      accentLine: 'linear-gradient(90deg,#ef4444,#f87171)',
+      iconBg:     'linear-gradient(135deg,#ef4444,#f87171)',
+      iconColor:  '#fff',
+      iconSvg:    `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 3L11 11M11 3L3 11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
+      textColor:  '#fca5a5',
+      subColor:   '#c8bfb2',
+      glow:       '0 0 32px rgba(239,68,68,0.14)',
+      label:      'Authentication Failed',
+    },
+    warning: {
+      bg:         'rgba(7,20,36,0.97)',
+      border:     'rgba(245,158,11,0.45)',
+      accentLine: 'linear-gradient(90deg,#f59e0b,#fbbf24)',
+      iconBg:     'linear-gradient(135deg,#f59e0b,#fbbf24)',
+      iconColor:  '#04111f',
+      iconSvg:    `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M7 2L12.5 11.5H1.5L7 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M7 6V8.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="10.25" r="0.75" fill="currentColor"/></svg>`,
+      textColor:  '#fde68a',
+      subColor:   '#c8bfb2',
+      glow:       '0 0 32px rgba(245,158,11,0.12)',
+      label:      'Notice',
+    },
+    info: {
+      bg:         'rgba(7,27,48,0.97)',
+      border:     'rgba(99,179,237,0.35)',
+      accentLine: 'linear-gradient(90deg,#63b3ed,#90cdf4)',
+      iconBg:     'linear-gradient(135deg,#63b3ed,#90cdf4)',
+      iconColor:  '#04111f',
+      iconSvg:    `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="7" cy="7" r="5.5" stroke="currentColor" stroke-width="1.5"/><path d="M7 6.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.75" r="0.75" fill="currentColor"/></svg>`,
+      textColor:  '#bfdbfe',
+      subColor:   '#c8bfb2',
+      glow:       '0 0 32px rgba(99,179,237,0.10)',
+      label:      'Information',
+    },
+  };
+
+  const c = config[type] || config.info;
 
   const alertHTML = `
-    <div id="loginAlert" style="position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10000; min-width: 320px; max-width: 500px; background: ${backgroundColor}; border: 1px solid ${borderColor}; border-radius: 4px; padding: 1rem 1.25rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); animation: slideDown 0.3s ease;">
-      <div style="display: flex; align-items: center; gap: 0.75rem;">
-        <div style="width: 24px; height: 24px; background: ${textColor}; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: bold; flex-shrink: 0;">
-          ${icon}
+    <div id="loginAlert" style="
+      position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
+      z-index:10000;width:min(520px,calc(100vw - 32px));
+      background:${c.bg};
+      border:1px solid ${c.border};
+      border-radius:14px;
+      box-shadow:var(--shadow-card),${c.glow};
+      overflow:hidden;
+      font-family:'Inter',sans-serif;
+      animation:loginAlertIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards;
+    ">
+      <!-- Top accent line -->
+      <div style="height:3px;background:${c.accentLine};"></div>
+
+      <div style="padding:16px 18px;display:flex;align-items:flex-start;gap:14px;">
+        <!-- Icon badge -->
+        <div style="
+          width:34px;height:34px;flex-shrink:0;
+          background:${c.iconBg};
+          border-radius:50%;
+          display:flex;align-items:center;justify-content:center;
+          color:${c.iconColor};
+          box-shadow:0 2px 8px rgba(0,0,0,0.3);
+          margin-top:1px;
+        ">${c.iconSvg}</div>
+
+        <!-- Text block -->
+        <div style="flex:1;min-width:0;">
+          <div style="
+            font-size:10px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;
+            color:${c.textColor};opacity:0.7;margin-bottom:4px;
+          ">${c.label}</div>
+          <p style="
+            margin:0;color:${c.textColor};
+            font-size:13.5px;font-weight:500;line-height:1.55;
+          ">${message}</p>
         </div>
-        <p style="margin: 0; color: ${textColor}; font-size: 0.95rem; line-height: 1.5; flex: 1;">
-          ${message}
-        </p>
-        <button onclick="document.getElementById('loginAlert').remove()" style="background: none; border: none; color: ${textColor}; font-size: 1.25rem; cursor: pointer; padding: 0; margin: 0; line-height: 1; opacity: 0.7; flex-shrink: 0;">
-          ×
-        </button>
+
+        <!-- Dismiss button -->
+        <button
+          onclick="(function(){var a=document.getElementById('loginAlert');if(a){a.style.animation='loginAlertOut 0.22s ease forwards';setTimeout(function(){a.remove();},220);}})()"
+          style="
+            background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);
+            color:rgba(255,255,255,0.45);border-radius:6px;
+            width:28px;height:28px;display:flex;align-items:center;justify-content:center;
+            cursor:pointer;flex-shrink:0;font-size:16px;line-height:1;
+            transition:all 0.2s;margin-top:1px;padding:0;
+          "
+          onmouseover="this.style.background='rgba(255,255,255,0.12)';this.style.color='rgba(255,255,255,0.8)';"
+          onmouseout="this.style.background='rgba(255,255,255,0.06)';this.style.color='rgba(255,255,255,0.45)';"
+          aria-label="Dismiss"
+        >&#x2715;</button>
       </div>
     </div>
-    <style>
-      @keyframes slideDown {
-        from {
-          opacity: 0;
-          transform: translateX(-50%) translateY(-20px);
-        }
-        to {
-          opacity: 1;
-          transform: translateX(-50%) translateY(0);
-        }
-      }
-    </style>
   `;
 
-  document.body.insertAdjacentHTML('beforeend', alertHTML);
+  // Inject after a short delay so remove animation from previous alert completes
+  setTimeout(() => {
+    document.body.insertAdjacentHTML('beforeend', alertHTML);
+  }, existingAlert ? 260 : 0);
 
-  // Auto-dismiss after 5 seconds for non-error messages
+  // Auto-dismiss after 6 s for success / warning / info; errors stay until dismissed
   if (type !== 'error') {
+    const delay = type === 'success' ? 4500 : 6000;
     setTimeout(() => {
       const alert = document.getElementById('loginAlert');
       if (alert) {
-        alert.style.animation = 'slideDown 0.3s ease reverse';
-        setTimeout(() => alert.remove(), 300);
+        alert.style.animation = 'loginAlertOut 0.25s ease forwards';
+        setTimeout(() => alert.remove(), 250);
       }
-    }, 5000);
+    }, delay + (existingAlert ? 260 : 0));
   }
 }
 

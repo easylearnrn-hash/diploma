@@ -62,10 +62,15 @@ QUICK START GUIDE:
     <link rel="icon" type="image/png" sizes="32x32" href="favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.svg">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- Non-render-blocking font load: preconnect first, then load async via media trick -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap">
+<link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 
 <!-- Supabase Client -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase.min.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/acnhs-logo-base64.js"></script>
 
@@ -518,6 +523,7 @@ body{
   cursor: pointer;
   transition: transform 0.1s, box-shadow 0.1s;
   border: 1.5px solid transparent;
+  contain: layout style; /* prevent layout thrash from individual button changes */
 }
 
 .question-num.unanswered {
@@ -938,12 +944,11 @@ body{
 }
 
 .stat-card {
-  background: rgba(255,255,255,0.06);
+  background: rgba(15,23,42,0.85);
   border: 1px solid rgba(201,168,76,0.2);
   border-radius: 14px;
   padding: 24px;
   text-align: center;
-  backdrop-filter: blur(8px);
   transition: border-color 0.2s;
 }
 
@@ -2156,6 +2161,10 @@ body{
 </style>
 </head>
 <body>
+
+<!-- LOADING SCREEN -->
+<div class="start-screen" id="loadingScreen" style="display:none;">
+</div>
 
 <!-- START SCREEN -->
 <div class="start-screen" id="startScreen">
@@ -3689,14 +3698,68 @@ let testState = {
 // DATABASE FUNCTIONS
 // ============================================
 
+function withTimeout(promise, ms, timeoutMessage) {
+  let timerId;
+  const timeout = new Promise((_, reject) => {
+    timerId = setTimeout(() => {
+      reject(new Error(timeoutMessage || 'Request timed out'));
+    }, ms);
+  });
+
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timerId) clearTimeout(timerId);
+  });
+}
+
+function isNetworkFailure(error) {
+  const msg = String(error?.message || '');
+  return msg.includes('Load failed') ||
+    msg.includes('TLS') ||
+    msg.includes('Failed to fetch') ||
+    msg.includes('network_timeout') ||
+    msg.includes('Request timed out') ||
+    msg.includes('timed out');
+}
+
+function setLoadingStatus(message) {
+  const statusEl = document.getElementById('startStatus');
+  if (statusEl) {
+    statusEl.textContent = message || '';
+  }
+}
+
+function refreshSupabaseOwner() {
+  if (typeof setSupabaseOwnerHeader === 'function') {
+    const ownerId = getOwnerId();
+    // Ensure the base client exists before injecting the header —
+    // setSupabaseOwnerHeader only rebuilds if supabaseClient is already set.
+    if (!db) initializeSupabase();
+    setSupabaseOwnerHeader(ownerId);
+    // Always rebind db so every subsequent query uses the updated headers.
+    db = initSupabase();
+    console.log('✓ Owner header set for:', ownerId);
+  }
+}
+
 async function loadTestConfiguration(testId) {
+  // Cache per testId — avoids double round-trip when showSubjectSelection()
+  // and startTest() both call this for the same testId in the same session.
+  if (window._cachedTestConfig && window._cachedTestConfig._id === testId) {
+    Object.assign(TEST_CONFIG, window._cachedTestConfig);
+    return window._cachedTestConfig;
+  }
   try {
+    setLoadingStatus('Fetching test configuration...');
     // Fetch test configuration from test_configs table
-    const { data: config, error: configError } = await db
-      .from('test_configs')
-      .select('*')
-      .eq('id', testId)
-      .single();
+    const { data: config, error: configError } = await withTimeout(
+      db
+        .from('test_configs')
+        .select('*')
+        .eq('id', testId)
+        .single(),
+      7000,
+      'Loading test configuration timed out'
+    );
     
     if (configError) throw configError;
     
@@ -3716,34 +3779,55 @@ async function loadTestConfiguration(testId) {
     
     testState.testConfig = config;
     
+    // Cache so the second call (from startTest) is instant
+    window._cachedTestConfig = { ...config, _id: testId };
+    
     return config;
   } catch (error) {
     console.error('Error loading test configuration:', error);
     showToast('Failed to load test configuration', 'error');
+    const friendly = isNetworkFailure(error)
+      ? 'Network blocked the test configuration request (TLS/SSL). Try disabling VPN/ad blockers or use Chrome.'
+      : (error.message || 'Unknown error');
+    error.message = `Test configuration failed: ${friendly}`;
     throw error;
   }
 }
 
 async function loadQuestions(testId, categoryFilter = null, questionCount = null, topicIds = null) {
   try {
+    setLoadingStatus('Querying question bank...');
+    // When topic IDs are provided (multi-subject system), skip the test_id filter —
+    // questions from different subjects have different test_ids (e.g. endocrine = 0004,
+    // fundamentals = 0001) and the topic_id already uniquely identifies the questions.
+    const useTopicSystem = topicIds && Array.isArray(topicIds) && topicIds.length > 0;
+
     let query = db
       .from('test_questions')
       .select('id, test_id, question_stem, question_stem_hy, options, options_hy, correct_answers, is_multiple_choice, rationale, rationale_hy, category, display_order, points, is_active, topic_id')
-      .eq('test_id', testId)
       .eq('is_active', true)
       .order('display_order', { ascending: true });
-    
-    // Filter by topic IDs if provided (new topic-based system)
-    if (topicIds && Array.isArray(topicIds) && topicIds.length > 0) {
+
+    if (useTopicSystem) {
+      // Topic-based: filter by topic_id only (works across all subjects/test_ids)
       query = query.in('topic_id', topicIds);
+    } else {
+      // Legacy: filter by test_id, optionally by category
+      query = query.eq('test_id', testId);
+      if (categoryFilter) {
+        query = query.eq('category', categoryFilter);
+      }
     }
-    // Fallback to category filter (legacy system)
-    else if (categoryFilter) {
-      query = query.eq('category', categoryFilter);
-    }
-    
-    const { data: questions, error } = await query;
-    
+
+    // Raise the page limit so large question banks (300+) are never silently truncated.
+    // PostgREST defaults to 1000; we set 5000 to accommodate all current subjects combined.
+    query = query.limit(5000);
+
+    const { data: questions, error } = await withTimeout(
+      query,
+      12000,
+      'Loading questions timed out'
+    );
     if (error) throw error;
     
     if (!questions || questions.length === 0) {
@@ -3778,6 +3862,10 @@ async function loadQuestions(testId, categoryFilter = null, questionCount = null
   } catch (error) {
     console.error('Error loading questions:', error);
     showToast('Failed to load questions', 'error');
+    const friendly = isNetworkFailure(error)
+      ? 'Network blocked the question request (TLS/SSL). Try disabling VPN/ad blockers or use Chrome.'
+      : (error.message || 'Unknown error');
+    error.message = `Question load failed: ${friendly}`;
     throw error;
   }
 }
@@ -3906,6 +3994,13 @@ function buildBilingualSnapshot(shuffledQuestions) {
     category: q.category,
     points: q.points || 1
   }));
+
+  // Fast-path: if no question has any Armenian content at all, skip the HY
+  // build loop entirely (saves iterating 300+ questions twice for EN-only tests).
+  const hasAnyHyData = shuffledQuestions.some(q => q.stem_hy || q.options_hy);
+  if (!hasAnyHyData) {
+    return { en, hy: null };
+  }
 
   // HY snapshot — same structure but with Armenian text where available.
   // Falls back to English when a question or option lacks a translation.
@@ -4078,12 +4173,14 @@ function saveToLocalStorage() {
       questionIds: testState.questions.map(q => q.id),
       testId: TEST_CONFIG.testId,
       selectedTopicIds: TEST_CONFIG.selectedTopicIds || [],
-      selectedTopicNames: TEST_CONFIG.selectedTopicNames || [],
-      // Persist the frozen bilingual snapshot so resume always shows identical content
-      snapshot: testState.snapshot
+      selectedTopicNames: TEST_CONFIG.selectedTopicNames || []
     };
     // Key is scoped per user so in-progress sessions never bleed between accounts
-    localStorage.setItem('acnhs_test_session_' + getOwnerId(), JSON.stringify(saveData));
+    try {
+      localStorage.setItem('acnhs_test_session_' + getOwnerId(), JSON.stringify(saveData));
+    } catch (e) {
+      console.warn('Failed to save session to localStorage, possibly quota exceeded:', e);
+    }
   }, 120);
 }
 
@@ -4110,9 +4207,55 @@ function formatTime(seconds) {
 }
 
 function showToast(message, type = 'info') {
-  // Toasts silenced — errors are logged to console only
-  if (type === 'error') console.error('[Toast suppressed]', message);
-  else console.log('[Toast suppressed]', type, message);
+  if (type === 'error') console.error('[Toast]', message);
+  else console.log('[Toast]', type, message);
+
+  // Remove any existing toast
+  const existing = document.getElementById('_acnhs_toast');
+  if (existing) existing.remove();
+
+  const colors = {
+    success: { bg: 'rgba(7,27,48,0.97)', border: '#10b981', icon: '✓', label: 'SUCCESS', accent: '#10b981' },
+    error:   { bg: 'rgba(7,27,48,0.97)', border: '#ef4444', icon: '✕', label: 'ERROR',   accent: '#ef4444' },
+    warning: { bg: 'rgba(7,27,48,0.97)', border: '#f59e0b', icon: '!', label: 'NOTICE',  accent: '#f59e0b' },
+    info:    { bg: 'rgba(7,27,48,0.97)', border: '#c9a84c', icon: 'i', label: 'INFO',    accent: '#c9a84c' }
+  };
+  const c = colors[type] || colors.info;
+
+  const toast = document.createElement('div');
+  toast.id = '_acnhs_toast';
+  toast.style.cssText = [
+    'position:fixed', 'bottom:24px', 'left:50%', 'transform:translateX(-50%) translateY(20px)',
+    'z-index:99999', 'min-width:300px', 'max-width:480px',
+    `background:${c.bg}`, `border:1.5px solid ${c.border}`,
+    'border-radius:12px', 'padding:14px 18px',
+    'display:flex', 'align-items:flex-start', 'gap:12px',
+    'box-shadow:0 8px 32px rgba(0,0,0,0.5)',
+    'opacity:0', 'transition:opacity 0.25s ease, transform 0.25s ease',
+    'font-family:Inter,sans-serif'
+  ].join(';');
+
+  toast.innerHTML = `
+    <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${c.accent}22;border:1.5px solid ${c.accent};display:flex;align-items:center;justify-content:center;font-weight:700;color:${c.accent};font-size:13px">${c.icon}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:9px;font-weight:800;letter-spacing:1.5px;color:${c.accent};text-transform:uppercase;margin-bottom:3px">${c.label}</div>
+      <div style="font-size:13px;color:#e2e8f0;line-height:1.45;word-break:break-word">${message}</div>
+    </div>
+    <button onclick="this.parentElement.remove()" style="flex-shrink:0;background:none;border:none;color:#64748b;cursor:pointer;font-size:16px;line-height:1;padding:2px 4px" aria-label="Dismiss">&times;</button>
+  `;
+
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => {
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+  });
+
+  const duration = type === 'error' ? 7000 : type === 'warning' ? 5000 : 4000;
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(-50%) translateY(20px)';
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
 }
 
 // ============================================
@@ -4197,44 +4340,69 @@ async function showSubjectSelection() {
 
     await loadTestConfiguration(testId);
 
-    // Load subjects, topics, and per-topic question counts in parallel
-    const [
-      { data: subjects, error: subjectError },
-      { data: allTopicsRaw, error: topicError }
-    ] = await Promise.all([
-      db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
-      db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order')
-    ]);
+    // Load subjects + topics — cached after first fetch so reopening the modal is instant.
+    let subjects, allTopicsRaw;
+    if (window._cachedSubjects && window._cachedTopics) {
+      subjects     = window._cachedSubjects;
+      allTopicsRaw = window._cachedTopics;
+      console.log('[SubjectModal] served subjects/topics from cache');
+    } else {
+      const [
+        { data: subjectsData, error: subjectError },
+        { data: topicsData,   error: topicError }
+      ] = await Promise.all([
+        db.from('test_subjects').select('*').eq('is_active', true).order('display_order'),
+        db.from('test_topics').select('*').eq('status', 'published').order('subject_id').order('display_order')
+      ]);
+      if (subjectError) throw subjectError;
+      subjects     = subjectsData;
+      allTopicsRaw = topicsData;
+      window._cachedSubjects = subjects;
+      window._cachedTopics   = allTopicsRaw;
+    }
 
-    if (subjectError) throw subjectError;
     if (!subjects || subjects.length === 0) throw new Error('No subjects available for this test');
 
     // Build a map: topic_id → question count
-    // Fetch all active questions without a test_id filter so every subject's questions
-    // are counted correctly regardless of which test_id they were inserted with.
-    // We paginate in 1000-row pages to stay within PostgREST's max-rows limit.
-    const topicQuestionCounts = {};
-    let page = 0;
-    const PAGE_SIZE = 1000;
-    while (true) {
-      const from = page * PAGE_SIZE;
-      const to   = from + PAGE_SIZE - 1;
-      const { data: pageRows, error: pageError } = await db
-        .from('test_questions')
-        .select('topic_id')
-        .eq('is_active', true)
-        .range(from, to);
-      if (pageError) { console.warn('[Topic Counts] page error', pageError); break; }
-      if (!pageRows || pageRows.length === 0) break;
-      pageRows.forEach(row => {
-        if (row.topic_id) {
-          topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
+    // Use a single Supabase RPC call to get counts grouped by topic_id in one round-trip.
+    // Falls back to a lightweight select if the RPC doesn't exist yet.
+    // Results are cached on the window object so reopening the modal is instant.
+    let topicQuestionCounts = window._cachedTopicCounts || null;
+    if (!topicQuestionCounts) {
+      topicQuestionCounts = {};
+      try {
+        // Try RPC first (most efficient — single query, server-side GROUP BY)
+        const { data: rpcRows, error: rpcError } = await db.rpc('get_topic_question_counts');
+        if (!rpcError && rpcRows) {
+          rpcRows.forEach(row => {
+            if (row.topic_id) topicQuestionCounts[row.topic_id] = row.question_count;
+          });
+          console.log(`[Topic Counts] loaded via RPC: ${Object.keys(topicQuestionCounts).length} topics`);
+        } else {
+          throw rpcError || new Error('RPC unavailable');
         }
-      });
-      if (pageRows.length < PAGE_SIZE) break; // last page
-      page++;
+      } catch (rpcFallbackErr) {
+        // Fallback: fetch only topic_id column with limit 5000 (single request, no loop)
+        console.warn('[Topic Counts] RPC not available, using fallback single query');
+        const { data: allRows, error: fallbackError } = await db
+          .from('test_questions')
+          .select('topic_id')
+          .eq('is_active', true)
+          .limit(5000);
+        if (!fallbackError && allRows) {
+          allRows.forEach(row => {
+            if (row.topic_id) {
+              topicQuestionCounts[row.topic_id] = (topicQuestionCounts[row.topic_id] || 0) + 1;
+            }
+          });
+          console.log(`[Topic Counts] loaded via fallback: ${Object.keys(topicQuestionCounts).length} topics`);
+        }
+      }
+      // Cache for this session so reopening the modal is instant
+      window._cachedTopicCounts = topicQuestionCounts;
+    } else {
+      console.log(`[Topic Counts] served from cache: ${Object.keys(topicQuestionCounts).length} topics`);
     }
-    console.log(`[Topic Counts] mapped ${Object.keys(topicQuestionCounts).length} topics`, topicQuestionCounts);
 
     allSubjects = subjects;
     availableTopics = allTopicsRaw || [];
@@ -4524,7 +4692,10 @@ async function startFromSubjectModal() {
   testState.studentId = getOwnerId();
 
   try {
-    document.getElementById('startScreen').innerHTML = `
+    document.getElementById('startScreen').style.display = 'none';
+    const loadingScreen = document.getElementById('loadingScreen');
+    loadingScreen.style.display = 'flex';
+    loadingScreen.innerHTML = `
       <div class="start-content">
         <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
         <p style="color:#cbd5e1;font-size:18px">Loading test questions...</p>
@@ -4536,18 +4707,21 @@ async function startFromSubjectModal() {
     // Resume is only offered on page-load flows that didn't involve a new selection.
     await initializeNewTest();
 
-    document.getElementById('startScreen').style.display = 'none';
+    loadingScreen.style.display = 'none';
     document.getElementById('testContainer').style.display = 'block';
     window.addEventListener('beforeunload', handleBeforeUnload);
 
   } catch (error) {
     console.error('Failed to start test:', error);
-    document.getElementById('startScreen').innerHTML = `
-      <div class="start-content">
-        <p style="color:#ef4444">Failed to start test: ${error.message}</p>
-        <button onclick="location.reload()" class="btn btn-primary" style="margin-top:16px">Try Again</button>
-      </div>
-    `;
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) {
+      loadingScreen.innerHTML = `
+        <div class="start-content">
+          <p style="color:#ef4444">Failed to start test: ${error.message}</p>
+          <button onclick="location.reload()" class="btn btn-primary" style="margin-top:16px">Try Again</button>
+        </div>
+      `;
+    }
   }
 }
 
@@ -4820,23 +4994,57 @@ async function startTest() {
   // Always use the authenticated user's own identity — never a spoofable URL param
   testState.studentId = getOwnerId();
   
+  let loadingWatchdog = null;
+  const showStartError = (message) => {
+    const startScreen = document.getElementById('startScreen');
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (startScreen) startScreen.style.display = 'none';
+    if (!loadingScreen) return;
+    loadingScreen.style.display = 'flex';
+    loadingScreen.innerHTML = `
+      <div class="start-content">
+        <h1 style="color:white;margin-bottom:16px">Unable to load test</h1>
+        <p style="color:#cbd5e1;font-size:18px;margin-bottom:16px">${message || 'Something is blocking the test data from loading.'}</p>
+        <p style="color:#94a3b8;font-size:13px;margin-bottom:28px">Tip: refresh the page. If it persists, your network is blocking Supabase.</p>
+        <button class="btn btn-primary" onclick="location.reload()">Refresh</button>
+      </div>
+    `;
+  };
+
   try {
     // Show loading state
-    document.getElementById('startScreen').innerHTML = `
+    document.getElementById('startScreen').style.display = 'none';
+    const loadingScreen = document.getElementById('loadingScreen');
+    loadingScreen.style.display = 'flex';
+    loadingScreen.innerHTML = `
       <div class="start-content">
         <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
         <p style="color:#cbd5e1;font-size:18px">Loading test${selectedCategory ? ': ' + selectedCategory : ''}${questionCount ? ` (${questionCount} questions)` : ''}...</p>
+        <p style="color:#64748b;font-size:13px;margin-top:8px">${TEST_CONFIG.selectedTopicIds ? TEST_CONFIG.selectedTopicIds.length + ' topic(s) selected' : ''}</p>
+        <p style="color:#64748b;font-size:12px;margin-top:6px">If this takes more than 10 seconds, refresh the page.</p>
+        <p id="startStatus" style="color:#94a3b8;font-size:12px;margin-top:8px;">Preparing...</p>
       </div>
     `;
+
+    setLoadingStatus('Connecting to test configuration...');
+
+    loadingWatchdog = setTimeout(() => {
+      showStartError('Loading timed out. The question service did not respond.');
+    }, 15000);
     
     // Load test configuration
-    await loadTestConfiguration(testId);
+  await loadTestConfiguration(testId);
+  setLoadingStatus('Loading questions...');
     
     // Check for existing session
     const saved = loadFromLocalStorage();
     
     if (saved && saved.sessionId && saved.testId === testId) {
+      // Hide loading spinner BEFORE showing the resume modal,
+      // otherwise the modal is invisible and startTest hangs forever.
+      if (loadingScreen) loadingScreen.style.display = 'none';
       const shouldResume = await showResumeTestModal();
+      if (loadingScreen) loadingScreen.style.display = 'flex';
       if (shouldResume) {
         await resumeTest(saved);
       } else {
@@ -4846,8 +5054,14 @@ async function startTest() {
       await initializeNewTest();
     }
     
-    // Hide start screen, show test container
+    if (loadingWatchdog) {
+      clearTimeout(loadingWatchdog);
+      loadingWatchdog = null;
+    }
+
+    // Hide loading screen, show test container
     document.getElementById('startScreen').style.display = 'none';
+    if (loadingScreen) loadingScreen.style.display = 'none';
     document.getElementById('testContainer').style.display = 'block';
     
     // Prevent accidental page leave
@@ -4855,13 +5069,11 @@ async function startTest() {
     
   } catch (error) {
     console.error('Failed to start test:', error);
-    document.getElementById('startScreen').innerHTML = `
-      <div class="start-content">
-        <h1 style="color:white;margin-bottom:16px">Error</h1>
-        <p style="color:#cbd5e1;font-size:18px;margin-bottom:32px">${error.message || 'Failed to load test'}</p>
-        <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
-      </div>
-    `;
+    if (loadingWatchdog) {
+      clearTimeout(loadingWatchdog);
+      loadingWatchdog = null;
+    }
+    showStartError(error.message || 'Failed to load test');
   }
 }
 
@@ -4912,6 +5124,7 @@ function isEnglishSubject() {
 
 async function initializeNewTest() {
   clearLocalStorage();
+  setLoadingStatus('Preparing session...');
   
   testState.sessionId = generateSessionId();
   // Derive a deterministic seed from testId + selected topics so every device
@@ -4931,6 +5144,8 @@ async function initializeNewTest() {
     TEST_CONFIG.questionCount,
     topicIds
   );
+
+  setLoadingStatus('Finalizing test layout...');
   
   // Shuffle questions if enabled
   if (TEST_CONFIG.shuffleQuestions) {
@@ -4955,6 +5170,7 @@ async function initializeNewTest() {
 
   // ── Build the frozen bilingual snapshot (once, permanent for this session) ──
   testState.snapshot = buildBilingualSnapshot(testState.questions);
+  setLoadingStatus('Preparing interface...');
   console.log('🌐 Bilingual snapshot built:', {
     en: testState.snapshot.en?.length + ' questions',
     hy: testState.snapshot.hy ? testState.snapshot.hy.length + ' questions' : 'no Armenian translations'
@@ -5119,7 +5335,21 @@ function initializeTimer() {
 // QUESTION RENDERING
 // ============================================
 
+// Debounced wrapper — when called rapidly (e.g. every answer click),
+// only the final call within 50ms actually runs the DOM update.
+let _navRenderTimer = null;
+const _renderQuestionNavigatorDebounced = (function() {
+  return function() {
+    if (_navRenderTimer) clearTimeout(_navRenderTimer);
+    _navRenderTimer = setTimeout(_renderQuestionNavigatorImpl, 50);
+  };
+})();
+
 function renderQuestionNavigator() {
+  _renderQuestionNavigatorDebounced();
+}
+
+function _renderQuestionNavigatorImpl() {
   const grid = document.getElementById('questionGrid');
   if (!grid) return;
   const totalQuestions = testState.questions.length;
@@ -5129,9 +5359,10 @@ function renderQuestionNavigator() {
     const frag = document.createDocumentFragment();
     for (let index = 0; index < totalQuestions; index += 1) {
       const btn = document.createElement('div');
-      btn.className = 'question-num';
+      btn.className = 'question-num unanswered';
       btn.textContent = index + 1;
       btn.dataset.index = String(index);
+      btn.dataset.computedState = 'unanswered';
       frag.appendChild(btn);
     }
     grid.innerHTML = '';
@@ -5150,19 +5381,23 @@ function renderQuestionNavigator() {
     const q = testState.questions[index];
     const btn = buttons[index];
     if (!btn) continue;
-    btn.className = 'question-num';
 
     const isAnswered = testState.answers[q.id];
     const answerStatus = testState.answerStatus[q.id];
     const isFlagged = testState.flagged.has(q.id);
     const isCurrent = index === testState.currentIndex;
 
-    if (isCurrent) btn.classList.add('current');
-    else if (isFlagged) btn.classList.add('flagged');
-    else if (answerStatus === 'incorrect') btn.classList.add('incorrect');
-    else if (answerStatus === 'correct') btn.classList.add('answered');
-    else if (isAnswered) btn.classList.add('answered');
-    else btn.classList.add('unanswered');
+    let targetState = 'unanswered';
+    if (isCurrent) targetState = 'current';
+    else if (isFlagged) targetState = 'flagged';
+    else if (answerStatus === 'incorrect') targetState = 'incorrect';
+    else if (answerStatus === 'correct') targetState = 'answered';
+    else if (isAnswered) targetState = 'answered';
+
+    if (btn.dataset.computedState !== targetState) {
+       btn.className = 'question-num ' + targetState;
+       btn.dataset.computedState = targetState;
+    }
   }
   
   // Scroll so the current question row is visible.
@@ -5170,7 +5405,7 @@ function renderQuestionNavigator() {
   //   - Row 1 (questions 1-5) → always scroll back to top (no offset)
   //   - Row 2+ → scroll down so that row is the FIRST visible row
   // This means: no movement for the first 5, then scroll by 1 row per row.
-  const currentBtn = grid.querySelector('.current');
+  const currentBtn = buttons[testState.currentIndex];
   if (currentBtn) {
     const COLS = 5; // must match grid-template-columns
     const currentRow = Math.floor(testState.currentIndex / COLS); // 0-based row
@@ -5179,7 +5414,10 @@ function renderQuestionNavigator() {
       grid.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
       // Scroll so the start of the current row is at the top of the grid
-      const btnHeight = currentBtn.offsetHeight;
+      if (!grid.dataset.btnHeight) {
+        grid.dataset.btnHeight = String(currentBtn.offsetHeight);
+      }
+      const btnHeight = Number(grid.dataset.btnHeight) || 36;
       const gap = 7; // must match CSS gap
       const rowTop = currentRow * (btnHeight + gap);
       grid.scrollTo({ top: rowTop, behavior: 'smooth' });
@@ -5686,68 +5924,94 @@ async function saveTestSession() {
     return;
   }
 
-  if (!db) {
-    if (!initializeSupabase()) {
-      showToast('Database not configured. Cannot save test.', 'error');
-      return;
-    }
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
   }
-  
-  try {
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.textContent = 'Saving...';
+
+  // Always persist to localStorage immediately — this is the guaranteed fallback
+  saveToLocalStorage();
+
+  // file:// origin: Supabase is blocked by TLS/CORS — skip cloud entirely
+  if (window.location.protocol === 'file:') {
+    closeSaveModal();
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Save & Exit'; }
+    document.getElementById('testContainer').style.display = 'none';
+    document.getElementById('startScreen').style.display = 'flex';
+    showToast('Saved locally. Open via localhost:8000 to enable cloud sync.', 'warning');
+    return;
+  }
+
+  // Helper: attempt the Supabase cloud save with a hard timeout
+  const trySaveToCloud = async () => {
+    if (!db) {
+      if (!initializeSupabase()) throw new Error('db_unavailable');
     }
+
+    // Always refresh the owner header before writing — ensures RLS passes
+    // even if the email wasn't available when the client was first built.
+    refreshSupabaseOwner();
+
     const answeredCount = Object.keys(testState.answers).length;
     const totalQuestions = testState.questions.length;
     const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
-    
-    // Create session object for Supabase
+
     const sessionData = {
       ...(testState.savedSessionDbId ? { id: testState.savedSessionDbId } : {}),
       session_name: sessionName,
-      student_id: getOwnerId(),  // always the authenticated owner, never 'guest'
+      student_id: getOwnerId(),
       test_id: TEST_CONFIG.testId,
       session_id: testState.sessionId,
       current_question_index: testState.currentIndex,
       answers: testState.answers,
-      answer_status: testState.answerStatus, // Persist correct/incorrect state so colours survive resume
+      answer_status: testState.answerStatus,
       flagged_questions: Array.from(testState.flagged),
-      questions: testState.questions,
-      test_config: TEST_CONFIG,
-      start_time: new Date(testState.startTime).toISOString(), // Convert timestamp to ISO string
+      // ── SLIM PAYLOAD: omit questions + snapshots from cloud saves ──────
+      // questions are reloaded from test_questions on resume (they're in the DB).
+      // snapshots are rebuilt from questions in buildBilingualSnapshot().
+      // Sending them here could be 500KB+ and causes timeouts / row-size errors.
+      questions: testState.questions.map(q => ({ id: q.id, topic_id: q.topic_id || null })),
+      test_config: {
+        testId: TEST_CONFIG.testId,
+        selectedTopicIds: TEST_CONFIG.selectedTopicIds || [],
+        selectedTopicNames: TEST_CONFIG.selectedTopicNames || [],
+        categoryFilter: TEST_CONFIG.categoryFilter || null,
+        questionCount: TEST_CONFIG.questionCount || null,
+        shuffleQuestions: TEST_CONFIG.shuffleQuestions,
+        shuffleOptions: TEST_CONFIG.shuffleOptions
+      },
+      start_time: new Date(testState.startTime).toISOString(),
       total_questions: totalQuestions,
       answered_questions: answeredCount,
       progress_percent: progressPercent,
-      // Persist the frozen bilingual snapshot for seamless resume
-      session_snapshot_en: testState.snapshot.en || null,
-      session_snapshot_hy: testState.snapshot.hy || null
+      session_snapshot_en: null,
+      session_snapshot_hy: null
     };
-    
-    const { data, error } = await db
+
+    // Raise timeout to 12s — Supabase cold-starts can take 3–5s
+    const upsertPromise = db
       .from('saved_test_sessions')
       .upsert([sessionData], { onConflict: 'id' })
       .select('id')
       .single();
-    
-    if (error) {
-      console.error('Error saving session:', error);
-      if (String(error.message || '').includes('saved_test_sessions') || error.code === '42P01') {
-        showToast('Missing table. Run ADD-SAVED-TEST-SESSIONS-TABLE.sql in Supabase.', 'error');
-      } else {
-        showToast(`Failed to save test session: ${error.message}`, 'error');
-      }
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.textContent = 'Save & Exit';
-      }
-      return;
-    }
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('network_timeout')), 12000)
+    );
+
+    const { data, error } = await Promise.race([upsertPromise, timeoutPromise]);
+
+    if (error) throw error;
+    return data;
+  };
+
+  try {
+    const data = await trySaveToCloud();
 
     if (data && data.id) {
       testState.savedSessionDbId = data.id;
     }
-    
+
     closeSaveModal();
     showToast('Test saved successfully! You can resume it anytime.', 'success');
     
@@ -5761,8 +6025,31 @@ async function saveTestSession() {
     }
     
   } catch (error) {
-    console.error('Error saving test session:', error);
-    showToast('Failed to save test session. Please try again.', 'error');
+    const msg = String(error.message || '');
+    const isNetworkError = isNetworkFailure(error) || error.message === 'db_unavailable';
+    const isMissingTable = msg.includes('saved_test_sessions') || error.code === '42P01';
+    const isRlsBlocked = error.code === '42501' || msg.toLowerCase().includes('row-level security');
+    const ownerId = getOwnerId();
+
+    if (isNetworkError) {
+      // Session is already in localStorage — just close and report
+      console.warn('Cloud save unavailable (network/TLS). Session preserved in localStorage.');
+      closeSaveModal();
+      showToast('Saved locally — cloud sync unavailable. Your progress is safe.', 'warning');
+    } else if (isRlsBlocked) {
+      console.error('RLS blocked save for owner:', ownerId, error);
+      closeSaveModal();
+      showToast(`Cloud save blocked (RLS). Owner: ${ownerId}. Please log out/in and try again.`, 'error');
+    } else if (isMissingTable) {
+      console.error('saved_test_sessions table missing:', error);
+      closeSaveModal();
+      showToast('Saved locally. (Cloud table missing — run ADD-SAVED-TEST-SESSIONS-TABLE.sql)', 'warning');
+    } else {
+      console.error('Error saving test session:', error);
+      showToast('Cloud save failed. Your progress was saved locally.', 'warning');
+      closeSaveModal();
+    }
+
     if (saveBtn) {
       saveBtn.disabled = false;
       saveBtn.textContent = 'Save & Exit';
@@ -5779,13 +6066,29 @@ async function loadSavedSessions() {
       }
     }
 
-    const { data: savedSessions, error } = await db
-      .from('saved_test_sessions')
-      .select('*')
-      .eq('student_id', getOwnerId())
-      .order('created_at', { ascending: false });
+    // Refresh owner header so RLS recognises this user
+    refreshSupabaseOwner();
+
+    const { data: savedSessions, error } = await withTimeout(
+      db
+        .from('saved_test_sessions')
+        .select('*')
+        .eq('student_id', getOwnerId())
+        .order('created_at', { ascending: false }),
+      6000,
+      'Loading saved sessions timed out'
+    );
     
     if (error) {
+      if (isNetworkFailure(error)) {
+        console.warn('Saved sessions unavailable (network/TLS). Skipping cloud load.');
+        return;
+      }
+      const isRlsBlocked = error.code === '42501' || String(error.message || '').toLowerCase().includes('row-level security');
+      if (isRlsBlocked) {
+        showToast(`Saved sessions blocked (RLS). Owner: ${getOwnerId()}`, 'error');
+        return;
+      }
       console.error('Error loading sessions:', error);
       if (String(error.message || '').includes('saved_test_sessions') || error.code === '42P01') {
         showToast('Missing table. Run ADD-SAVED-TEST-SESSIONS-TABLE.sql in Supabase.', 'error');
@@ -6032,6 +6335,8 @@ async function loadSavedSession(sessionId) {
     
     // Show test container
     document.getElementById('startScreen').style.display = 'none';
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) loadingScreen.style.display = 'none';
     document.getElementById('testContainer').style.display = 'block';
     
     // Render question
@@ -6063,9 +6368,7 @@ function showDeleteConfirm(message) {
     overlay.style.cssText = [
       'position:fixed','inset:0','z-index:99999',
       'display:flex','align-items:center','justify-content:center',
-      'background:rgba(2,6,23,0.75)',
-      'backdrop-filter:blur(4px)',
-      '-webkit-backdrop-filter:blur(4px)',
+      'background:rgba(2,6,23,0.85)',
       'animation:_dcFadeIn 0.15s ease',
     ].join(';');
 
@@ -6394,7 +6697,10 @@ async function resumeOngoingTest() {
     }
     
     // Show loading
-    document.getElementById('startScreen').innerHTML = `
+    document.getElementById('startScreen').style.display = 'none';
+    const loadingScreen = document.getElementById('loadingScreen');
+    loadingScreen.style.display = 'flex';
+    loadingScreen.innerHTML = `
       <div class="start-content">
         <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
         <p style="color:#cbd5e1;font-size:18px">Resuming your test...</p>
@@ -6410,8 +6716,8 @@ async function resumeOngoingTest() {
     console.log('🔄 Restoring test state...');
     await resumeTest(saved);
     
-    // Hide start screen, show test container
-    document.getElementById('startScreen').style.display = 'none';
+    // Hide loading screen, show test container
+    loadingScreen.style.display = 'none';
     document.getElementById('testContainer').style.display = 'block';
     
     // Prevent accidental page leave
@@ -6424,15 +6730,19 @@ async function resumeOngoingTest() {
     console.error('❌ Failed to resume test:', error);
     showToast('Failed to resume test: ' + error.message, 'error');
     
-    // Show error on start screen
-    document.getElementById('startScreen').innerHTML = `
-      <div class="start-content">
-        <h1 style="color:white;margin-bottom:16px">Error</h1>
-        <p style="color:#cbd5e1;font-size:18px;margin-bottom:32px">${error.message || 'Failed to resume test'}</p>
-        <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
-      </div>
-    `;
-    document.getElementById('startScreen').style.display = 'block';
+    // Show error on loading screen
+    const loadingScreen = document.getElementById('loadingScreen');
+    if (loadingScreen) {
+      loadingScreen.style.display = 'flex';
+      loadingScreen.innerHTML = `
+        <div class="start-content">
+          <h1 style="color:white;margin-bottom:16px">Error</h1>
+          <p style="color:#cbd5e1;font-size:18px;margin-bottom:32px">${error.message || 'Failed to resume test'}</p>
+          <button class="btn btn-primary" onclick="location.reload()">Try Again</button>
+        </div>
+      `;
+    }
+    document.getElementById('startScreen').style.display = 'none';
     document.getElementById('testContainer').style.display = 'none';
   }
 }
@@ -6610,6 +6920,7 @@ function showReview() {
   
   const container = document.getElementById('reviewContainer');
   container.innerHTML = '<h2>Answer Review</h2>';
+  const frag = document.createDocumentFragment();
   
   window.testResults.details.forEach((detail, index) => {
     const q = detail.question;
@@ -7467,14 +7778,9 @@ function escapeHtml(str) {
 // INITIALIZATION
 // ============================================
 
-// Load saved sessions on page load
 document.addEventListener('DOMContentLoaded', () => {
   // ── Auth gate & role detection ─────────────────────────────────────────
-  // initSessionRole() redirects to login.html if not logged in.
-  // Must run before any other UI setup.
   initSessionRole();
-
-  // After auth passes, show/hide teacher-only controls
   applySessionRole();
 
   // Initialize Supabase first
@@ -7488,8 +7794,16 @@ document.addEventListener('DOMContentLoaded', () => {
     console.warn('⚠️ applyAcnshLogo() not available');
   }
   
-  loadSavedSessions();
   initColdCallPicker();
+
+  // Defer loadSavedSessions until the browser is idle — it's not needed
+  // before the user can see and interact with the page, so don't block
+  // the initial render with a Supabase round-trip.
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => loadSavedSessions(), { timeout: 3000 });
+  } else {
+    setTimeout(() => loadSavedSessions(), 800);
+  }
 });
 </script>
 
