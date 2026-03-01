@@ -242,6 +242,7 @@
         
         if (student.monthStatuses && student.monthStatuses[val]) {
           const st = student.monthStatuses[val];
+          console.log(`[PaymentReminder Debug] Student: ${student.name}, Month: ${val}, Status: ${st}`);
           if (st === 'unpaid') b.classList.add('unpaid-glow');
           else if (st === 'partial') b.classList.add('partial-glow');
           else if (st === 'paid') b.classList.add('paid-glow');
