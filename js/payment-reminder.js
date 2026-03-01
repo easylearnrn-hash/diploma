@@ -38,17 +38,18 @@
                     'July','August','September','October','November','December'];
     const items = [];
     if (tags.has('Enrollment Fee')) items.push({ label: 'Enrollment Fee', key: 'Enrollment Fee' });
-    if (tags.has('This Month')) items.push({ label: "Current Month's Tuition", key: null });
-    if (tags.has('Next Month')) items.push({ label: "Upcoming Month's Tuition", key: null });
+    if (tags.has('This Month')) items.push({ label: "Current Month's Tuition", key: null, neutral: true });
+    if (tags.has('Next Month')) items.push({ label: "Upcoming Month's Tuition", key: null, neutral: true });
     months.filter(m => tags.has(m)).forEach(m => items.push({ label: `${m} Tuition`, key: m }));
     if (items.length < 1) return '';
 
     return `
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:14px 0 22px;border-collapse:collapse;width:100%;">
-        ${items.map(({ label, key }) => {
-          const st = (key && student && student.monthStatuses) ? (student.monthStatuses[key] || 'unpaid') : 'unpaid';
+        ${items.map(({ label, key, neutral }) => {
+          const st = (!neutral && key && student && student.monthStatuses) ? (student.monthStatuses[key] || 'unpaid') : (neutral ? 'neutral' : 'unpaid');
           const isPaid    = st === 'paid';
           const isPartial = st === 'partial';
+          const isNeutral = st === 'neutral';
 
           // Calculate % remaining for partial items
           let pctLabel = '';
@@ -61,13 +62,13 @@
             }
           }
 
-          const bg      = isPaid ? '#f0fdf4' : isPartial ? '#fffbeb' : '#fef5f5';
-          const border  = isPaid ? '#bbf7d0' : isPartial ? '#fde68a' : '#fecaca';
-          const dotClr  = isPaid ? '#16a34a' : isPartial ? '#d97706' : '#dc2626';
-          const textClr = isPaid ? '#14532d' : isPartial ? '#78350f'  : '#991b1b';
-          const badgeClr= isPaid ? '#22c55e' : isPartial ? '#f59e0b'  : '#ef4444';
-          const badge   = isPaid ? 'PAID'    : isPartial ? `PARTIAL${pctLabel}` : 'UNPAID';
-          const shadow  = isPaid ? 'rgba(34,197,94,0.08)' : 'rgba(220,38,38,0.08)';
+          const bg      = isPaid ? '#f0fdf4' : isPartial ? '#fffbeb' : isNeutral ? '#f8f5ef' : '#fef5f5';
+          const border  = isPaid ? '#bbf7d0' : isPartial ? '#fde68a' : isNeutral ? 'rgba(201,168,76,0.35)' : '#fecaca';
+          const dotClr  = isPaid ? '#16a34a' : isPartial ? '#d97706' : isNeutral ? '#c9a84c' : '#dc2626';
+          const textClr = isPaid ? '#14532d' : isPartial ? '#78350f'  : isNeutral ? '#5a4e3a' : '#991b1b';
+          const badgeClr= isPaid ? '#22c55e' : isPartial ? '#f59e0b'  : isNeutral ? '#c9a84c' : '#ef4444';
+          const badge   = isPaid ? 'PAID'    : isPartial ? `PARTIAL${pctLabel}` : isNeutral ? 'OUTSTANDING' : 'UNPAID';
+          const shadow  = isPaid ? 'rgba(34,197,94,0.08)' : isNeutral ? 'rgba(201,168,76,0.06)' : 'rgba(220,38,38,0.08)';
           return `
         <tr>
           <td style="padding:10px 14px;background:${bg};border:1px solid ${border};border-radius:6px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:600;color:${textClr};letter-spacing:0.01em;box-shadow:0 0 10px ${shadow};">
@@ -98,8 +99,10 @@
     if (tags.has('Enrollment Fee')) selectedKeys.push('Enrollment Fee');
     months.filter(m => tags.has(m)).forEach(m => selectedKeys.push(m));
     const statuses = selectedKeys.map(k => (student && student.monthStatuses && student.monthStatuses[k]) || 'unpaid');
-    const allPaid    = statuses.length > 0 && statuses.every(s => s === 'paid');
-    const anyUnpaid  = statuses.some(s => s === 'unpaid' || s === 'partial');
+    // This Month / Next Month always count as outstanding (we don't know their status)
+    const hasGenericMonth = tags.has('This Month') || tags.has('Next Month');
+    const allPaid    = statuses.length > 0 && !hasGenericMonth && statuses.every(s => s === 'paid');
+    const anyUnpaid  = hasGenericMonth || statuses.some(s => s === 'unpaid' || s === 'partial');
     const mixedPaid  = statuses.some(s => s === 'paid') && anyUnpaid;
 
     const customMsgHtml = customMsg
@@ -212,7 +215,9 @@
     `.trim();
 
     if (typeof window.EMAIL_HTML_TEMPLATE !== 'undefined') {
-      const emailTitle = tags.size > 1 ? 'Payment Reminder — Outstanding Balances' : 'Payment Reminder';
+      const emailTitle = allPaid
+        ? 'Payment Confirmation'
+        : (tags.size > 1 ? 'Payment Reminder — Outstanding Balances' : 'Payment Reminder');
       const html = window.EMAIL_HTML_TEMPLATE
         .replace(/\{\{SUBJECT\}\}/g, subject)
         .replace(/\{\{EMAIL_TITLE\}\}/g, emailTitle)
@@ -335,7 +340,6 @@
         
         if (student.monthStatuses && student.monthStatuses[val]) {
           const st = student.monthStatuses[val];
-          console.log(`[PaymentReminder Debug] Student: ${student.name}, Month: ${val}, Status: ${st}`);
           if (st === 'unpaid') b.classList.add('unpaid-glow');
           else if (st === 'partial') b.classList.add('partial-glow');
           else if (st === 'paid') b.classList.add('paid-glow');
