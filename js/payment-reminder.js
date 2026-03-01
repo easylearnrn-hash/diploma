@@ -103,7 +103,24 @@
     const mixedPaid  = statuses.some(s => s === 'paid') && anyUnpaid;
 
     const customMsgHtml = customMsg
-      ? `<p style="margin:0 0 16px;padding:12px 16px;background:#fef3c7;border-left:3px solid #f59e0b;border-radius:0 8px 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#92400e;">${escHtml(customMsg).replace(/\n/g, '<br>')}</p>`
+      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border-collapse:collapse;width:100%;">
+          <tr>
+            <td style="padding:0 0 0 3px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;width:100%;background:#f8f5ef;border:1px solid rgba(201,168,76,0.35);border-left:3px solid #c9a84c;border-radius:0 6px 6px 0;">
+                <tr>
+                  <td style="padding:4px 14px 0;">
+                    <div style="font-family:Georgia,'Times New Roman',serif;font-size:9.5px;font-weight:700;color:#c9a84c;letter-spacing:0.12em;text-transform:uppercase;">Note from the Billing Office</div>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:5px 14px 12px;">
+                    <div style="font-family:Arial,Helvetica,sans-serif;font-size:13.5px;line-height:1.65;color:#3a3020;">${escHtml(customMsg).replace(/\n/g, '<br>')}</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>`
       : '';
 
     const multiItems = tags.size > 1;
