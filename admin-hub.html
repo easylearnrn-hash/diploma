@@ -7985,6 +7985,75 @@
      */
     function buildNotesFromStorage() {
       const NOTES_STORAGE_KEY = 'acnhs_topics';
+
+      // Canonical seed data — mirrors what notes.html seeds on first visit.
+      // Keyed by topic title → array of {title, htmlFile}.
+      const SEED = {
+        'Fundamentals': [
+          { title: 'Fundamentals of Nursing - NCLEX Review',           htmlFile: 'fundamentals-nursing-nclex.html' },
+          { title: "Nurse's Role in Informed Consent",                  htmlFile: 'informed-consent-nursing.html' },
+          { title: 'Scope of Practice',                                 htmlFile: 'scope-of-practice-nursing.html' },
+          { title: 'Delegation - NCLEX Comprehensive Review',           htmlFile: 'delegation-nursing-nclex.html' },
+          { title: 'Family Dynamics',                                   htmlFile: 'family-dynamics-nursing.html' },
+          { title: "Maslow's Hierarchy of Needs",                       htmlFile: 'maslows-hierarchy-nursing.html' },
+          { title: 'SBAR Communication',                                htmlFile: 'sbar-communication-nursing.html' },
+          { title: 'Precautions',                                       htmlFile: 'precautions-nursing.html' },
+          { title: 'Vital Signs Interpretation',                        htmlFile: 'vital-signs-interpretation-nursing.html' },
+          { title: 'Physical Exam & Bowel Sounds',                      htmlFile: 'physical-exam-bowel-sounds-nursing.html' },
+          { title: 'Physical Assessment',                               htmlFile: 'physical-assessment-nursing.html' },
+          { title: 'Head-to-Toe Assessment',                            htmlFile: 'head-to-toe-assessment-nursing.html' },
+          { title: 'Nursing Diagnosis',                                 htmlFile: 'nursing-diagnosis-nclex.html' },
+          { title: 'Documentation & Informatics',                       htmlFile: 'documentation-informatics-nursing.html' },
+          { title: 'Client Positioning',                                htmlFile: 'client-positioning-nursing.html' },
+          { title: 'Care of a Client With a Tube',                      htmlFile: 'tube-care-nursing.html' },
+          { title: 'Administration of Blood Products',                  htmlFile: 'blood-products-administration-nursing.html' },
+          { title: 'Amputation',                                        htmlFile: 'amputation-nursing.html' },
+          { title: 'Nursing Calculations',                              htmlFile: 'nursing-calculations-nclex.html' },
+          { title: 'BMI Calculation',                                   htmlFile: 'bmi-calculation-nursing.html' },
+          { title: 'Complementary and Alternative Medicine (CAM)',       htmlFile: 'complementary-alternative-medicine-nursing.html' },
+          { title: 'Emergency Triage Tag Colors (MCI)',                  htmlFile: 'emergency-triage-tag-colors-nursing.html' },
+          { title: 'Hygiene & Grooming (Fundamentals)',                  htmlFile: 'hygiene-grooming-nursing-nclex.html' },
+          { title: 'Elimination & Intake and Output (I&O)',              htmlFile: 'elimination-intake-output-nursing.html' },
+          { title: 'Nutrition & Feeding',                               htmlFile: 'nutrition-feeding-nursing-nclex.html' },
+          { title: 'Oxygenation Basics',                                htmlFile: 'oxygenation-basics-nursing-nclex.html' },
+          { title: 'Pain Assessment',                                   htmlFile: 'pain-assessment-nursing-nclex.html' },
+          { title: 'Skin Integrity & Pressure Injuries',                htmlFile: 'skin-integrity-pressure-injuries-nclex.html' },
+          { title: 'Sleep & Sensory Needs',                             htmlFile: 'sleep-sensory-needs-nclex.html' },
+        ],
+        'Cardiovascular System': [
+          { title: 'Heart Structure & Circulation',                     htmlFile: 'Cardiovascular System/Heart Structure & Circulation.html' },
+          { title: 'Vital Signs and Organ Prioritization',              htmlFile: 'Cardiovascular System/Vital Signs and Organ Prioritization.html' },
+          { title: 'Pulses',                                            htmlFile: 'Cardiovascular System/❤️ Pulses.html' },
+          { title: 'Hypertension, Hypotension, CO & SV',               htmlFile: 'Cardiovascular System/❤️ Hyper-Hypotension, CO & SV.html' },
+          { title: 'Heart Attack, Heart Failure & Cardiac Arrest',      htmlFile: 'Cardiovascular System/❤️‍🩹 Heart Attack _ 💔 Heart Failure _ 🫀⚡Cardiac Arrest.docx.html' },
+          { title: 'Right & Left-Sided Heart Failure',                  htmlFile: 'Cardiovascular System/Right & Left-Sided Heart Failure.html' },
+          { title: 'Ischemic Heart Disease (IHD)',                      htmlFile: 'Cardiovascular System/Ischemic Heart Disease IHD.html' },
+          { title: 'EKG / ECG',                                         htmlFile: 'Cardiovascular System/EKG.html' },
+          { title: 'Pacemakers & ICDs',                                 htmlFile: 'Cardiovascular System/⚡ Pacemakers & ICDs.html' },
+          { title: 'CPR (Cardiopulmonary Resuscitation)',               htmlFile: 'Cardiovascular System/🫀 CPR (Cardiopulmonary Resuscitation).html' },
+          { title: 'CABG & PCI',                                        htmlFile: 'Cardiovascular System/🫀 CABG & PCI.html' },
+          { title: 'Cardiomyopathy',                                    htmlFile: 'Cardiovascular System/💔Cardiomyopathy.html' },
+          { title: 'Pericarditis',                                      htmlFile: 'Cardiovascular System/🫀 Pericarditis .html' },
+          { title: 'Infective Endocarditis',                            htmlFile: 'Cardiovascular System/🦠❤️ Infective Endocarditis.html' },
+          { title: 'Cardiac Tamponade',                                 htmlFile: 'Cardiovascular System/🚨 Cardiac Tamponade.html' },
+          { title: 'Shock Management & Emergency Care',                 htmlFile: 'Cardiovascular System/4. 🚨 Shock Management & Emergency Care.html' },
+          { title: 'PVD, PAD & DVT',                                   htmlFile: 'Cardiovascular System/🧊 PVD, 🦵 PAD, 🩸 DVT.html' },
+          { title: "Buerger's Disease",                                 htmlFile: "Cardiovascular System/🩸 Buerger's Disease.html" },
+          { title: 'Blood, Vessels & Lymphs',                           htmlFile: 'Cardiovascular System/🩸 Blood, Vessels & Lymphs.html' },
+          { title: 'IV Gauges and Their Uses',                          htmlFile: 'Cardiovascular System/💉 IV Gauges and Their Uses.html' },
+          { title: 'Anticoagulants',                                    htmlFile: 'Cardiovascular System/💉ANTICOAGULANTS.html' },
+          { title: 'Troponin, BNP & Cardiac Biomarkers',               htmlFile: 'Cardiovascular System/🧪 Troponin, BNP, CK-MM, CK-MB, CK-BB, and BUN.html' },
+          { title: 'Cardiovascular Medications',                        htmlFile: 'Cardiovascular System/🫀💊 Cardiovascular Medications.html' },
+        ],
+        'Medical Terminology': [
+          { title: 'Medical Terminology', htmlFile: 'medical-terminology.html' },
+        ],
+        'Neurology': [
+          { title: 'Scleroderma (Systemic Sclerosis)', htmlFile: 'Neurology/Scleroderma.html' },
+        ],
+      };
+
+      // Read from storage
       let topics = [];
       try {
         topics = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
@@ -7992,10 +8061,39 @@
         console.warn('admin-hub: failed to parse acnhs_topics from localStorage', e);
       }
 
+      // If storage is empty or missing topics, seed it so notes always show
+      // even if the user has never visited notes.html.
+      let storageDirty = false;
+      Object.entries(SEED).forEach(([topicTitle, seedNotes]) => {
+        let topic = topics.find(t => t.title === topicTitle);
+        if (!topic) {
+          topic = { id: 'seed_' + topicTitle.replace(/\s+/g,'_'), title: topicTitle, notes: [], created: Date.now() };
+          topics.push(topic);
+          storageDirty = true;
+        }
+        seedNotes.forEach((entry, idx) => {
+          if (!topic.notes.some(n => n.htmlFile === entry.htmlFile)) {
+            topic.notes.push({
+              id: 'seed_' + topicTitle.replace(/\s+/g,'_') + '_' + idx,
+              title: entry.title,
+              content: '',
+              created: new Date().toISOString(),
+              type: 'html',
+              htmlFile: entry.htmlFile
+            });
+            storageDirty = true;
+          }
+        });
+      });
+      if (storageDirty) {
+        try { localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(topics)); } catch(e) {}
+      }
+
+      // Flatten topics → notes in the shape admin-hub expects
       const notes = [];
       topics.forEach(topic => {
         const topicTitle = topic.title || 'Uncategorized';
-        const isModule = topicTitle === 'Medical Terminology'; // keep Medical Terminology as isModule
+        const isModule = topicTitle === 'Medical Terminology';
         (topic.notes || []).forEach(note => {
           notes.push({
             id:       note.id || ('dyn_' + Math.random().toString(36).slice(2)),
