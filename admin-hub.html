@@ -8071,11 +8071,14 @@
       // the canonical explicit IDs (note_1, note_cv_1, etc.) so Supabase rows match.
       let storageDirty = false;
 
-      // Build a lookup: htmlFile → canonical id, for migration
-      const canonicalIdByFile = {};
-      Object.entries(SEED).forEach(([, seedNotes]) => {
-        seedNotes.forEach(entry => {
-          if (entry.id && entry.htmlFile) canonicalIdByFile[entry.htmlFile] = entry.id;
+      // Build a flat lookup of ALL notes across ALL topics by htmlFile and by id
+      // so we never re-seed a note that was moved to a different category by admin
+      const allNotesByFile = {};
+      const allNotesById   = {};
+      topics.forEach(topic => {
+        (topic.notes || []).forEach(note => {
+          if (note.htmlFile) allNotesByFile[note.htmlFile] = note;
+          if (note.id)       allNotesById[note.id]         = note;
         });
       });
 
@@ -8087,23 +8090,26 @@
           storageDirty = true;
         }
         seedNotes.forEach(entry => {
-          const existing = topic.notes.find(n => n.htmlFile === entry.htmlFile);
-          if (!existing) {
-            // Note not in storage yet — add with canonical id
-            topic.notes.push({
-              id:      entry.id,
-              title:   entry.title,
-              content: '',
-              created: new Date().toISOString(),
-              type:    'html',
-              htmlFile: entry.htmlFile
-            });
-            storageDirty = true;
-          } else if (entry.id && existing.id !== entry.id) {
-            // Migrate stale auto-generated id → canonical id
-            existing.id = entry.id;
-            storageDirty = true;
+          // If note already exists ANYWHERE, just migrate its id if stale — never move it back
+          const globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
+          if (globalExisting) {
+            if (entry.id && globalExisting.id !== entry.id) {
+              globalExisting.id = entry.id;
+              storageDirty = true;
+            }
+            return;
           }
+          // Note doesn't exist anywhere — add it to its original seed topic
+          topic.notes.push({
+            id:       entry.id,
+            title:    entry.title,
+            content:  '',
+            created:  new Date().toISOString(),
+            type:     'html',
+            htmlFile: entry.htmlFile
+          });
+          allNotesByFile[entry.htmlFile] = topic.notes[topic.notes.length - 1];
+          storageDirty = true;
         });
       });
       if (storageDirty) {
