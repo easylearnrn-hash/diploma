@@ -3990,6 +3990,29 @@
 
       let dirty = false;
 
+      // ── ONE-TIME MIGRATION: rename stale 'Neurology' topic → 'Autoimmune Diseases' ──
+      // Old localStorage may have a 'Neurology' topic from before the rename.
+      // Move all its notes into 'Autoimmune Diseases' (deduplicating by htmlFile),
+      // then delete the empty Neurology shell so it never shows in the hub again.
+      {
+        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
+        if (neuroIdx !== -1) {
+          const neuroTopic = topics[neuroIdx];
+          let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
+          if (!autoimmune) {
+            autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
+            topics.push(autoimmune);
+          }
+          (neuroTopic.notes || []).forEach(note => {
+            const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
+            if (!alreadyThere) autoimmune.notes.push(note);
+          });
+          topics.splice(neuroIdx, 1); // remove Neurology topic entirely
+          dirty = true;
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       // Load the permanently-deleted note registry so the seed loop never re-adds them
       let deletedNotes = {};
       try { deletedNotes = JSON.parse(localStorage.getItem('acnhs_deleted_notes') || '{}'); } catch(e) {}

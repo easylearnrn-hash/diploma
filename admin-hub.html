@@ -8065,6 +8065,26 @@
         console.warn('admin-hub: failed to parse acnhs_topics from localStorage', e);
       }
 
+      // ── ONE-TIME MIGRATION: rename stale 'Neurology' topic → 'Autoimmune Diseases' ──
+      {
+        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
+        if (neuroIdx !== -1) {
+          const neuroTopic = topics[neuroIdx];
+          let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
+          if (!autoimmune) {
+            autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
+            topics.push(autoimmune);
+          }
+          (neuroTopic.notes || []).forEach(note => {
+            const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
+            if (!alreadyThere) autoimmune.notes.push(note);
+          });
+          topics.splice(neuroIdx, 1);
+          try { localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(topics)); } catch(e) {}
+        }
+      }
+      // ─────────────────────────────────────────────────────────────────────────
+
       // Load the permanently-deleted note registry so the seed loop never re-adds them
       let deletedNotes = {};
       try { deletedNotes = JSON.parse(localStorage.getItem('acnhs_deleted_notes') || '{}'); } catch(e) {}
