@@ -63,8 +63,7 @@ const VideoLibrary = {
         src="${embedUrl}"
         style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;"
         allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
-        allowfullscreen
-        sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
+        sandbox="allow-scripts allow-same-origin allow-presentation"
         loading="lazy"
       ></iframe>
       <div class="video-open-blocker" aria-hidden="true"></div>
