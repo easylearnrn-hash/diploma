@@ -7975,48 +7975,72 @@
     let ALL_NOTES = [];
     let CURRENT_CATEGORY_FILTER = 'All';
 
-    // EXACT NOTES from notes.html - Fundamentals category only (29 notes)
-    const HARDCODED_NOTES = [
-      { id: 'note_1', title: 'Fundamentals of Nursing', htmlFile: 'fundamentals-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_2', title: "Nurse's Role in Informed Consent", htmlFile: 'informed-consent-nursing.html', category: 'Fundamentals' },
-      { id: 'note_3', title: 'Scope of Practice', htmlFile: 'scope-of-practice-nursing.html', category: 'Fundamentals' },
-      { id: 'note_4', title: 'Delegation', htmlFile: 'delegation-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_5', title: 'Family Dynamics', htmlFile: 'family-dynamics-nursing.html', category: 'Fundamentals' },
-      { id: 'note_6', title: "Maslow's Hierarchy of Needs", htmlFile: 'maslows-hierarchy-nursing.html', category: 'Fundamentals' },
-      { id: 'note_7', title: 'SBAR Communication', htmlFile: 'sbar-communication-nursing.html', category: 'Fundamentals' },
-      { id: 'note_8', title: 'Precautions', htmlFile: 'precautions-nursing.html', category: 'Fundamentals' },
-      { id: 'note_9', title: 'Vital Signs Interpretation', htmlFile: 'vital-signs-interpretation-nursing.html', category: 'Fundamentals' },
-      { id: 'note_10', title: 'Physical Exam & Bowel Sounds', htmlFile: 'physical-exam-bowel-sounds-nursing.html', category: 'Fundamentals' },
-      { id: 'note_11', title: 'Physical Assessment', htmlFile: 'physical-assessment-nursing.html', category: 'Fundamentals' },
-      { id: 'note_12', title: 'Head-to-Toe Assessment', htmlFile: 'head-to-toe-assessment-nursing.html', category: 'Fundamentals' },
-      { id: 'note_13', title: 'Nursing Diagnosis', htmlFile: 'nursing-diagnosis-nclex.html', category: 'Fundamentals' },
-      { id: 'note_14', title: 'Documentation & Informatics', htmlFile: 'documentation-informatics-nursing.html', category: 'Fundamentals' },
-      { id: 'note_15', title: 'Client Positioning', htmlFile: 'client-positioning-nursing.html', category: 'Fundamentals' },
-      { id: 'note_16', title: 'Care of a Client With a Tube', htmlFile: 'tube-care-nursing.html', category: 'Fundamentals' },
-      { id: 'note_17', title: 'Administration of Blood Products', htmlFile: 'blood-products-administration-nursing.html', category: 'Fundamentals' },
-      { id: 'note_18', title: 'Amputation', htmlFile: 'amputation-nursing.html', category: 'Fundamentals' },
-      { id: 'note_19', title: 'Nursing Calculations', htmlFile: 'nursing-calculations-nclex.html', category: 'Fundamentals' },
-      { id: 'note_20', title: 'BMI Calculation', htmlFile: 'bmi-calculation-nursing.html', category: 'Fundamentals' },
-      { id: 'note_21', title: 'Complementary and Alternative Medicine (CAM)', htmlFile: 'complementary-alternative-medicine-nursing.html', category: 'Fundamentals' },
-      { id: 'note_22', title: 'Emergency Triage Tag Colors (MCI)', htmlFile: 'emergency-triage-tag-colors-nursing.html', category: 'Fundamentals' },
-      { id: 'note_23', title: 'Hygiene & Grooming', htmlFile: 'hygiene-grooming-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_24', title: 'Elimination & Intake and Output (I&O)', htmlFile: 'elimination-intake-output-nursing.html', category: 'Fundamentals' },
-      { id: 'note_25', title: 'Nutrition & Feeding', htmlFile: 'nutrition-feeding-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_26', title: 'Oxygenation Basics', htmlFile: 'oxygenation-basics-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_27', title: 'Pain Assessment', htmlFile: 'pain-assessment-nursing-nclex.html', category: 'Fundamentals' },
-      { id: 'note_28', title: 'Skin Integrity & Pressure Injuries', htmlFile: 'skin-integrity-pressure-injuries-nclex.html', category: 'Fundamentals' },
-      { id: 'note_29', title: 'Sleep & Sensory Needs', htmlFile: 'sleep-sensory-needs-nclex.html', category: 'Fundamentals' },
-      // ── Medical Terminology ──
-      { id: 'note_mt_1', title: 'Medical Terminology', htmlFile: 'medical-terminology.html', category: 'Medical Terminology', isModule: true }
-    ];
+    /**
+     * Reads the same localStorage key used by notes.html ('acnhs_topics')
+     * and flattens all topics + their notes into the same shape admin-hub
+     * expects: { id, title, htmlFile, category, isModule? }
+     *
+     * This means whatever appears in notes.html automatically appears here —
+     * no manual HARDCODED_NOTES list to maintain.
+     */
+    function buildNotesFromStorage() {
+      const NOTES_STORAGE_KEY = 'acnhs_topics';
+      let topics = [];
+      try {
+        topics = JSON.parse(localStorage.getItem(NOTES_STORAGE_KEY) || '[]');
+      } catch (e) {
+        console.warn('admin-hub: failed to parse acnhs_topics from localStorage', e);
+      }
+
+      const notes = [];
+      topics.forEach(topic => {
+        const topicTitle = topic.title || 'Uncategorized';
+        const isModule = topicTitle === 'Medical Terminology'; // keep Medical Terminology as isModule
+        (topic.notes || []).forEach(note => {
+          notes.push({
+            id:       note.id || ('dyn_' + Math.random().toString(36).slice(2)),
+            title:    note.title || 'Untitled',
+            htmlFile: note.htmlFile || '',
+            category: topicTitle,
+            isModule: isModule
+          });
+        });
+      });
+
+      return notes;
+    }
+
+    /** Rebuild the category <select> options from the live note list */
+    function refreshCategoryFilter(allNotes) {
+      const select = document.getElementById('categoryFilterSelect');
+      if (!select) return;
+      const categories = ['All', ...new Set(allNotes.map(n => n.category))].sort((a, b) =>
+        a === 'All' ? -1 : b === 'All' ? 1 : a.localeCompare(b)
+      );
+      const current = select.value;
+      select.innerHTML = categories
+        .map(c => `<option value="${c}"${c === current ? ' selected' : ''}>${c === 'All' ? 'All Categories' : c}</option>`)
+        .join('');
+    }
+
+    // Auto-refresh the Notes Library if notes.html saves changes in another tab
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'acnhs_topics') {
+        const notesView = document.getElementById('notesView');
+        if (notesView && notesView.classList.contains('active')) {
+          loadNotesManagement();
+        }
+      }
+    });
 
     async function loadNotesManagement() {
-      // Notes Library shows only plain notes — modules are managed in the Modules tab
-      ALL_NOTES = HARDCODED_NOTES.filter(n => !n.isModule);
+      // ── Build note list dynamically from the same localStorage as notes.html ──
+      const dynamicNotes = buildNotesFromStorage();
 
-      // If logged in as a teacher, filter notes to their assigned subjects only.
-      // Uses case-insensitive substring matching so 'Fundamentals of Nursing' stored
-      // as a subject correctly matches notes with category 'Fundamentals', and vice-versa.
+      // Notes Library shows only non-module notes; modules go in the Modules tab
+      ALL_NOTES = dynamicNotes.filter(n => !n.isModule);
+
+      // If logged in as a teacher, filter to their assigned subjects only.
       const rawRole = (sessionStorage.getItem('userRole') || '').toLowerCase().trim();
       const teacherRoles = ['teacher', 'instructor'];
       if (teacherRoles.includes(rawRole)) {
@@ -8025,24 +8049,27 @@
           .filter(Boolean);
 
         if (teacherSubjects.length > 0) {
-          ALL_NOTES = HARDCODED_NOTES.filter(n => {
+          const filtered = dynamicNotes.filter(n => {
             const cat = (n.category || '').toLowerCase().trim();
-            // Match if subject contains category name OR category contains subject name
             return teacherSubjects.some(s => cat.includes(s) || s.includes(cat));
           });
 
-          // If still empty, fall back to showing all notes and warn in console
-          if (ALL_NOTES.length === 0) {
+          if (filtered.length === 0) {
             console.warn(
               '⚠️ Notes filter returned 0 results for subjects:',
               teacherSubjects,
-              '— note categories available:',
-              [...new Set(HARDCODED_NOTES.map(n => n.category))]
+              '— categories available:',
+              [...new Set(dynamicNotes.map(n => n.category))]
             );
-            ALL_NOTES = HARDCODED_NOTES; // fail-open so teacher is not stranded
+            // fail-open so teacher is not stranded
+          } else {
+            ALL_NOTES = filtered.filter(n => !n.isModule);
           }
         }
       }
+
+      // Rebuild category dropdown to match live topics
+      refreshCategoryFilter(ALL_NOTES);
 
       renderNotesTable();
     }
@@ -8896,7 +8923,8 @@
     // ════════════════════════════════════════════════════════════════
     // MODULES MANAGEMENT  (isModule:true entries only)
     // ════════════════════════════════════════════════════════════════
-    const ALL_MODULES = HARDCODED_NOTES.filter(n => n.isModule);
+    // Modules are the isModule:true subset of the live notes library
+    const ALL_MODULES = buildNotesFromStorage().filter(n => n.isModule);
     let CURRENT_MODULE_STATUS_FILTER = 'all';
 
     // ── Module data cache — fetched once, invalidated only on mutations ──────
