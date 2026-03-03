@@ -2417,7 +2417,7 @@ const haClose   = document.getElementById('ha-close');
 // Idle rule: >60 s no mouse/key/scroll = paused (not counted)
 // ══════════════════════════════════════════════════
 const PROGRESS_KEY   = 'module_progress_note_mt_1';
-const PUB_AT_KEY     = 'module_pub_at_note_mt_1'; // tracks last seen published_at
+const RESET_SEEN_KEY = 'module_reset_seen_note_mt_1'; // tracks last reset_at we acted on
 const NOTE_ID        = 'note_mt_1';
 const HA_TOTAL   = 6;         // insulin heparin warfarin opioids digoxin potassium
 const SFX_CAP    = 20;
@@ -2484,55 +2484,52 @@ let prog = loadProgress();
 if (_db && _studentId) {
   (async () => {
     try {
-      // 1. Get published_at for this student+note
-      const { data: pubData } = await _db.from('published_notes').select('published_at')
-        .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1);
-      const publishedAt = pubData && pubData.length > 0 ? new Date(pubData[0].published_at) : null;
-
-      // 2. Read last-seen published_at from localStorage
-      const storedPubAtRaw = localStorage.getItem(PUB_AT_KEY);
-      const storedPubAt = storedPubAtRaw ? new Date(storedPubAtRaw) : null;
-
-      // 3. Get existing remote progress
+      // 1. Fetch the module_progress row for this student+note (single query)
       const { data: progData } = await _db.from('module_progress').select('*')
         .eq('student_id', _studentId).eq('note_id', NOTE_ID).limit(1);
       const remoteRow = progData && progData.length > 0 ? progData[0] : null;
-      const remoteUpdatedAt = remoteRow ? new Date(remoteRow.updated_at) : null;
 
-      // 4. If admin republished AFTER the last seen published_at (or never seen yet),
-      //    reset to zero. This works even if the student has no DB row yet (pure localStorage).
-      const needsReset = publishedAt && (!storedPubAt || publishedAt > storedPubAt);
+      // 2. Check if an explicit admin reset has been issued.
+      //    reset_at is written ONLY by the admin reset action — never by publish.
+      //    We store the last reset_at we acted on in localStorage so we only
+      //    reset once per device, even if the student opens the module many times.
+      const remoteResetAt = remoteRow && remoteRow.reset_at ? new Date(remoteRow.reset_at) : null;
+      const seenResetAtRaw = localStorage.getItem(RESET_SEEN_KEY);
+      const seenResetAt = seenResetAtRaw ? new Date(seenResetAtRaw) : null;
+
+      const needsReset = remoteResetAt && (!seenResetAt || remoteResetAt > seenResetAt);
       if (needsReset) {
+        // Admin explicitly reset this student — zero out everything
         const zero = { ha:[], sfx:[], dc:[], ms:0, clicks:0 };
         prog = zero;
         localStorage.setItem(PROGRESS_KEY, JSON.stringify(zero));
-        // Record that we have now seen this published_at so we don't reset again
-        localStorage.setItem(PUB_AT_KEY, publishedAt.toISOString());
+        // Record that we have now acted on this reset_at so we don't reset again
+        localStorage.setItem(RESET_SEEN_KEY, remoteResetAt.toISOString());
+        // Write zeroed row back (updated_at = now, reset_at preserved)
         await _db.from('module_progress').upsert({
           student_id: _studentId, note_id: NOTE_ID,
           ha:[], sfx:[], dc:[], ms:0, clicks:0,
           updated_at: new Date().toISOString()
+          // reset_at intentionally NOT overwritten here — leave the admin-set value intact
         }, { onConflict: 'student_id,note_id' });
-        return; // don't merge stale remote data
+        return; // don't merge stale remote data after a reset
       }
 
-      // 5. Update storedPubAt if we now have a publishedAt (first-time load with no prior record)
-      if (publishedAt && !storedPubAt) {
-        localStorage.setItem(PUB_AT_KEY, publishedAt.toISOString());
-      }
-
-      // 6. Normal merge: take best of local + remote
+      // 3. Normal merge: take best of local + remote (no reset needed)
       if (remoteRow) {
-        // Guard: only merge if remote was updated AFTER the last republish
-        // (prevents stale remote data from surviving a reset on another device)
-        const remoteIsStale = publishedAt && remoteUpdatedAt && publishedAt > remoteUpdatedAt;
-        if (!remoteIsStale) {
-          const remote = { ha: remoteRow.ha||[], sfx: remoteRow.sfx||[], dc: remoteRow.dc||[], ms: remoteRow.ms||0, clicks: remoteRow.clicks||0 };
-          prog = mergeProgress(prog, remote);
-          localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog));
-        }
+        const remote = {
+          ha:     remoteRow.ha     || [],
+          sfx:    remoteRow.sfx    || [],
+          dc:     remoteRow.dc     || [],
+          ms:     remoteRow.ms     || 0,
+          clicks: remoteRow.clicks || 0
+        };
+        prog = mergeProgress(prog, remote);
+        localStorage.setItem(PROGRESS_KEY, JSON.stringify(prog));
       }
-    } catch(e) {}
+    } catch(e) {
+      // Network/DB error — silently keep local progress, don't reset
+    }
   })();
 }
 
