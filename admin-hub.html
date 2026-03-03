@@ -7971,11 +7971,37 @@
     });
 
     // ===== NOTES MANAGEMENT FUNCTIONS =====
-    
+
     let ALL_NOTES = [];
     let CURRENT_CATEGORY_FILTER = 'All';
     let CURRENT_STATUS_FILTER = 'all';
     let CURRENT_SEARCH_TERM = '';
+
+    // ── ONE-TIME MIGRATION (runs once at startup, never inside buildNotesFromStorage) ──
+    // Rename stale 'Neurology' topic → 'Autoimmune Diseases' in existing localStorage.
+    // Must run BEFORE buildNotesFromStorage so the seed loop never sees Neurology.
+    // Writing localStorage here does NOT trigger the storage event in the same tab.
+    (function migrateNeuroToAutoimmune() {
+      const KEY = 'acnhs_topics';
+      try {
+        const topics = JSON.parse(localStorage.getItem(KEY) || '[]');
+        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
+        if (neuroIdx === -1) return; // nothing to do
+        const neuroTopic = topics[neuroIdx];
+        let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
+        if (!autoimmune) {
+          autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
+          topics.push(autoimmune);
+        }
+        (neuroTopic.notes || []).forEach(note => {
+          const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
+          if (!alreadyThere) autoimmune.notes.push(note);
+        });
+        topics.splice(neuroIdx, 1);
+        localStorage.setItem(KEY, JSON.stringify(topics));
+      } catch(e) {}
+    })();
+    // ─────────────────────────────────────────────────────────────────────────────
 
     /**
      * Reads the same localStorage key used by notes.html ('acnhs_topics')
@@ -8064,26 +8090,6 @@
       } catch (e) {
         console.warn('admin-hub: failed to parse acnhs_topics from localStorage', e);
       }
-
-      // ── ONE-TIME MIGRATION: rename stale 'Neurology' topic → 'Autoimmune Diseases' ──
-      {
-        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
-        if (neuroIdx !== -1) {
-          const neuroTopic = topics[neuroIdx];
-          let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
-          if (!autoimmune) {
-            autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
-            topics.push(autoimmune);
-          }
-          (neuroTopic.notes || []).forEach(note => {
-            const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
-            if (!alreadyThere) autoimmune.notes.push(note);
-          });
-          topics.splice(neuroIdx, 1);
-          try { localStorage.setItem(NOTES_STORAGE_KEY, JSON.stringify(topics)); } catch(e) {}
-        }
-      }
-      // ─────────────────────────────────────────────────────────────────────────
 
       // Load the permanently-deleted note registry so the seed loop never re-adds them
       let deletedNotes = {};

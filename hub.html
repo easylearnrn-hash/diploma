@@ -3978,6 +3978,31 @@
       ],
     };
 
+    // ── ONE-TIME MIGRATION (runs once at startup, never inside buildHubNotesFromStorage) ──
+    // Rename stale 'Neurology' topic → 'Autoimmune Diseases' in any existing localStorage.
+    // Running it here (outside the function) means it never fires inside the storage event loop.
+    (function migrateNeuroToAutoimmune() {
+      const KEY = 'acnhs_topics';
+      try {
+        const topics = JSON.parse(localStorage.getItem(KEY) || '[]');
+        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
+        if (neuroIdx === -1) return;
+        const neuroTopic = topics[neuroIdx];
+        let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
+        if (!autoimmune) {
+          autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
+          topics.push(autoimmune);
+        }
+        (neuroTopic.notes || []).forEach(note => {
+          const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
+          if (!alreadyThere) autoimmune.notes.push(note);
+        });
+        topics.splice(neuroIdx, 1);
+        localStorage.setItem(KEY, JSON.stringify(topics));
+      } catch(e) {}
+    })();
+    // ─────────────────────────────────────────────────────────────────────────────
+
     /**
      * Build the canonical note list from localStorage (acnhs_topics),
      * seeding any missing topics/notes from HUB_SEED and migrating stale
@@ -3989,29 +4014,6 @@
       try { topics = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch(e) {}
 
       let dirty = false;
-
-      // ── ONE-TIME MIGRATION: rename stale 'Neurology' topic → 'Autoimmune Diseases' ──
-      // Old localStorage may have a 'Neurology' topic from before the rename.
-      // Move all its notes into 'Autoimmune Diseases' (deduplicating by htmlFile),
-      // then delete the empty Neurology shell so it never shows in the hub again.
-      {
-        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
-        if (neuroIdx !== -1) {
-          const neuroTopic = topics[neuroIdx];
-          let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
-          if (!autoimmune) {
-            autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
-            topics.push(autoimmune);
-          }
-          (neuroTopic.notes || []).forEach(note => {
-            const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
-            if (!alreadyThere) autoimmune.notes.push(note);
-          });
-          topics.splice(neuroIdx, 1); // remove Neurology topic entirely
-          dirty = true;
-        }
-      }
-      // ─────────────────────────────────────────────────────────────────────────
 
       // Load the permanently-deleted note registry so the seed loop never re-adds them
       let deletedNotes = {};
