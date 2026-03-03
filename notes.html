@@ -1151,7 +1151,9 @@
 
   let topics = JSON.parse(localStorage.getItem(storageKey) || '[]');
   let deletedNotes = {};
+  let deletedTopics = {};
   try { deletedNotes = JSON.parse(localStorage.getItem('acnhs_deleted_notes') || '{}'); } catch(e) {}
+  try { deletedTopics = JSON.parse(localStorage.getItem('acnhs_deleted_topics') || '{}'); } catch(e) {}
   let currentTopicId = null;
 
   // Initialize with Fundamentals topic if no topics exist
@@ -1189,7 +1191,7 @@
     }];
 
     // Autoimmune Diseases seed topic (Scleroderma)
-    if (!deletedNotes['note_neuro_1'] && !deletedNotes['Neurology/Scleroderma.html']) {
+    if (!deletedTopics['Autoimmune Diseases'] && !deletedNotes['note_neuro_1'] && !deletedNotes['Neurology/Scleroderma.html']) {
       topics.push({
         id: crypto.randomUUID(),
         title: 'Autoimmune Diseases',
@@ -1339,7 +1341,7 @@
 
       // Ensure Autoimmune Diseases topic exists (Scleroderma)
       const hasAutoimmuneTopic = topics.some(t => t.title === 'Autoimmune Diseases');
-      if (!hasAutoimmuneTopic && !deletedNotes['note_neuro_1'] && !deletedNotes['Neurology/Scleroderma.html']) {
+      if (!hasAutoimmuneTopic && !deletedTopics['Autoimmune Diseases'] && !deletedNotes['note_neuro_1'] && !deletedNotes['Neurology/Scleroderma.html']) {
         topics.push({
           id: crypto.randomUUID(),
           title: 'Autoimmune Diseases',
@@ -1622,6 +1624,35 @@
       }
     }
   }
+
+  // Remove duplicate notes across topics (keep the last occurrence so moves don't copy)
+  (function dedupeNotesAcrossTopics() {
+    const lastSeenTopicIndex = new Map();
+    topics.forEach((topic, idx) => {
+      (topic.notes || []).forEach(note => {
+        const key = note.id || note.htmlFile || note.title;
+        if (key) lastSeenTopicIndex.set(key, idx);
+      });
+    });
+
+    let changed = false;
+    topics.forEach((topic, idx) => {
+      if (!topic.notes) return;
+      const filtered = topic.notes.filter(note => {
+        const key = note.id || note.htmlFile || note.title;
+        if (!key) return true;
+        return lastSeenTopicIndex.get(key) === idx;
+      });
+      if (filtered.length !== topic.notes.length) {
+        topic.notes = filtered;
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      localStorage.setItem(storageKey, JSON.stringify(topics));
+    }
+  })();
 
   // Initialize Cardiovascular System topic if it doesn't exist
   {
@@ -1952,6 +1983,14 @@
       confirmLabel: 'Delete Topic',
       danger: true,
       onConfirm: () => {
+        // Record deleted topic so it won't be auto-restored
+        try {
+          const TOPIC_KEY = 'acnhs_deleted_topics';
+          const deleted = JSON.parse(localStorage.getItem(TOPIC_KEY) || '{}');
+          deleted[topic.title] = true;
+          localStorage.setItem(TOPIC_KEY, JSON.stringify(deleted));
+        } catch(e) {}
+
         topics = topics.filter(t => t.id !== topicId);
         localStorage.setItem(storageKey, JSON.stringify(topics));
         renderTopics();
