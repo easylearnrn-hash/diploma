@@ -1825,6 +1825,10 @@
                   <div class="note-title">${escapeHtml(note.title)}</div>
                   <div class="note-actions-small">
                     <button class="btn-small" onclick="event.stopPropagation(); openDocumentWindow('${topic.id}', '${note.id}')">Open</button>
+                    <select class="btn-small" style="padding:4px 8px;border-radius:8px;background:rgba(255,255,255,0.06);border:1px solid rgba(201,168,76,0.26);color:#d7c79a;font-size:11px;cursor:pointer;" onchange="event.stopPropagation(); moveNoteToTopic('${note.id}', '${topic.id}', this.value, this)">
+                      <option value="">Move to…</option>
+                      ${topics.filter(t => t.id !== topic.id).map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+                    </select>
                     <button class="btn-small delete" onclick="event.stopPropagation(); deleteNote('${topic.id}', '${note.id}')">×</button>
                   </div>
                 </div>
@@ -2040,6 +2044,31 @@
     openNoteModal(topicId);
   }
 
+  function moveNoteToTopic(noteId, fromTopicId, toTopicId, selectEl) {
+    if (!toTopicId) return;
+    const fromTopic = topics.find(t => t.id === fromTopicId);
+    const targetTopic = topics.find(t => t.id === toTopicId);
+    if (!fromTopic || !targetTopic) return;
+
+    const noteIndex = (fromTopic.notes || []).findIndex(n => n.id === noteId);
+    if (noteIndex === -1) return;
+
+    const noteData = fromTopic.notes.splice(noteIndex, 1)[0];
+
+    // Remove duplicates from any other topic before adding to target
+    topics.forEach(topic => {
+      if (!topic.notes) return;
+      topic.notes = topic.notes.filter(n => n.id !== noteId);
+    });
+
+    targetTopic.notes = targetTopic.notes || [];
+    targetTopic.notes.push(noteData);
+    localStorage.setItem(storageKey, JSON.stringify(topics));
+
+    if (selectEl) selectEl.value = '';
+    renderTopics();
+  }
+
   function deleteNote(topicId, noteId) {
     const topic = topics.find(t => t.id === topicId);
     if (!topic) return;
@@ -2118,9 +2147,16 @@
                   Study Material
                 </div>
                 <h3>${escapedDocTitle}</h3>
-                <div class="meta">
+                <div class="meta" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
                   <span>${docDate}</span>
                   <span class="open-arrow">→</span>
+                </div>
+                <div style="margin-top:12px;display:flex;gap:8px;align-items:center;">
+                  <select style="flex:1;padding:7px 10px;border-radius:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.22);color:#d7c79a;font-size:12px;cursor:pointer;" onchange="event.stopPropagation(); moveNoteToTopic('${doc.id}', '${topicId}', this.value, this)">
+                    <option value="">Move to…</option>
+                    ${topics.filter(t => t.id !== topicId).map(t => `<option value="${t.id}">${t.title}</option>`).join('')}
+                  </select>
+                  <button class="btn-small delete" style="padding:6px 10px;border-radius:10px;" onclick="event.stopPropagation(); deleteNote('${topicId}', '${doc.id}')">Delete</button>
                 </div>
               </div>
             </div>
