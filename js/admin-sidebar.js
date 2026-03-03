@@ -111,6 +111,12 @@
         permission: 'view_reports'
       },
       { 
+        href: 'admin-test-grades.html', 
+        icon: '🏆', 
+        text: 'Test Grades', 
+        permission: 'view_reports'
+      },
+      { 
         href: 'admin-analytics.html', 
         icon: '📈', 
         text: 'Analytics', 
