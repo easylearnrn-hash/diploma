@@ -745,24 +745,7 @@
 
             <div class="totals-section">
               <table class="totals-table">
-                <thead class="sr-only">
-                  <tr>
-                    <th scope="col">Label</th>
-                    <th scope="col">Amount</th>
-                  </tr>
-                </thead>
-                <tr>
-                  <td class="label">Subtotal</td>
-                  <td class="amount" id="subtotal"></td>
-                </tr>
-                <tr>
-                  <td class="label">Tax (<span id="taxRate">0</span>%)</td>
-                  <td class="amount" id="taxAmount"></td>
-                </tr>
-                <tr>
-                  <td class="label">Total</td>
-                  <td class="amount" id="total"></td>
-                </tr>
+                <!-- rows built dynamically by JS -->
               </table>
             </div>
 
@@ -1060,36 +1043,50 @@
         const subtotal = invoice.subtotal && invoice.subtotal > 0 ? invoice.subtotal : calculatedSubtotal;
         const taxRate = invoice.tax_rate || 0;
         const taxAmount = invoice.tax_amount && invoice.tax_amount > 0 ? invoice.tax_amount : (subtotal * taxRate / 100);
-        const total = invoice.total && invoice.total > 0 ? invoice.total : (subtotal + taxAmount);
-        const remainingBalance = total - totalPaid;
-        
-        // Populate totals
+        const grossTotal = invoice.total && invoice.total > 0 ? invoice.total : (subtotal + taxAmount);
+        const remainingBalance = Math.max(0, grossTotal - totalPaid);
+        const isFullyPaid = totalPaid >= grossTotal;
+
+        // Populate static rows
         document.getElementById('subtotal').textContent = formatMoney(subtotal);
         document.getElementById('taxRate').textContent = taxRate;
         document.getElementById('taxAmount').textContent = formatMoney(taxAmount);
-        document.getElementById('total').textContent = formatMoney(total);
-        
-        // Add Amount Paid and Remaining Balance if there are partial payments
-        if (totalPaid > 0) {
-          const totalsTable = document.querySelector('.totals-table');
-          const totalRow = totalsTable.querySelector('tr:last-child');
-          
-          // Insert Amount Paid row before Total
-          const paidRow = document.createElement('tr');
-          paidRow.innerHTML = `
-            <td class="label" style="color: var(--gold-500); font-weight: 600;">Amount Paid</td>
-            <td class="amount" style="color: var(--gold-500); font-weight: 600;">-${formatMoney(totalPaid)}</td>
-          `;
-          totalRow.parentNode.insertBefore(paidRow, totalRow);
-          
-          // Add Remaining Balance row after Total
-          const remainingRow = document.createElement('tr');
-          remainingRow.innerHTML = `
-            <td class="label" style="color: ${remainingBalance > 0 ? '#475569' : 'var(--gold-500)'}; font-weight: 700; font-size: 18px;">Remaining Balance</td>
-            <td class="amount" style="color: ${remainingBalance > 0 ? '#0f172a' : 'var(--gold-500)'}; font-weight: 700; font-size: 18px;">${formatMoney(remainingBalance)}</td>
-          `;
-          totalRow.parentNode.insertBefore(remainingRow, totalRow.nextSibling);
-        }
+
+        // Build the totals table dynamically so the math is always correct
+        const totalsTable = document.querySelector('.totals-table');
+        const tbody = totalsTable.querySelector('tbody') || totalsTable;
+
+        // Remove the placeholder Total row (populated via id="total") and re-render all rows
+        totalsTable.innerHTML = `
+          <thead class="sr-only">
+            <tr><th scope="col">Label</th><th scope="col">Amount</th></tr>
+          </thead>
+          <tr>
+            <td class="label">Subtotal</td>
+            <td class="amount">${formatMoney(subtotal)}</td>
+          </tr>
+          <tr>
+            <td class="label">Tax (<span>${taxRate}</span>%)</td>
+            <td class="amount">${formatMoney(taxAmount)}</td>
+          </tr>
+          <tr>
+            <td class="label" style="color:#64748b;">Invoice Total</td>
+            <td class="amount" style="color:#64748b;">${formatMoney(grossTotal)}</td>
+          </tr>
+          ${totalPaid > 0 ? `
+          <tr>
+            <td class="label" style="color:var(--gold-500);font-weight:600;">Amount Paid</td>
+            <td class="amount" style="color:var(--gold-500);font-weight:600;">-${formatMoney(totalPaid)}</td>
+          </tr>` : ''}
+          <tr style="border-top:2px solid rgba(201,168,76,0.4);">
+            <td class="label" style="font-size:18px;font-weight:700;color:${isFullyPaid ? 'var(--gold-500)' : 'inherit'};">
+              ${isFullyPaid ? '✓ Paid in Full' : 'Balance Due'}
+            </td>
+            <td class="amount" style="font-size:18px;font-weight:700;color:${isFullyPaid ? 'var(--gold-500)' : 'inherit'};">
+              ${formatMoney(remainingBalance)}
+            </td>
+          </tr>
+        `;
 
         // Populate notes
         if (invoice.notes && invoice.notes.trim()) {
