@@ -8381,6 +8381,76 @@
       renderNotesTable();
     }
 
+    /**
+     * Save a new category for a note.
+     * Updates localStorage (acnhs_topics) and ALL_NOTES in memory,
+     * then refreshes the category filter dropdown.
+     */
+    function saveNoteCategory(noteId, newCategory) {
+      if (newCategory === '__new__') {
+        const custom = prompt('Enter new category name:');
+        if (!custom || !custom.trim()) {
+          // Reset select to current value
+          const sel = document.getElementById('noteCategoryEdit_' + noteId);
+          if (sel) {
+            const note = ALL_NOTES.find(n => n.id === noteId);
+            if (note) sel.value = note.category;
+          }
+          return;
+        }
+        newCategory = custom.trim();
+        // Add the new option to the select and select it
+        const sel = document.getElementById('noteCategoryEdit_' + noteId);
+        if (sel) {
+          const opt = document.createElement('option');
+          opt.value = newCategory;
+          opt.textContent = newCategory;
+          // Insert before the "＋ New category…" option
+          sel.insertBefore(opt, sel.lastElementChild);
+          sel.value = newCategory;
+        }
+      }
+
+      // 1. Update ALL_NOTES in memory
+      const note = ALL_NOTES.find(n => n.id === noteId);
+      if (note) note.category = newCategory;
+
+      // 2. Persist to localStorage (acnhs_topics)
+      try {
+        const NOTES_KEY = 'acnhs_topics';
+        const topics = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]');
+        let moved = false;
+        // Find the note in its current topic and move it to the new topic
+        topics.forEach(topic => {
+          const idx = (topic.notes || []).findIndex(n => n.id === noteId);
+          if (idx !== -1) {
+            const noteData = topic.notes.splice(idx, 1)[0];
+            // Find or create target topic
+            let targetTopic = topics.find(t => t.title === newCategory);
+            if (!targetTopic) {
+              targetTopic = { id: 'seed_' + newCategory.replace(/\s+/g,'_'), title: newCategory, notes: [], created: Date.now() };
+              topics.push(targetTopic);
+            }
+            targetTopic.notes.push(noteData);
+            moved = true;
+          }
+        });
+        if (moved) localStorage.setItem(NOTES_KEY, JSON.stringify(topics));
+      } catch(e) {
+        console.error('saveNoteCategory: localStorage update failed', e);
+      }
+
+      // 3. Refresh category filter dropdown
+      refreshCategoryFilter(ALL_NOTES);
+
+      // 4. Show brief success indicator on the select
+      const sel = document.getElementById('noteCategoryEdit_' + noteId);
+      if (sel) {
+        sel.style.borderColor = 'rgba(74,222,128,0.7)';
+        setTimeout(() => { sel.style.borderColor = 'rgba(201,168,76,0.30)'; }, 1400);
+      }
+    }
+
     async function publishNoteToStudents(noteId) {
       const modal = document.createElement('div');
       modal.className = 'modal-backdrop';
@@ -8427,7 +8497,17 @@
             </div>
             <div style="flex:1;min-width:0;">
               <div style="color:#e2cc92;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${note.title}</div>
-              <div style="color:#8a8070;font-size:12px;margin-top:1px;">${note.category}</div>
+              <div style="margin-top:4px;display:flex;align-items:center;gap:7px;">
+                <span style="color:#8a8070;font-size:12px;">Category:</span>
+                <select id="noteCategoryEdit_${noteId}"
+                        onchange="saveNoteCategory('${noteId}', this.value)"
+                        style="background:rgba(201,168,76,0.10);color:#e2cc92;border:1px solid rgba(201,168,76,0.30);border-radius:7px;padding:3px 8px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;outline:none;">
+                  ${[...new Set(ALL_NOTES.map(n => n.category))].sort().map(cat =>
+                    `<option value="${cat}" ${cat === note.category ? 'selected' : ''}>${cat}</option>`
+                  ).join('')}
+                  <option value="__new__">＋ New category…</option>
+                </select>
+              </div>
             </div>
             <span style="background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.08));border:1px solid rgba(201,168,76,0.35);color:var(--gold-300,#e2cc92);padding:4px 12px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase;flex-shrink:0;">Active</span>
           </div>
