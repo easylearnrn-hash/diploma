@@ -1660,11 +1660,115 @@
     renderTopics();
   }
 
+  /* ─────────────────────────────────────────────────────────────────────────
+   * Premium confirm modal — replaces all native browser confirm() dialogs.
+   * Usage: _acnhsConfirm({ title, body, confirmLabel, danger, onConfirm })
+   * ───────────────────────────────────────────────────────────────────────── */
+  function _acnhsConfirm({ title = 'Confirm', body = '', confirmLabel = 'Confirm', danger = false, onConfirm }) {
+    // Remove any existing instance
+    const existing = document.getElementById('_acnhsConfirmModal');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = '_acnhsConfirmModal';
+    backdrop.style.cssText = [
+      'position:fixed;inset:0;z-index:99999;',
+      'display:flex;align-items:center;justify-content:center;padding:20px;',
+      'background:rgba(2,6,23,0.80);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);',
+      'animation:_acnhsFadeIn 0.18s ease;'
+    ].join('');
+
+    const confirmColor = danger ? '#ef4444' : '#c9a84c';
+    const confirmHover = danger ? 'rgba(239,68,68,0.18)' : 'rgba(201,168,76,0.15)';
+    const confirmBorder = danger ? 'rgba(239,68,68,0.45)' : 'rgba(201,168,76,0.45)';
+    const iconSvg = danger
+      ? `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${confirmColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`
+      : `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="${confirmColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+
+    backdrop.innerHTML = `
+      <style>
+        @keyframes _acnhsFadeIn  { from { opacity:0 } to { opacity:1 } }
+        @keyframes _acnhsSlideUp { from { transform:translateY(20px);opacity:0 } to { transform:translateY(0);opacity:1 } }
+        #_acnhsConfirmModal .acm-cancel-btn:hover  { background:rgba(255,255,255,0.08) !important; border-color:rgba(255,255,255,0.18) !important; }
+        #_acnhsConfirmModal .acm-confirm-btn:hover { background:${confirmHover} !important; border-color:${confirmBorder} !important; }
+      </style>
+      <div style="
+        background:linear-gradient(160deg,rgba(7,20,40,0.98),rgba(4,12,28,0.99));
+        border:1px solid rgba(201,168,76,0.18);
+        border-radius:20px;
+        max-width:440px;width:100%;
+        padding:36px 36px 28px;
+        box-shadow:0 40px 80px rgba(0,0,0,0.70),0 0 0 1px rgba(255,255,255,0.03);
+        animation:_acnhsSlideUp 0.22s cubic-bezier(0.34,1.56,0.64,1) both;
+        position:relative;
+      ">
+        <!-- Icon + Title -->
+        <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:20px;">
+          <div style="
+            width:48px;height:48px;flex-shrink:0;
+            background:${danger ? 'rgba(239,68,68,0.10)' : 'rgba(201,168,76,0.10)'};
+            border:1px solid ${danger ? 'rgba(239,68,68,0.25)' : 'rgba(201,168,76,0.25)'};
+            border-radius:14px;
+            display:flex;align-items:center;justify-content:center;
+          ">${iconSvg}</div>
+          <div>
+            <h3 style="margin:0 0 6px;font-family:'Playfair Display',serif;font-size:19px;font-weight:700;color:#f0ece3;letter-spacing:-0.2px;">${title}</h3>
+            <p style="margin:0;font-size:14px;color:#8a9ec0;line-height:1.55;">${body}</p>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div style="height:1px;background:rgba(255,255,255,0.06);margin:0 -36px 24px;"></div>
+
+        <!-- Actions -->
+        <div style="display:flex;justify-content:flex-end;gap:10px;">
+          <button class="acm-cancel-btn" style="
+            padding:10px 22px;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;
+            background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);
+            color:#a0aec0;letter-spacing:0.2px;transition:all 0.18s;
+          ">Cancel</button>
+          <button class="acm-confirm-btn" style="
+            padding:10px 26px;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;
+            background:${danger ? 'rgba(239,68,68,0.12)' : 'rgba(201,168,76,0.10)'};
+            border:1px solid ${danger ? 'rgba(239,68,68,0.35)' : 'rgba(201,168,76,0.35)'};
+            color:${confirmColor};letter-spacing:0.2px;transition:all 0.18s;
+          ">${confirmLabel}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(backdrop);
+
+    const dismiss = () => {
+      backdrop.style.opacity = '0';
+      backdrop.style.transition = 'opacity 0.15s';
+      setTimeout(() => backdrop.remove(), 150);
+    };
+
+    backdrop.querySelector('.acm-cancel-btn').addEventListener('click', dismiss);
+    backdrop.querySelector('.acm-confirm-btn').addEventListener('click', () => { dismiss(); onConfirm(); });
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) dismiss(); });
+    document.addEventListener('keydown', function _esc(e) {
+      if (e.key === 'Escape') { dismiss(); document.removeEventListener('keydown', _esc); }
+      if (e.key === 'Enter')  { dismiss(); onConfirm(); document.removeEventListener('keydown', _esc); }
+    });
+  }
+
   function deleteTopic(topicId) {
-    if (!confirm('Delete this topic and all its notes?')) return;
-    topics = topics.filter(t => t.id !== topicId);
-    localStorage.setItem(storageKey, JSON.stringify(topics));
-    renderTopics();
+    const topic = topics.find(t => t.id === topicId);
+    if (!topic) return;
+    const noteCount = (topic.notes || []).length;
+    _acnhsConfirm({
+      title: 'Delete Topic',
+      body: `"<strong style="color:#f0ece3">${topic.title}</strong>" and its ${noteCount} note${noteCount !== 1 ? 's' : ''} will be permanently removed. This cannot be undone.`,
+      confirmLabel: 'Delete Topic',
+      danger: true,
+      onConfirm: () => {
+        topics = topics.filter(t => t.id !== topicId);
+        localStorage.setItem(storageKey, JSON.stringify(topics));
+        renderTopics();
+      }
+    });
   }
 
   function openNoteModal(topicId) {
@@ -1710,12 +1814,21 @@
   }
 
   function deleteNote(topicId, noteId) {
-    if (!confirm('Delete this note?')) return;
     const topic = topics.find(t => t.id === topicId);
     if (!topic) return;
-    topic.notes = topic.notes.filter(n => n.id !== noteId);
-    localStorage.setItem(storageKey, JSON.stringify(topics));
-    renderTopics();
+    const note = (topic.notes || []).find(n => n.id === noteId);
+    if (!note) return;
+    _acnhsConfirm({
+      title: 'Delete Note',
+      body: `"<strong style="color:#f0ece3">${note.title}</strong>" will be permanently removed from <strong style="color:#f0ece3">${topic.title}</strong>. This cannot be undone.`,
+      confirmLabel: 'Delete Note',
+      danger: true,
+      onConfirm: () => {
+        topic.notes = topic.notes.filter(n => n.id !== noteId);
+        localStorage.setItem(storageKey, JSON.stringify(topics));
+        renderTopics();
+      }
+    });
   }
 
   function openTopicPage(topicId) {
