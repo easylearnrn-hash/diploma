@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="css/watermark.css">
   <link rel="stylesheet" href="css/med-abbr-tooltip.css">
   <script src="js/med-abbr-tooltip.js" defer></script>
+  <script src="js/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
 
   <style>
     :root {
@@ -973,10 +975,133 @@
     }
 
     if (!isAdmin || !isPrimaryAdmin) {
-      window.location.replace('login.html');
+      showNotesLogin();
     }
   })();
   // ─────────────────────────────────────────────────────────────────────────
+
+  async function hashPassword(password) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function showNotesLogin() {
+    if (document.getElementById('notesLoginOverlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'notesLoginOverlay';
+    overlay.style.cssText = [
+      'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;',
+      'background:rgba(2,6,23,0.86);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);',
+      'padding:24px;'
+    ].join('');
+
+    overlay.innerHTML = `
+      <div style="
+        width:100%;max-width:520px;
+        background:linear-gradient(160deg,rgba(7,20,40,0.98),rgba(4,12,28,0.98));
+        border:1px solid rgba(201,168,76,0.22);
+        border-radius:22px;
+        box-shadow:0 40px 80px rgba(0,0,0,0.70),0 0 0 1px rgba(255,255,255,0.04);
+        padding:36px 38px 30px;
+        position:relative;
+      ">
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+          <div style="width:52px;height:52px;border-radius:16px;background:rgba(201,168,76,0.14);border:1px solid rgba(201,168,76,0.34);display:flex;align-items:center;justify-content:center;">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"/><path d="M6 10V7a6 6 0 1 1 12 0v3"/><rect x="4" y="10" width="16" height="10" rx="2"/></svg>
+          </div>
+          <div>
+            <h2 style="margin:0 0 6px;font-family:'Playfair Display',serif;font-size:20px;font-weight:700;color:#f0ece3;letter-spacing:-0.2px;">Academic Notes — Admin Access</h2>
+            <p style="margin:0;color:#8a9ec0;font-size:14px;">Sign in with the primary admin account to continue.</p>
+          </div>
+        </div>
+
+        <form id="notesLoginForm" style="margin-top:18px;display:flex;flex-direction:column;gap:14px;">
+          <label style="font-size:12.5px;letter-spacing:0.4px;color:#9fb2d2;font-weight:600;">Email</label>
+          <input id="notesLoginEmail" type="email" autocomplete="username" placeholder="hrachfilm@gmail.com" required
+            style="width:100%;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(201,168,76,0.20);color:#e8edf5;font-size:14px;" />
+          <label style="font-size:12.5px;letter-spacing:0.4px;color:#9fb2d2;font-weight:600;">Password</label>
+          <input id="notesLoginPassword" type="password" autocomplete="current-password" placeholder="Enter your password" required
+            style="width:100%;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,0.04);border:1px solid rgba(201,168,76,0.20);color:#e8edf5;font-size:14px;" />
+
+          <div id="notesLoginError" style="display:none;color:#fca5a5;font-size:13px;line-height:1.4;margin-top:4px;"></div>
+
+          <button type="submit" id="notesLoginBtn" style="
+            margin-top:6px;height:44px;border-radius:12px;border:1px solid rgba(201,168,76,0.45);
+            background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.08));
+            color:#f0e3bc;font-weight:700;font-size:14px;letter-spacing:0.4px;cursor:pointer;">
+            Unlock Notes
+          </button>
+        </form>
+      </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    const form = overlay.querySelector('#notesLoginForm');
+    const errorEl = overlay.querySelector('#notesLoginError');
+    const btn = overlay.querySelector('#notesLoginBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.style.display = 'none';
+
+      const email = overlay.querySelector('#notesLoginEmail').value.trim().toLowerCase();
+      const password = overlay.querySelector('#notesLoginPassword').value;
+      if (!email || !password) return;
+
+      if (email !== 'hrachfilm@gmail.com') {
+        errorEl.textContent = 'Only the primary admin account is allowed.';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      try {
+        btn.disabled = true;
+        btn.textContent = 'Verifying...';
+        const supabase = initSupabase();
+        if (!supabase) throw new Error('Supabase not configured');
+
+        const passwordHash = await hashPassword(password);
+        const { data: adminUsers, error } = await supabase
+          .from('admin_users')
+          .select('id, name, email, password_hash, role, status')
+          .eq('email', email)
+          .eq('status', 'active')
+          .limit(1);
+
+        if (error || !adminUsers || !adminUsers.length) throw new Error('Invalid credentials');
+        const adminUser = adminUsers[0];
+        if (adminUser.password_hash !== passwordHash) throw new Error('Invalid credentials');
+
+        sessionStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('isLoggedIn', 'true');
+        sessionStorage.setItem('isAdmin', 'true');
+        localStorage.setItem('isAdmin', 'true');
+        sessionStorage.setItem('primaryAdmin', 'true');
+        localStorage.setItem('primaryAdmin', 'true');
+        sessionStorage.setItem('userEmail', adminUser.email);
+        localStorage.setItem('userEmail', adminUser.email);
+        sessionStorage.setItem('userName', adminUser.name || 'Admin');
+        localStorage.setItem('userName', adminUser.name || 'Admin');
+        sessionStorage.setItem('userId', adminUser.id || '');
+        localStorage.setItem('userId', adminUser.id || '');
+        sessionStorage.setItem('userRole', adminUser.role || 'admin');
+        localStorage.setItem('userRole', adminUser.role || 'admin');
+
+        window.location.reload();
+      } catch (err) {
+        errorEl.textContent = 'Login failed. Please check your credentials.';
+        errorEl.style.display = 'block';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Unlock Notes';
+      }
+    });
+  }
   const ACNHS_SEAL_BASE64 = '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';
 
   // Inject ACNHS logo wherever data-acnhs-logo is present
