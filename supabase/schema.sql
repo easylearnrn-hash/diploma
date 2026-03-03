@@ -684,3 +684,13 @@ COMMENT ON COLUMN public.user_activity_log.action_type IS 'Type of action: creat
 COMMENT ON COLUMN public.user_activity_log.action_category IS 'Category: application, student, email, user, document, system';
 COMMENT ON COLUMN public.user_activity_log.old_value IS 'JSON snapshot of data before change (for updates/deletes)';
 COMMENT ON COLUMN public.user_activity_log.new_value IS 'JSON snapshot of data after change (for creates/updates)';
+
+-- ============================================================
+-- Test Grade History Answer Snapshots
+-- ============================================================
+
+ALTER TABLE public.test_grade_history
+    ADD COLUMN IF NOT EXISTS answered_snapshot JSONB;
+
+COMMENT ON COLUMN public.test_grade_history.answered_snapshot IS
+    'Answered questions snapshot: array of {index, id, stem, answers:[{id,text}]}. Only answered questions stored.';

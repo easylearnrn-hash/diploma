@@ -2688,6 +2688,7 @@ body{
       <div class="pass-badge" id="passBadge">PASS</div>
       <h1 class="results-title">Test Complete!</h1>
       <p class="results-subtitle">You've successfully completed the examination</p>
+      <p class="results-subtitle" id="scoreBasedOn" style="font-size:12px;opacity:0.6;margin-top:-6px;"></p>
     </div>
 
     <div class="stats-grid">
@@ -6898,7 +6899,8 @@ function calculateResults() {
   });
   
   const totalQuestions = testState.questions.filter(q => !q.isDisclaimer).length;
-  const scorePercent = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
+  const answeredQuestions = correct + incorrect; // only questions the student actually answered
+  const scorePercent = answeredQuestions > 0 ? Math.round((correct / answeredQuestions) * 100) : 0;
   const passed = scorePercent >= TEST_CONFIG.passingScorePercent;
   const timeUsed = Math.floor((testState.endTime - testState.startTime) / 1000);
   
@@ -6907,6 +6909,7 @@ function calculateResults() {
     incorrect,
     skipped,
     totalQuestions,
+    answeredQuestions,
     scorePercent,
     passed,
     timeUsed,
@@ -6922,6 +6925,16 @@ function displayResults(results) {
   document.getElementById('incorrectCount').textContent = results.incorrect;
   document.getElementById('skippedCount').textContent = results.skipped;
   document.getElementById('timeUsed').textContent = formatTime(results.timeUsed);
+
+  // Show grading basis note
+  const basedOnEl = document.getElementById('scoreBasedOn');
+  if (basedOnEl) {
+    if (results.skipped > 0) {
+      basedOnEl.textContent = `Score based on ${results.answeredQuestions} answered question${results.answeredQuestions !== 1 ? 's' : ''} (${results.skipped} skipped)`;
+    } else {
+      basedOnEl.textContent = '';
+    }
+  }
   
   const badge = document.getElementById('passBadge');
   if (results.passed) {
@@ -7574,6 +7587,34 @@ function buildTestTitle() {
   return 'Practice Test';
 }
 
+function buildAnsweredSnapshot() {
+  const snapshot = (testState.snapshot && testState.snapshot.en) ? testState.snapshot.en : [];
+  const answersMap = testState.answers || {};
+
+  return snapshot.reduce((acc, q, idx) => {
+    const rawAnswer = answersMap[q.id];
+    if (!rawAnswer || (Array.isArray(rawAnswer) && rawAnswer.length === 0)) return acc;
+
+    const answerIds = Array.isArray(rawAnswer) ? rawAnswer : [rawAnswer];
+    const options = Array.isArray(q.options) ? q.options : [];
+    const answerDetails = answerIds.map(id => {
+      const match = options.find(o => String(o.id) === String(id));
+      return {
+        id,
+        text: match ? match.text : String(id)
+      };
+    });
+
+    acc.push({
+      index: idx + 1,
+      id: q.id,
+      stem: q.stem,
+      answers: answerDetails
+    });
+    return acc;
+  }, []);
+}
+
 // ─── Persist grade to Supabase; return full history ──────────
 async function saveTestGrade(results) {
   try {
@@ -7596,6 +7637,7 @@ async function saveTestGrade(results) {
       test_title:      title,
       topics:          topics,
       test_id:         TEST_CONFIG.testId || null,
+      answered_snapshot: buildAnsweredSnapshot(),
       score_percent:   results.scorePercent,
       letter_grade:    letter,
       correct_count:   results.correct,

@@ -236,6 +236,54 @@
     }
     .table-empty svg { display: block; margin: 0 auto 14px; opacity: 0.35; }
 
+    /* ── ANSWER REVIEW MODAL ── */
+    .answer-modal-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(3,7,18,0.82);
+      display: none; align-items: center; justify-content: center;
+      padding: 24px;
+    }
+    .answer-modal {
+      width: 100%; max-width: 860px; max-height: 90vh; overflow-y: auto;
+      background: #0b162b;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+    }
+    .answer-modal-header {
+      padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.07);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .answer-modal-title { font-size: 16px; font-weight: 700; color: #f5f8fc; }
+    .answer-modal-sub { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+    .answer-close-btn {
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #94a3b8; width: 32px; height: 32px; border-radius: 9px;
+      cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
+    }
+    .answer-modal-body { padding: 18px 22px 24px; }
+    .answer-question {
+      padding: 14px 16px; border-radius: 12px; margin-bottom: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+    }
+    .answer-question h4 {
+      font-size: 13.5px; font-weight: 700; color: #f1f5f9; margin-bottom: 8px;
+    }
+    .answer-question p { font-size: 13px; color: #cbd5e1; margin-bottom: 8px; line-height: 1.6; }
+    .answer-chip {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+      background: rgba(201,168,76,0.12); color: var(--gold-light); border: 1px solid rgba(201,168,76,0.3);
+      margin-right: 8px; margin-bottom: 6px;
+    }
+    .answer-link-btn {
+      background: rgba(201,168,76,0.08); border: 1px solid rgba(201,168,76,0.3);
+      color: var(--gold-primary); font-size: 11px; font-weight: 700; cursor: pointer;
+      padding: 4px 10px; border-radius: 8px; margin-left: 8px;
+    }
+
     /* ── CHARTS ROW ── */
     .charts-row {
       display: grid;
@@ -497,6 +545,22 @@
   </div>
 </div>
 
+<!-- ── ANSWER REVIEW MODAL ── -->
+<div class="answer-modal-overlay" id="answerReviewOverlay" onclick="if(event.target===this)closeAnswerReview()">
+  <div class="answer-modal">
+    <div class="answer-modal-header">
+      <div>
+        <div class="answer-modal-title" id="answerReviewTitle">Answered Questions</div>
+        <div class="answer-modal-sub" id="answerReviewSubtitle">Review submitted answers</div>
+      </div>
+      <button class="answer-close-btn" onclick="closeAnswerReview()">&times;</button>
+    </div>
+    <div class="answer-modal-body" id="answerReviewBody">
+      <div style="text-align:center;color:var(--text-muted);padding:30px 0;font-size:13px">No answers to display.</div>
+    </div>
+  </div>
+</div>
+
 <script src="js/admin-sidebar.js"></script>
 <script>
 // ── Auth guard ────────────────────────────────────────────────────────────
@@ -528,6 +592,7 @@ let _sortDir     = 'desc';
 let _donutChart  = null;
 let _barChart    = null;
 let _trendChart  = null;
+let _drawerRows  = [];
 
 // ── Load ──────────────────────────────────────────────────────────────────
 async function loadAll() {
@@ -821,6 +886,7 @@ async function openDrawer(ownerId, name, email) {
     if (error) throw error;
 
     const rows = data || [];
+    _drawerRows = rows;
     if (!rows.length) {
       document.getElementById('drawerBody').innerHTML =
         '<div style="text-align:center;color:var(--text-muted);padding:40px 0;font-size:14px">No test history found.</div>';
@@ -858,6 +924,7 @@ async function openDrawer(ownerId, name, email) {
             </div>
             <span style="font-size:13px;font-weight:800;color:#f1f5f9;flex-shrink:0">${r.score_percent}%</span>
             <span class="pass-chip ${ok?'pass':'fail'}">${ok?'Pass':'Fail'}</span>
+            <button class="answer-link-btn" onclick="openAnswerReview(${i})">View Answers</button>
           </div>
           <div style="font-size:11px;color:#475569;margin-top:5px">${fmtDate(r.taken_at)}</div>
         </div>`;
@@ -870,6 +937,54 @@ async function openDrawer(ownerId, name, email) {
 
 function closeDrawer() {
   document.getElementById('detailOverlay').classList.remove('open');
+}
+
+function normalizeAnswerSnapshot(row) {
+  if (!row || !row.answered_snapshot) return [];
+  if (Array.isArray(row.answered_snapshot)) return row.answered_snapshot;
+  try {
+    return JSON.parse(row.answered_snapshot);
+  } catch (e) {
+    return [];
+  }
+}
+
+function openAnswerReview(idx) {
+  const row = _drawerRows[idx];
+  const overlay = document.getElementById('answerReviewOverlay');
+  const body = document.getElementById('answerReviewBody');
+  const title = document.getElementById('answerReviewTitle');
+  const subtitle = document.getElementById('answerReviewSubtitle');
+
+  if (!row || !overlay || !body) return;
+
+  title.textContent = row.test_title ? `Answered Questions — ${row.test_title}` : 'Answered Questions';
+  subtitle.textContent = row.taken_at ? fmtDate(row.taken_at) : 'Review submitted answers';
+
+  const snapshot = normalizeAnswerSnapshot(row);
+  if (!snapshot.length) {
+    body.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:30px 0;font-size:13px">No answered questions were stored for this test.</div>';
+    overlay.style.display = 'flex';
+    return;
+  }
+
+  body.innerHTML = snapshot.map((q, i) => {
+    const answers = Array.isArray(q.answers) ? q.answers : [];
+    return `
+      <div class="answer-question">
+        <h4>Question ${q.index || (i + 1)}</h4>
+        <p>${escHtml(q.stem || '—')}</p>
+        ${answers.map(a => `<span class="answer-chip">${escHtml(a.text || a.id || '')}</span>`).join('')}
+      </div>
+    `;
+  }).join('');
+
+  overlay.style.display = 'flex';
+}
+
+function closeAnswerReview() {
+  const overlay = document.getElementById('answerReviewOverlay');
+  if (overlay) overlay.style.display = 'none';
 }
 
 // ── CSV export ───────────────────────────────────────────────────────────
