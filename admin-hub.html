@@ -8564,7 +8564,10 @@
         const NOTES_KEY = 'acnhs_topics';
         const topics = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]');
         let moved = false;
-        topics.forEach(topic => {
+        // Use for...of + break so we stop as soon as the note is found and moved.
+        // forEach would continue iterating into the destination topic and splice
+        // the note back out again, leaving the note in both or neither topic.
+        for (const topic of topics) {
           const idx = (topic.notes || []).findIndex(n => n.id === noteId);
           if (idx !== -1) {
             const noteData = topic.notes.splice(idx, 1)[0];
@@ -8575,8 +8578,9 @@
             }
             targetTopic.notes.push(noteData);
             moved = true;
+            break; // ← stop here; don't process the destination topic again
           }
-        });
+        }
         if (moved) localStorage.setItem(NOTES_KEY, JSON.stringify(topics));
       } catch(e) {
         console.error('saveNoteCategory: localStorage update failed', e);
