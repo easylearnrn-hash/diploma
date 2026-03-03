@@ -8065,6 +8065,10 @@
         console.warn('admin-hub: failed to parse acnhs_topics from localStorage', e);
       }
 
+      // Load the permanently-deleted note registry so the seed loop never re-adds them
+      let deletedNotes = {};
+      try { deletedNotes = JSON.parse(localStorage.getItem('acnhs_deleted_notes') || '{}'); } catch(e) {}
+
       // If storage is empty or missing topics, seed it so notes always show
       // even if the user has never visited notes.html.
       // Also MIGRATE any old auto-generated IDs (seed_Fundamentals_0 style) to
@@ -8090,6 +8094,9 @@
           storageDirty = true;
         }
         seedNotes.forEach(entry => {
+          // Never re-seed a note that was explicitly deleted by the admin
+          if (deletedNotes[entry.id] || deletedNotes[entry.htmlFile]) return;
+
           // If note already exists ANYWHERE, just migrate its id if stale — never move it back
           const globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
           if (globalExisting) {

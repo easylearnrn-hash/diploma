@@ -1824,8 +1824,19 @@
       confirmLabel: 'Delete Note',
       danger: true,
       onConfirm: () => {
+        // Remove from topic
         topic.notes = topic.notes.filter(n => n.id !== noteId);
         localStorage.setItem(storageKey, JSON.stringify(topics));
+
+        // Record in deleted-notes set so the seed loop never re-adds it
+        try {
+          const DELETED_KEY = 'acnhs_deleted_notes';
+          const deleted = JSON.parse(localStorage.getItem(DELETED_KEY) || '{}');
+          deleted[note.id]       = true;
+          if (note.htmlFile) deleted[note.htmlFile] = true;
+          localStorage.setItem(DELETED_KEY, JSON.stringify(deleted));
+        } catch(e) {}
+
         renderTopics();
       }
     });

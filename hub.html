@@ -3990,6 +3990,10 @@
 
       let dirty = false;
 
+      // Load the permanently-deleted note registry so the seed loop never re-adds them
+      let deletedNotes = {};
+      try { deletedNotes = JSON.parse(localStorage.getItem('acnhs_deleted_notes') || '{}'); } catch(e) {}
+
       // Build a flat lookup of ALL notes across ALL topics by htmlFile and by id
       // so we never re-seed a note that was moved to a different category
       const allNotesByFile = {};
@@ -4009,6 +4013,9 @@
           dirty = true;
         }
         seedNotes.forEach(entry => {
+          // Never re-seed a note that was explicitly deleted
+          if (deletedNotes[entry.id] || deletedNotes[entry.htmlFile]) return;
+
           // If this note already exists ANYWHERE (any topic), just migrate its id if stale
           const globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
           if (globalExisting) {
