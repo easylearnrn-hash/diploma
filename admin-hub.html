@@ -8407,29 +8407,148 @@
      */
     function saveNoteCategory(noteId, newCategory) {
       if (newCategory === '__new__') {
-        const custom = prompt('Enter new category name:');
-        if (!custom || !custom.trim()) {
-          // Reset select to current value
-          const sel = document.getElementById('noteCategoryEdit_' + noteId);
-          if (sel) {
-            const note = ALL_NOTES.find(n => n.id === noteId);
-            if (note) sel.value = note.category;
-          }
-          return;
-        }
-        newCategory = custom.trim();
-        // Add the new option to the select and select it
+        // Reset select back to current value while modal is open
         const sel = document.getElementById('noteCategoryEdit_' + noteId);
         if (sel) {
-          const opt = document.createElement('option');
-          opt.value = newCategory;
-          opt.textContent = newCategory;
-          // Insert before the "＋ New category…" option
-          sel.insertBefore(opt, sel.lastElementChild);
-          sel.value = newCategory;
+          const currentNote = ALL_NOTES.find(n => n.id === noteId);
+          if (currentNote) sel.value = currentNote.category;
         }
+        _showNewCategoryModal(noteId);
+        return;
       }
+      _applyNoteCategory(noteId, newCategory);
+    }
 
+    function _showNewCategoryModal(noteId) {
+      // Remove any existing instance
+      document.getElementById('_newCatModal')?.remove();
+
+      const overlay = document.createElement('div');
+      overlay.id = '_newCatModal';
+      overlay.style.cssText = [
+        'position:fixed;inset:0;z-index:20000',
+        'display:flex;align-items:center;justify-content:center;padding:20px',
+        'background:rgba(2,10,20,0.72)',
+        'backdrop-filter:blur(8px)',
+        'animation:fadeIn 0.18s ease',
+      ].join(';');
+
+      overlay.innerHTML = `
+        <div style="
+          background:linear-gradient(160deg,rgba(7,24,44,0.99) 0%,rgba(4,14,28,0.99) 100%);
+          border:1px solid rgba(201,168,76,0.30);
+          border-radius:20px;
+          width:100%;max-width:420px;
+          box-shadow:0 32px 80px rgba(0,0,0,0.75),0 0 0 1px rgba(201,168,76,0.06);
+          animation:slideUp 0.22s cubic-bezier(.22,1,.36,1);
+          overflow:hidden;
+        ">
+          <!-- Header -->
+          <div style="padding:24px 28px 18px;border-bottom:1px solid rgba(201,168,76,0.10);display:flex;align-items:flex-start;gap:14px;">
+            <div style="width:44px;height:44px;flex-shrink:0;background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.06));border:1px solid rgba(201,168,76,0.32);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+              <h3 style="margin:0 0 4px;font-size:16px;font-weight:800;color:#f0ece3;letter-spacing:-0.2px;">New Category</h3>
+              <p style="margin:0;font-size:12.5px;color:#7a7060;line-height:1.45;">Create a new category to organise this note under.</p>
+            </div>
+            <button id="_newCatClose"
+              style="width:28px;height:28px;flex-shrink:0;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.09);border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.18s;"
+              onmouseover="this.style.background='rgba(239,68,68,0.18)';this.style.borderColor='rgba(239,68,68,0.35)'"
+              onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.borderColor='rgba(255,255,255,0.09)'">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#c8bfb2" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div style="padding:22px 28px 24px;">
+            <label style="display:block;font-size:11.5px;font-weight:700;color:#8a8070;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px;">Category Name</label>
+            <input id="_newCatInput" type="text" placeholder="e.g. Respiratory System"
+              autocomplete="off" spellcheck="false"
+              style="
+                width:100%;box-sizing:border-box;
+                background:rgba(255,255,255,0.04);
+                border:1px solid rgba(201,168,76,0.25);
+                border-radius:10px;
+                padding:11px 14px;
+                font-size:14px;font-weight:600;
+                color:#f0ece3;
+                font-family:inherit;
+                outline:none;
+                transition:border-color 0.18s,box-shadow 0.18s;
+              "
+              onfocus="this.style.borderColor='rgba(201,168,76,0.65)';this.style.boxShadow='0 0 0 3px rgba(201,168,76,0.10)'"
+              onblur="this.style.borderColor='rgba(201,168,76,0.25)';this.style.boxShadow='none'"
+            />
+            <p id="_newCatError" style="margin:7px 0 0;font-size:12px;color:#f87171;display:none;">Please enter a category name.</p>
+          </div>
+
+          <!-- Footer -->
+          <div style="padding:0 28px 22px;display:flex;gap:10px;justify-content:flex-end;">
+            <button id="_newCatCancel"
+              style="padding:10px 22px;border-radius:10px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);color:#c8bfb2;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.18s;"
+              onmouseover="this.style.background='rgba(255,255,255,0.09)'"
+              onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+              Cancel
+            </button>
+            <button id="_newCatConfirm"
+              style="padding:10px 26px;border-radius:10px;background:linear-gradient(135deg,#c9a84c,#a8863a);border:none;color:#04111f;font-size:13px;font-weight:800;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:7px;transition:all 0.18s;box-shadow:0 4px 14px rgba(201,168,76,0.25);"
+              onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(201,168,76,0.38)'"
+              onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(201,168,76,0.25)'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8"><polyline points="20 6 9 17 4 12"/></svg>
+              Save Category
+            </button>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(overlay);
+
+      const input   = document.getElementById('_newCatInput');
+      const errMsg  = document.getElementById('_newCatError');
+      const dismiss = () => overlay.remove();
+
+      const confirm = () => {
+        const val = input.value.trim();
+        if (!val) {
+          errMsg.style.display = 'block';
+          input.style.borderColor = 'rgba(248,113,113,0.65)';
+          input.focus();
+          return;
+        }
+        overlay.remove();
+
+        // Add option to the select and select it
+        const sel = document.getElementById('noteCategoryEdit_' + noteId);
+        if (sel) {
+          // Only add if not already present
+          if (![...sel.options].some(o => o.value === val)) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            sel.insertBefore(opt, sel.lastElementChild);
+          }
+          sel.value = val;
+        }
+        _applyNoteCategory(noteId, val);
+      };
+
+      document.getElementById('_newCatClose').onclick   = dismiss;
+      document.getElementById('_newCatCancel').onclick  = dismiss;
+      document.getElementById('_newCatConfirm').onclick = confirm;
+      overlay.addEventListener('click', e => { if (e.target === overlay) dismiss(); });
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+        if (e.key === 'Escape') dismiss();
+        errMsg.style.display = 'none';
+        input.style.borderColor = 'rgba(201,168,76,0.25)';
+      });
+      requestAnimationFrame(() => input.focus());
+    }
+
+    function _applyNoteCategory(noteId, newCategory) {
       // 1. Update ALL_NOTES in memory
       const note = ALL_NOTES.find(n => n.id === noteId);
       if (note) note.category = newCategory;
@@ -8439,12 +8558,10 @@
         const NOTES_KEY = 'acnhs_topics';
         const topics = JSON.parse(localStorage.getItem(NOTES_KEY) || '[]');
         let moved = false;
-        // Find the note in its current topic and move it to the new topic
         topics.forEach(topic => {
           const idx = (topic.notes || []).findIndex(n => n.id === noteId);
           if (idx !== -1) {
             const noteData = topic.notes.splice(idx, 1)[0];
-            // Find or create target topic
             let targetTopic = topics.find(t => t.title === newCategory);
             if (!targetTopic) {
               targetTopic = { id: 'seed_' + newCategory.replace(/\s+/g,'_'), title: newCategory, notes: [], created: Date.now() };
@@ -8462,7 +8579,7 @@
       // 3. Refresh category filter dropdown
       refreshCategoryFilter(ALL_NOTES);
 
-      // 4. Show brief success indicator on the select
+      // 4. Flash green success on the select
       const sel = document.getElementById('noteCategoryEdit_' + noteId);
       if (sel) {
         sel.style.borderColor = 'rgba(74,222,128,0.7)';
