@@ -92,9 +92,8 @@ const ACNHS_FOOTER_HTML = `
       <div class="footer-link-group">
         <h4>Institution</h4>
         <a href="about.html">About the College</a>
-        <a href="staff.html">Faculty &amp; Staff</a>
         <a href="contact.html">Contact Us</a>
-        <a href="academic-catalog.html" data-action="open-catalog-picker">Academic Catalog</a>
+        <a href="academic-catalog.html">Academic Catalog</a>
       </div>
     </div>
   </div>
