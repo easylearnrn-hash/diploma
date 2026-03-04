@@ -1040,9 +1040,9 @@ function redirectToStudentPortal(application = {}) {
 
   showRefreshNotification('Enrollment complete! Redirecting to the student portal...', 'success');
 
-  if (statusPollInterval) {
-    clearInterval(statusPollInterval);
-    statusPollInterval = null;
+  if (statusRealtimeChannel) {
+    statusRealtimeChannel.unsubscribe();
+    statusRealtimeChannel = null;
   }
 
   setTimeout(() => {
@@ -2093,46 +2093,39 @@ function showRefreshNotification(message, type = 'info') {
   }, 3000);
 }
 
-// Enable realtime updates via polling
-let statusPollInterval;
+// Enable realtime updates via Supabase Realtime
+let statusRealtimeChannel;
 
 function startStatusPolling() {
-  // Poll every 30 seconds for status changes
-  statusPollInterval = setInterval(async () => {
-    try {
-      const supabase = initSupabase();
-      if (!supabase) return;
-      
-      const username = sessionStorage.getItem('applicationUsername');
-      const referenceNumber = sessionStorage.getItem('applicationReference');
-      
-      if (!username || !referenceNumber) return;
-      
-      const { data: application, error } = await supabase
-        .from('applications')
-        .select('status, status_updated_at')
-        .eq('username', username)
-        .eq('reference_number', referenceNumber)
-        .single();
-      
-      if (!error && application) {
-        const currentStatus = document.getElementById('statusText')?.textContent;
-        if (application.status && application.status !== currentStatus) {
-          // Status changed - show notification and refresh
-          showRefreshNotification('Your application status has been updated to: ' + application.status, 'success');
-          await refreshStatus();
-        }
+  const supabase = initSupabase();
+  if (!supabase) return;
+
+  const username = sessionStorage.getItem('applicationUsername');
+  const referenceNumber = sessionStorage.getItem('applicationReference');
+  if (!username || !referenceNumber) return;
+
+  statusRealtimeChannel = supabase
+    .channel('application-status-updates')
+    .on('postgres_changes', {
+      event: 'UPDATE',
+      schema: 'public',
+      table: 'applications',
+      filter: `reference_number=eq.${referenceNumber}`
+    }, async (payload) => {
+      const newStatus = payload.new?.status;
+      const currentStatus = document.getElementById('statusText')?.textContent;
+      if (newStatus && newStatus !== currentStatus) {
+        showRefreshNotification('Your application status has been updated to: ' + newStatus, 'success');
+        await refreshStatus();
       }
-    } catch (error) {
-      console.error('Polling error:', error);
-    }
-  }, 30000); // 30 seconds
+    })
+    .subscribe();
 }
 
-// Stop polling when leaving page
+// Clean up Realtime channel when leaving page
 window.addEventListener('beforeunload', () => {
-  if (statusPollInterval) {
-    clearInterval(statusPollInterval);
+  if (statusRealtimeChannel) {
+    statusRealtimeChannel.unsubscribe();
   }
 });
 

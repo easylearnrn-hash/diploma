@@ -1917,7 +1917,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     let emailToDelete = null;
     let bulkDeleteMode = false;
     let viewedEmails = new Set(); // Track viewed email IDs to remove glow
-    let autoRefreshInterval = null;
 
     // Load viewed emails from localStorage
     function loadViewedEmails() {
@@ -2179,10 +2178,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }, 100);
       }
 
-      // Auto-refresh emails every 5 minutes
-      autoRefreshInterval = setInterval(async () => {
-        await loadEmailHistory();
-      }, 300000);
+      // Auto-refresh emails via Realtime on new inserts
+      db.channel('email-system-inbox')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'email_history' },
+          async () => { await loadEmailHistory(); })
+        .subscribe();
     });
 
     function setupEventListeners() {

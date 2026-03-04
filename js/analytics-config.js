@@ -188,15 +188,29 @@ const ACNHS_ANALYTICS = {
   // Initialize time tracking
   initTimeTracking: function() {
     window.pageLoadTime = Date.now();
-    
-    // Track engagement every 30 seconds
-    setInterval(() => {
+
+    const getEngagementSnapshot = () => {
       const timeSpent = Math.round((Date.now() - window.pageLoadTime) / 1000);
       const scrollHeight = document.documentElement.scrollHeight - window.innerHeight;
-      const scrollPercent = Math.round((window.scrollY / scrollHeight) * 100);
-      
+      const scrollPercent = scrollHeight > 0
+        ? Math.round((window.scrollY / scrollHeight) * 100)
+        : 0;
+      return { timeSpent, scrollPercent };
+    };
+
+    // Track engagement when tab is hidden (user switches away)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        const { timeSpent, scrollPercent } = getEngagementSnapshot();
+        this.trackEngagement(timeSpent, scrollPercent);
+      }
+    });
+
+    // Track engagement on page unload
+    window.addEventListener('beforeunload', () => {
+      const { timeSpent, scrollPercent } = getEngagementSnapshot();
       this.trackEngagement(timeSpent, scrollPercent);
-    }, 30000);
+    });
   },
   
   // Initialize outbound link tracking
