@@ -31,6 +31,13 @@ CREATE POLICY "Admins can delete expenses"
   FOR DELETE
   USING (true);
 
+-- Allow admins to update expenses
+CREATE POLICY "Admins can update expenses"
+  ON monthly_expenses
+  FOR UPDATE
+  USING (true)
+  WITH CHECK (true);
+
 -- Create index for faster queries
 CREATE INDEX IF NOT EXISTS idx_monthly_expenses_created_at 
   ON monthly_expenses(created_at DESC);

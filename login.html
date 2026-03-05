@@ -651,14 +651,16 @@ function switchLoginType(type) {
 }
 
 // Check if already logged in on page load
+// NOTE: Only check sessionStorage here — localStorage persists across browser
+// sessions and causes redirect loops when stale auth keys are still present.
 window.addEventListener('DOMContentLoaded', function() {
-  const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
-  const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-  const isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
-  const isViewer = isStudentViewerSession();
-  
+  const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true';
+  const userEmail = sessionStorage.getItem('userEmail');
+  const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+  const isViewer = sessionStorage.getItem('isStudentViewer') === 'true';
+
   if (isLoggedIn && userEmail) {
-    // Already logged in - redirect based on role
+    // Already logged in this tab session - redirect based on role
     if (isViewer) {
       window.location.href = STUDENT_VIEWER_SELECTION_PAGE;
     } else if (isAdmin) {
@@ -666,6 +668,14 @@ window.addEventListener('DOMContentLoaded', function() {
     } else {
       window.location.href = 'Student-page.html';
     }
+  } else {
+    // No active session — clear any stale localStorage auth flags that could
+    // cause loops on the next page load if sessionStorage has expired.
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('isAdmin');
+    localStorage.removeItem('isStudentViewer');
+    localStorage.removeItem('userEmail');
+    localStorage.removeItem('viewerAccountEmail');
   }
 });
 

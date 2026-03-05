@@ -809,16 +809,25 @@
     // ==========================================
     // Check for student_id in URL FIRST (for iframe embedding)
     const urlParams = new URLSearchParams(window.location.search);
-    const urlStudentId = urlParams.get('student_id');
-    const invoiceId = urlParams.get('id');
+  const urlStudentId = urlParams.get('student_id');
+  const invoiceId = urlParams.get('id');
+  const urlAdminFlag = urlParams.get('admin') === '1';
+  const urlAdminEmail = (urlParams.get('admin_email') || '').toLowerCase();
     
     // Then check session storage
-    let loggedInStudentId = sessionStorage.getItem('studentId') || urlStudentId;
-    const loggedInEmail = sessionStorage.getItem('userEmail');
-    const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+  let loggedInStudentId = sessionStorage.getItem('studentId') || localStorage.getItem('studentId') || urlStudentId;
+  let loggedInEmail = (sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '').toLowerCase();
+  let isAdmin = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
     
     // Admin can view any invoice
-    const ADMIN_EMAIL = 'hrachfilm@gmail.com';
+  const ADMIN_EMAIL = 'hrachfilm@gmail.com';
+    if (!isAdmin && urlAdminFlag && urlAdminEmail === ADMIN_EMAIL) {
+      isAdmin = true;
+      loggedInEmail = ADMIN_EMAIL;
+      sessionStorage.setItem('isAdmin', 'true');
+      sessionStorage.setItem('userEmail', ADMIN_EMAIL);
+    }
+
     const isAuthorizedAdmin = isAdmin && loggedInEmail === ADMIN_EMAIL;
 
     if (!isAuthorizedAdmin && !loggedInStudentId) {

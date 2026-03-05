@@ -1085,6 +1085,11 @@
       to   { opacity: 1; transform: translateY(0); }
     }
 
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+
     /* ── REFRESH BUTTON ── */
     .refresh-btn {
       display: flex;
@@ -1622,7 +1627,7 @@
             Admin Portal <span>›</span> Payments
           </div>
           <h1>Payment Status</h1>
-          <p class="subtitle">Student payment standing — up to date or outstanding</p>
+          <p class="subtitle" id="pageSubtitle">Student payment standing — dynamically calculated from invoice data</p>
         </div>
         <span class="last-updated" id="lastUpdated"></span>
       </div>
@@ -2100,18 +2105,144 @@
     }
 
     // ── State ────────────────────────────────────────────────────────────
-    // { name, studentId, group, program, status:'paid'|'partial'|'due', hasInvoice, invoiceIds:[] }
+    // { name, studentId, group, program, status:'paid'|'partial'|'due', hasInvoice, invoiceIds:[], currentMonthStatus, currentMonthName, overdueMonths:[] }
     let allStudentStatuses = [];
     let drawerStudentId    = null;
     let drawerCurrentStatus = null;
 
-    // ── Status resolution ────────────────────────────────────────────────
-    // Priority: paid > partial > anything else → 'due'
-    function bestStatus(statuses) {
-      const s = statuses.map(x => (x || '').toLowerCase());
-      if (s.includes('paid'))    return 'paid';
-      if (s.includes('partial')) return 'partial';
-      return 'due';
+    // Month names array
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // ── Dynamic status computation from invoice items + partial payment notes ──────
+    // Returns { status:'paid'|'partial'|'due', currentMonthStatus:'paid'|'partial'|'due'|'none', overdueMonths:[] }
+    function computeDynamicStatus(invoices) {
+      if (!invoices || invoices.length === 0) return { status: 'due', currentMonthStatus: 'none', overdueMonths: [] };
+
+      const now = new Date();
+      const currentMonthName = MONTHS[now.getMonth()]; // e.g. "March"
+
+      // Build a map: itemKey (lowercase description) → { total, paid }
+      const itemMap = {}; // key → { total, paid }
+
+      invoices.forEach(inv => {
+        // Parse items
+        let items = [];
+        try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch(e) {}
+
+        // Parse partial payment records from notes
+        const paidByKey = {}; // key → amount paid (from notes)
+        if (inv.notes) {
+          const blocks = inv.notes.split('--- PARTIAL PAYMENT RECORDED ---');
+          blocks.forEach((block, i) => {
+            if (i === 0) return;
+            const amtMatch  = block.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+            const appMatch  = block.match(/Applied To:\s*(.+?)(?=\n|$)/);
+            if (amtMatch && appMatch) {
+              const k = appMatch[1].trim().toLowerCase();
+              paidByKey[k] = (paidByKey[k] || 0) + (parseFloat(amtMatch[1].replace(/,/g,'')) || 0);
+            }
+          });
+        }
+
+        items.forEach(item => {
+          const desc = (item.description || '').trim();
+          if (!desc) return;
+          const descLow = desc.toLowerCase();
+
+          const qty   = parseFloat(item.qty || item.quantity || 1) || 1;
+          const price = parseFloat(String(item.price || 0).replace(/,/g,'')) || 0;
+          const disc  = parseFloat(String(item.discount || 0).replace(/,/g,'')) || 0;
+          const total = qty * price * (1 - disc / 100);
+
+          // Resolve paid amount
+          let paid = 0;
+          if (inv.status === 'paid') {
+            paid = total; // invoice fully paid
+          } else if (inv.status === 'partial') {
+            // Check paidByKey for a matching record
+            const matchKey = Object.keys(paidByKey).find(k =>
+              k === descLow || k.includes(descLow) || descLow.includes(k)
+            );
+            paid = matchKey ? paidByKey[matchKey] : 0;
+          }
+
+          // Accumulate into itemMap using the desc as key
+          if (!itemMap[descLow]) itemMap[descLow] = { total: 0, paid: 0, originalDesc: desc };
+          itemMap[descLow].total += total;
+          itemMap[descLow].paid  += paid;
+        });
+      });
+
+      // Determine which months are overdue (have items but unpaid/partial)
+      const overdueMonths = [];
+      let currentMonthStatus = 'none'; // no line item for this month at all
+
+      MONTHS.forEach(month => {
+        const mLow = month.toLowerCase();
+        // Find all items for this month (skip enrollment/down-payment items)
+        const monthKeys = Object.keys(itemMap).filter(k =>
+          k.includes(mLow) && !k.includes('enrollment') && !k.includes('down payment')
+        );
+        if (monthKeys.length === 0) return; // no tuition item for this month
+
+        const totalForMonth = monthKeys.reduce((s, k) => s + itemMap[k].total, 0);
+        const paidForMonth  = monthKeys.reduce((s, k) => s + itemMap[k].paid, 0);
+
+        let mStatus;
+        if (totalForMonth <= 0) {
+          mStatus = 'paid'; // zero-cost item, consider paid
+        } else if (paidForMonth >= totalForMonth - 0.01) {
+          mStatus = 'paid';
+        } else if (paidForMonth > 0) {
+          mStatus = 'partial';
+        } else {
+          mStatus = 'due';
+          overdueMonths.push(month);
+        }
+
+        if (month === currentMonthName) currentMonthStatus = mStatus;
+      });
+
+      // Also check enrollment / down-payment items
+      const enrollKeys = Object.keys(itemMap).filter(k =>
+        k.includes('enrollment') || k.includes('down payment')
+      );
+      enrollKeys.forEach(k => {
+        const { total, paid } = itemMap[k];
+        if (total > 0 && paid < total - 0.01) {
+          overdueMonths.push(itemMap[k].originalDesc);
+        }
+      });
+
+      // ── Overall status ──────────────────────────────────────────────────
+      // RED (due):
+      //   • Current month item exists AND is not paid
+      // GREEN (paid):
+      //   • ALL items are fully paid (nothing overdue including current month)
+      // AMBER (partial):
+      //   • Some items paid, some not — but current month is at least partial
+
+      const hasAnyItem = Object.keys(itemMap).length > 0;
+      if (!hasAnyItem) return { status: 'due', currentMonthStatus: 'none', overdueMonths: [] };
+
+      // If every item is fully paid → green
+      const allPaid = Object.values(itemMap).every(({ total, paid }) => total <= 0 || paid >= total - 0.01);
+      if (allPaid) return { status: 'paid', currentMonthStatus: currentMonthStatus === 'none' ? 'paid' : currentMonthStatus, overdueMonths: [] };
+
+      // If current month has an item and it's unpaid → red (overdue)
+      if (currentMonthStatus === 'due') return { status: 'due', currentMonthStatus, overdueMonths };
+
+      // If current month not present but there are past overdue items → red
+      if (currentMonthStatus === 'none' && overdueMonths.length > 0) return { status: 'due', currentMonthStatus, overdueMonths };
+
+      // Partial: some paid, current month partial or paid
+      if (currentMonthStatus === 'partial') return { status: 'partial', currentMonthStatus, overdueMonths };
+
+      // Some old months overdue but current month is paid → partial
+      if (overdueMonths.length > 0) return { status: 'partial', currentMonthStatus, overdueMonths };
+
+      // Fallback: something is paid, nothing specifically overdue → partial
+      return { status: 'partial', currentMonthStatus, overdueMonths };
     }
 
     // ── Load data ────────────────────────────────────────────────────────
@@ -2119,48 +2250,55 @@
       const btn = document.getElementById('refreshBtn');
       btn.classList.add('spinning');
 
-  try {
+      try {
         const db = initSupabase();
         if (!db) throw new Error('Supabase not initialised');
 
-        const { data: students, error: studErr } = await db
-          .from('students')
-          .select('full_name, student_id, group, program, id, email')
-          .order('full_name', { ascending: true });
-        if (studErr) throw studErr;
+        // Fetch students + full invoice data (items + notes needed for dynamic status)
+        const [studResult, invResult] = await Promise.all([
+          db.from('students').select('full_name, student_id, group, program, id, email').order('full_name', { ascending: true }),
+          db.from('invoices').select('id, student_id, status, items, notes')
+        ]);
+        if (studResult.error) throw studResult.error;
+        if (invResult.error)  throw invResult.error;
 
-        const { data: invoices, error: invErr } = await db
-          .from('invoices')
-          .select('id, student_id, status');
-        if (invErr) throw invErr;
-
-        // Build lookup: studentId → { statuses[], ids[] }
-        const invoiceMap = {};
-        (invoices || []).forEach(inv => {
+        // Build lookup: studentId → invoices[]
+        const invoiceMap = {}; // sid → { ids:[], invoices:[] }
+        (invResult.data || []).forEach(inv => {
           const sid = (inv.student_id || '').trim();
           if (!sid) return;
-          if (!invoiceMap[sid]) invoiceMap[sid] = { statuses: [], ids: [] };
-          invoiceMap[sid].statuses.push((inv.status || '').toLowerCase());
+          if (!invoiceMap[sid]) invoiceMap[sid] = { ids: [], invoices: [] };
           invoiceMap[sid].ids.push(inv.id);
+          invoiceMap[sid].invoices.push(inv);
         });
 
-        allStudentStatuses = (students || []).map(s => {
+        allStudentStatuses = (studResult.data || []).map(s => {
           const sid   = (s.student_id || '').trim();
           const entry = invoiceMap[sid];
+          const { status, currentMonthStatus, overdueMonths } =
+            entry ? computeDynamicStatus(entry.invoices) : { status: 'due', currentMonthStatus: 'none', overdueMonths: [] };
           return {
-            name:       s.full_name || 'Unknown',
-            studentId:  sid,
-            group:      s.group   || '',
-            program:    s.program || '',
-            email:      s.email   || '',
-            status:     entry ? bestStatus(entry.statuses) : 'due',
-            hasInvoice: !!entry,
-            invoiceIds: entry ? entry.ids : [],
+            name:               s.full_name || 'Unknown',
+            studentId:          sid,
+            group:              s.group   || '',
+            program:            s.program || '',
+            email:              s.email   || '',
+            status,
+            currentMonthStatus,
+            overdueMonths,
+            hasInvoice:         !!entry,
+            invoiceIds:         entry ? entry.ids : [],
           };
         });
 
         populateGroupFilter();
         applyFilters();
+
+        // Update subtitle to show current month context
+        const now = new Date();
+        const monthLabel = MONTHS[now.getMonth()] + ' ' + now.getFullYear();
+        const subtitleEl = document.getElementById('pageSubtitle');
+        if (subtitleEl) subtitleEl.textContent = `Dynamically calculated from invoice data — Red = ${monthLabel} unpaid · Green = all paid`;
 
         document.getElementById('lastUpdated').textContent =
           'Updated ' + new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
@@ -2234,6 +2372,9 @@
       const grid = document.getElementById(gridId);
       if (!students.length) { grid.innerHTML = ''; return; }
 
+      const now = new Date();
+      const currentMonthName = MONTHS[now.getMonth()];
+
       const badgeCfg = {
         paid:    { cls: 'badge-paid',    label: 'PAID' },
         partial: { cls: 'badge-partial', label: 'PARTIAL' },
@@ -2247,6 +2388,65 @@
         const programTag = s.program ? `<span class="meta-tag">${escHtml(s.program)}</span>` : '';
         const noInvNote  = !s.hasInvoice ? `<div class="no-invoice-note">No invoice on record</div>` : '';
 
+        // ── Dynamic status tags ──────────────────────────────────────────
+        let statusTag = '';
+        if (zone === 'paid') {
+          // All items fully paid — show a green confirmation tag
+          statusTag = `
+            <div style="
+              display:inline-flex;align-items:center;gap:5px;
+              margin-top:6px;
+              font-size:10.5px;font-weight:700;letter-spacing:0.05em;
+              color:#4ade80;
+              background:rgba(34,197,94,0.10);
+              border:1px solid rgba(34,197,94,0.28);
+              border-radius:999px;padding:2px 10px;
+            ">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+              All payments up to date
+            </div>`;
+        } else if (zone === 'due') {
+          // Show which month(s) are overdue
+          const displayOverdue = (s.overdueMonths && s.overdueMonths.length > 0)
+            ? s.overdueMonths.slice(0, 3).join(', ') + (s.overdueMonths.length > 3 ? ` +${s.overdueMonths.length - 3} more` : '')
+            : currentMonthName; // fallback to current month
+          statusTag = `
+            <div style="
+              display:inline-flex;align-items:center;gap:5px;
+              margin-top:6px;
+              font-size:10.5px;font-weight:700;letter-spacing:0.05em;
+              color:#f87171;
+              background:rgba(239,68,68,0.10);
+              border:1px solid rgba(239,68,68,0.28);
+              border-radius:999px;padding:2px 10px;
+            ">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01" stroke-linecap="round"/></svg>
+              Overdue: ${escHtml(displayOverdue)}
+            </div>`;
+        } else if (zone === 'partial') {
+          // Show current month partial status
+          const cmLabel = s.currentMonthStatus === 'paid'
+            ? `${currentMonthName} ✓`
+            : s.currentMonthStatus === 'partial'
+              ? `${currentMonthName} partial`
+              : (s.overdueMonths && s.overdueMonths.length > 0
+                  ? `Pending: ${s.overdueMonths.slice(0,2).join(', ')}`
+                  : 'Partial payment');
+          const tagColor = s.currentMonthStatus === 'paid'
+            ? { fg:'#4ade80', bg:'rgba(34,197,94,0.10)', border:'rgba(34,197,94,0.28)' }
+            : { fg:'#fbbf24', bg:'rgba(245,158,11,0.10)', border:'rgba(245,158,11,0.28)' };
+          statusTag = `
+            <div style="
+              display:inline-flex;align-items:center;gap:5px;
+              margin-top:6px;
+              font-size:10.5px;font-weight:700;letter-spacing:0.05em;
+              color:${tagColor.fg};
+              background:${tagColor.bg};
+              border:1px solid ${tagColor.border};
+              border-radius:999px;padding:2px 10px;
+            ">⏳ ${escHtml(cmLabel)}</div>`;
+        }
+
         // Safely encode studentId and name for the onclick attribute
         const safeId   = escHtml(s.studentId);
         const safeName = escHtml(s.name).replace(/'/g, '&#39;').replace(/"/g, '&quot;');
@@ -2258,6 +2458,7 @@
               <div class="student-name">${escHtml(s.name)}</div>
               <div class="student-id">${safeId || '—'}</div>
               <div class="student-meta">${groupTag}${programTag}</div>
+              ${statusTag}
               ${noInvNote}
             </div>
             <button
@@ -2586,15 +2787,23 @@
         }
 
         // Optimistic local update
-        student.status     = newStatus;
-        student.hasInvoice = true;
+        student.status             = newStatus;
+        student.hasInvoice         = true;
+        // Reflect manual override in dynamic tags too
+        if (newStatus === 'paid') {
+          student.currentMonthStatus = 'paid';
+          student.overdueMonths      = [];
+        } else if (newStatus === 'due') {
+          student.currentMonthStatus = 'due';
+        }
 
         closeDrawer();
         applyFilters();
         showToast('Status updated to ' + newStatus.toUpperCase(), 'success');
 
-        // If we inserted a new invoice, reload to get real ids
+        // Reload after manual change to get accurate dynamic status
         if (student.invoiceIds.length === 0) loadPaymentStatus();
+        else setTimeout(() => loadPaymentStatus(), 600);
 
       } catch (err) {
         console.error('Failed to update status:', err);

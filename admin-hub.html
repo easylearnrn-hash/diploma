@@ -7977,28 +7977,99 @@
     let CURRENT_STATUS_FILTER = 'all';
     let CURRENT_SEARCH_TERM = '';
 
-    // ── ONE-TIME MIGRATION (runs once at startup, never inside buildNotesFromStorage) ──
-    // Rename stale 'Neurology' topic → 'Autoimmune Diseases' in existing localStorage.
-    // Must run BEFORE buildNotesFromStorage so the seed loop never sees Neurology.
-    // Writing localStorage here does NOT trigger the storage event in the same tab.
-    (function migrateNeuroToAutoimmune() {
+    // ── ONE-TIME MIGRATION: migrate stale auto-generated IDs in 'Neurology' to canonical note_neuro_N ──
+    // Also rescue any neuro notes (note_neuro_2+) that were previously merged into
+    // 'Autoimmune Diseases' by the old migrateNeuroToAutoimmune() function.
+    // Scleroderma (note_neuro_1) intentionally stays in 'Autoimmune Diseases'.
+    (function migrateNeuroIds() {
       const KEY = 'acnhs_topics';
+      const canonicalIds = {
+        'Neurology/Scleroderma.html':                     'note_neuro_1',
+        'Neurology/Orientation.html':                     'note_neuro_2',
+        'Neurology/Clonus.html':                          'note_neuro_3',
+        'Neurology/12-Cranial-Nerves.html':               'note_neuro_4',
+        'Neurology/Autonomic-Nervous-System.html':        'note_neuro_5',
+        'Neurology/Cerebral-Palsy.html':                  'note_neuro_6',
+        'Neurology/Glasgow-Coma-Scale.html':              'note_neuro_7',
+        'Neurology/Neuro-Imaging-Diagnostics.html':       'note_neuro_8',
+        'Neurology/Spinal-Cord-Injury.html':              'note_neuro_9',
+        'Neurology/Stroke.html':                          'note_neuro_10',
+        'Neurology/Sympathetic-vs-Parasympathetic.html':  'note_neuro_11',
+        'Neurology/Seizure-Disorders.html':               'note_neuro_12',
+        'Neurology/Increased-ICP.html':                   'note_neuro_13',
+        'Neurology/Cerebral-Aneurysms.html':              'note_neuro_14',
+        'Neurology/Multiple-Sclerosis.html':              'note_neuro_15',
+        'Neurology/Parkinsons-Disease.html':              'note_neuro_16',
+        'Neurology/Spinal-Cord-Injury-Full.html':         'note_neuro_17',
+        'Neurology/Vertigo-Menieres.html':                'note_neuro_18',
+      };
+      // Canonical titles (no emojis) — overwrite whatever is cached in localStorage
+      const canonicalTitles = {
+        'Neurology/Scleroderma.html':                    'Scleroderma (Systemic Sclerosis)',
+        'Neurology/Orientation.html':                    'Orientation',
+        'Neurology/Clonus.html':                         'Clonus',
+        'Neurology/12-Cranial-Nerves.html':              '12 Cranial Nerves',
+        'Neurology/Autonomic-Nervous-System.html':       'Autonomic Nervous System (ANS)',
+        'Neurology/Cerebral-Palsy.html':                 'Cerebral Palsy (CP)',
+        'Neurology/Glasgow-Coma-Scale.html':             'Glasgow Coma Scale (GCS)',
+        'Neurology/Neuro-Imaging-Diagnostics.html':      'Neuro Imaging & Diagnostics',
+        'Neurology/Spinal-Cord-Injury.html':             'Spinal Cord Injury (SCI) Syndromes',
+        'Neurology/Stroke.html':                         'Stroke (CVA)',
+        'Neurology/Sympathetic-vs-Parasympathetic.html': 'Sympathetic vs Parasympathetic',
+        'Neurology/Seizure-Disorders.html':              'Seizure Disorders',
+        'Neurology/Increased-ICP.html':                  'Increased Intracranial Pressure (ICP)',
+        'Neurology/Cerebral-Aneurysms.html':             'Cerebral Aneurysms',
+        'Neurology/Multiple-Sclerosis.html':             'Multiple Sclerosis (MS)',
+        'Neurology/Parkinsons-Disease.html':             "Parkinson's Disease",
+        'Neurology/Spinal-Cord-Injury-Full.html':        'Spinal Cord Injury (SCI)',
+        'Neurology/Vertigo-Menieres.html':               "Vertigo & Ménière's Disease",
+      };
       try {
         const topics = JSON.parse(localStorage.getItem(KEY) || '[]');
-        const neuroIdx = topics.findIndex(t => t.title === 'Neurology');
-        if (neuroIdx === -1) return; // nothing to do
-        const neuroTopic = topics[neuroIdx];
-        let autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
-        if (!autoimmune) {
-          autoimmune = { id: 'seed_Autoimmune_Diseases', title: 'Autoimmune Diseases', notes: [], created: Date.now() };
-          topics.push(autoimmune);
-        }
-        (neuroTopic.notes || []).forEach(note => {
-          const alreadyThere = autoimmune.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
-          if (!alreadyThere) autoimmune.notes.push(note);
+        let dirty = false;
+
+        // Step 1: fix stale IDs and emoji titles across all topics
+        topics.forEach(topic => {
+          (topic.notes || []).forEach(note => {
+            const canonical = note.htmlFile && canonicalIds[note.htmlFile];
+            if (canonical && note.id !== canonical) {
+              note.id = canonical;
+              dirty = true;
+            }
+            const canonicalTitle = note.htmlFile && canonicalTitles[note.htmlFile];
+            if (canonicalTitle && note.title !== canonicalTitle) {
+              note.title = canonicalTitle;
+              dirty = true;
+            }
+          });
         });
-        topics.splice(neuroIdx, 1);
-        localStorage.setItem(KEY, JSON.stringify(topics));
+
+        // Step 2: rescue neuro notes 2-18 that were merged into 'Autoimmune Diseases'
+        // by the old migration. Move them into a proper 'Neurology' topic.
+        const autoimmune = topics.find(t => t.title === 'Autoimmune Diseases');
+        if (autoimmune) {
+          const displaced = autoimmune.notes.filter(n =>
+            n.htmlFile && n.htmlFile.startsWith('Neurology/') && n.htmlFile !== 'Neurology/Scleroderma.html'
+          );
+          if (displaced.length > 0) {
+            let neuroTopic = topics.find(t => t.title === 'Neurology');
+            if (!neuroTopic) {
+              neuroTopic = { id: 'seed_Neurology', title: 'Neurology', notes: [], created: Date.now() };
+              topics.push(neuroTopic);
+            }
+            displaced.forEach(note => {
+              const alreadyIn = neuroTopic.notes.some(n => n.htmlFile === note.htmlFile || n.id === note.id);
+              if (!alreadyIn) neuroTopic.notes.push(note);
+            });
+            // Remove them from Autoimmune Diseases
+            autoimmune.notes = autoimmune.notes.filter(n =>
+              !n.htmlFile || !n.htmlFile.startsWith('Neurology/') || n.htmlFile === 'Neurology/Scleroderma.html'
+            );
+            dirty = true;
+          }
+        }
+
+        if (dirty) localStorage.setItem(KEY, JSON.stringify(topics));
       } catch(e) {}
     })();
     // ─────────────────────────────────────────────────────────────────────────────
@@ -8079,7 +8150,33 @@
           { id: 'note_mt_1', title: 'Medical Terminology', htmlFile: 'medical-terminology.html' },
         ],
         'Autoimmune Diseases': [
-          { id: 'note_neuro_1', title: 'Scleroderma (Systemic Sclerosis)', htmlFile: 'Neurology/Scleroderma.html' },
+          { id: 'note_auto_1', title: 'Lupus (Systemic Lupus Erythematosus)',           htmlFile: 'Autoimmune & Infectious Disorders/Lupus.html' },
+          { id: 'note_auto_2', title: 'Autoimmune Diseases Overview',                   htmlFile: 'Autoimmune & Infectious Disorders/Autoimmune-Diseases.html' },
+          { id: 'note_auto_3', title: 'Autoimmune & Inflammatory Disorder Medications', htmlFile: 'Autoimmune & Infectious Disorders/Autoimmune-Medications.html' },
+          { id: 'note_auto_4', title: 'Guillain-Barré Syndrome (GBS)',                  htmlFile: 'Autoimmune & Infectious Disorders/GBS.html' },
+          { id: 'note_auto_5', title: 'Myasthenia Gravis (MG)',                         htmlFile: 'Autoimmune & Infectious Disorders/Myasthenia-Gravis.html' },
+          { id: 'note_auto_6', title: 'Immunodeficiency',                               htmlFile: 'Autoimmune & Infectious Disorders/Immunodeficiency.html' },
+          { id: 'note_auto_7', title: 'Rheumatoid Arthritis (RA)',                      htmlFile: 'Autoimmune & Infectious Disorders/Rheumatoid-Arthritis.html' },
+          { id: 'note_neuro_1', title: 'Scleroderma (Systemic Sclerosis)',              htmlFile: 'Neurology/Scleroderma.html' },
+        ],
+        'Neurology': [
+          { id: 'note_neuro_2',  title: 'Orientation',                             htmlFile: 'Neurology/Orientation.html' },
+          { id: 'note_neuro_3',  title: 'Clonus',                                  htmlFile: 'Neurology/Clonus.html' },
+          { id: 'note_neuro_4',  title: '12 Cranial Nerves',                       htmlFile: 'Neurology/12-Cranial-Nerves.html' },
+          { id: 'note_neuro_5',  title: 'Autonomic Nervous System (ANS)',           htmlFile: 'Neurology/Autonomic-Nervous-System.html' },
+          { id: 'note_neuro_6',  title: 'Cerebral Palsy (CP)',                      htmlFile: 'Neurology/Cerebral-Palsy.html' },
+          { id: 'note_neuro_7',  title: 'Glasgow Coma Scale (GCS)',                 htmlFile: 'Neurology/Glasgow-Coma-Scale.html' },
+          { id: 'note_neuro_8',  title: 'Neuro Imaging & Diagnostics',              htmlFile: 'Neurology/Neuro-Imaging-Diagnostics.html' },
+          { id: 'note_neuro_9',  title: 'Spinal Cord Injury (SCI) Syndromes',       htmlFile: 'Neurology/Spinal-Cord-Injury.html' },
+          { id: 'note_neuro_10', title: 'Stroke (CVA)',                              htmlFile: 'Neurology/Stroke.html' },
+          { id: 'note_neuro_11', title: 'Sympathetic vs Parasympathetic',            htmlFile: 'Neurology/Sympathetic-vs-Parasympathetic.html' },
+          { id: 'note_neuro_12', title: 'Seizure Disorders',                         htmlFile: 'Neurology/Seizure-Disorders.html' },
+          { id: 'note_neuro_13', title: 'Increased Intracranial Pressure (ICP)',     htmlFile: 'Neurology/Increased-ICP.html' },
+          { id: 'note_neuro_14', title: 'Cerebral Aneurysms',                        htmlFile: 'Neurology/Cerebral-Aneurysms.html' },
+          { id: 'note_neuro_15', title: 'Multiple Sclerosis (MS)',                   htmlFile: 'Neurology/Multiple-Sclerosis.html' },
+          { id: 'note_neuro_16', title: 'Parkinson\'s Disease',                      htmlFile: 'Neurology/Parkinsons-Disease.html' },
+          { id: 'note_neuro_17', title: 'Spinal Cord Injury (SCI)',                  htmlFile: 'Neurology/Spinal-Cord-Injury-Full.html' },
+          { id: 'note_neuro_18', title: 'Vertigo & Ménière\'s Disease',              htmlFile: 'Neurology/Vertigo-Menieres.html' },
         ],
       };
 

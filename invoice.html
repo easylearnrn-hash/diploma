@@ -3631,213 +3631,257 @@ Please include your Student ID in the payment reference or memo to ensure proper
     }
 
     // All Invoices Modal
-    document.getElementById('allInvoices').addEventListener('click', async () => {
+    document.getElementById('allInvoices').addEventListener('click', () => {
       const modal = document.getElementById('invoicesModal');
       modal.style.display = 'flex';
-      await loadAllInvoices();
+      loadAllInvoices();
     });
 
     // All Invoices Header Link (top of page)
-    document.getElementById('allInvoicesHeaderLink').addEventListener('click', async () => {
+    document.getElementById('allInvoicesHeaderLink').addEventListener('click', () => {
       const modal = document.getElementById('invoicesModal');
       modal.style.display = 'flex';
-      await loadAllInvoices();
+      loadAllInvoices();
     });
 
+    // ── Persistent caches so repeat opens are instant ──────────────────────
+    let _cachedStudentRows = null;   // { studentProgramMap, studentAppMap }
+    let _cachedAppReceipts = null;   // appReceiptCountMap
+    let _lastInvoiceFetch  = 0;      // timestamp of last full fetch
+
     async function loadAllInvoices(searchTerm = '', statusFilter = '') {
+      const invoicesList = document.getElementById('invoicesList');
+
+      // Show skeleton immediately — zero wait
+      if (!window.currentInvoices) {
+        invoicesList.innerHTML = `
+          <div style="display:flex;flex-direction:column;gap:10px;padding:4px 0;">
+            ${[1,2,3].map(() => `
+              <div style="background:rgba(255,255,255,0.04);border-radius:12px;padding:18px;
+                border:1px solid rgba(255,255,255,0.07);animation:pulse 1.4s ease-in-out infinite;">
+                <div style="height:14px;width:40%;background:rgba(255,255,255,0.08);border-radius:6px;margin-bottom:10px;"></div>
+                <div style="height:10px;width:25%;background:rgba(255,255,255,0.05);border-radius:4px;"></div>
+              </div>`).join('')}
+          </div>`;
+      }
+
       try {
-        const invoicesList = document.getElementById('invoicesList');
-        invoicesList.innerHTML = '<p style="color: var(--text-muted); text-align: center;">Loading invoices...</p>';
+        // ── Fire all 3 fetches in parallel ──────────────────────────────────
+        const invoiceQuery = (() => {
+          let q = invoiceSupabase.from('invoices').select('*').order('created_at', { ascending: false });
+          if (statusFilter) q = q.eq('status', statusFilter);
+          if (searchTerm)   q = q.or(`student_name.ilike.%${searchTerm}%,invoice_number.ilike.%${searchTerm}%`);
+          return q;
+        })();
 
-        let query = invoiceSupabase
-          .from('invoices')
-          .select('*')
-          .order('created_at', { ascending: false });
+        // Use cached student/app data unless it's the first load
+        const studentPromise = _cachedStudentRows
+          ? Promise.resolve(_cachedStudentRows)
+          : invoiceSupabase.from('students').select('student_id, program, application_id')
+              .then(({ data }) => {
+                const studentProgramMap = new Map();
+                const studentAppMap = new Map();
+                (data || []).forEach(s => {
+                  if (s.student_id) studentProgramMap.set(s.student_id, s.program || '');
+                  if (s.student_id && s.application_id) studentAppMap.set(s.student_id, s.application_id);
+                });
+                _cachedStudentRows = { studentProgramMap, studentAppMap };
+                return _cachedStudentRows;
+              });
 
-        // Apply status filter
-        if (statusFilter) {
-          query = query.eq('status', statusFilter);
-        }
+        const [invoiceResult, { studentProgramMap, studentAppMap }] = await Promise.all([invoiceQuery, studentPromise]);
 
-        // Apply search filter
-        if (searchTerm) {
-          query = query.or(`student_name.ilike.%${searchTerm}%,invoice_number.ilike.%${searchTerm}%`);
-        }
+        if (invoiceResult.error) throw invoiceResult.error;
+        const invoices = invoiceResult.data || [];
 
-        const { data: invoices, error } = await query;
-
-        if (error) throw error;
-
-        if (!invoices || invoices.length === 0) {
+        if (invoices.length === 0) {
           invoicesList.innerHTML = '<p style="color: var(--text-muted); text-align: center;">No invoices found.</p>';
-          // Reset header to default
           document.getElementById('invoicesHeader').textContent = 'All Invoices';
           return;
         }
 
-        // Fetch live program data from students table (single round-trip)
-        // This ensures the program shown always reflects what's in admin-students.html,
-        // not the stale copy written at invoice creation time.
-        const studentProgramMap = new Map();
-        try {
-          const { data: studentRows } = await invoiceSupabase
-            .from('students')
-            .select('student_id, program');
-          if (studentRows) {
-            studentRows.forEach(s => {
-              if (s.student_id) studentProgramMap.set(s.student_id, s.program || '');
-            });
-          }
-        } catch (_) { /* non-fatal — fall back to invoice.program */ }
-
-        // Overlay live program onto each invoice
+        // Overlay live program
         invoices.forEach(inv => {
           if (inv.student_id && studentProgramMap.has(inv.student_id)) {
             inv.program = studentProgramMap.get(inv.student_id);
           }
         });
 
-        // Calculate total sum of all invoices
+        // ── App receipt counts — fetch in background, render cards without waiting ──
+        const applicationIds = [...new Set(invoices
+          .map(inv => studentAppMap.get(inv.student_id))
+          .filter(Boolean))];
+
+        const appReceiptPromise = (_cachedAppReceipts && applicationIds.every(id => _cachedAppReceipts.has(id)))
+          ? Promise.resolve(_cachedAppReceipts)
+          : (applicationIds.length > 0
+              ? invoiceSupabase.from('applications').select('id, uploaded_documents').in('id', applicationIds)
+                  .then(({ data: appRows }) => {
+                    if (!_cachedAppReceipts) _cachedAppReceipts = new Map();
+                    (appRows || []).forEach(app => {
+                      let docs = Array.isArray(app.uploaded_documents) ? app.uploaded_documents
+                        : (typeof app.uploaded_documents === 'string'
+                            ? (() => { try { return JSON.parse(app.uploaded_documents); } catch(_){ return []; } })()
+                            : []);
+                      const count = (docs || []).filter(d => (d?.doc_name||'').toLowerCase() === 'invoice payment receipt').length;
+                      _cachedAppReceipts.set(app.id, count);
+                    });
+                    return _cachedAppReceipts;
+                  })
+              : Promise.resolve(_cachedAppReceipts || new Map()));
+
+        // Normalize receipt timestamps
+        invoices.forEach(inv => {
+          if (Array.isArray(inv.payment_receipts) && inv.payment_receipts.length > 0) {
+            const latest = inv.payment_receipts
+              .map(r => new Date(r.uploaded_at).getTime()).filter(t => !isNaN(t)).sort((a,b) => b-a)[0];
+            if (latest) {
+              const cur = inv.receipts_last_uploaded_at ? new Date(inv.receipts_last_uploaded_at).getTime() : null;
+              if (!cur || latest > cur) inv.receipts_last_uploaded_at = new Date(latest).toISOString();
+            }
+          }
+        });
+
+        // Calculate total
         let totalSum = 0;
         invoices.forEach(invoice => {
           let displayTotal = invoice.total;
           if (!displayTotal || displayTotal === 0) {
-            if (invoice.items && invoice.items.length > 0) {
-              displayTotal = invoice.items.reduce((sum, item) => {
-                const qty = item.qty || item.quantity || 1;
-                const price = item.price || 0;
-                const discountPercent = item.discount || 0;
-                const lineSubtotal = qty * price;
-                const discountAmount = lineSubtotal * (discountPercent / 100);
-                const lineTotal = lineSubtotal - discountAmount;
-                return sum + lineTotal;
-              }, 0);
-            }
+            displayTotal = (invoice.items || []).reduce((sum, item) => {
+              const qty = item.qty || item.quantity || 1;
+              const price = item.price || 0;
+              const disc  = item.discount || 0;
+              return sum + (qty * price) * (1 - disc / 100);
+            }, 0);
           }
           totalSum += displayTotal || 0;
         });
 
-        // Update header with total sum (make it clickable)
-        const formattedTotal = totalSum.toLocaleString('en-US', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        });
-        const headerElement = document.getElementById('invoicesHeader');
-        headerElement.innerHTML = `All Invoices — <span id="totalAmountLink" style="cursor: pointer; color: var(--gold-primary); text-decoration: underline; text-decoration-style: dotted;" onclick="showMonthlyBreakdown()" title="Click for monthly breakdown">${formattedTotal} $</span>`;
-        
-        // Store invoices globally for breakdown
+        const formattedTotal = totalSum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('invoicesHeader').innerHTML = `All Invoices — <span id="totalAmountLink" style="cursor:pointer;color:var(--gold-primary);text-decoration:underline;text-decoration-style:dotted;" onclick="showMonthlyBreakdown()" title="Click for monthly breakdown">${formattedTotal} $</span>`;
+
         window.currentInvoices = invoices;
 
-        invoicesList.innerHTML = invoices.map(invoice => {
-          const invoiceUrl = `https://www.acnhs.am/invoice-view.html?id=${invoice.id}`;
-          
-          // Calculate total from items if database total is 0
-          let displayTotal = invoice.total;
-          if (!displayTotal || displayTotal === 0) {
-            if (invoice.items && invoice.items.length > 0) {
-              displayTotal = invoice.items.reduce((sum, item) => {
+        // ── Render cards immediately with what we know (app receipts may still be loading) ──
+        const renderCards = (appReceiptCountMap) => {
+          invoicesList.innerHTML = invoices.map(invoice => {
+            const storedEmail = (sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '').toLowerCase();
+            const isPrimaryAdmin = (sessionStorage.getItem('primaryAdmin') || localStorage.getItem('primaryAdmin')) === 'true'
+              || storedEmail === 'hrachfilm@gmail.com';
+            const adminParams = isPrimaryAdmin ? `&admin=1&admin_email=${encodeURIComponent('hrachfilm@gmail.com')}` : '';
+            const invoiceUrl = `https://www.acnhs.am/invoice-view.html?id=${invoice.id}${adminParams}`;
+
+            let displayTotal = invoice.total;
+            if (!displayTotal || displayTotal === 0) {
+              displayTotal = (invoice.items || []).reduce((sum, item) => {
                 const qty = item.qty || item.quantity || 1;
                 const price = item.price || 0;
-                const discountPercent = item.discount || 0;
-                const lineSubtotal = qty * price;
-                const discountAmount = lineSubtotal * (discountPercent / 100);
-                const lineTotal = lineSubtotal - discountAmount;
-                return sum + lineTotal;
+                const disc  = item.discount || 0;
+                return sum + (qty * price) * (1 - disc / 100);
               }, 0);
             }
-          }
-          
-          // Determine which payment buttons to show based on status
-          let paymentButtons = '';
-          if (invoice.status === 'paid') {
-            paymentButtons = `<button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'unpaid')">Mark Unpaid</button>`;
-          } else if (invoice.status === 'partial') {
-            const escapedName = (invoice.student_name || '').replace(/'/g, "\\'");
-            paymentButtons = `
-              <button class="secondary" onclick="showPaymentHistory('${invoice.id}', '${escapedName}')">Payment History</button>
-              <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'partial')">+ Add Payment</button>
-              <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'paid')">Mark Paid</button>
-            `;
-          } else {
-            paymentButtons = `
-              <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'paid')">Mark Paid</button>
-              <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'partial')">Partial Payment</button>
-            `;
-          }
-          
-          // Badge logic: show when receipts exist AND never viewed,
-          // OR when a new receipt was uploaded after the last view
-          const hasReceipts = invoice.payment_receipts && invoice.payment_receipts.length > 0;
-          const viewedAt   = invoice.receipts_viewed_at   ? new Date(invoice.receipts_viewed_at)   : null;
-          const uploadedAt = invoice.receipts_last_uploaded_at ? new Date(invoice.receipts_last_uploaded_at) : null;
-          const isUnopened = hasReceipts && (!viewedAt || (uploadedAt && uploadedAt > viewedAt));
-          const receiptsEncoded = hasReceipts ? JSON.stringify(invoice.payment_receipts).replace(/"/g, '&quot;') : '';
-          const safeStudentName = (invoice.student_name || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-          const safeStudentId = (invoice.student_id || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-          return `
-          <div class="invoice-card" onclick="loadInvoiceFromDB('${invoice.id}')" style="opacity: 1;">
-            <div class="invoice-card-header">
-              <div>
-                <div class="invoice-card-title">${invoice.student_name}</div>
-                <div class="invoice-card-number">${invoice.invoice_number}</div>
+            let paymentButtons = '';
+            if (invoice.status === 'paid') {
+              paymentButtons = `<button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'unpaid')">Mark Unpaid</button>`;
+            } else if (invoice.status === 'partial') {
+              const escapedName = (invoice.student_name || '').replace(/'/g, "\\'");
+              paymentButtons = `
+                <button class="secondary" onclick="showPaymentHistory('${invoice.id}', '${escapedName}')">Payment History</button>
+                <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'partial')">+ Add Payment</button>
+                <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'paid')">Mark Paid</button>`;
+            } else {
+              paymentButtons = `
+                <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'paid')">Mark Paid</button>
+                <button class="secondary" onclick="updateInvoiceStatus('${invoice.id}', 'partial')">Partial Payment</button>`;
+            }
+
+            const invoiceReceiptsCount = Array.isArray(invoice.payment_receipts) ? invoice.payment_receipts.length : 0;
+            const appReceiptsCount = invoice.student_id && studentAppMap.has(invoice.student_id)
+              ? (appReceiptCountMap?.get(studentAppMap.get(invoice.student_id)) || 0) : 0;
+            const mergedReceiptsCount = invoiceReceiptsCount + appReceiptsCount;
+            const lastSeenCount = parseInt(localStorage.getItem(`receipt_count_seen_${invoice.id}`) || '0', 10);
+            const hasReceipts = mergedReceiptsCount > 0;
+            const hasNewReceiptCount = mergedReceiptsCount > lastSeenCount;
+            const viewedAt   = invoice.receipts_viewed_at ? new Date(invoice.receipts_viewed_at) : null;
+            const latestReceiptUpload = hasReceipts
+              ? (invoice.payment_receipts || []).map(r => new Date(r.uploaded_at).getTime()).filter(t => !isNaN(t)).sort((a,b) => b-a)[0]
+              : null;
+            const uploadedAt = invoice.receipts_last_uploaded_at
+              ? new Date(invoice.receipts_last_uploaded_at)
+              : (latestReceiptUpload ? new Date(latestReceiptUpload) : null);
+            const isUnopened = hasReceipts && (!viewedAt || (uploadedAt && uploadedAt > viewedAt));
+            const safeStudentName = (invoice.student_name || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+            const safeStudentId   = (invoice.student_id   || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+            return `
+            <div class="invoice-card" onclick="loadInvoiceFromDB('${invoice.id}')" style="opacity:1;">
+              <div class="invoice-card-header">
+                <div>
+                  <div class="invoice-card-title">${invoice.student_name}</div>
+                  <div class="invoice-card-number">${invoice.invoice_number}</div>
+                </div>
+                <span class="invoice-status status-${invoice.status}">${invoice.status}</span>
               </div>
-              <span class="invoice-status status-${invoice.status}">${invoice.status}</span>
-            </div>
-            <div class="invoice-card-body">
-              ${(() => {
-                // Calculate paid / balance from payment records in notes
-                let paidAmt = 0;
-                if (invoice.status === 'paid') {
-                  paidAmt = displayTotal;
-                } else if (invoice.status === 'partial') {
-                  const partials = parsePartialPayments(invoice.notes);
-                  paidAmt = partials.reduce((s, p) => s + p.amount, 0);
-                }
-                const balance = Math.max(0, displayTotal - paidAmt);
-                const fmt = n => '$' + Math.round(n).toLocaleString('en-US');
-                const balanceColor = balance === 0 ? '#22c55e' : balance < displayTotal ? '#c9a84c' : '#f87171';
-                const paidColor = paidAmt > 0 ? '#22c55e' : '#94a3b8';
-                const dueDateStr = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A';
-                const programAbbr = {
-                  'Associate Degree in Nursing (ADN)': 'ADN',
-                  'Bachelor of Science in Nursing (BSN)': 'BSN',
-                  'RN Bridge Program': 'RN Bridge',
-                  'Practical Nursing (PN)': 'PN'
-                };
-                const programLabel = programAbbr[invoice.program] || invoice.program || 'N/A';
-                return `
-                  <span class="icb-item"><strong>Program:</strong>&nbsp;${programLabel}</span>
-                  <span class="icb-item"><strong>Date:</strong>&nbsp;${new Date(invoice.invoice_date).toLocaleDateString()}</span>
-                  <span class="icb-item"><strong>Due Date:</strong>&nbsp;${dueDateStr}</span>
-                  <span class="icb-item"><strong>Total:</strong>&nbsp;${fmt(displayTotal)}</span>
-                  <span class="icb-item" style="color:${paidColor}"><strong>Paid:</strong>&nbsp;${fmt(paidAmt)}</span>
-                  <span class="icb-item" style="color:${balanceColor};font-weight:600"><strong>Balance:</strong>&nbsp;${fmt(balance)}</span>`;
-              })()}
-            </div>
-            <div class="invoice-card-actions" onclick="event.stopPropagation()">
-              <button class="secondary" onclick="window.open('${invoiceUrl}', '_blank')">View Invoice</button>
-              <button class="secondary" onclick="copyInvoiceUrl('${invoiceUrl}')">Copy URL</button>
-              <button class="secondary" onclick="sendInvoiceEmail('${invoice.id}', '${invoice.student_name}', '${invoiceUrl}')">Send Invoice</button>
-              ${hasReceipts ? `
-                <span class="receipt-btn-wrap" id="receipt-wrap-${invoice.id}">
-                  <button class="secondary" onclick="viewReceipts('${invoice.id}', ${receiptsEncoded})">
-                    📄 View Receipts (${invoice.payment_receipts.length})
-                  </button>
-                  ${isUnopened ? `<span class="new-receipt-badge" id="receipt-badge-${invoice.id}">🔴 New Receipt</span>` : ''}
-                </span>
-              ` : ''}
-              <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
-              ${paymentButtons}
-              <button class="inv-reminder-btn" data-invoice-id="${invoice.id}" data-student-name="${safeStudentName}" data-student-id="${safeStudentId}" onclick="invOpenReminderModalFromBtn(this)" title="Send Payment Reminder"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block; margin:auto;"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
-              <button class="danger" onclick="deleteInvoice('${invoice.id}')">Delete</button>
-            </div>
-          </div>
-        `;
-        }).join('');
+              <div class="invoice-card-body">
+                ${(() => {
+                  let paidAmt = 0;
+                  if (invoice.status === 'paid') {
+                    paidAmt = displayTotal;
+                  } else if (invoice.status === 'partial') {
+                    paidAmt = parsePartialPayments(invoice.notes).reduce((s,p) => s + p.amount, 0);
+                  }
+                  const balance = Math.max(0, displayTotal - paidAmt);
+                  const fmt = n => '$' + Math.round(n).toLocaleString('en-US');
+                  const balanceColor = balance === 0 ? '#22c55e' : balance < displayTotal ? '#c9a84c' : '#f87171';
+                  const paidColor = paidAmt > 0 ? '#22c55e' : '#94a3b8';
+                  const dueDateStr = invoice.due_date ? new Date(invoice.due_date).toLocaleDateString() : 'N/A';
+                  const programAbbr = {
+                    'Associate Degree in Nursing (ADN)':'ADN','Bachelor of Science in Nursing (BSN)':'BSN',
+                    'RN Bridge Program':'RN Bridge','Practical Nursing (PN)':'PN'
+                  };
+                  const programLabel = programAbbr[invoice.program] || invoice.program || 'N/A';
+                  return `
+                    <span class="icb-item"><strong>Program:</strong>&nbsp;${programLabel}</span>
+                    <span class="icb-item"><strong>Date:</strong>&nbsp;${new Date(invoice.invoice_date).toLocaleDateString()}</span>
+                    <span class="icb-item"><strong>Due Date:</strong>&nbsp;${dueDateStr}</span>
+                    <span class="icb-item"><strong>Total:</strong>&nbsp;${fmt(displayTotal)}</span>
+                    <span class="icb-item" style="color:${paidColor}"><strong>Paid:</strong>&nbsp;${fmt(paidAmt)}</span>
+                    <span class="icb-item" style="color:${balanceColor};font-weight:600"><strong>Balance:</strong>&nbsp;${fmt(balance)}</span>`;
+                })()}
+              </div>
+              <div class="invoice-card-actions" onclick="event.stopPropagation()">
+                <button class="secondary" onclick="window.open('${invoiceUrl}','_blank')">View Invoice</button>
+                <button class="secondary" onclick="copyInvoiceUrl('${invoiceUrl}')">Copy URL</button>
+                <button class="secondary" onclick="sendInvoiceEmail('${invoice.id}','${invoice.student_name}','${invoiceUrl}')">Send Invoice</button>
+                ${hasReceipts ? `
+                  <span class="receipt-btn-wrap" id="receipt-wrap-${invoice.id}">
+                    <button class="secondary" onclick="viewReceipts('${invoice.id}', null, '${safeStudentId}', '${safeStudentName}')">
+                      📄 View Receipts (${mergedReceiptsCount})
+                    </button>
+                    ${isUnopened || hasNewReceiptCount ? `<span class="new-receipt-badge" id="receipt-badge-${invoice.id}">🔴 New Receipt</span>` : ''}
+                  </span>
+                ` : ''}
+                <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
+                ${paymentButtons}
+                <button class="inv-reminder-btn" data-invoice-id="${invoice.id}" data-student-name="${safeStudentName}" data-student-id="${safeStudentId}" onclick="invOpenReminderModalFromBtn(this)" title="Send Payment Reminder"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:block;margin:auto;"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
+                <button class="danger" onclick="deleteInvoice('${invoice.id}')">Delete</button>
+              </div>
+            </div>`;
+          }).join('');
+        };
+
+        // Render immediately with whatever receipt counts we have (may be 0 if still loading)
+        renderCards(_cachedAppReceipts);
+
+        // When app receipt fetch completes, re-render if counts changed
+        appReceiptPromise.then(map => {
+          if (map && map !== _cachedAppReceipts) renderCards(map);
+        }).catch(() => {});
+
       } catch (error) {
         console.error('Error loading invoices:', error?.message || error);
-        document.getElementById('invoicesList').innerHTML = `<p style="color: #ef4444; text-align: center;">Failed to load invoices: ${error?.message || 'Unknown error'}. Try refreshing.</p>`;
+        invoicesList.innerHTML = `<p style="color:#ef4444;text-align:center;">Failed to load invoices: ${error?.message || 'Unknown error'}.</p>`;
       }
     }
 
@@ -3907,19 +3951,29 @@ Please include your Student ID in the payment reference or memo to ensure proper
       return { type: 'other', label: description };
     }
 
-    function pillHtml(status, paidAmt, totalAmt) {
+    function pillHtml(status, paidAmt, totalAmt, actionAttr = '') {
       const fmt = v => v.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
       if (status === 'paid') {
-        return `<span class="ps-pill ps-pill-paid">✓ Paid<span class="ps-amount ps-amount-paid"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
+        return `<span class="ps-pill ps-pill-paid" ${actionAttr}>✓ Paid<span class="ps-amount ps-amount-paid"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
       }
       if (status === 'partial') {
-        return `<span class="ps-pill ps-pill-partial">⬤ Partial<span class="ps-amount ps-amount-partial"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
+        return `<span class="ps-pill ps-pill-partial" ${actionAttr}>⬤ Partial<span class="ps-amount ps-amount-partial"> $${fmt(paidAmt)}/$${fmt(totalAmt)}</span></span>`;
       }
       if (status === 'unpaid') {
-        return `<span class="ps-pill ps-pill-unpaid">✕ Unpaid<span class="ps-amount ps-amount-unpaid"> $0/$${fmt(totalAmt)}</span></span>`;
+        return `<span class="ps-pill ps-pill-unpaid" ${actionAttr}>✕ Unpaid<span class="ps-amount ps-amount-unpaid"> $0/$${fmt(totalAmt)}</span></span>`;
       }
-      return `<span class="ps-pill ps-pill-na">—</span>`;
+      return `<span class="ps-pill ps-pill-na" ${actionAttr}>—</span>`;
     }
+
+    window.openSummaryReminder = function openSummaryReminder(invoiceId, studentName, studentId) {
+      const btn = document.createElement('button');
+      btn.dataset.invoiceId = invoiceId;
+      btn.dataset.studentName = studentName;
+      btn.dataset.studentId = studentId;
+      if (typeof window.invOpenReminderModalFromBtn === 'function') {
+        window.invOpenReminderModalFromBtn(btn);
+      }
+    };
 
     function buildStudentSummaryRow(invoice) {
       const items     = invoice.items || [];
@@ -4050,10 +4104,15 @@ Please include your Student ID in the payment reference or memo to ensure proper
         });
 
         const latestInv = invList[0];
+        const safeStudentName = (latestInv.student_name || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const safeStudentId = (latestInv.student_id || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        const actionAttr = latestInv?.id
+          ? `onclick="openSummaryReminder('${latestInv.id}', '${safeStudentName}', '${safeStudentId}')" style="cursor:pointer;" title="Send Payment Reminder"`
+          : '';
         const cols = sortedLabels.map(label => {
           const d = mergedMap[label];
-          if (!d) return `<td><span class="ps-pill ps-pill-na">—</span></td>`;
-          return `<td>${pillHtml(d.status, d.paid, d.total)}</td>`;
+          if (!d) return `<td>${pillHtml('na', 0, 0, actionAttr)}</td>`;
+          return `<td>${pillHtml(d.status, d.paid, d.total, actionAttr)}</td>`;
         }).join('');
 
         return `
@@ -4806,355 +4865,279 @@ Please include your Student ID in the payment reference or memo to ensure proper
     };
 
     // Show monthly breakdown modal
-    window.showMonthlyBreakdown = async function() {
-      try {
-        if (!window.currentInvoices || window.currentInvoices.length === 0) {
-          showNotification('No invoices to show breakdown', 'warning');
-          return;
-        }
+    window.showMonthlyBreakdown = function() {
+      if (!window.currentInvoices || window.currentInvoices.length === 0) {
+        showNotification('No invoices to show breakdown', 'warning');
+        return;
+      }
 
-        const invoices = window.currentInvoices;
+      const invoices = window.currentInvoices;
+      const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                      'July', 'August', 'September', 'October', 'November', 'December'];
 
-        // Group items by month and calculate totals
-        const monthlyData = {};
-        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
-                       'July', 'August', 'September', 'October', 'November', 'December'];
-        
-        let totalDownPayments = 0;
-        let grandTotal = 0;
-
-        invoices.forEach(invoice => {
-          if (invoice.items && invoice.items.length > 0) {
-            invoice.items.forEach(item => {
-              const itemDesc = item.description || '';
-              const qty = item.qty || item.quantity || 1;
-              const price = item.price || 0;
-              const discountPercent = item.discount || 0;
-              const lineSubtotal = qty * price;
-              const discountAmount = lineSubtotal * (discountPercent / 100);
-              const lineTotal = lineSubtotal - discountAmount;
-
-              // Check if it's a down payment
-              if (itemDesc.toLowerCase().includes('down payment') || 
-                  itemDesc.toLowerCase().includes('enrollment')) {
-                totalDownPayments += lineTotal;
-              } else {
-                // Check which month it belongs to
-                months.forEach(month => {
-                  if (itemDesc.includes(month)) {
-                    if (!monthlyData[month]) {
-                      monthlyData[month] = {
-                        total: 0,
-                        count: 0,
-                        items: []
-                      };
-                    }
-                    monthlyData[month].total += lineTotal;
-                    monthlyData[month].count++;
-                    monthlyData[month].items.push({
-                      description: itemDesc,
-                      amount: lineTotal,
-                      studentName: invoice.student_name
-                    });
-                  }
-                });
+      // ── All invoice math is synchronous (window.currentInvoices is in memory) ──
+      const monthlyData = {};
+      let totalDownPayments = 0;
+      let grandTotal = 0;
+      invoices.forEach(invoice => {
+        (invoice.items || []).forEach(item => {
+          const itemDesc = item.description || '';
+          const qty = item.qty || item.quantity || 1;
+          const price = item.price || 0;
+          const disc = item.discount || 0;
+          const lineTotal = (qty * price) * (1 - disc / 100);
+          if (itemDesc.toLowerCase().includes('down payment') || itemDesc.toLowerCase().includes('enrollment')) {
+            totalDownPayments += lineTotal;
+          } else {
+            months.forEach(month => {
+              if (itemDesc.includes(month)) {
+                if (!monthlyData[month]) monthlyData[month] = { total: 0, count: 0, items: [] };
+                monthlyData[month].total += lineTotal;
+                monthlyData[month].count++;
+                monthlyData[month].items.push({ description: itemDesc, amount: lineTotal, studentName: invoice.student_name });
               }
-
-              grandTotal += lineTotal;
             });
           }
+          grandTotal += lineTotal;
         });
+      });
 
-        // Create modal
-        const modal = document.createElement('div');
-        modal.style.cssText = `
-          position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.85);
-          backdrop-filter: blur(4px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 10001;
-          padding: 20px;
-        `;
-        
-        const modalContent = document.createElement('div');
-        modalContent.style.cssText = `
-          background: linear-gradient(135deg, #0a2540 0%, #1e293b 100%);
-          border: 2px solid rgba(20, 184, 166, 0.3);
-          border-radius: 16px;
-          max-width: 900px;
-          width: 100%;
-          max-height: 85vh;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-        `;
-        
-        const header = document.createElement('div');
-        header.style.cssText = `
-          padding: 24px 28px;
-          border-bottom: 2px solid rgba(20, 184, 166, 0.2);
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        `;
-        header.innerHTML = `
-          <div>
-            <h3 style="margin: 0 0 6px 0; color: var(--gold-primary); font-size: 20px; font-weight: 700; font-family: 'Playfair Display', Georgia, serif; letter-spacing: 0.3px;">Monthly Revenue Breakdown</h3>
-            <p style="margin: 0; color: rgba(255,255,255,0.6); font-size: 14px;">Total from ${invoices.length} invoice(s)</p>
-          </div>
-          <button id="closeBreakdownModal" style="background: transparent; border: none; color: rgba(255,255,255,0.6); font-size: 28px; cursor: pointer; padding: 0; width: 32px; height: 32px; line-height: 1;">&times;</button>
-        `;
-        
-        const body = document.createElement('div');
-        body.style.cssText = `
-          padding: 24px 28px;
-          overflow-y: auto;
-          flex: 1;
-        `;
-        
-        // Get stored expenses from Supabase
-        const { data: storedExpenses, error: expensesError } = await invoiceSupabase
-          .from('monthly_expenses')
-          .select('*')
-          .order('amount', { ascending: true }); // Sort by amount (low to high)
-        
-        if (expensesError) {
-          console.error('Error loading expenses:', expensesError);
-          showNotification('Failed to load expenses', 'error');
+      const uniqueMonths = new Set();
+      invoices.forEach(invoice => {
+        (invoice.items || []).forEach(item => {
+          const d = item.description || '';
+          months.forEach(m => { if (d.includes(m) && !d.toLowerCase().includes('down payment')) uniqueMonths.add(m); });
+        });
+      });
+      const numberOfMonths = uniqueMonths.size;
+      const grossMonthlyTuition = grandTotal - totalDownPayments;
+
+      let totalActuallyReceived = 0;
+      invoices.forEach(inv => {
+        if (inv.status === 'paid') {
+          (inv.items || []).forEach(item => {
+            const qty = item.qty || item.quantity || 1;
+            totalActuallyReceived += (qty * (item.price || 0)) * (1 - (item.discount || 0) / 100);
+          });
+        } else {
+          parsePartialPayments(inv.notes || '').forEach(p => { totalActuallyReceived += p.amount; });
         }
-        
-        const expenses = storedExpenses || [];
-        
-        // Calculate total monthly expenses
-        let totalMonthlyExpenses = 0;
-        expenses.forEach(expense => {
-          totalMonthlyExpenses += parseFloat(expense.amount) || 0;
-        });
-        
-        // Count unique months with tuition in invoices
-        const uniqueMonths = new Set();
-        invoices.forEach(invoice => {
-          if (invoice.items && invoice.items.length > 0) {
-            invoice.items.forEach(item => {
-              const itemDesc = item.description || '';
-              months.forEach(month => {
-                if (itemDesc.includes(month) && !itemDesc.toLowerCase().includes('down payment')) {
-                  uniqueMonths.add(month);
-                }
-              });
-            });
-          }
-        });
-        const numberOfMonths = uniqueMonths.size;
-        const totalExpensesForPeriod = totalMonthlyExpenses * numberOfMonths;
-        
-        // Calculate net tuition after expenses
-        const grossMonthlyTuition = grandTotal - totalDownPayments;
-        const netMonthlyTuition = grossMonthlyTuition - totalExpensesForPeriod;
-        
-        // Summary cards
-        let summaryHTML = `
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px;">
-            <div style="background: rgba(20, 184, 166, 0.1); border: 2px solid rgba(20, 184, 166, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
-              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Down Payments</div>
-              <div style="font-size: 24px; font-weight: 700; color: var(--teal);">$${totalDownPayments.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-            <div style="background: rgba(139, 92, 246, 0.1); border: 2px solid rgba(139, 92, 246, 0.3); border-radius: 12px; padding: 18px; text-align: center; position: relative;">
-              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Monthly Tuition (Gross)</div>
-              <div style="font-size: 24px; font-weight: 700; color: #a78bfa;">$${grossMonthlyTuition.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-              ${storedExpenses.length > 0 ? `
-                <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.1);">
-                  <div style="font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Expenses (${numberOfMonths} months)</div>
-                  <div style="font-size: 16px; font-weight: 600; color: #ef4444;">- $${totalExpensesForPeriod.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+      });
+      const totalOutstanding = grandTotal - totalActuallyReceived;
+
+      // ── Build and show modal shell IMMEDIATELY ──────────────────────────────
+      const modal = document.createElement('div');
+      modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10001;padding:20px;';
+
+      const modalContent = document.createElement('div');
+      modalContent.style.cssText = `
+        background: linear-gradient(135deg, #0a2540 0%, #1e293b 100%);
+        border: 2px solid rgba(20, 184, 166, 0.3);
+        border-radius: 16px;
+        max-width: 900px;
+        width: 100%;
+        max-height: 85vh;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+      `;
+
+      const header = document.createElement('div');
+      header.style.cssText = 'padding:24px 28px;border-bottom:2px solid rgba(20,184,166,0.2);display:flex;align-items:center;justify-content:space-between;';
+      header.innerHTML = `
+        <div>
+          <h3 style="margin:0 0 6px 0;color:var(--gold-primary);font-size:20px;font-weight:700;font-family:'Playfair Display',Georgia,serif;letter-spacing:0.3px;">Monthly Revenue Breakdown</h3>
+          <p style="margin:0;color:rgba(255,255,255,0.6);font-size:14px;">Total from ${invoices.length} invoice(s)</p>
+        </div>
+        <button id="closeBreakdownModal" style="background:transparent;border:none;color:rgba(255,255,255,0.6);font-size:28px;cursor:pointer;padding:0;width:32px;height:32px;line-height:1;">&times;</button>
+      `;
+
+      const body = document.createElement('div');
+      body.style.cssText = 'padding:24px 28px;overflow-y:auto;flex:1;';
+
+      // Month-by-month HTML (pure sync, no DB) — built immediately
+      let monthlyHTML = '<h4 style="margin:0 0 16px 0;color:rgba(255,255,255,0.9);font-size:16px;font-weight:700;">📅 Month-by-Month Breakdown</h4>';
+      let monthIndex = 0;
+      months.forEach(month => {
+        if (monthlyData[month]) {
+          const data = monthlyData[month];
+          data.items.sort((a, b) => a.amount - b.amount);
+          const fmtTotal = data.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const monthId = `month-${monthIndex}`;
+          monthlyHTML += `
+            <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:16px;margin-bottom:14px;">
+              <div onclick="toggleMonth('${monthId}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;" title="Click to expand/collapse">
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <svg id="${monthId}-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" style="transition:transform 0.2s;"><polyline points="9 18 15 12 9 6"/></svg>
+                  <div style="font-size:16px;font-weight:700;color:var(--teal);">${month}</div>
                 </div>
-                <div style="margin-top: 8px; padding-top: 8px; border-top: 2px solid rgba(139, 92, 246, 0.5);">
-                  <div style="font-size: 11px; color: rgba(255,255,255,0.5); margin-bottom: 4px;">Net Tuition</div>
-                  <div style="font-size: 20px; font-weight: 700; color: #22c55e;">$${netMonthlyTuition.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-                </div>
-              ` : ''}
-            </div>
-            <div style="background: rgba(34, 197, 94, 0.1); border: 2px solid rgba(34, 197, 94, 0.3); border-radius: 12px; padding: 18px; text-align: center;">
-              <div style="font-size: 13px; color: rgba(255,255,255,0.6); text-transform: uppercase; margin-bottom: 8px; font-weight: 600;">Grand Total</div>
-              <div style="font-size: 24px; font-weight: 700; color: #22c55e;">$${grandTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
-            </div>
-          </div>
-        `;
-        
-        // Expenses management section
-        summaryHTML += `
-          <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid rgba(239, 68, 68, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 24px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-              <h4 style="margin: 0; color: #f8c8c8; font-size: 15px; font-weight: 700; font-family: 'Playfair Display', Georgia, serif; letter-spacing: 0.3px;">Monthly Recurring Expenses</h4>
-              <button onclick="addExpense()" style="
-                background: #ef4444;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-size: 14px;
-                font-weight: 600;
-                cursor: pointer;
-                transition: all 0.2s;
-              " onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">
-                ➕ Add Expense
-              </button>
-            </div>
-            
-            <div id="expensesList" style="display: grid; gap: 10px;">
-              ${expenses.length === 0 ? `
-                <div style="text-align: center; padding: 20px; color: rgba(255,255,255,0.4); font-size: 14px;">
-                  No recurring expenses added yet.<br>
-                  Click "Add Expense" to add salaries or other monthly costs.
-                </div>
-              ` : expenses.map((expense) => `
-                <div id="expense-row-${expense.id}" style="
-                  background: rgba(0,0,0,0.3);
-                  border: 1px solid rgba(255,255,255,0.1);
-                  border-radius: 8px;
-                  padding: 12px 16px;
-                  display: flex;
-                  justify-content: space-between;
-                  align-items: center;
-                  gap: 12px;
-                  transition: border-color 0.2s;
-                ">
-                  <div style="flex:1;min-width:0;">
-                    <input
-                      id="exp-name-${expense.id}"
-                      value="${expense.name.replace(/"/g, '&quot;')}"
-                      onblur="saveExpenseEdit('${expense.id}')"
-                      onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.orig;this.blur()}"
-                      onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
-                      style="
-                        width:100%;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);
-                        color:white;font-size:14px;font-weight:600;padding:2px 0;margin-bottom:6px;
-                        outline:none;cursor:text;transition:border-color 0.2s;
-                      "
-                      title="Click to edit name"
-                    />
-                    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.5);">
-                      $<input
-                        id="exp-amt-${expense.id}"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value="${parseFloat(expense.amount).toFixed(2)}"
-                        onblur="saveExpenseEdit('${expense.id}')"
-                        onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.orig;this.blur()}"
-                        onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
-                        style="
-                          width:90px;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);
-                          color:rgba(255,255,255,0.7);font-size:12px;padding:1px 0;outline:none;cursor:text;
-                          transition:border-color 0.2s;
-                        "
-                        title="Click to edit amount"
-                      /> per month × ${numberOfMonths} months = $${(parseFloat(expense.amount) * numberOfMonths).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                    <span id="exp-saving-${expense.id}" style="font-size:11px;color:#c9a84c;display:none;">Saving…</span>
-                    <button onclick="removeExpense('${expense.id}')" style="
-                      background: transparent;
-                      border: 1px solid #ef4444;
-                      color: #ef4444;
-                      padding: 6px 12px;
-                      border-radius: 4px;
-                      font-size: 12px;
-                      cursor: pointer;
-                      transition: all 0.2s;
-                    " onmouseover="this.style.background='#ef4444'; this.style.color='white'" onmouseout="this.style.background='transparent'; this.style.color='#ef4444'">
-                      🗑️ Delete
-                    </button>
-                  </div>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `;
-        
-        // Monthly breakdown with expand/collapse
-        let monthlyHTML = '<h4 style="margin: 0 0 16px 0; color: rgba(255,255,255,0.9); font-size: 16px; font-weight: 700;">📅 Month-by-Month Breakdown</h4>';
-        
-        let monthIndex = 0;
-        months.forEach(month => {
-          if (monthlyData[month]) {
-            const data = monthlyData[month];
-            // Sort items by amount (low to high)
-            data.items.sort((a, b) => a.amount - b.amount);
-            const formattedTotal = data.total.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const monthId = `month-${monthIndex}`;
-            
-            monthlyHTML += `
-              <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; padding: 16px; margin-bottom: 14px;">
-                <div onclick="toggleMonth('${monthId}')" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;" title="Click to expand/collapse">
-                  <div style="display: flex; align-items: center; gap: 10px;">
-                    <svg id="${monthId}-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2.5" style="transition: transform 0.2s;">
-                      <polyline points="9 18 15 12 9 6"/>
-                    </svg>
-                    <div style="font-size: 16px; font-weight: 700; color: var(--teal);">${month}</div>
-                  </div>
-                  <div style="font-size: 18px; font-weight: 700; color: white;">$${formattedTotal}</div>
-                </div>
-                <div id="${monthId}-content" style="display: none; margin-top: 12px;">
-                  <div style="font-size: 13px; color: rgba(255,255,255,0.6); margin-bottom: 10px;">${data.count} payment(s)</div>
-                  <div style="display: grid; gap: 8px;">
-                    ${data.items.map(item => {
-                      const itemAmount = item.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                      return `
-                        <div style="display: flex; justify-content: space-between; align-items: start; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px;">
-                          <div style="flex: 1;">
-                            <div style="font-size: 13px; color: rgba(255,255,255,0.9); margin-bottom: 3px;">${item.description}</div>
-                            <div style="font-size: 11px; color: rgba(255,255,255,0.5);">${item.studentName}</div>
-                          </div>
-                          <div style="font-size: 14px; font-weight: 600; color: var(--teal); white-space: nowrap; margin-left: 12px;">$${itemAmount}</div>
-                        </div>
-                      `;
-                    }).join('')}
-                  </div>
+                <div style="font-size:18px;font-weight:700;color:white;">$${fmtTotal}</div>
+              </div>
+              <div id="${monthId}-content" style="display:none;margin-top:12px;">
+                <div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:10px;">${data.count} payment(s)</div>
+                <div style="display:grid;gap:8px;">
+                  ${data.items.map(item => `
+                    <div style="display:flex;justify-content:space-between;align-items:start;padding:10px;background:rgba(0,0,0,0.2);border-radius:6px;">
+                      <div style="flex:1;">
+                        <div style="font-size:13px;color:rgba(255,255,255,0.9);margin-bottom:3px;">${item.description}</div>
+                        <div style="font-size:11px;color:rgba(255,255,255,0.5);">${item.studentName}</div>
+                      </div>
+                      <div style="font-size:14px;font-weight:600;color:var(--teal);white-space:nowrap;margin-left:12px;">$${item.amount.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+                    </div>`).join('')}
                 </div>
               </div>
-            `;
-            monthIndex++;
-          }
-        });
-        
-        if (Object.keys(monthlyData).length === 0) {
-          monthlyHTML += '<p style="text-align: center; color: rgba(255,255,255,0.5); padding: 20px;">No monthly tuition payments found.</p>';
+            </div>`;
+          monthIndex++;
         }
-        
-        body.innerHTML = summaryHTML + monthlyHTML;
-        
-        modalContent.appendChild(header);
-        modalContent.appendChild(body);
-        modal.appendChild(modalContent);
-        document.body.appendChild(modal);
-        
-        // Add toggle function
-        window.toggleMonth = function(monthId) {
-          const content = document.getElementById(`${monthId}-content`);
-          const icon = document.getElementById(`${monthId}-icon`);
-          
-          if (content.style.display === 'none') {
-            content.style.display = 'block';
-            icon.style.transform = 'rotate(90deg)';
-          } else {
-            content.style.display = 'none';
-            icon.style.transform = 'rotate(0deg)';
-          }
-        };
-        
-        // Close handlers
-        document.getElementById('closeBreakdownModal').onclick = () => modal.remove();
-        modal.onclick = (e) => { if (e.target === modal) modal.remove(); };
-        
-      } catch (error) {
-        console.error('Error showing monthly breakdown:', error);
-        showNotification('Failed to show breakdown', 'error');
+      });
+      if (Object.keys(monthlyData).length === 0) {
+        monthlyHTML += '<p style="text-align:center;color:rgba(255,255,255,0.5);padding:20px;">No monthly tuition payments found.</p>';
       }
+
+      // Summary cards with loading placeholders for expense-dependent values
+      const fmt2 = n => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+          <div style="background:rgba(20,184,166,0.1);border:2px solid rgba(20,184,166,0.3);border-radius:12px;padding:18px;text-align:center;">
+            <div style="font-size:13px;color:rgba(255,255,255,0.6);text-transform:uppercase;margin-bottom:8px;font-weight:600;">Down Payments</div>
+            <div style="font-size:24px;font-weight:700;color:var(--teal);">$${fmt2(totalDownPayments)}</div>
+          </div>
+          <div id="bd-gross-card" style="background:rgba(139,92,246,0.1);border:2px solid rgba(139,92,246,0.3);border-radius:12px;padding:18px;text-align:center;position:relative;">
+            <div style="font-size:13px;color:rgba(255,255,255,0.6);text-transform:uppercase;margin-bottom:8px;font-weight:600;">Monthly Tuition (Gross)</div>
+            <div style="font-size:24px;font-weight:700;color:#a78bfa;">$${fmt2(grossMonthlyTuition)}</div>
+            <div id="bd-expense-block" style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.1);display:none;">
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Expenses (<span id="bd-months-label">${numberOfMonths}</span> months)</div>
+              <div id="bd-expenses-total" style="font-size:16px;font-weight:600;color:#ef4444;">- $0.00</div>
+              <div style="margin-top:8px;padding-top:8px;border-top:2px solid rgba(139,92,246,0.5);">
+                <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Net Tuition</div>
+                <div id="bd-net-tuition" style="font-size:20px;font-weight:700;color:#22c55e;">$${fmt2(grossMonthlyTuition)}</div>
+              </div>
+            </div>
+          </div>
+          <div data-card="grand-total" style="background:rgba(34,197,94,0.1);border:2px solid rgba(34,197,94,0.3);border-radius:12px;padding:18px;text-align:center;">
+            <div style="font-size:13px;color:rgba(255,255,255,0.6);text-transform:uppercase;margin-bottom:8px;font-weight:600;">Grand Total</div>
+            <div style="font-size:24px;font-weight:700;color:#22c55e;">$${fmt2(grandTotal)}</div>
+            <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(34,197,94,0.3);">
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Actually Received</div>
+              <div style="font-size:20px;font-weight:700;color:#22c55e;">$${fmt2(totalActuallyReceived)}</div>
+            </div>
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(34,197,94,0.2);">
+              <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px;">Outstanding</div>
+              <div style="font-size:16px;font-weight:700;color:${totalOutstanding > 0 ? '#ef4444' : '#22c55e'};">$${fmt2(totalOutstanding)}</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:rgba(239,68,68,0.1);border:2px solid rgba(239,68,68,0.3);border-radius:12px;padding:20px;margin-bottom:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+            <h4 style="margin:0;color:#f8c8c8;font-size:15px;font-weight:700;font-family:'Playfair Display',Georgia,serif;">Monthly Recurring Expenses</h4>
+            <button onclick="addExpense()" style="background:#ef4444;color:white;border:none;padding:8px 16px;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer;" onmouseover="this.style.background='#dc2626'" onmouseout="this.style.background='#ef4444'">➕ Add Expense</button>
+          </div>
+          <div id="expensesList" data-months="${numberOfMonths}" style="display:grid;gap:10px;">
+            <div style="text-align:center;padding:16px;color:rgba(255,255,255,0.35);font-size:13px;animation:pulse 1.4s ease-in-out infinite;">Loading expenses…</div>
+          </div>
+        </div>
+        ${monthlyHTML}
+      `;
+
+      modalContent.appendChild(header);
+      modalContent.appendChild(body);
+      modal.appendChild(modalContent);
+      document.body.appendChild(modal);
+
+      // Close handlers
+      document.getElementById('closeBreakdownModal').addEventListener('click', () => modal.remove());
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+
+      // Toggle helper
+      window.toggleMonth = function(monthId) {
+        const content = document.getElementById(`${monthId}-content`);
+        const icon = document.getElementById(`${monthId}-icon`);
+        const open = content.style.display === 'none';
+        content.style.display = open ? 'block' : 'none';
+        icon.style.transform = open ? 'rotate(90deg)' : 'rotate(0deg)';
+      };
+
+      // ── Fetch expenses in the background — modal is already visible ─────────
+      (async () => {
+        try {
+          // Use cache if available, otherwise fetch
+          let expenses = window._cachedExpenses || null;
+          if (!expenses) {
+            const { data, error } = await invoiceSupabase
+              .from('monthly_expenses')
+              .select('*')
+              .order('amount', { ascending: true });
+            if (error) throw error;
+            expenses = data || [];
+            window._cachedExpenses = expenses;
+          }
+
+          // Don't render if modal was closed while loading
+          if (!document.body.contains(modal)) return;
+
+          let totalMonthlyExpenses = 0;
+          expenses.forEach(e => { totalMonthlyExpenses += parseFloat(e.amount) || 0; });
+          const totalExpensesForPeriod = totalMonthlyExpenses * numberOfMonths;
+          const netMonthlyTuition = grossMonthlyTuition - totalExpensesForPeriod;
+
+          // Update expense block in gross card
+          if (expenses.length > 0) {
+            const expBlock = document.getElementById('bd-expense-block');
+            if (expBlock) {
+              document.getElementById('bd-expenses-total').textContent = `- $${fmt2(totalExpensesForPeriod)}`;
+              document.getElementById('bd-net-tuition').textContent = `$${fmt2(netMonthlyTuition)}`;
+              expBlock.style.display = '';
+            }
+          }
+
+          // Render expense rows
+          const expensesListEl = document.getElementById('expensesList');
+          if (!expensesListEl) return;
+          expensesListEl.innerHTML = expenses.length === 0 ? `
+            <div style="text-align:center;padding:20px;color:rgba(255,255,255,0.4);font-size:14px;">
+              No recurring expenses added yet.<br>Click "Add Expense" to add salaries or other monthly costs.
+            </div>
+          ` : expenses.map(expense => `
+            <div id="expense-row-${expense.id}" style="background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;transition:border-color 0.2s;">
+              <div style="flex:1;min-width:0;">
+                <input
+                  id="exp-name-${expense.id}"
+                  value="${expense.name.replace(/"/g,'&quot;')}"
+                  data-saved="${expense.name.replace(/"/g,'&quot;')}"
+                  onblur="saveExpenseEdit('${expense.id}')"
+                  onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.saved||this.dataset.orig;this.blur()}"
+                  onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
+                  style="width:100%;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);color:white;font-size:14px;font-weight:600;padding:2px 0;margin-bottom:6px;outline:none;cursor:text;"
+                  title="Click to edit name"
+                />
+                <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:rgba(255,255,255,0.5);">
+                  $<input
+                    id="exp-amt-${expense.id}"
+                    type="number" step="0.01" min="0"
+                    value="${parseFloat(expense.amount).toFixed(2)}"
+                    data-saved="${parseFloat(expense.amount).toFixed(2)}"
+                    onblur="saveExpenseEdit('${expense.id}')"
+                    onkeydown="if(event.key==='Enter'){this.blur()}if(event.key==='Escape'){this.value=this.dataset.saved||this.dataset.orig;this.blur()}"
+                    onfocus="this.dataset.orig=this.value;document.getElementById('expense-row-${expense.id}').style.borderColor='rgba(201,168,76,0.5)'"
+                    style="width:90px;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,0.2);color:rgba(255,255,255,0.7);font-size:12px;padding:1px 0;outline:none;cursor:text;"
+                    title="Click to edit amount"
+                  />
+                  <span id="exp-row-total-${expense.id}"> per month × ${numberOfMonths} months = $${fmt2(parseFloat(expense.amount) * numberOfMonths)}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span id="exp-saving-${expense.id}" style="font-size:11px;color:#c9a84c;display:none;">Saving…</span>
+                <button onclick="removeExpense('${expense.id}')" style="background:transparent;border:1px solid #ef4444;color:#ef4444;padding:6px 12px;border-radius:4px;font-size:12px;cursor:pointer;" onmouseover="this.style.background='#ef4444';this.style.color='white'" onmouseout="this.style.background='transparent';this.style.color='#ef4444'">🗑️ Delete</button>
+              </div>
+            </div>
+          `).join('');
+        } catch (err) {
+          console.error('Error loading expenses:', err);
+          const el = document.getElementById('expensesList');
+          if (el) el.innerHTML = '<div style="color:#ef4444;text-align:center;padding:12px;">Failed to load expenses.</div>';
+        }
+      })();
     };
 
     // Add expense function
@@ -5289,6 +5272,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
           
           if (error) throw error;
           
+          window._cachedExpenses = null; // invalidate cache
           modal.remove();
           showNotification('✅ Expense added successfully', 'success');
           
@@ -5319,33 +5303,35 @@ Please include your Student ID in the payment reference or memo to ensure proper
 
     // Inline edit save function
     window.saveExpenseEdit = async function(expenseId) {
-      const nameEl  = document.getElementById(`exp-name-${expenseId}`);
-      const amtEl   = document.getElementById(`exp-amt-${expenseId}`);
-      const saveInd = document.getElementById(`exp-saving-${expenseId}`);
-      const rowEl   = document.getElementById(`expense-row-${expenseId}`);
+      const nameEl    = document.getElementById(`exp-name-${expenseId}`);
+      const amtEl     = document.getElementById(`exp-amt-${expenseId}`);
+      const saveInd   = document.getElementById(`exp-saving-${expenseId}`);
+      const rowEl     = document.getElementById(`expense-row-${expenseId}`);
+      const rowTotal  = document.getElementById(`exp-row-total-${expenseId}`);
 
       if (!nameEl || !amtEl) return;
 
       const newName   = nameEl.value.trim();
       const newAmount = parseFloat(amtEl.value);
 
-      // Restore border
+      // Restore row border
       if (rowEl) rowEl.style.borderColor = 'rgba(255,255,255,0.1)';
 
-      // Skip if nothing changed
-      if (newName === nameEl.dataset.orig && amtEl.value === amtEl.dataset.orig) return;
+      // Skip if nothing changed vs last saved value
+      const savedName = nameEl.dataset.saved ?? '';
+      const savedAmt  = parseFloat(amtEl.dataset.saved || 0);
+      if (newName === savedName && Math.abs(newAmount - savedAmt) < 0.001) return;
 
       // Validate
       if (!newName || isNaN(newAmount) || newAmount <= 0) {
-        nameEl.value  = nameEl.dataset.orig  || nameEl.value;
-        amtEl.value   = amtEl.dataset.orig   || amtEl.value;
+        nameEl.value = savedName || nameEl.value;
+        amtEl.value  = savedAmt  || amtEl.value;
         showNotification('Invalid name or amount — changes reverted', 'error');
         return;
       }
 
+      // Show saving indicator (never disable inputs or buttons)
       if (saveInd) saveInd.style.display = 'inline';
-      nameEl.disabled = true;
-      amtEl.disabled  = true;
 
       try {
         const { error } = await invoiceSupabase
@@ -5355,20 +5341,53 @@ Please include your Student ID in the payment reference or memo to ensure proper
 
         if (error) throw error;
 
-        showNotification('✅ Expense updated', 'success');
-        // Update stored originals so a second blur doesn't re-save
-        nameEl.dataset.orig = newName;
-        amtEl.dataset.orig  = newAmount.toFixed(2);
-        // Refresh breakdown to recalculate totals
-        setTimeout(() => showMonthlyBreakdown(), 400);
+        window._cachedExpenses = null; // invalidate cache on edit
+
+        // Update saved baseline so next blur won't re-trigger
+        nameEl.dataset.saved = newName;
+        nameEl.dataset.orig  = newName;
+        amtEl.dataset.saved  = newAmount.toFixed(2);
+        amtEl.dataset.orig   = newAmount.toFixed(2);
+
+        // Flash row border green to confirm save
+        if (rowEl) {
+          rowEl.style.borderColor = 'rgba(34,197,94,0.6)';
+          setTimeout(() => { if (rowEl) rowEl.style.borderColor = 'rgba(255,255,255,0.1)'; }, 1200);
+        }
+
+        // Update per-row total text in place
+        const numMonths = parseInt(document.getElementById('expensesList')?.dataset?.months || '1', 10);
+        if (rowTotal) {
+          const fmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          rowTotal.textContent = ` per month × ${numMonths} months = $${fmt(newAmount * numMonths)}`;
+        }
+
+        // Recalculate and update the expenses total + net tuition cards in place
+        const allAmtEls = document.querySelectorAll('[id^="exp-amt-"]');
+        let newTotalMonthly = 0;
+        allAmtEls.forEach(el => { newTotalMonthly += parseFloat(el.value) || 0; });
+        const newExpensesTotal = newTotalMonthly * numMonths;
+        const expTotalEl = document.getElementById('bd-expenses-total');
+        const netTuitionEl = document.getElementById('bd-net-tuition');
+        if (expTotalEl) {
+          const fmt = (v) => v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          expTotalEl.textContent = `- $${fmt(newExpensesTotal)}`;
+          if (netTuitionEl) {
+            // gross = grandTotal - downPayments; we can read it from the purple card's first big number
+            const grossEl = expTotalEl.closest('[style*="139, 92, 246"]')?.querySelector('[style*="a78bfa"]');
+            const gross = grossEl ? parseFloat(grossEl.textContent.replace(/[$,]/g, '')) : 0;
+            netTuitionEl.textContent = `$${fmt(gross - newExpensesTotal)}`;
+          }
+        }
+
+        showNotification('✅ Expense saved', 'success');
+
       } catch (err) {
         console.error('Error updating expense:', err);
-        nameEl.value  = nameEl.dataset.orig || nameEl.value;
-        amtEl.value   = amtEl.dataset.orig  || amtEl.value;
+        nameEl.value = savedName || nameEl.value;
+        amtEl.value  = (savedAmt || 0).toFixed(2);
         showNotification('Failed to update expense', 'error');
       } finally {
-        nameEl.disabled = false;
-        amtEl.disabled  = false;
         if (saveInd) saveInd.style.display = 'none';
       }
     };
@@ -5388,6 +5407,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
         
         if (error) throw error;
         
+        window._cachedExpenses = null; // invalidate cache
         showNotification('✅ Expense removed', 'success');
         
         // Refresh the breakdown modal
@@ -5704,47 +5724,305 @@ Please include your Student ID in the payment reference or memo to ensure proper
       }
     };
 
-    // Delete a single receipt from an invoice
-    async function deleteReceipt(invoiceId, receiptIndex, modalEl) {
-      const confirmed = confirm('Delete this receipt? This cannot be undone.');
+    // ─── Elite confirm dialog ──────────────────────────────────────────────────
+    function showEliteConfirm({ title, message, confirmText = 'Confirm', cancelText = 'Cancel' }) {
+      return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `position:fixed;inset:0;background:rgba(2,6,23,0.78);
+          display:flex;align-items:center;justify-content:center;z-index:10010;padding:24px;`;
+        overlay.innerHTML = `
+          <div style="width:min(420px,92vw);background:linear-gradient(160deg,#0c1a32 0%,#050e1f 100%);
+               border:1px solid rgba(201,168,76,0.25);border-top:3px solid #c9a84c;
+               border-radius:16px;box-shadow:0 32px 80px rgba(0,0,0,0.65);padding:26px;">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+              <div style="width:42px;height:42px;border-radius:12px;background:rgba(201,168,76,0.12);
+                border:1px solid rgba(201,168,76,0.3);display:flex;align-items:center;justify-content:center;font-size:20px;">⚠️</div>
+              <div style="font-family:'Playfair Display',Georgia,serif;font-size:18px;color:#f0ece3;font-weight:700;">${title}</div>
+            </div>
+            <div style="color:rgba(240,236,227,0.7);font-size:13px;line-height:1.7;margin-bottom:22px;">${message}</div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <button data-action="cancel" style="padding:10px 18px;border-radius:10px;background:rgba(255,255,255,0.08);
+                color:#e8edf5;border:1px solid rgba(255,255,255,0.15);font-weight:700;font-size:12px;cursor:pointer;">${cancelText}</button>
+              <button data-action="confirm" style="padding:10px 18px;border-radius:10px;background:linear-gradient(135deg,#c9a84c,#d4b56a);
+                color:#0a1020;border:none;font-weight:800;font-size:12px;cursor:pointer;">${confirmText}</button>
+            </div>
+          </div>`;
+        const cleanup = r => { overlay.remove(); resolve(r); };
+        overlay.addEventListener('click', e => { if (e.target === overlay) cleanup(false); });
+        overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => cleanup(false));
+        overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => cleanup(true));
+        document.body.appendChild(overlay);
+      });
+    }
+
+    // ─── Receipt zoom overlay ──────────────────────────────────────────────────
+    function openReceiptZoom(url, type) {
+      const overlay = document.createElement('div');
+      overlay.style.cssText = `position:fixed;inset:0;background:rgba(2,6,23,0.9);
+        display:flex;align-items:center;justify-content:center;z-index:10005;padding:24px;`;
+      overlay.innerHTML = `
+        <div style="position:relative;width:min(960px,92vw);max-height:90vh;">
+          <button onclick="this.closest('[style*=fixed]').remove()"
+            style="position:absolute;top:-14px;right:-14px;background:rgba(255,255,255,0.12);
+              border:1px solid rgba(255,255,255,0.2);color:#e8edf5;width:34px;height:34px;
+              border-radius:10px;cursor:pointer;font-size:20px;line-height:1;">×</button>
+          ${type === 'pdf'
+            ? `<iframe src="${url}" style="width:100%;height:85vh;border:none;border-radius:12px;background:white;"></iframe>`
+            : `<img src="${url}" style="width:100%;height:auto;max-height:85vh;border-radius:12px;object-fit:contain;background:#0b1c35;" />`}
+        </div>`;
+      overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+      document.body.appendChild(overlay);
+    }
+    window.__openReceiptZoom = openReceiptZoom;
+
+    // ─── In-memory receipt store (source of truth for open modal) ─────────────
+    const receiptCache = new Map(); // invoiceId → { receipts, studentId, studentName }
+
+    // ─── Render receipts into an existing modal body element ──────────────────
+    function renderReceiptGrid(receipts, invoiceId, bodyEl) {
+      if (!receipts.length) {
+        bodyEl.innerHTML = `<p style="color:#8a9ec0;text-align:center;padding:32px 0;">No receipts found.</p>`;
+        return;
+      }
+      const cards = receipts.map((receipt, index) => {
+        const fileType = (receipt.filename || '').toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
+        const uploadDate = receipt.uploaded_at
+          ? new Date(receipt.uploaded_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase()
+          : '—';
+        const fileSize = receipt.size ? ((receipt.size) / 1024).toFixed(1) + ' KB' : '';
+        const rp = JSON.stringify({ public_url: receipt.public_url, uploaded_at: receipt.uploaded_at }).replace(/"/g,'&quot;');
+        const thumb = fileType === 'pdf'
+          ? `<div style="width:100%;height:130px;border-radius:8px;background:rgba(201,168,76,0.07);
+               display:flex;flex-direction:column;align-items:center;justify-content:center;
+               color:#d4b56a;font-size:11px;font-weight:700;gap:6px;">
+               <div style="font-size:34px;">📄</div>PDF</div>`
+          : `<img src="${receipt.public_url}" loading="lazy"
+               style="width:100%;height:130px;object-fit:cover;border-radius:8px;display:block;" />`;
+        return `
+          <div style="background:rgba(8,18,36,0.85);border:1px solid rgba(201,168,76,0.18);
+               border-radius:12px;overflow:hidden;display:flex;flex-direction:column;">
+            <!-- thumbnail -->
+            <div onclick="__openReceiptZoom('${receipt.public_url}','${fileType}')"
+              style="cursor:zoom-in;position:relative;overflow:hidden;flex-shrink:0;">
+              ${thumb}
+              <div style="position:absolute;bottom:0;left:0;right:0;padding:4px 8px;
+                background:rgba(0,0,0,0.5);font-size:10px;color:rgba(255,255,255,0.6);text-align:center;">
+                Click to zoom
+              </div>
+            </div>
+            <!-- info -->
+            <div style="padding:10px 12px;flex:1;display:flex;flex-direction:column;gap:4px;">
+              <div style="color:#c9a84c;font-weight:700;font-size:11px;letter-spacing:0.4px;">Receipt ${index + 1}</div>
+              <div style="color:#e8edf5;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"
+                title="${receipt.filename}">${receipt.filename}</div>
+              <div style="color:#c9a84c;font-size:10px;font-weight:600;">${uploadDate}</div>
+              ${fileSize ? `<div style="color:#5a7099;font-size:10px;">${fileSize}</div>` : ''}
+            </div>
+            <!-- actions -->
+            <div style="padding:8px 12px 10px;display:flex;gap:6px;border-top:1px solid rgba(255,255,255,0.05);">
+              <button onclick="__openReceiptZoom('${receipt.public_url}','${fileType}')"
+                style="flex:1;padding:6px 0;background:linear-gradient(135deg,#c9a84c,#d4b56a);color:#0a1020;
+                  border:none;border-radius:7px;cursor:pointer;font-weight:700;font-size:11px;">
+                View
+              </button>
+              <button onclick="window.open('${receipt.public_url}','_blank')"
+                style="flex:1;padding:6px 0;background:rgba(255,255,255,0.07);color:#e8edf5;
+                  border:1px solid rgba(255,255,255,0.1);border-radius:7px;cursor:pointer;font-weight:600;font-size:11px;">
+                New Tab
+              </button>
+              <button onclick="deleteReceipt('${invoiceId}','${rp}',document.getElementById('receipt-modal-${invoiceId}'))"
+                style="padding:6px 10px;background:rgba(239,68,68,0.1);color:#fca5a5;
+                  border:1px solid rgba(239,68,68,0.25);border-radius:7px;cursor:pointer;font-weight:700;font-size:11px;"
+                onmouseover="this.style.background='rgba(239,68,68,0.22)'"
+                onmouseout="this.style.background='rgba(239,68,68,0.1)'">🗑</button>
+            </div>
+          </div>`;
+      }).join('');
+      bodyEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;">
+          ${cards}
+        </div>`;
+    }
+
+    // ─── Mark receipts viewed ─────────────────────────────────────────────────
+    async function markReceiptsViewed(invoiceId) {
+      const now = new Date().toISOString();
+      invoiceSupabase.from('invoices').update({ receipts_viewed_at: now }).eq('id', invoiceId).then(() => {});
+      const badge = document.getElementById(`receipt-badge-${invoiceId}`);
+      if (badge) badge.remove();
+      const inv = window.currentInvoices?.find(iv => iv.id === invoiceId);
+      if (inv) inv.receipts_viewed_at = now;
+    }
+
+    // ─── Open the receipts modal (instant, then refreshes in background) ──────
+    async function viewReceipts(invoiceId, _unused, studentId, studentName) {
+      // Remove any stale modal
+      document.getElementById(`receipt-modal-${invoiceId}`)?.remove();
+
+      const resolvedName = studentName
+        || window.currentInvoices?.find(iv => iv.id === invoiceId)?.student_name
+        || 'Student';
+
+      // Build modal shell immediately (zero-latency open)
+      const modal = document.createElement('div');
+      modal.id = `receipt-modal-${invoiceId}`;
+      modal.style.cssText = `position:fixed;inset:0;background:rgba(2,6,23,0.88);
+        display:flex;align-items:center;justify-content:center;z-index:10000;padding:20px;`;
+      modal.innerHTML = `
+        <div style="background:linear-gradient(160deg,#0c1a32 0%,#050e1f 100%);border-radius:18px;
+          width:min(980px,96vw);max-height:90vh;overflow-y:auto;
+          box-shadow:0 32px 80px rgba(0,0,0,0.7);border:1px solid rgba(201,168,76,0.15);">
+          <div style="padding:20px 24px;border-bottom:1px solid rgba(201,168,76,0.1);
+            display:flex;justify-content:space-between;align-items:center;
+            position:sticky;top:0;background:linear-gradient(160deg,#0c1a32 0%,#050e1f 100%);z-index:1;">
+            <h3 style="margin:0;color:#e8edf5;font-family:'Playfair Display',Georgia,serif;font-size:19px;font-weight:700;">
+              Payment Receipts <span style="color:#c9a84c;">— ${resolvedName}</span>
+            </h3>
+            <button onclick="document.getElementById('receipt-modal-${invoiceId}')?.remove()"
+              style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#8a9ec0;
+                font-size:22px;cursor:pointer;width:34px;height:34px;border-radius:8px;
+                display:flex;align-items:center;justify-content:center;line-height:1;"
+              onmouseover="this.style.color='#e8edf5'" onmouseout="this.style.color='#8a9ec0'">×</button>
+          </div>
+          <div id="receipt-body-${invoiceId}" style="padding:20px 24px;">
+            <div style="color:#8a9ec0;font-size:13px;padding:24px 0;text-align:center;">Loading receipts…</div>
+          </div>
+        </div>`;
+      modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+      document.body.appendChild(modal);
+
+      // Mark viewed instantly (fire-and-forget)
+      markReceiptsViewed(invoiceId);
+
+      // Fetch fresh data — single parallel fetch
+      let receiptsArray = [];
+      try {
+        const [invResult, studentIdResolved] = await Promise.all([
+          invoiceSupabase.from('invoices').select('payment_receipts,student_id').eq('id', invoiceId).single(),
+          Promise.resolve(studentId)
+        ]);
+
+        if (!invResult.error && invResult.data) {
+          receiptsArray = Array.isArray(invResult.data.payment_receipts) ? invResult.data.payment_receipts : [];
+          // Sync in-memory
+          const inv2 = window.currentInvoices?.find(iv => iv.id === invoiceId);
+          if (inv2) inv2.payment_receipts = receiptsArray;
+
+          // Merge application docs if we have student_id
+          const sid = studentIdResolved || invResult.data.student_id;
+          if (sid) {
+            try {
+              const { data: sr } = await invoiceSupabase.from('students').select('application_id').eq('student_id', sid).single();
+              if (sr?.application_id) {
+                const { data: ar } = await invoiceSupabase.from('applications').select('uploaded_documents').eq('id', sr.application_id).single();
+                const docs = Array.isArray(ar?.uploaded_documents) ? ar.uploaded_documents
+                  : (typeof ar?.uploaded_documents === 'string' ? ((() => { try { return JSON.parse(ar.uploaded_documents); } catch(_){return [];} })()) : []);
+                const extra = (docs || [])
+                  .filter(d => (d?.doc_name||'').toLowerCase().includes('invoice payment receipt'))
+                  .map(d => ({ filename: d.filename, public_url: d.public_url, uploaded_at: d.uploaded_at, size: d.size }));
+                const seen = new Set();
+                receiptsArray = [...receiptsArray, ...extra].filter(r => {
+                  const k = `${r.public_url||''}|${r.uploaded_at||''}`;
+                  if (seen.has(k)) return false; seen.add(k); return true;
+                });
+              }
+            } catch(_) {}
+          }
+        }
+      } catch(_) {}
+
+      receiptsArray = receiptsArray
+        .filter(r => r && (r.public_url || r.filename))
+        .sort((a, b) => new Date(b.uploaded_at||0) - new Date(a.uploaded_at||0));
+
+      // Cache merged result
+      receiptCache.set(invoiceId, receiptsArray);
+
+      // Update button count + clear badge
+      const receiptBtn = document.querySelector(`button.secondary[onclick*="viewReceipts('${invoiceId}'"]`);
+      if (receiptBtn) receiptBtn.innerHTML = `📄 View Receipts (${receiptsArray.length})`;
+      localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(receiptsArray.length));
+      document.getElementById(`receipt-badge-${invoiceId}`)?.remove();
+
+      // Render into modal body
+      const bodyEl = document.getElementById(`receipt-body-${invoiceId}`);
+      if (bodyEl) renderReceiptGrid(receiptsArray, invoiceId, bodyEl);
+    }
+
+    // ─── Delete a receipt ─────────────────────────────────────────────────────
+    async function deleteReceipt(invoiceId, receiptPayload, modalEl) {
+      const confirmed = await showEliteConfirm({
+        title: 'Delete Receipt',
+        message: 'This receipt will be permanently removed. This action cannot be undone.',
+        confirmText: 'Delete Receipt',
+        cancelText: 'Keep Receipt'
+      });
       if (!confirmed) return;
 
+      // Parse target
+      const payload = typeof receiptPayload === 'string'
+        ? (() => { try { return JSON.parse(receiptPayload.replace(/&quot;/g,'"')); } catch(_){ return {}; } })()
+        : (receiptPayload || {});
+      const targetUrl = payload.public_url || '';
+      const targetTs  = payload.uploaded_at || '';
+
+      const filterFn = arr => (arr || []).filter(r =>
+        !((r?.public_url||'') === targetUrl && (r?.uploaded_at||'') === targetTs));
+
       try {
-        // Fetch current receipts from DB (source of truth)
-        const { data: inv, error: fetchErr } = await invoiceSupabase
-          .from('invoices')
-          .select('payment_receipts')
-          .eq('id', invoiceId)
-          .single();
+        // 1. Fetch & update invoices table
+        const { data: invRow, error: fe } = await invoiceSupabase
+          .from('invoices').select('payment_receipts,student_id').eq('id', invoiceId).single();
+        if (fe) throw fe;
 
-        if (fetchErr) throw fetchErr;
+        const updatedInvoiceReceipts = filterFn(invRow.payment_receipts);
+        const { error: ue } = await invoiceSupabase
+          .from('invoices').update({ payment_receipts: updatedInvoiceReceipts }).eq('id', invoiceId);
+        if (ue) throw ue;
 
-        const current = Array.isArray(inv.payment_receipts) ? inv.payment_receipts : [];
-        const updated = current.filter((_, i) => i !== receiptIndex);
+        // 2. Sync in-memory
+        const inv2 = window.currentInvoices?.find(iv => iv.id === invoiceId);
+        if (inv2) inv2.payment_receipts = updatedInvoiceReceipts;
 
-        const { error: updateErr } = await invoiceSupabase
-          .from('invoices')
-          .update({ payment_receipts: updated })
-          .eq('id', invoiceId);
+        // 3. Also remove from applications (fire-and-forget)
+        const sid = invRow.student_id;
+        if (sid) {
+          invoiceSupabase.from('students').select('application_id').eq('student_id', sid).single().then(({ data: sr }) => {
+            if (!sr?.application_id) return;
+            invoiceSupabase.from('applications').select('uploaded_documents').eq('id', sr.application_id).single().then(({ data: ar }) => {
+              const docs = Array.isArray(ar?.uploaded_documents) ? ar.uploaded_documents
+                : (typeof ar?.uploaded_documents === 'string' ? ((() => { try { return JSON.parse(ar.uploaded_documents); } catch(_){return [];} })()) : []);
+              const filtered = (docs||[]).filter(d => !(
+                (d?.public_url||'') === targetUrl &&
+                (d?.uploaded_at||'') === targetTs &&
+                (d?.doc_name||'').toLowerCase().includes('invoice payment receipt')
+              ));
+              invoiceSupabase.from('applications').update({ uploaded_documents: filtered }).eq('id', sr.application_id).then(()=>{});
+            });
+          });
+        }
 
-        if (updateErr) throw updateErr;
+        // 4. Rebuild the merged list from cache and re-render (no full reload)
+        const prev = receiptCache.get(invoiceId) || [];
+        const newList = filterFn(prev);
+        receiptCache.set(invoiceId, newList);
 
-        // Update in-memory currentInvoices so the card refreshes
+        // Update localStorage seen count to new count so badge doesn't reappear
+        localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(newList.length));
+
+        // Update button label
+        const btn = document.querySelector(`button.secondary[onclick*="viewReceipts('${invoiceId}'"]`);
+        if (btn) btn.innerHTML = `📄 View Receipts (${newList.length})`;
+
+        // Re-render inside open modal (no modal close/reopen)
+        const bodyEl = document.getElementById(`receipt-body-${invoiceId}`);
+        if (bodyEl) renderReceiptGrid(newList, invoiceId, bodyEl);
+
+        // Update invoice card count without full list reload
         if (Array.isArray(window.currentInvoices)) {
-          const inv2 = window.currentInvoices.find(iv => iv.id === invoiceId);
-          if (inv2) inv2.payment_receipts = updated;
+          const inv3 = window.currentInvoices.find(iv => iv.id === invoiceId);
+          if (inv3) inv3.payment_receipts = updatedInvoiceReceipts;
         }
-
-        // Close current modal and reopen with updated list (or close if empty)
-        modalEl.remove();
-        if (updated.length > 0) {
-          viewReceipts(invoiceId, updated);
-        }
-
-        // Refresh the invoice cards
-        const searchTerm = document.getElementById('searchInvoices')?.value || '';
-        const statusFilter = document.getElementById('filterStatus')?.value || '';
-        await loadAllInvoices(searchTerm, statusFilter);
 
       } catch (err) {
         console.error('Failed to delete receipt:', err);
@@ -5752,149 +6030,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
       }
     }
 
-    // Mark all receipts for an invoice as viewed (persisted to Supabase)
-    async function markReceiptsViewed(invoiceId) {
-      const now = new Date().toISOString();
-      try {
-        await invoiceSupabase
-          .from('invoices')
-          .update({ receipts_viewed_at: now })
-          .eq('id', invoiceId);
-      } catch (err) {
-        console.warn('markReceiptsViewed error (non-fatal):', err);
-      }
-
-      // Instantly remove the badge from the DOM (no reload needed)
-      const badge = document.getElementById(`receipt-badge-${invoiceId}`);
-      if (badge) badge.remove();
-
-      // Also update in-memory so re-renders don't re-add the badge
-      const inv = window.currentInvoices?.find(iv => iv.id === invoiceId);
-      if (inv) inv.receipts_viewed_at = now;
-    }
-
-    // View payment receipts
-    function viewReceipts(invoiceId, receipts) {
-      // ✅ Mark as viewed immediately on open
-      markReceiptsViewed(invoiceId);
-      const receiptsArray = typeof receipts === 'string' ? JSON.parse(receipts) : receipts;
-      
-      let receiptHTML = receiptsArray.map((receipt, index) => {
-        const fileType = receipt.filename.toLowerCase().endsWith('.pdf') ? 'pdf' : 'image';
-        const uploadDate = new Date(receipt.uploaded_at).toLocaleString();
-        const fileSize = ((receipt.size || 0) / 1024).toFixed(2) + ' KB';
-        
-        return `
-          <div style="margin-bottom: 20px; padding: 18px; background: rgba(201,168,76,0.07); border: 1px solid rgba(201,168,76,0.2); border-radius: 10px; position: relative;">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
-              <strong style="color: #c9a84c;">Receipt ${index + 1}:</strong>&nbsp;<span style="color:#e8edf5;">${receipt.filename}</span>
-              <button
-                onclick="deleteReceipt('${invoiceId}', ${index}, this.closest('[style*=fixed]'))"
-                title="Delete this receipt"
-                style="
-                  margin-left: 12px;
-                  flex-shrink: 0;
-                  padding: 6px 12px;
-                  background: rgba(239,68,68,0.12);
-                  border: 1px solid rgba(239,68,68,0.3);
-                  color: #fca5a5;
-                  border-radius: 7px;
-                  font-size: 12px;
-                  font-weight: 700;
-                  cursor: pointer;
-                  transition: background 0.2s;
-                "
-                onmouseover="this.style.background='rgba(239,68,68,0.22)'"
-                onmouseout="this.style.background='rgba(239,68,68,0.12)'"
-              >Delete</button>
-            </div>
-            <div style="font-size: 12px; color: #8a9ec0; margin-bottom: 12px; line-height: 1.7;">
-              <div>Uploaded: ${uploadDate}</div>
-              <div>Size: ${fileSize}</div>
-            </div>
-            ${fileType === 'pdf' ? 
-              `<iframe src="${receipt.public_url}" style="width: 100%; height: 500px; border: none; border-radius: 4px; background: white;"></iframe>` :
-              `<img src="${receipt.public_url}" style="max-width: 100%; height: auto; border-radius: 4px; display: block;" />`
-            }
-            <div style="margin-top: 14px;">
-              <button onclick="window.open('${receipt.public_url}', '_blank')" style="padding: 8px 18px; background: linear-gradient(135deg,#c9a84c,#d4b56a); color: #0a1020; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 13px;">
-                Open in New Tab
-              </button>
-            </div>
-          </div>
-        `;
-      }).join('');
-      
-      const modal = document.createElement('div');
-      modal.style.cssText = `
-        position: fixed;
-        inset: 0;
-        background: rgba(2,6,23,0.9);
-        backdrop-filter: blur(10px);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 10000;
-        padding: 20px;
-      `;
-      
-      modal.innerHTML = `
-        <div style="
-          background: linear-gradient(160deg, #0c1a32 0%, #050e1f 100%);
-          border-radius: 18px;
-          max-width: 900px;
-          width: 100%;
-          max-height: 90vh;
-          overflow-y: auto;
-          box-shadow: 0 32px 80px rgba(0,0,0,0.7);
-          border: 1px solid rgba(201,168,76,0.15);
-        ">
-          <div style="
-            padding: 24px 28px;
-            border-bottom: 1px solid rgba(201,168,76,0.1);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            position: sticky;
-            top: 0;
-            background: linear-gradient(160deg, #0c1a32 0%, #050e1f 100%);
-            z-index: 1;
-          ">
-            <h3 style="margin: 0; color: #e8edf5; font-family: 'Playfair Display', Georgia, serif; font-size: 20px; font-weight: 700;">
-              Payment Receipts
-            </h3>
-            <button onclick="this.closest('[style*=fixed]').remove()" style="
-              background: rgba(255,255,255,0.05);
-              border: 1px solid rgba(255,255,255,0.1);
-              color: #8a9ec0;
-              font-size: 22px;
-              cursor: pointer;
-              width: 36px;
-              height: 36px;
-              border-radius: 8px;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              transition: all 0.2s;
-            " onmouseover="this.style.background='rgba(255,255,255,0.1)';this.style.color='#e8edf5'" onmouseout="this.style.background='rgba(255,255,255,0.05)';this.style.color='#8a9ec0'">
-              ×
-            </button>
-          </div>
-          <div style="padding: 24px 28px;">
-            ${receiptHTML}
-          </div>
-        </div>
-      `;
-      
-      document.body.appendChild(modal);
-      modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.remove();
-      });
-    }
-
-    // Make viewReceipts and deleteReceipt globally accessible
-    window.viewReceipts = viewReceipts;
-    window.deleteReceipt = deleteReceipt;
+    // ─── Expose globally ──────────────────────────────────────────────────────
+    window.viewReceipts   = viewReceipts;
+    window.deleteReceipt  = deleteReceipt;
 
     // Live update on all inputs
     ['studentName', 'studentId', 'program', 'notes'].forEach((id) => {

@@ -4438,7 +4438,24 @@ function renderDocumentVault(documents = []) {
     return;
   }
 
-  vault.innerHTML = documents.map((doc, index) => {
+  const getDocTimestamp = (doc) => {
+    const candidates = [
+      doc?.uploaded_at,
+      doc?.uploadedAt,
+      doc?.uploaded_on,
+      doc?.upload_date,
+      doc?.created_at,
+      doc?.createdAt,
+      doc?.issued,
+      doc?.date,
+      doc?.timestamp
+    ];
+    const raw = candidates.find(v => v);
+    const ts = raw ? new Date(raw).getTime() : 0;
+    return Number.isNaN(ts) ? 0 : ts;
+  };
+  const sortedDocs = [...documents].sort((a, b) => getDocTimestamp(b) - getDocTimestamp(a));
+  vault.innerHTML = sortedDocs.map((doc, index) => {
     const docId = doc.id || `doc-${index}`;
     documentVaultRegistry.set(docId, doc);
     return `
@@ -5975,18 +5992,17 @@ async function handleUpload(event) {
     
     if (updateError) throw updateError;
     
-    // If this is an invoice payment receipt, link it to the student's unpaid invoices
+    // If this is an invoice payment receipt, link it to the student's latest open invoice
     if (documentType === 'Invoice Payment Receipt') {
       const { data: invoices, error: invoiceError } = await supabase
         .from('invoices')
-        .select('id, invoice_number, payment_receipts')
+        .select('id, invoice_number, payment_receipts, status')
         .eq('student_id', studentProfile.student_id)
-        .eq('status', 'unpaid')
-        .order('created_at', { ascending: false })
-        .limit(1);
+        .order('created_at', { ascending: false });
       
       if (!invoiceError && invoices && invoices.length > 0) {
-        const invoice = invoices[0];
+        const openInvoice = invoices.find(inv => ['unpaid', 'partial', 'overdue'].includes(inv.status));
+        const invoice = openInvoice || invoices[0];
         const currentReceipts = Array.isArray(invoice.payment_receipts) ? invoice.payment_receipts : [];
         const updatedReceipts = [...currentReceipts, {
           filename: file.name,
