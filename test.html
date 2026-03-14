@@ -5426,7 +5426,9 @@ async function resumeTest(saved) {
   }
 
   // Load questions from Supabase using the saved topic filter
-  const topicIds = TEST_CONFIG.selectedTopicIds || null;
+  // Fix: treat empty array same as null — empty array is truthy but means "no topics selected"
+  const rawTopicIds = TEST_CONFIG.selectedTopicIds;
+  const topicIds = (rawTopicIds && rawTopicIds.length > 0) ? rawTopicIds : null;
   const questions = await loadQuestions(saved.testId, TEST_CONFIG.categoryFilter, null, topicIds);
   
   // Reconstruct questions with the same deterministic seed — produces identical order on every device
@@ -5642,12 +5644,23 @@ function toggleExtraQuestions() {
 }
 
 function renderQuestion() {
+  // ── Safety guard ────────────────────────────────────────────────────────
+  // If questions aren't loaded yet (or currentIndex is somehow out of range),
+  // show a clear error state rather than letting downstream code crash silently
+  // with a TypeError that leaves the test container blank.
+  const baseQuestion = testState.questions[testState.currentIndex];
+  if (!baseQuestion) {
+    console.error('[renderQuestion] No question at index', testState.currentIndex,
+      '— questions.length:', testState.questions.length);
+    const stemEl = document.getElementById('questionStem');
+    const container = document.getElementById('optionsContainer');
+    if (stemEl) stemEl.textContent = 'Unable to load question. Please refresh the page or contact your instructor.';
+    if (container) container.innerHTML = '';
+    document.getElementById('questionNumber').textContent = 'Error';
+    return;
+  }
+
   // ── LANGUAGE-AWARE QUESTION RESOLUTION ─────────────────────────────────
-  // Always use the frozen snapshot for text so language switching never
-  // changes question/answer order or correct answers.
-  // Fall back gracefully: if HY is active but this specific question lacks
-  // a translation, show EN text and display the notice banner.
-  const baseQuestion = testState.questions[testState.currentIndex]; // carries id, correct, multi, etc.
   
   let displayQuestion; // the object whose .stem / .options we show
   let showNoTranslation = false;
@@ -5665,6 +5678,12 @@ function renderQuestion() {
     displayQuestion = testState.snapshot.en[testState.currentIndex];
   } else {
     // No snapshot yet (e.g. student loading mid-stream) — use raw question data
+    displayQuestion = baseQuestion;
+  }
+
+  // Snapshot index mismatch guard — fallback to raw question if snapshot is stale
+  if (!displayQuestion) {
+    console.warn('[renderQuestion] snapshot missing entry at index', testState.currentIndex, '— using raw question');
     displayQuestion = baseQuestion;
   }
 
@@ -6612,12 +6631,31 @@ async function loadSavedSession(sessionId) {
 
       // Rebuild testState.questions with full DB records, perfectly matching the saved order
       // (This retains the shuffled order from the exact moment the test started)
-      testState.questions = testState.questions.map(stub => {
+      const rebuiltQuestions = testState.questions.map(stub => {
         if (stub.id === 'english-disclaimer-q0') {
           return buildEnglishDisclaimerQuestion();
         }
-        return fullQMap[stub.id];
-      }).filter(Boolean);
+        return fullQMap[stub.id]; // may be undefined if DB didn't return that question
+      });
+
+      // Log any stubs that didn't resolve so we can diagnose RLS / deleted-question issues
+      const missingCount = rebuiltQuestions.filter(q => !q).length;
+      if (missingCount > 0) {
+        console.warn(`[Resume] ${missingCount} question stub(s) not found in DB response — they will be skipped.`);
+      }
+
+      testState.questions = rebuiltQuestions.filter(Boolean);
+
+      // Clamp currentIndex — if questions were dropped, the saved index may now be
+      // out-of-bounds, which would leave renderQuestion() with undefined and a blank screen.
+      if (testState.questions.length > 0) {
+        testState.currentIndex = Math.min(
+          testState.currentIndex,
+          testState.questions.length - 1
+        );
+      } else {
+        testState.currentIndex = 0;
+      }
     }
 
   // Restore test config
