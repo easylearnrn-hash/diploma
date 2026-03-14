@@ -9188,87 +9188,208 @@
         return;
       }
 
-      // Fetch all active students to show a preview
-      const activeStudents = allStudents.filter(s => s.enrollment_status === 'active');
+      // Ensure students are loaded
+      if (allStudents.length === 0) {
+        const { data, error } = await db.from('students').select('id,full_name,student_id,group,enrollment_status').eq('enrollment_status','active').order('full_name',{ascending:true});
+        if (!error) allStudents = data || [];
+      }
+      const activeStudents = allStudents.filter(s => s.enrollment_status === 'active').sort((a,b)=>(a.full_name||'').localeCompare(b.full_name||''));
+
+      // Track which students are currently selected in the modal (all by default)
+      let selectedStudentIds = new Set(activeStudents.map(s => s.id));
 
       const modal = document.createElement('div');
       modal.className = 'modal-backdrop';
       modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.82);backdrop-filter:blur(6px);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;animation:fadeIn 0.2s ease;';
 
+      function renderStudentRows(filter) {
+        const q = (filter || '').toLowerCase().trim();
+        const visible = q ? activeStudents.filter(s => (s.full_name||'').toLowerCase().includes(q) || (s.student_id||'').toLowerCase().includes(q) || (s.group||'').toLowerCase().includes(q)) : activeStudents;
+        if (visible.length === 0) return `<div style="text-align:center;padding:20px 0;color:#5a6a8a;font-size:13px;">No students match</div>`;
+        return visible.map(s => {
+          const checked = selectedStudentIds.has(s.id);
+          const initials = (s.full_name||'?').split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
+          return `<label style="display:flex;align-items:center;gap:12px;padding:9px 14px;border-radius:9px;cursor:pointer;transition:background 0.15s;${checked?'background:rgba(201,168,76,0.07);':''}"
+                        onmouseover="this.style.background='rgba(255,255,255,0.04)'"
+                        onmouseout="this.style.background='${checked?'rgba(201,168,76,0.07)':'transparent'}'">
+            <input type="checkbox" data-student-id="${s.id}" ${checked?'checked':''} onchange="window._bpToggleStudent(this)"
+                   style="width:16px;height:16px;accent-color:#c9a84c;cursor:pointer;flex-shrink:0;">
+            <div style="width:32px;height:32px;border-radius:8px;background:rgba(201,168,76,0.14);border:1px solid rgba(201,168,76,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;font-weight:800;color:#c9a84c;">${initials}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="color:#e8eaf0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${s.full_name||'Unknown'}</div>
+              <div style="color:#5a6a8a;font-size:11px;">${s.student_id||''} ${s.group?'· '+s.group:''}</div>
+            </div>
+          </label>`;
+        }).join('');
+      }
+
+      function updateSelectionUI() {
+        const countEl = modal.querySelector('#bp-sel-count');
+        const publishBtn = modal.querySelector('#bp-publish-btn');
+        const n = selectedStudentIds.size;
+        if (countEl) countEl.textContent = n + ' student' + (n!==1?'s':'') + ' selected';
+        if (publishBtn) {
+          publishBtn.disabled = n === 0;
+          publishBtn.style.opacity = n === 0 ? '0.45' : '1';
+          publishBtn.style.cursor  = n === 0 ? 'not-allowed' : 'pointer';
+        }
+        // update indeterminate state on select-all checkbox
+        const allCb = modal.querySelector('#bp-select-all-cb');
+        if (allCb) {
+          if (n === 0)                         { allCb.checked = false; allCb.indeterminate = false; }
+          else if (n === activeStudents.length) { allCb.checked = true;  allCb.indeterminate = false; }
+          else                                  { allCb.checked = false; allCb.indeterminate = true; }
+        }
+      }
+
+      // Global helpers referenced from inline HTML
+      window._bpToggleStudent = function(cb) {
+        const id = cb.dataset.studentId;
+        if (cb.checked) selectedStudentIds.add(id); else selectedStudentIds.delete(id);
+        // re-colour row background
+        const lbl = cb.closest('label');
+        if (lbl) lbl.style.background = cb.checked ? 'rgba(201,168,76,0.07)' : 'transparent';
+        updateSelectionUI();
+      };
+      window._bpSelectAll = function() {
+        const q = (modal.querySelector('#bp-search-input')?.value||'').toLowerCase().trim();
+        const visible = q ? activeStudents.filter(s=>(s.full_name||'').toLowerCase().includes(q)||(s.student_id||'').toLowerCase().includes(q)||(s.group||'').toLowerCase().includes(q)) : activeStudents;
+        visible.forEach(s => selectedStudentIds.add(s.id));
+        rerenderList();
+      };
+      window._bpClearAll = function() {
+        const q = (modal.querySelector('#bp-search-input')?.value||'').toLowerCase().trim();
+        const visible = q ? activeStudents.filter(s=>(s.full_name||'').toLowerCase().includes(q)||(s.student_id||'').toLowerCase().includes(q)||(s.group||'').toLowerCase().includes(q)) : activeStudents;
+        visible.forEach(s => selectedStudentIds.delete(s.id));
+        rerenderList();
+      };
+      window._bpToggleAll = function(cb) {
+        if (cb.checked) window._bpSelectAll(); else window._bpClearAll();
+      };
+      function rerenderList() {
+        const q = modal.querySelector('#bp-search-input')?.value || '';
+        const listEl = modal.querySelector('#bp-student-list');
+        if (listEl) listEl.innerHTML = renderStudentRows(q);
+        updateSelectionUI();
+      }
+
       modal.innerHTML = `
-        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(201,168,76,0.28);border-radius:20px;max-width:500px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
-          <div style="padding:28px 32px 22px;border-bottom:1px solid rgba(201,168,76,0.14);background:rgba(4,17,31,0.6);position:relative;">
+        <div style="background:rgba(7,27,48,0.97);border:1px solid rgba(201,168,76,0.28);border-radius:20px;max-width:560px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 25px 60px rgba(0,0,0,0.6);animation:slideUp 0.3s ease;overflow:hidden;">
+
+          <!-- Header -->
+          <div style="padding:24px 28px 18px;border-bottom:1px solid rgba(201,168,76,0.14);background:rgba(4,17,31,0.6);position:relative;flex-shrink:0;">
             <button onclick="this.closest('.modal-backdrop').remove()"
-                    style="position:absolute;top:22px;right:22px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;"
-                    onmouseover="this.style.background='rgba(239,68,68,0.18)'"
-                    onmouseout="this.style.background='rgba(255,255,255,0.06)'">
+                    style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.18)'" onmouseout="this.style.background='rgba(255,255,255,0.06)'">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f0ece3" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
             <div style="display:flex;align-items:center;gap:14px;">
-              <div style="width:50px;height:50px;background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.08));border:1px solid rgba(201,168,76,0.40);border-radius:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+              <div style="width:46px;height:46px;background:linear-gradient(135deg,rgba(201,168,76,0.22),rgba(201,168,76,0.08));border:1px solid rgba(201,168,76,0.40);border-radius:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d4b56a" stroke-width="2"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
               </div>
               <div>
-                <h2 style="margin:0 0 3px;color:#f0ece3;font-size:19px;font-weight:800;letter-spacing:-0.3px;">Confirm Bulk Publish</h2>
-                <p style="margin:0;color:#8a8070;font-size:13px;">This will grant access to all active students</p>
+                <h2 style="margin:0 0 2px;color:#f0ece3;font-size:18px;font-weight:800;letter-spacing:-0.3px;">Bulk Publish Notes</h2>
+                <p style="margin:0;color:#8a8070;font-size:12.5px;">Choose which students will receive access</p>
+              </div>
+            </div>
+
+            <!-- Stats bar -->
+            <div style="display:flex;gap:10px;margin-top:16px;">
+              <div style="flex:1;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:10px 14px;text-align:center;">
+                <div style="color:#e2cc92;font-size:19px;font-weight:900;">${selectedNoteIds.length}</div>
+                <div style="color:#6a7a9a;font-size:11px;margin-top:1px;">Note${selectedNoteIds.length!==1?'s':''}</div>
+              </div>
+              <div style="flex:1;background:rgba(96,165,250,0.06);border:1px solid rgba(96,165,250,0.15);border-radius:10px;padding:10px 14px;text-align:center;">
+                <div id="bp-sel-count" style="color:#93c5fd;font-size:19px;font-weight:900;">${activeStudents.length} student${activeStudents.length!==1?'s':''} selected</div>
+                <div style="color:#6a7a9a;font-size:11px;margin-top:1px;">will receive access</div>
               </div>
             </div>
           </div>
 
-          <div style="padding:24px 32px;">
-            <div style="display:flex;gap:12px;margin-bottom:16px;">
-              <div style="flex:1;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:14px 16px;text-align:center;">
-                <div style="color:#e2cc92;font-size:22px;font-weight:900;">${selectedNoteIds.length}</div>
-                <div style="color:#8a8070;font-size:12px;margin-top:2px;">Note${selectedNoteIds.length!==1?'s':''} selected</div>
-              </div>
-              <div style="flex:1;background:rgba(201,168,76,0.06);border:1px solid rgba(201,168,76,0.18);border-radius:12px;padding:14px 16px;text-align:center;">
-                <div style="color:#e2cc92;font-size:22px;font-weight:900;">${activeStudents.length}</div>
-                <div style="color:#8a8070;font-size:12px;margin-top:2px;">Active student${activeStudents.length!==1?'s':''}</div>
+          <!-- Student picker -->
+          <div style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;">
+
+            <!-- Search + Select-all bar -->
+            <div style="padding:14px 20px 10px;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,0.05);">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="flex:1;position:relative;">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a6a8a" stroke-width="2" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);pointer-events:none;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input id="bp-search-input" type="text" placeholder="Search by name, ID, or group…"
+                         oninput="(()=>{ const q=this.value; const l=this.closest('.modal-backdrop').querySelector('#bp-student-list'); if(l){l.innerHTML=window._bpRenderRows(q);} window._bpUpdateUI(); })()"
+                         style="width:100%;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:9px;padding:8px 12px 8px 32px;color:#e8eaf0;font-size:13px;font-family:inherit;outline:none;"
+                         onfocus="this.style.borderColor='rgba(201,168,76,0.40)'" onblur="this.style.borderColor='rgba(255,255,255,0.10)'">
+                </div>
+                <label style="display:flex;align-items:center;gap:7px;cursor:pointer;flex-shrink:0;font-size:12.5px;color:#8a9ab0;white-space:nowrap;">
+                  <input id="bp-select-all-cb" type="checkbox" checked onchange="window._bpToggleAll(this)" style="width:15px;height:15px;accent-color:#c9a84c;cursor:pointer;">
+                  All
+                </label>
               </div>
             </div>
-            <div style="background:rgba(201,168,76,0.05);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:13px 16px;display:flex;gap:10px;align-items:flex-start;">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              <div style="color:#8a8070;font-size:13px;line-height:1.55;">All <strong style="color:#d4b56a;">${selectedNoteIds.length} note${selectedNoteIds.length!==1?'s':''}</strong> will be published to all <strong style="color:#d4b56a;">${activeStudents.length} active student${activeStudents.length!==1?'s':''}</strong>. Existing assignments will be updated.</div>
+
+            <!-- Scrollable student rows -->
+            <div id="bp-student-list" style="flex:1;overflow-y:auto;padding:8px 10px;">
+              ${renderStudentRows('')}
             </div>
           </div>
 
-          <div style="padding:0 32px 24px;display:flex;justify-content:flex-end;gap:10px;">
-            <button onclick="this.closest('.modal-backdrop').remove()"
-                    style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:11px 24px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;"
-                    onmouseover="this.style.background='rgba(255,255,255,0.09)'"
-                    onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-              Cancel
-            </button>
-            <button id="confirmBulkPublishBtn"
-                    onclick="executeBulkPublish(window._bulkPublishNoteIds, window._bulkPublishStudentIds, this)"
-                    style="background:linear-gradient(135deg,#c9a84c,#a8863a);color:#04111f;border:none;padding:11px 28px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(201,168,76,0.28);font-family:inherit;"
-                    onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(201,168,76,0.40)'"
-                    onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(201,168,76,0.28)'">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-              Publish Now
-            </button>
+          <!-- Footer actions -->
+          <div style="padding:14px 24px 20px;flex-shrink:0;border-top:1px solid rgba(255,255,255,0.06);display:flex;justify-content:space-between;align-items:center;gap:10px;">
+            <div style="display:flex;gap:8px;">
+              <button onclick="window._bpSelectAll()"
+                      style="background:rgba(201,168,76,0.08);color:#c9a84c;border:1px solid rgba(201,168,76,0.22);padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;"
+                      onmouseover="this.style.background='rgba(201,168,76,0.15)'" onmouseout="this.style.background='rgba(201,168,76,0.08)'">Select All</button>
+              <button onclick="window._bpClearAll()"
+                      style="background:rgba(255,255,255,0.05);color:#8a9ab0;border:1px solid rgba(255,255,255,0.10);padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">Clear</button>
+            </div>
+            <div style="display:flex;gap:10px;">
+              <button onclick="this.closest('.modal-backdrop').remove()"
+                      style="background:rgba(255,255,255,0.05);color:#c8bfb2;border:1px solid rgba(255,255,255,0.12);padding:10px 22px;border-radius:10px;font-size:13.5px;font-weight:700;cursor:pointer;font-family:inherit;"
+                      onmouseover="this.style.background='rgba(255,255,255,0.09)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                Cancel
+              </button>
+              <button id="bp-publish-btn"
+                      onclick="executeBulkPublish(window._bulkPublishNoteIds, window._bulkPublishStudentIds, this)"
+                      style="background:linear-gradient(135deg,#c9a84c,#a8863a);color:#04111f;border:none;padding:10px 26px;border-radius:10px;font-size:13.5px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:8px;box-shadow:0 4px 14px rgba(201,168,76,0.28);font-family:inherit;"
+                      onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(201,168,76,0.40)'"
+                      onmouseout="this.style.transform='';this.style.boxShadow='0 4px 14px rgba(201,168,76,0.28)'">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                Publish Now
+              </button>
+            </div>
           </div>
         </div>
       `;
 
       modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
-      // Store IDs on window to avoid JSON-in-HTML-attribute quoting bugs
+
+      // Expose renderer so the search oninput can call it
+      window._bpRenderRows = renderStudentRows;
+      window._bpUpdateUI  = updateSelectionUI;
+
+      // Store note IDs on window; student IDs are derived live from selectedStudentIds at click time
       window._bulkPublishNoteIds = selectedNoteIds;
-      window._bulkPublishStudentIds = activeStudents.map(s => s.id);
+
+      // Override the publish button click to capture the live selection at press time
+      modal.addEventListener('click', e => {
+        if (e.target.closest('#bp-publish-btn') && !e.target.closest('#bp-publish-btn').disabled) {
+          window._bulkPublishStudentIds = Array.from(selectedStudentIds);
+        }
+      }, true); // capture phase so it fires before the inline onclick
+
       document.body.appendChild(modal);
+      updateSelectionUI();
     }
 
     async function executeBulkPublish(noteIds, studentIds, btn) {
+      if (!studentIds || studentIds.length === 0) {
+        showToast('No students selected.', 'warning');
+        return;
+      }
       btn.disabled = true;
       btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Publishing…`;
 
       try {
-        // For each note, delete old records then insert fresh ones
-        for (const noteId of noteIds) {
-          const { error: delErr } = await db.from('published_notes').delete().eq('note_id', noteId);
-          if (delErr) throw delErr;
-        }
-
         const records = [];
         const adminEmail = sessionStorage.getItem('adminEmail') || 'admin';
         for (const noteId of noteIds) {
@@ -9278,8 +9399,10 @@
         }
 
         if (records.length > 0) {
-          const { error: insErr } = await db.from('published_notes').insert(records);
-          if (insErr) throw insErr;
+          // Upsert: insert and update on conflict so we never wipe unrelated students' access
+          const { error: upsertErr } = await db.from('published_notes')
+            .upsert(records, { onConflict: 'note_id,student_id', ignoreDuplicates: false });
+          if (upsertErr) throw upsertErr;
         }
 
         document.querySelector('.modal-backdrop')?.remove();
