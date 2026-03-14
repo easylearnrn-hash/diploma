@@ -344,6 +344,11 @@
     TCA:     'Tricyclic Antidepressant',
 
     // ── Pharmacology / Medications ───────────────────────────────────
+    SE:      'Side Effects',
+    ADR:     'Adverse Drug Reaction',
+    AE:      'Adverse Effects',
+    CI:      'Contraindication',
+    MOA:     'Mechanism of Action',
     ACEi:    'ACE Inhibitor (Angiotensin-Converting Enzyme Inhibitor)',
     ARB:     'Angiotensin II Receptor Blocker',
     BB:      'Beta Blocker',
