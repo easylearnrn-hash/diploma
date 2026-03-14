@@ -7432,28 +7432,52 @@ function coldCallAnimatePick(finalName) {
     display.className = 'cc-name-display rolling';
     display.innerHTML = '<div class="cc-rolling-dots"><span>·</span><span>·</span><span>·</span></div>';
 
-    // After 700ms show the name + correct/wrong buttons
+    // After 700ms show the name + auto-derived answer result
     setTimeout(() => {
       display.className = 'cc-name-display revealed';
+
+      // Auto-detect result from current question's answerStatus
+      const currentQ = testState.questions[testState.currentIndex];
+      const status = currentQ ? testState.answerStatus[currentQ.id] : undefined;
+      const isCorrect = status === 'correct';
+      const isWrong   = status === 'incorrect';
+      const hasResult = isCorrect || isWrong;
+
+      let resultBadge;
+      if (isCorrect) {
+        resultBadge = `<div class="cc-answered-badge correct">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+          Correct
+        </div>`;
+      } else if (isWrong) {
+        resultBadge = `<div class="cc-answered-badge wrong">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          Wrong
+        </div>`;
+      } else {
+        resultBadge = `<div class="cc-answered-badge" style="background:rgba(100,116,139,0.18);border-color:rgba(100,116,139,0.35);color:#94a3b8;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          Not answered yet
+        </div>`;
+      }
+
       display.innerHTML = `
         <div class="cc-called-label">
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
           Called on
         </div>
         <div class="cc-name-text animate-in">${escapeHtml(finalName)}</div>
-        <div class="cc-answer-btns" id="ccAnswerBtns">
-          <button class="cc-correct-btn" id="ccCorrectBtn" onclick="coldCallRecordAnswer(true)">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-            Correct
-          </button>
-          <button class="cc-wrong-btn" id="ccWrongBtn" onclick="coldCallRecordAnswer(false)">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-            Wrong
-          </button>
-        </div>
+        ${resultBadge}
       `;
+
       coldCallState.isRolling = false;
       if (pickBtn) pickBtn.disabled = false;
+
+      // Auto-record the result (only if the question has been checked)
+      if (hasResult) {
+        coldCallRecordAnswer(isCorrect);
+      }
+
       resolve();
     }, 700);
   });
@@ -7513,16 +7537,7 @@ async function coldCallRecordAnswer(isCorrect) {
   const stem = coldCallGetCurrentQuestionStem();
   if (stem) rec.questions.push({ stem, correct: isCorrect });
 
-  // Update UI — replace buttons with badge
-  const answerBtns = document.getElementById('ccAnswerBtns');
-  if (answerBtns) {
-    answerBtns.outerHTML = `
-      <div class="cc-answered-badge ${isCorrect ? 'correct' : 'wrong'}">
-        ${isCorrect
-          ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Correct'
-          : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Wrong'}
-      </div>`;
-  }
+  // Badge is already rendered by coldCallAnimatePick — no DOM swap needed here.
 
   // Show End Session button
   const endRow = document.getElementById('ccEndSessionRow');
