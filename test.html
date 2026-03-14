@@ -3880,7 +3880,11 @@ async function loadTestConfiguration(testId) {
 // any question already loaded in the current session.
 // ─────────────────────────────────────────────────────────────────
 async function addMoreQuestions(count = 10) {
-  if (!SESSION_ROLE.isTeacher) return;
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[addMoreQuestions] Blocked — SESSION_ROLE.isTeacher is false');
+    showToast('Teacher access required.', 'warning');
+    return;
+  }
 
   const btn = document.getElementById('addQuestionsBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
@@ -3890,7 +3894,17 @@ async function addMoreQuestions(count = 10) {
     const existingIds = new Set((testState.questions || []).map(q => q.id));
 
     // 2. Re-fetch the full pool using the same topic / test config
-    const topicIds = TEST_CONFIG.selectedTopicIds || null;
+    // Fix: treat empty array same as null — empty array is truthy but means "no topics selected"
+    const rawTopicIds = TEST_CONFIG.selectedTopicIds;
+    const topicIds = (rawTopicIds && rawTopicIds.length > 0) ? rawTopicIds : null;
+
+    console.log('[addMoreQuestions] Config:', {
+      testId: TEST_CONFIG.testId,
+      categoryFilter: TEST_CONFIG.categoryFilter,
+      topicIds,
+      existing: existingIds.size
+    });
+
     // Pass null for questionCount so we get every available question
     const pool = await loadQuestions(
       TEST_CONFIG.testId,
@@ -3979,7 +3993,12 @@ async function addMoreQuestions(count = 10) {
 
   } catch (err) {
     console.error('addMoreQuestions error:', err);
-    showToast('Failed to add questions. Try again.', 'error');
+    // "No questions found" means the pool is exhausted — show friendly message
+    if (err && err.message && err.message.includes('No questions found')) {
+      showToast('No more questions available in this topic set.', 'info');
+    } else {
+      showToast(`Failed to add questions: ${err?.message || 'Unknown error'}`, 'error');
+    }
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -3995,6 +4014,11 @@ async function loadQuestions(testId, categoryFilter = null, questionCount = null
     // questions from different subjects have different test_ids (e.g. endocrine = 0004,
     // fundamentals = 0001) and the topic_id already uniquely identifies the questions.
     const useTopicSystem = topicIds && Array.isArray(topicIds) && topicIds.length > 0;
+
+    // Guard: if neither testId nor topicIds are available, we can't query
+    if (!useTopicSystem && !testId) {
+      throw new Error('No questions found for the selected topics');
+    }
 
     let query = db
       .from('test_questions')
