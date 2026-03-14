@@ -507,6 +507,33 @@ body{
   display: none;
 }
 
+/* ── Add More Questions button (teacher-only, inside nav) ── */
+.add-questions-btn {
+  display: none; /* hidden by default; shown for teachers via applySessionRole */
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 0;
+  border-radius: 9px;
+  border: 1.5px dashed rgba(201,168,76,0.4);
+  background: rgba(201,168,76,0.04);
+  color: var(--gold-primary);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  transition: all 0.18s;
+  text-transform: uppercase;
+}
+.add-questions-btn:hover:not(:disabled) {
+  background: rgba(201,168,76,0.12);
+  border-color: rgba(201,168,76,0.7);
+}
+.add-questions-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .show-more-btn {
   display: none !important;
 }
@@ -2561,6 +2588,9 @@ body{
       <div class="question-nav">
         <h3>Questions</h3>
         <div class="question-grid" id="questionGrid"></div>
+        <button class="add-questions-btn" id="addQuestionsBtn" onclick="addMoreQuestions()">
+          + Add 10 More Questions
+        </button>
       </div><!-- /.question-nav -->
 
     </div><!-- /.test-right-col -->
@@ -2927,6 +2957,8 @@ function applySessionRole() {
   if (SESSION_ROLE.isTeacher) {
     revealBtn.style.display = 'inline-flex';
     if (teacherGradesBtn) teacherGradesBtn.style.display = 'inline-flex';
+    const addQBtn = document.getElementById('addQuestionsBtn');
+    if (addQBtn) addQBtn.style.display = 'block';
     if (coldCallPanel) {
       coldCallPanel.style.display = 'flex';
       // Load groups immediately since panel is always visible
@@ -3839,6 +3871,116 @@ async function loadTestConfiguration(testId) {
       : (error.message || 'Unknown error');
     error.message = `Test configuration failed: ${friendly}`;
     throw error;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ADD MORE QUESTIONS  (teacher-only)
+// Fetches 10 more questions from the same topic pool, excluding
+// any question already loaded in the current session.
+// ─────────────────────────────────────────────────────────────────
+async function addMoreQuestions(count = 10) {
+  if (!SESSION_ROLE.isTeacher) return;
+
+  const btn = document.getElementById('addQuestionsBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+  try {
+    // 1. Build a set of IDs already in the session
+    const existingIds = new Set((testState.questions || []).map(q => q.id));
+
+    // 2. Re-fetch the full pool using the same topic / test config
+    const topicIds = TEST_CONFIG.selectedTopicIds || null;
+    // Pass null for questionCount so we get every available question
+    const pool = await loadQuestions(
+      TEST_CONFIG.testId,
+      TEST_CONFIG.categoryFilter,
+      null,          // no limit — we need the full pool to pick from
+      topicIds
+    );
+
+    // 3. Keep only questions not already loaded
+    const available = pool.filter(q => !existingIds.has(q.id));
+
+    if (available.length === 0) {
+      showToast('No more questions available in this topic set.', 'info');
+      return;
+    }
+
+    // 4. Even topic distribution — same logic as loadQuestions()
+    const useTopicSystem = topicIds && topicIds.length > 0;
+    let picks = [];
+
+    if (useTopicSystem) {
+      // Group by topic_id
+      const groups = {};
+      available.forEach(q => {
+        if (!groups[q.topic_id]) groups[q.topic_id] = [];
+        groups[q.topic_id].push(q);
+      });
+
+      const topicKeys = Object.keys(groups);
+      topicKeys.sort(() => Math.random() - 0.5); // randomise remainder allocation
+
+      let remaining = Math.min(count, available.length);
+      while (remaining > 0) {
+        const activeTopics = topicKeys.filter(t => groups[t].length > 0);
+        if (activeTopics.length === 0) break;
+
+        let share = Math.floor(remaining / activeTopics.length);
+        if (share === 0) share = 1;
+
+        for (let i = 0; i < activeTopics.length && remaining > 0; i++) {
+          const tid = activeTopics[i];
+          const toTake = Math.min(share, groups[tid].length, remaining);
+          picks.push(...groups[tid].splice(0, toTake));
+          remaining -= toTake;
+        }
+      }
+    } else {
+      picks = available.slice(0, Math.min(count, available.length));
+    }
+
+    // 5. Optionally shuffle options (match the session's shuffle setting)
+    if (TEST_CONFIG.shuffleOptions) {
+      picks = picks.map(q => ({
+        ...q,
+        options: q.options
+          ? shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0))
+          : []
+      }));
+    }
+
+    // 6. Append to session state
+    testState.questions.push(...picks);
+
+    // 7. Rebuild the bilingual snapshot to include new questions
+    testState.snapshot = buildBilingualSnapshot(testState.questions);
+
+    // 8. Initialise answer/status slots for new questions
+    picks.forEach(q => {
+      if (testState.answers[q.id] === undefined)    testState.answers[q.id]    = null;
+      if (testState.answerStatus[q.id] === undefined) testState.answerStatus[q.id] = 'unanswered';
+    });
+
+    // 9. Force navigator to rebuild (clear the "already built" cache flag)
+    const grid = document.getElementById('questionGrid');
+    if (grid) grid.dataset.built = '';
+
+    renderQuestionNavigator();
+
+    const actualCount = picks.length;
+    showToast(`${actualCount} question${actualCount !== 1 ? 's' : ''} added!`, 'success');
+    console.log(`✓ addMoreQuestions: appended ${actualCount} questions (total now ${testState.questions.length})`);
+
+  } catch (err) {
+    console.error('addMoreQuestions error:', err);
+    showToast('Failed to add questions. Try again.', 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '+ Add 10 More Questions';
+    }
   }
 }
 
