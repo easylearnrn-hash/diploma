@@ -3981,9 +3981,12 @@ async function addMoreQuestions(count = 10) {
       delete testState.answerStatus[q.id];
     });
 
-    // 9. Force navigator to rebuild (clear the "already built" cache flag)
+    // 9. Force navigator to rebuild (clear the "already built" cache flag and height cache)
     const grid = document.getElementById('questionGrid');
-    if (grid) grid.dataset.built = '';
+    if (grid) {
+      grid.dataset.built = '';
+      delete grid.dataset.btnHeight; // stale height causes wrong scroll after row count changes
+    }
 
     renderQuestionNavigator();
 
@@ -4561,6 +4564,7 @@ let selectedSubjects = new Set();
 let selectedTopics = new Set();
 let availableTopics = [];
 let allSubjects = [];
+let _updateSubjectStatsTimer = null; // debounce timer for live question count DB query
 
 
 // ─── Subject icon: returns an SVG string keyed on subject name ────────────────
@@ -4935,21 +4939,26 @@ function updateSubjectStats() {
   continueBtn.style.opacity = hasSelection ? '1' : '0.5';
   continueBtn.style.cursor  = hasSelection ? 'pointer' : 'not-allowed';
 
-  // Live question count
-  if (tCount > 0) {
-    db.from('test_questions')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-      .in('topic_id', Array.from(selectedTopics))
-      .then(({ count, error }) => {
-        const val = (!error && count != null) ? count : '—';
-        document.getElementById('totalQuestionsCount').textContent = val;
-        if (footerQ) footerQ.textContent = val;
-      });
-  } else {
-    document.getElementById('totalQuestionsCount').textContent = '—';
-    if (footerQ) footerQ.textContent = '—';
-  }
+  // Live question count — debounced 300ms so rapid checkbox clicks don't flood Supabase
+  if (_updateSubjectStatsTimer) clearTimeout(_updateSubjectStatsTimer);
+  _updateSubjectStatsTimer = setTimeout(() => {
+    if (tCount > 0) {
+      db.from('test_questions')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_active', true)
+        .in('topic_id', Array.from(selectedTopics))
+        .then(({ count, error }) => {
+          const val = (!error && count != null) ? count : '—';
+          document.getElementById('totalQuestionsCount').textContent = val;
+          const fq = document.getElementById('footerQuestionsCount');
+          if (fq) fq.textContent = val;
+        });
+    } else {
+      document.getElementById('totalQuestionsCount').textContent = '—';
+      const fq = document.getElementById('footerQuestionsCount');
+      if (fq) fq.textContent = '—';
+    }
+  }, 300);
 }
 
 // ─── Subject modal warning banner helpers ─────────────────────────────────────
@@ -5349,7 +5358,9 @@ async function initializeNewTest() {
   testState.startTime = Date.now();
   
   // Load questions from Supabase with topic filter (new system) or category filter (legacy)
-  const topicIds = TEST_CONFIG.selectedTopicIds || null;
+  // Fix: empty array [] is truthy so `|| null` doesn't catch it — check .length explicitly
+  const _rawTopicIds = TEST_CONFIG.selectedTopicIds;
+  const topicIds = (_rawTopicIds && _rawTopicIds.length > 0) ? _rawTopicIds : null;
   const questions = await loadQuestions(
     TEST_CONFIG.testId, 
     TEST_CONFIG.categoryFilter, 
@@ -5538,6 +5549,7 @@ function initializeTimer() {
     
     const timerEl = document.getElementById('timer');
     const displayEl = document.getElementById('timerDisplay');
+    if (!timerEl || !displayEl) return; // DOM may not be present (e.g. after submit)
     displayEl.textContent = formatTime(remaining);
     
     // Warning state in last 5 minutes
@@ -5874,7 +5886,9 @@ function renderQuestion() {
 }
 
 function handleAnswerChange(questionId, isMulti) {
+  // Guard: question may have been removed from the session (e.g. during addMoreQuestions)
   const question = testState.questions.find(q => q.id === questionId);
+  if (!question) return;
   const inputName = 'question_' + questionId;
   
   if (isMulti) {
@@ -5922,6 +5936,7 @@ function checkAnswer() {
   }
   
   const question = testState.questions[testState.currentIndex];
+  if (!question) return;
   const userAnswer = testState.answers[question.id];
   
   if (!userAnswer) {
@@ -6082,6 +6097,7 @@ function previousQuestion() {
 
 function toggleFlag() {
   const currentQ = testState.questions[testState.currentIndex];
+  if (!currentQ) return;
   if (testState.flagged.has(currentQ.id)) {
     testState.flagged.delete(currentQ.id);
     showToast('Question unflagged', 'info');
@@ -6095,6 +6111,7 @@ function toggleFlag() {
 
 function clearAnswer() {
   const currentQ = testState.questions[testState.currentIndex];
+  if (!currentQ) return;
   delete testState.answers[currentQ.id];
   delete testState.answerStatus[currentQ.id];
   
@@ -7708,7 +7725,7 @@ function coldCallAnimatePick(finalName) {
 function coldCallGetCurrentQuestionStem() {
   try {
     if (!testState || !testState.questions || testState.questions.length === 0) return null;
-    const idx = testState.currentQuestionIndex || 0;
+    const idx = testState.currentIndex; // NOTE: field is currentIndex, not currentQuestionIndex
     const q = testState.questions[idx];
     if (!q) return null;
     const stem = q.stem || '';
@@ -7773,7 +7790,7 @@ async function coldCallRecordAnswer(isCorrect) {
       student_id: String(student.id || ''),
       student_name: student.full_name,
       question_stem: stem,
-      question_order: testState ? (testState.currentQuestionIndex || 0) : 0,
+      question_order: testState ? (testState.currentIndex || 0) : 0,
       is_correct: isCorrect
     }).then(({ error }) => {
       if (error) console.error('coldCallRecordAnswer save error:', error);
