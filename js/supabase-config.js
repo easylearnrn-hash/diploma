@@ -42,6 +42,12 @@ function setSupabaseOwnerHeader(ownerId) {
   if (!ownerId) return;
   SUPABASE_CONFIG.options.global = SUPABASE_CONFIG.options.global || {};
   SUPABASE_CONFIG.options.global.headers = SUPABASE_CONFIG.options.global.headers || {};
+  
+  // Prevent rebuilding the client if the header is already correctly set
+  if (SUPABASE_CONFIG.options.global.headers['x-owner-id'] === ownerId) {
+    return;
+  }
+  
   SUPABASE_CONFIG.options.global.headers['x-owner-id'] = ownerId;
 
   // If a client already exists, rebuild so new headers apply immediately.

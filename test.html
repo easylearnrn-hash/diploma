@@ -65,7 +65,6 @@ QUICK START GUIDE:
 <!-- Non-render-blocking font load: preconnect first, then load async via media trick -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap">
 <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap">
 <noscript><link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"></noscript>
 
@@ -2178,7 +2177,7 @@ body{
     <button class="btn btn-primary" id="initialStartBtn" onclick="showSubjectSelection()">Start New Test</button>
 
     <!-- DASHBOARD LINK -->
-    <div style="margin-top:22px">
+    <div style="margin-top:22px;display:flex;flex-direction:column;align-items:center;gap:12px">
       <a href="student-dashboard.html"
          style="display:inline-flex;align-items:center;gap:10px;padding:13px 28px;border-radius:12px;border:1.5px solid rgba(201,168,76,0.4);background:linear-gradient(135deg,rgba(201,168,76,0.09),rgba(201,168,76,0.04));color:var(--gold-primary);font-size:14px;font-weight:700;text-decoration:none;font-family:'Inter',sans-serif;transition:all 0.2s;letter-spacing:0.3px;box-shadow:0 2px 12px rgba(201,168,76,0.08)"
          onmouseover="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.10))';this.style.borderColor='rgba(201,168,76,0.75)';this.style.boxShadow='0 4px 20px rgba(201,168,76,0.18)';this.style.transform='translateY(-1px)'"
@@ -2190,6 +2189,18 @@ body{
         </svg>
         My Academic Dashboard
       </a>
+
+      <!-- TEACHER ONLY: View all student quiz results from start screen -->
+      <button id="teacherGradesBtn" onclick="openGradeHistoryModal()"
+        style="display:none;align-items:center;gap:9px;padding:12px 26px;border-radius:12px;border:1.5px solid rgba(201,168,76,0.55);background:linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.07));color:var(--gold-primary);font-size:14px;font-weight:700;cursor:pointer;letter-spacing:0.3px;box-shadow:0 2px 12px rgba(201,168,76,0.12);transition:all 0.2s;font-family:'Inter',sans-serif"
+        onmouseover="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.25),rgba(201,168,76,0.14))';this.style.transform='translateY(-1px)'"
+        onmouseout="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.15),rgba(201,168,76,0.07))';this.style.transform=''">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        View All Student Quiz Results
+      </button>
     </div>
 
     <!-- SAVED SESSIONS -->
@@ -2910,10 +2921,12 @@ function getOwnerId() {
 function applySessionRole() {
   const revealBtn    = document.getElementById('revealAllBtn');
   const coldCallPanel = document.getElementById('coldCallPanel');
+  const teacherGradesBtn = document.getElementById('teacherGradesBtn');
   if (!revealBtn) return;
 
   if (SESSION_ROLE.isTeacher) {
     revealBtn.style.display = 'inline-flex';
+    if (teacherGradesBtn) teacherGradesBtn.style.display = 'inline-flex';
     if (coldCallPanel) {
       coldCallPanel.style.display = 'flex';
       // Load groups immediately since panel is always visible
@@ -3075,14 +3088,14 @@ parseTeacherModeParams();
 // ============================================
 
 // Generate a unique session ID
-function generateSessionId() {
+function generateTeacherSessionId() {
   return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
 }
 
 // Create a new teacher session in database
 async function createTeacherSession(testId, questionOrder) {
   if (!TEACHER_MODE.sessionId) {
-    TEACHER_MODE.sessionId = generateSessionId();
+    TEACHER_MODE.sessionId = generateTeacherSessionId();
   }
   
   try {
@@ -3438,7 +3451,10 @@ function revealAllAnswers() {
 
   // Remove any previous modal
   const existing = document.getElementById('revealAllModal');
-  if (existing) existing.remove();
+  if (existing) {
+    if (existing._acnhs_cleanup) existing._acnhs_cleanup();
+    else existing.remove();
+  }
 
   // Resolve the language-aware snapshot for display text.
   // Use HY snapshot when the teacher has switched to Armenian AND translations exist.
@@ -3524,17 +3540,17 @@ function revealAllAnswers() {
       <div style="display:flex;align-items:center;gap:10px;">
         ${testState.snapshot && testState.snapshot.hy ? `
           <div style="display:flex;border-radius:10px;overflow:hidden;border:1.5px solid rgba(201,168,76,0.35);">
-            <button onclick="switchLanguage('en');document.getElementById('revealAllModal').remove();revealAllAnswers();"
+            <button onclick="switchLanguage('en');const m=document.getElementById('revealAllModal');if(m&&m._acnhs_cleanup)m._acnhs_cleanup();else if(m)m.remove();revealAllAnswers();"
               style="padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;border:none;
                 background:${!useHy ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.05)'};
                 color:${!useHy ? '#f1f5f9' : '#64748b'};">EN</button>
-            <button onclick="switchLanguage('hy');document.getElementById('revealAllModal').remove();revealAllAnswers();"
+            <button onclick="switchLanguage('hy');const m=document.getElementById('revealAllModal');if(m&&m._acnhs_cleanup)m._acnhs_cleanup();else if(m)m.remove();revealAllAnswers();"
               style="padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;border:none;
                 background:${useHy ? 'rgba(201,168,76,0.25)' : 'rgba(255,255,255,0.05)'};
                 color:${useHy ? '#f1f5f9' : '#64748b'};">ՀԱՅ</button>
           </div>
         ` : ''}
-        <button onclick="document.getElementById('revealAllModal').remove()"
+        <button onclick="const m=document.getElementById('revealAllModal');if(m&&m._acnhs_cleanup)m._acnhs_cleanup();else if(m)m.remove()"
           style="background:rgba(239,68,68,0.12);border:1.5px solid rgba(239,68,68,0.4);color:#f87171;
             font-weight:700;font-size:14px;padding:10px 20px;border-radius:10px;cursor:pointer;
             display:flex;align-items:center;gap:8px;">
@@ -3589,7 +3605,12 @@ function revealAllAnswers() {
     }
   };
   document.addEventListener('keydown', onKeyDown);
-  modal.addEventListener('remove', () => document.removeEventListener('keydown', onKeyDown));
+  
+  // Custom cleanup method attached to the modal DOM element so other buttons can call it safely
+  modal._acnhs_cleanup = () => {
+    document.removeEventListener('keydown', onKeyDown);
+    modal.remove();
+  };
 }
 
 // Show Teacher Control Panel with session link
@@ -3861,10 +3882,83 @@ async function loadQuestions(testId, categoryFilter = null, questionCount = null
       throw new Error('No questions found for the selected topics');
     }
     
-    // Apply question count limit AFTER fetching (so we can shuffle first if needed)
-    let finalQuestions = questions;
+    try {
+      setLoadingStatus('Analyzing past attempts...');
+      const studentId = getOwnerId();
+      let historyMap = {}; // question_id -> timestamp (ms)
+
+      if (studentId && db) {
+        // Fetch student's test attempts to prioritize least-used questions
+        const { data: attempts, error: historyError } = await db
+          .from('test_attempts')
+          .select('created_at, answers')
+          .eq('student_id', studentId);
+        
+        if (!historyError && attempts) {
+          attempts.forEach(attempt => {
+            const time = new Date(attempt.created_at).getTime();
+            if (Array.isArray(attempt.answers)) {
+              attempt.answers.forEach(ans => {
+                if (ans && ans.question_id) {
+                  // Keep the latest time the question was seen
+                  if (!historyMap[ans.question_id] || time > historyMap[ans.question_id]) {
+                    historyMap[ans.question_id] = time;
+                  }
+                }
+              });
+            }
+          });
+        }
+      }
+
+      // Sort all questions based on last seen time (oldest/unseen first)
+      // Unseen questions (time 0) will bubble to the top.
+      questions.sort((a, b) => {
+        const timeA = historyMap[a.id] || 0;
+        const timeB = historyMap[b.id] || 0;
+        return timeA - timeB;
+      });
+    } catch (e) {
+      console.warn('Could not fetch question history, ignoring:', e);
+    }
+    
+    // Apply question count limit AFTER fetching, distributing evenly across topics
+    let finalQuestions = [];
     if (questionCount && questionCount > 0 && questions.length > questionCount) {
-      finalQuestions = questions.slice(0, questionCount);
+      if (useTopicSystem) {
+        // Group by topic_id (already sorted oldest-first within groups)
+        const groups = {};
+        questions.forEach(q => {
+          if (!groups[q.topic_id]) groups[q.topic_id] = [];
+          groups[q.topic_id].push(q);
+        });
+
+        const topicKeys = Object.keys(groups);
+        // Randomize topics so remainder doesn't always go to the same first topic
+        topicKeys.sort(() => Math.random() - 0.5);
+        
+        let remainingToPick = questionCount;
+        
+        while (remainingToPick > 0) {
+          const activeTopics = topicKeys.filter(t => groups[t].length > 0);
+          if (activeTopics.length === 0) break; // Used all available questions
+          
+          let share = Math.floor(remainingToPick / activeTopics.length);
+          if (share === 0) share = 1;
+          
+          for (let i = 0; i < activeTopics.length && remainingToPick > 0; i++) {
+            const tid = activeTopics[i];
+            const toTake = Math.min(share, groups[tid].length, remainingToPick);
+            finalQuestions.push(...groups[tid].splice(0, toTake));
+            remainingToPick -= toTake;
+          }
+        }
+      } else {
+        // Legacy: Just take oldest N
+        finalQuestions = questions.slice(0, questionCount);
+      }
+    } else {
+      finalQuestions = questions;
     }
     
     console.log(`✓ Loaded ${finalQuestions.length} questions${topicIds ? ` from ${topicIds.length} topic(s)` : categoryFilter ? ` from ${categoryFilter}` : ''}${questionCount ? ` (limited to ${questionCount})` : ''}`);
@@ -4933,175 +5027,8 @@ function backToSubjects() {
 }
 
 async function startTestWithTopics() {
-  // This is now an alias for the unified flow
+  // Alias for the unified flow (legacy modal back-compat)
   await startFromSubjectModal();
-}
-
-// ============================================
-// LEGACY SUPPORT (keeping old function for backwards compatibility)
-// ============================================
-
-async function showCategorySelection() {
-  // Initialize Supabase first
-  if (!initializeSupabase()) {
-    alert('Cannot connect to database. Please check your connection and try again.');
-    return;
-  }
-  
-  // Get test ID from URL parameter or use default
-  const urlParams = new URLSearchParams(window.location.search);
-  const testId = urlParams.get('test_id') || '00000000-0000-0000-0000-000000000001';
-  TEST_CONFIG.testId = testId;
-  
-  try {
-    // Show loading
-    const startBtn = document.querySelector('.start-content .btn-primary');
-    startBtn.innerHTML = '<div class="loading" style="width:20px;height:20px;display:inline-block"></div> Loading...';
-    startBtn.disabled = true;
-    
-    // Load categories
-    const categories = await loadAvailableCategories(testId);
-    
-    if (categories.length > 0) {
-      // Populate category dropdown
-      const select = document.getElementById('categorySelect');
-      select.innerHTML = '<option value="">All Categories (All Questions)</option>';
-      
-      categories.forEach(cat => {
-        const option = document.createElement('option');
-        option.value = cat;
-        option.textContent = cat;
-        select.appendChild(option);
-      });
-      
-      // Show category selection
-      document.getElementById('categorySelection').style.display = 'block';
-      startBtn.textContent = 'Begin Test';
-      startBtn.disabled = false;
-      startBtn.onclick = startTest;
-    } else {
-      // No categories, start directly
-      startBtn.textContent = 'Start Test';
-      startBtn.disabled = false;
-      await startTest();
-    }
-  } catch (error) {
-    console.error('Error loading categories:', error);
-    // Fallback: start without category selection
-    const startBtn = document.querySelector('.start-content .btn-primary');
-    startBtn.textContent = 'Start Test';
-    startBtn.disabled = false;
-    startBtn.onclick = startTest;
-  }
-}
-
-async function startTest() {
-  // Initialize Supabase if not already done
-  if (!db) {
-    if (!initializeSupabase()) {
-      alert('Cannot connect to database. Please check your connection and try again.');
-      return;
-    }
-  }
-  
-  // Get test ID from URL parameter or use default
-  const urlParams = new URLSearchParams(window.location.search);
-  const testId = urlParams.get('test_id') || '00000000-0000-0000-0000-000000000001';
-  
-  // Get selected category
-  const categorySelect = document.getElementById('categorySelect');
-  const selectedCategory = categorySelect && categorySelect.value ? categorySelect.value : null;
-  TEST_CONFIG.categoryFilter = selectedCategory;
-  
-  // Get question count limit
-  const questionCountInput = document.getElementById('questionCount');
-  const questionCount = questionCountInput && questionCountInput.value ? parseInt(questionCountInput.value) : null;
-  TEST_CONFIG.questionCount = questionCount;
-  
-  // Always use the authenticated user's own identity — never a spoofable URL param
-  testState.studentId = getOwnerId();
-  
-  let loadingWatchdog = null;
-  const showStartError = (message) => {
-    const startScreen = document.getElementById('startScreen');
-    const loadingScreen = document.getElementById('loadingScreen');
-    if (startScreen) startScreen.style.display = 'none';
-    if (!loadingScreen) return;
-    loadingScreen.style.display = 'flex';
-    loadingScreen.innerHTML = `
-      <div class="start-content">
-        <h1 style="color:white;margin-bottom:16px">Unable to load test</h1>
-        <p style="color:#cbd5e1;font-size:18px;margin-bottom:16px">${message || 'Something is blocking the test data from loading.'}</p>
-        <p style="color:#94a3b8;font-size:13px;margin-bottom:28px">Tip: refresh the page. If it persists, your network is blocking Supabase.</p>
-        <button class="btn btn-primary" onclick="location.reload()">Refresh</button>
-      </div>
-    `;
-  };
-
-  try {
-    // Show loading state
-    document.getElementById('startScreen').style.display = 'none';
-    const loadingScreen = document.getElementById('loadingScreen');
-    loadingScreen.style.display = 'flex';
-    loadingScreen.innerHTML = `
-      <div class="start-content">
-        <div class="loading" style="width:60px;height:60px;margin:0 auto 24px"></div>
-        <p style="color:#cbd5e1;font-size:18px">Loading test${selectedCategory ? ': ' + selectedCategory : ''}${questionCount ? ` (${questionCount} questions)` : ''}...</p>
-        <p style="color:#64748b;font-size:13px;margin-top:8px">${TEST_CONFIG.selectedTopicIds ? TEST_CONFIG.selectedTopicIds.length + ' topic(s) selected' : ''}</p>
-        <p style="color:#64748b;font-size:12px;margin-top:6px">If this takes more than 10 seconds, refresh the page.</p>
-        <p id="startStatus" style="color:#94a3b8;font-size:12px;margin-top:8px;">Preparing...</p>
-      </div>
-    `;
-
-    setLoadingStatus('Connecting to test configuration...');
-
-    loadingWatchdog = setTimeout(() => {
-      showStartError('Loading timed out. The question service did not respond.');
-    }, 15000);
-    
-    // Load test configuration
-  await loadTestConfiguration(testId);
-  setLoadingStatus('Loading questions...');
-    
-    // Check for existing session
-    const saved = loadFromLocalStorage();
-    
-    if (saved && saved.sessionId && saved.testId === testId) {
-      // Hide loading spinner BEFORE showing the resume modal,
-      // otherwise the modal is invisible and startTest hangs forever.
-      if (loadingScreen) loadingScreen.style.display = 'none';
-      const shouldResume = await showResumeTestModal();
-      if (loadingScreen) loadingScreen.style.display = 'flex';
-      if (shouldResume) {
-        await resumeTest(saved);
-      } else {
-        await initializeNewTest();
-      }
-    } else {
-      await initializeNewTest();
-    }
-    
-    if (loadingWatchdog) {
-      clearTimeout(loadingWatchdog);
-      loadingWatchdog = null;
-    }
-
-    // Hide loading screen, show test container
-    document.getElementById('startScreen').style.display = 'none';
-    if (loadingScreen) loadingScreen.style.display = 'none';
-    document.getElementById('testContainer').style.display = 'block';
-    
-    // Prevent accidental page leave
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    
-  } catch (error) {
-    console.error('Failed to start test:', error);
-    if (loadingWatchdog) {
-      clearTimeout(loadingWatchdog);
-      loadingWatchdog = null;
-    }
-    showStartError(error.message || 'Failed to load test');
-  }
 }
 
 // ============================================
@@ -5186,7 +5113,7 @@ async function initializeNewTest() {
   if (TEST_CONFIG.shuffleOptions) {
     testState.questions = testState.questions.map(q => ({
       ...q,
-      options: shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0))
+      options: q.options ? shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0)) : []
     }));
   }
 
@@ -5261,7 +5188,7 @@ async function resumeTest(saved) {
   if (TEST_CONFIG.shuffleOptions) {
     testState.questions = testState.questions.map(q => ({
       ...q,
-      options: shuffleArray(q.options, saved.shuffleSeed + q.id.toString().charCodeAt(0))
+      options: q.options ? shuffleArray(q.options, saved.shuffleSeed + q.id.toString().charCodeAt(0)) : []
     }));
   }
 
@@ -5329,6 +5256,8 @@ function handleBeforeUnload(e) {
 // ============================================
 
 function initializeTimer() {
+  if (testState.timerInterval) clearInterval(testState.timerInterval);
+
   if (SESSION_ROLE.isTeacher) {
     const timerEl = document.getElementById('timer');
     if (timerEl) timerEl.style.display = 'none';
@@ -6295,11 +6224,14 @@ async function loadSavedSession(sessionId) {
       }
     }
 
+    // Fetch the session by its primary key (ID is unguessable — sufficient for security).
+    // We intentionally do NOT filter by student_id here because in Private Browsing or
+    // after a page refresh, the locally-derived anon ID may differ from the saved one,
+    // which would cause a false "Session not found" error.
     const { data: session, error } = await db
       .from('saved_test_sessions')
       .select('*')
       .eq('id', sessionId)
-      .eq('student_id', getOwnerId())  // enforce ownership at fetch time
       .single();
     
     if (error || !session) {
@@ -6341,9 +6273,124 @@ async function loadSavedSession(sessionId) {
     testState.startTime = session.start_time ? new Date(session.start_time).getTime() : Date.now();
     testState.studentId = session.student_id;
     
+    // ── RELOAD FULL QUESTIONS FROM DATABASE ──────────────────────────────
+    // The session only saved {id, topic_id} stubs to keep the payload slim.
+    // We need to fetch the full question bodies and restore the stored order.
+    if (testState.questions.length > 0) {
+      const loadingScreen = document.getElementById('loadingScreen');
+      if (loadingScreen) {
+        loadingScreen.style.display = 'flex';
+        loadingScreen.innerHTML = `
+          <div class="spinner"></div>
+          <h2>Loading Session...</h2>
+          <p>Restoring question data</p>
+        `;
+      }
+
+      // Extract all question IDs from the stubs, filtering out non-UUID stubs like the disclaimer
+      // and any null/undefined/malformed values that would cause a 400 Bad Request from Supabase
+      const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const questionIdsToFetch = testState.questions
+        .map(q => q && q.id)
+        .filter(id => id && id !== 'english-disclaimer-q0' && UUID_RE.test(id));
+
+      console.log(`[Resume] Stubs loaded: ${testState.questions.length}, Valid UUIDs to fetch: ${questionIdsToFetch.length}`);
+      
+      let fullQuestionsList = [];
+      let qError = null;
+
+      if (questionIdsToFetch.length > 0) {
+        // Use the student_id that was saved WITH the session (not re-derived) so that
+        // RLS headers always match what the row was originally written under.
+        // This is critical for Private Browsing / file:// where localStorage is reset.
+        const sessionOwnerId = session.student_id || getOwnerId();
+        if (typeof setSupabaseOwnerHeader === 'function') {
+          setSupabaseOwnerHeader(sessionOwnerId);
+          db = initSupabase();
+        }
+
+        // Fetch full question data from DB in batches of 100 to avoid URL length limits
+        // (Supabase .in() sends IDs as query params — 1000 UUIDs will exceed the limit and 400)
+        const BATCH_SIZE = 100;
+        let allFetched = [];
+
+        for (let i = 0; i < questionIdsToFetch.length; i += BATCH_SIZE) {
+          const batch = questionIdsToFetch.slice(i, i + BATCH_SIZE);
+          const result = await db
+            .from('test_questions')
+            .select('id, test_id, question_stem, question_stem_hy, options, options_hy, correct_answers, is_multiple_choice, rationale, rationale_hy, category, display_order, points, topic_id')
+            .in('id', batch);
+
+          if (result.error) {
+            qError = result.error;
+            break;
+          }
+          allFetched = allFetched.concat(result.data || []);
+        }
+
+        fullQuestionsList = allFetched;
+        console.log(`[Resume] DB returned ${fullQuestionsList.length} questions from ${questionIdsToFetch.length} IDs`, qError ? `Error: ${JSON.stringify(qError)}` : 'OK');
+      }
+
+      if (qError) {
+        console.error('Error fetching full questions for saved session:', qError);
+        showToast(`Failed to load question data: ${qError.message || 'Bad Request'}`, 'error');
+        return;
+      }
+
+      // Map the array into a dictionary for quick lookup by ID
+      const fullQMap = {};
+      (fullQuestionsList || []).forEach(q => {
+        fullQMap[q.id] = {
+          id: q.id,
+          stem: q.question_stem,
+          stem_hy: q.question_stem_hy || null,
+          options: q.options,
+          options_hy: q.options_hy || null,
+          correct: q.correct_answers,
+          multi: q.is_multiple_choice,
+          rationale: q.rationale,
+          rationale_hy: q.rationale_hy || null,
+          category: q.category,
+          points: q.points || 1,
+          displayOrder: q.display_order,
+          topic_id: q.topic_id
+        };
+      });
+
+      // Rebuild testState.questions with full DB records, perfectly matching the saved order
+      // (This retains the shuffled order from the exact moment the test started)
+      testState.questions = testState.questions.map(stub => {
+        if (stub.id === 'english-disclaimer-q0') {
+          return buildEnglishDisclaimerQuestion();
+        }
+        return fullQMap[stub.id];
+      }).filter(Boolean);
+    }
+
   // Restore test config
   const parsedConfig = parseSessionField(session.test_config, {});
   Object.assign(TEST_CONFIG, parsedConfig || {});
+
+  // Regenerate the exact shuffle seed used when the session started
+  testState.shuffleSeed = deriveShuffleSeed(
+    TEST_CONFIG.testId,
+    TEST_CONFIG.selectedTopicIds
+  );
+
+  // Re-apply options shuffling so the snapshot builds correctly
+  if (TEST_CONFIG.shuffleOptions && testState.questions && testState.questions.length > 0) {
+    testState.questions = testState.questions.map(q => {
+      // If the question is a full object (not just a stub)
+      if (q.options) {
+        return {
+          ...q,
+          options: shuffleArray(q.options, testState.shuffleSeed + q.id.toString().charCodeAt(0))
+        };
+      }
+      return q;
+    });
+  }
 
   // ── Rebuild the bilingual snapshot from the restored questions ──────────
   // Prefer snapshot columns if they were saved (post-feature sessions),
@@ -6370,9 +6417,9 @@ async function loadSavedSession(sessionId) {
     renderQuestion();
     renderQuestionNavigator();
     
-    // Start timer if configured
-    if (TEST_CONFIG.timeLimit > 0) {
-      startTimer();
+    // Start timer if configured (only if it has a duration, some are infinite)
+    if (TEST_CONFIG.durationMinutes > 0) {
+      initializeTimer();
     }
     
     showToast('Test resumed successfully!', 'success');
@@ -6474,7 +6521,12 @@ function showDeleteConfirm(message) {
 
     document.body.appendChild(overlay);
 
+    const escHandler = (e) => {
+      if (e.key === 'Escape') dismiss(false);
+    };
+
     const dismiss = (result) => {
+      document.removeEventListener('keydown', escHandler);
       overlay.style.animation = 'none';
       overlay.style.opacity = '0';
       overlay.style.transition = 'opacity 0.12s';
@@ -6485,9 +6537,7 @@ function showDeleteConfirm(message) {
     document.getElementById('_dcCancel').onclick = () => dismiss(false);
     document.getElementById('_dcConfirm').onclick = () => dismiss(true);
     overlay.addEventListener('click', (e) => { if (e.target === overlay) dismiss(false); });
-    document.addEventListener('keydown', function esc(e) {
-      if (e.key === 'Escape') { document.removeEventListener('keydown', esc); dismiss(false); }
-    });
+    document.addEventListener('keydown', escHandler);
   });
 }
 
@@ -6782,16 +6832,9 @@ function handleResumeOngoingTest() {
   });
 }
 
-function closeSubjectModal() {
-  const modal = document.getElementById('subjectModal');
-  if (modal) {
-    modal.classList.add('hidden');
-  }
-}
-
 async function loadSavedSessionFromModal(sessionId) {
   closeSavedTestsModal();
-  closeSubjectModal();
+  document.getElementById('subjectModal')?.classList.add('hidden'); // Close inline without calling the heavy close logic which resets test states
   await loadSavedSession(sessionId);
 }
 
@@ -7744,23 +7787,34 @@ async function openGradeHistoryModal() {
   if (!modal) return;
   modal.style.display = 'flex';
   const body = document.getElementById('gradeModalBody');
-  body.innerHTML = '<div style="text-align:center;color:#475569;font-size:13px;padding:30px 0">Loading…</div>';
+  const subtitle = document.getElementById('gradeModalSubtitle');
+  body.innerHTML = '<div style="text-align:center;color:#475569;font-size:13px;padding:30px 0"><div class="cc-rolling-dots" style="justify-content:center"><span>·</span><span>·</span><span>·</span></div><div style="margin-top:8px">Loading all student quiz results…</div></div>';
+  if (subtitle) subtitle.textContent = 'Loading…';
 
   try {
     const sdb = initSupabase();
+    // Fetch ALL rows — no owner_id filter — sorted newest first
     const { data, error } = await sdb
       .from('test_grade_history')
       .select('*')
       .order('taken_at', { ascending: false });
+
     if (error) throw error;
     _allGradeHistory = data || [];
+
+    if (_allGradeHistory.length === 0) {
+      body.innerHTML = '<div style="text-align:center;color:#475569;font-size:13px;padding:40px 0">No quiz attempts recorded yet. Students who complete a test will appear here.</div>';
+      if (subtitle) subtitle.textContent = 'No records found';
+      return;
+    }
+
     renderGradeModalTable(_allGradeHistory);
   } catch(e) {
-    body.innerHTML = `<div style="text-align:center;color:#f87171;font-size:13px;padding:30px 0">Failed to load: ${e.message}</div>`;
+    console.error('openGradeHistoryModal error:', e);
+    body.innerHTML = `<div style="text-align:center;color:#f87171;font-size:13px;padding:30px 0">Failed to load: ${e.message || 'Unknown error'}</div>`;
+    if (subtitle) subtitle.textContent = 'Error loading data';
   }
-}
-
-function filterGradeModalTable() {
+}function filterGradeModalTable() {
   const q = (document.getElementById('gradeModalSearch')?.value || '').toLowerCase().trim();
   if (!q) { renderGradeModalTable(_allGradeHistory); return; }
   renderGradeModalTable(_allGradeHistory.filter(r =>
@@ -7772,6 +7826,7 @@ function filterGradeModalTable() {
 
 function renderGradeModalTable(rows) {
   const body = document.getElementById('gradeModalBody');
+  const subtitle = document.getElementById('gradeModalSubtitle');
   if (!rows || rows.length === 0) {
     body.innerHTML = '<div style="text-align:center;color:#475569;font-size:13px;padding:30px 0">No records found.</div>';
     return;
@@ -7780,42 +7835,69 @@ function renderGradeModalTable(rows) {
   // Group by owner_id → compute per-student average
   const byStudent = {};
   rows.forEach(r => {
-    if (!byStudent[r.owner_id]) byStudent[r.owner_id] = { name: r.student_name || r.owner_id, email: r.student_email || '', rows: [] };
-    byStudent[r.owner_id].rows.push(r);
+    const key = r.owner_id || 'unknown';
+    if (!byStudent[key]) {
+      // Build a display name: prefer student_name, then email, then humanize owner_id
+      let displayName = r.student_name || '';
+      if (!displayName && r.student_email) displayName = r.student_email.split('@')[0];
+      if (!displayName && r.owner_id) {
+        // Humanize anon IDs like "anon_17..." → "Anonymous Student"
+        displayName = r.owner_id.startsWith('anon_') ? 'Anonymous Student' : r.owner_id;
+      }
+      byStudent[key] = {
+        name: displayName || 'Unknown Student',
+        email: r.student_email || r.owner_id || '',
+        rows: []
+      };
+    }
+    byStudent[key].rows.push(r);
+  });
+
+  // Sort students: named students first, then by most recent attempt
+  const sortedStudents = Object.values(byStudent).sort((a, b) => {
+    const aAnon = a.name === 'Anonymous Student' || a.name === 'Unknown Student';
+    const bAnon = b.name === 'Anonymous Student' || b.name === 'Unknown Student';
+    if (aAnon !== bAnon) return aAnon ? 1 : -1;
+    // Then by most recent attempt
+    const aLatest = new Date(a.rows[0].taken_at).getTime();
+    const bLatest = new Date(b.rows[0].taken_at).getTime();
+    return bLatest - aLatest;
   });
 
   const fmt = iso => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const fmtTime = iso => new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
   let html = '';
-  Object.values(byStudent).forEach(student => {
+  sortedStudents.forEach(student => {
     const avg = Math.round(student.rows.reduce((s, r) => s + r.score_percent, 0) / student.rows.length);
     const avgL = gradeFromPercent(avg);
+    const isAnon = student.name === 'Anonymous Student' || student.name === 'Unknown Student';
     html += `
       <div style="margin-bottom:18px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.07);border-radius:10px;overflow:hidden">
         <div style="padding:12px 14px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,0.06)">
           <div class="grade-avg-letter ${avgL}" style="width:40px;height:40px;font-size:18px;border-radius:9px">${avgL}</div>
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:700;color:#e2e8f0">${escapeHtml(student.name)}</div>
-            <div style="font-size:11px;color:#475569">${escapeHtml(student.email)} · ${student.rows.length} attempt${student.rows.length !== 1 ? 's' : ''} · avg <strong style="color:${gradeColor(avgL)}">${avg}%</strong></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14px;font-weight:700;color:${isAnon ? '#64748b' : '#e2e8f0'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(student.name)}</div>
+            <div style="font-size:11px;color:#475569;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(student.email)} &middot; ${student.rows.length} attempt${student.rows.length !== 1 ? 's' : ''} &middot; avg <strong style="color:${gradeColor(avgL)}">${avg}%</strong></div>
           </div>
         </div>
         <table class="grade-history-table" style="margin:0">
           <thead><tr>
-            <th>Test</th><th>Date</th>
+            <th>Test</th><th>Date &amp; Time</th>
             <th style="text-align:center">Score</th><th style="text-align:center">Grade</th>
           </tr></thead>
           <tbody>`;
 
     student.rows.forEach(row => {
-      const gl = row.letter_grade;
+      const gl = row.letter_grade || gradeFromPercent(row.score_percent);
       html += `
         <tr>
           <td>
-            <div style="font-weight:600;color:#e2e8f0">${escapeHtml(row.test_title)}</div>
+            <div style="font-weight:600;color:#e2e8f0">${escapeHtml(row.test_title || 'Untitled Test')}</div>
             ${row.topics ? `<div style="font-size:10px;color:#475569">${escapeHtml(row.topics)}</div>` : ''}
           </td>
-          <td style="white-space:nowrap;color:#64748b;font-size:11.5px">${fmt(row.taken_at)}</td>
-          <td style="text-align:center;font-weight:700;color:${gradeColor(gl)}">${row.score_percent}%</td>
+          <td style="white-space:nowrap;color:#64748b;font-size:11.5px">${fmt(row.taken_at)}<br><span style="font-size:10px">${fmtTime(row.taken_at)}</span></td>
+          <td style="text-align:center;font-weight:700;color:${gradeColor(gl)}">${row.score_percent}%<br><span style="font-size:10px;color:#475569;font-weight:400">${row.correct_count}/${row.total_questions}</span></td>
           <td style="text-align:center"><span class="grade-letter-pill ${gl}">${gl}</span></td>
         </tr>`;
     });
@@ -7824,10 +7906,8 @@ function renderGradeModalTable(rows) {
   });
 
   body.innerHTML = html;
-  document.getElementById('gradeModalSubtitle').textContent = `${rows.length} total attempt${rows.length !== 1 ? 's' : ''} · ${Object.keys(byStudent).length} student${Object.keys(byStudent).length !== 1 ? 's' : ''}`;
-}
-
-function closeGradeHistoryModal() {
+  if (subtitle) subtitle.textContent = `${rows.length} total attempt${rows.length !== 1 ? 's' : ''} · ${sortedStudents.length} student${sortedStudents.length !== 1 ? 's' : ''}`;
+}function closeGradeHistoryModal() {
   const modal = document.getElementById('gradeHistoryModal');
   if (modal) modal.style.display = 'none';
 }
