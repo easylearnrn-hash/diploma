@@ -4822,6 +4822,7 @@ function handleSubjectCheckbox(subjectId, checked) {
     // Deselect all topics
     selectAllTopicsForSubject(subjectId, false);
   }
+  clearSubjectModalWarning();
   updateSubjectStats();
 }
 
@@ -4841,6 +4842,7 @@ function selectAllTopicsForSubject(subjectId, select) {
       if (row) row.classList.remove('selected');
     }
   });
+  clearSubjectModalWarning();
   syncSubjectCheckboxState(subjectId);
   updateSubjectStats();
 }
@@ -4859,6 +4861,8 @@ function toggleTopicInline(topicId, subjectId) {
     selectedTopics.delete(topicId);
     if (row) row.classList.remove('selected');
   }
+  // Clear any "no questions" warning whenever the selection changes
+  clearSubjectModalWarning();
   syncSubjectCheckboxState(subjectId);
   updateSubjectStats();
 }
@@ -4941,6 +4945,44 @@ function updateSubjectStats() {
   }
 }
 
+// ─── Subject modal warning banner helpers ─────────────────────────────────────
+// Injects (or replaces) a styled warning banner above the modal footer.
+// Cleared automatically when the user changes topic selection or starts a valid test.
+function showSubjectModalWarning(htmlMessage) {
+  const BANNER_ID = 'subjectModalWarningBanner';
+  let banner = document.getElementById(BANNER_ID);
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = BANNER_ID;
+    // Insert directly before the modal footer
+    const footer = document.querySelector('#subjectModal .modal-footer');
+    if (footer) footer.parentNode.insertBefore(banner, footer);
+  }
+  banner.style.cssText = [
+    'margin:0 32px 0',
+    'padding:13px 16px',
+    'border-radius:10px',
+    'background:rgba(239,68,68,0.09)',
+    'border:1px solid rgba(239,68,68,0.28)',
+    'display:flex',
+    'align-items:flex-start',
+    'gap:11px',
+    'animation:fadeIn 0.2s ease',
+  ].join(';');
+  banner.innerHTML = `
+    <svg style="flex-shrink:0;margin-top:1px" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+    </svg>
+    <span style="color:#fca5a5;font-size:13px;line-height:1.55;">${htmlMessage}</span>
+  `;
+}
+
+function clearSubjectModalWarning() {
+  const banner = document.getElementById('subjectModalWarningBanner');
+  if (banner) banner.remove();
+}
+
 // "Start Test →" button in the subject modal
 async function startFromSubjectModal() {
   if (selectedTopics.size === 0 && selectedSubjects.size === 0) {
@@ -4977,6 +5019,45 @@ async function startFromSubjectModal() {
   TEST_CONFIG.selectedTopicNames = TEST_CONFIG.selectedTopicIds
     .map(id => availableTopics.find(t => t.id === id)?.name)
     .filter(Boolean);
+
+  // ── Topic question-count validation ──────────────────────────────────────
+  // Use the cached count map (built when the modal opened) to determine which
+  // selected topics actually have questions available.
+  const counts = window._cachedTopicCounts || {};
+  const emptyTopicIds  = TEST_CONFIG.selectedTopicIds.filter(id => !(counts[id] > 0));
+  const filledTopicIds = TEST_CONFIG.selectedTopicIds.filter(id =>  (counts[id] > 0));
+
+  if (filledTopicIds.length === 0) {
+    // ALL selected topics are empty — abort and show an in-modal warning.
+    const emptyNames = emptyTopicIds
+      .map(id => availableTopics.find(t => t.id === id)?.name || 'Unknown Topic')
+      .join(', ');
+    showSubjectModalWarning(
+      emptyTopicIds.length === 1
+        ? `The selected topic <strong>"${availableTopics.find(t => t.id === emptyTopicIds[0])?.name || 'this topic'}"</strong> has no available questions yet. Please select a different topic.`
+        : `None of the selected topics have available questions yet (<em>${emptyNames}</em>). Please choose topics that contain questions.`
+    );
+    return; // Keep modal open
+  }
+
+  if (emptyTopicIds.length > 0) {
+    // Some topics are empty — silently drop them, proceed with only the populated ones.
+    const droppedNames = emptyTopicIds
+      .map(id => availableTopics.find(t => t.id === id)?.name || id)
+      .join(', ');
+    console.warn(`[startFromSubjectModal] Dropping ${emptyTopicIds.length} empty topic(s): ${droppedNames}`);
+    TEST_CONFIG.selectedTopicIds = filledTopicIds;
+    TEST_CONFIG.selectedTopicNames = filledTopicIds
+      .map(id => availableTopics.find(t => t.id === id)?.name)
+      .filter(Boolean);
+    showToast(
+      `${emptyTopicIds.length} topic${emptyTopicIds.length !== 1 ? 's' : ''} skipped (no questions yet)`,
+      'info'
+    );
+  }
+
+  // Clear any lingering warning banner before hiding the modal
+  clearSubjectModalWarning();
 
   document.getElementById('subjectModal').classList.add('hidden');
 
