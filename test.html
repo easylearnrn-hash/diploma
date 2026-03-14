@@ -3960,9 +3960,11 @@ async function addMoreQuestions(count = 10) {
     // 8. Reset answer/status slots for new questions — always overwrite,
     //    even if the question ID was previously answered in this session
     //    (stale entries from the existing question set cause "pre-answered" bug).
+    //    Use delete (not 'unanswered') — a truthy string would trigger renderQuestion's
+    //    existingStatus branch and show a false "Incorrect" feedback banner.
     picks.forEach(q => {
-      testState.answers[q.id]      = null;
-      testState.answerStatus[q.id] = 'unanswered';
+      testState.answers[q.id] = null;
+      delete testState.answerStatus[q.id];
     });
 
     // 9. Force navigator to rebuild (clear the "already built" cache flag)
@@ -6063,7 +6065,7 @@ async function saveTestSession() {
       session_id: testState.sessionId,
       current_question_index: testState.currentIndex,
       answers: testState.answers,
-      answer_status: testState.answerStatus,
+      answer_status: {}, // Do NOT persist check-answer results — users re-check on resume
       flagged_questions: Array.from(testState.flagged),
       // ── SLIM PAYLOAD: omit questions + snapshots from cloud saves ──────
       // questions are reloaded from test_questions on resume (they're in the DB).
