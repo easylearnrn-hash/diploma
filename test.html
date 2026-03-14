@@ -7431,6 +7431,46 @@ async function coldCallPickStudent() {
     // Brief "cycle complete" feedback already shown; now continue picking
   }
 
+  // ── Auto-advance question when the current one is already answered ────────
+  // If the current question has been checked (correct or incorrect) and a result
+  // has been recorded for the previous student, move to the next unanswered
+  // question BEFORE picking a new student.  This prevents the new student from
+  // inheriting the previous result badge automatically.
+  // If the question is not yet answered, do NOT change the question — just pick.
+  const currentQ = testState.questions[testState.currentIndex];
+  const currentStatus = currentQ ? testState.answerStatus[currentQ.id] : undefined;
+  const currentAnswered = currentStatus === 'correct' || currentStatus === 'incorrect';
+
+  if (currentAnswered && coldCallState.currentPickAnswered) {
+    // Find the next unanswered question after the current index
+    let nextIndex = -1;
+    for (let i = testState.currentIndex + 1; i < testState.questions.length; i++) {
+      const s = testState.answerStatus[testState.questions[i].id];
+      if (s !== 'correct' && s !== 'incorrect') {
+        nextIndex = i;
+        break;
+      }
+    }
+    // If no unanswered question ahead, wrap from the beginning
+    if (nextIndex === -1) {
+      for (let i = 0; i < testState.currentIndex; i++) {
+        const s = testState.answerStatus[testState.questions[i].id];
+        if (s !== 'correct' && s !== 'incorrect') {
+          nextIndex = i;
+          break;
+        }
+      }
+    }
+    if (nextIndex !== -1) {
+      testState.currentIndex = nextIndex;
+      renderQuestion();
+      // Broadcast to students if teacher-mode sync is active
+      if (typeof broadcastSessionUpdate === 'function' && TEACHER_MODE.enabled) {
+        broadcastSessionUpdate();
+      }
+    }
+  }
+
   // Pop from front of queue
   const student = coldCallState.queue.shift();
   coldCallState.calledThisRound.push(student);
