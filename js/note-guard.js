@@ -34,25 +34,68 @@
 
   /** Redirect and stop execution. */
   function redirect(url) {
+    // If the URL is relative, prefix() may already be prepended by the caller.
+    // Use replace() so back-button doesn't loop.
     window.location.replace(url);
-    // Throw so no code after redirect() ever runs even if replace() is async
+    // Throw so no code after redirect() ever runs even if replace() is async.
     throw new Error('ACNHS: redirecting to ' + url);
   }
 
   /**
-   * Resolve path depth so relative links to js/ always work.
-   * A note at:  Cardiovascular System/foo.html  → depth 1  → prefix = '../'
-   * A note at:  Fundamentals/bar/baz.html       → depth 2  → prefix = '../../'
-   * Root level: foo.html                        → depth 0  → prefix = ''
+   * Reveal the page body (remove the guard hide-style AND inline override).
+   */
+  function reveal() {
+    // Remove the injected hide <style> tag
+    var hideEl = document.getElementById('acnhs-guard-hide');
+    if (hideEl) { hideEl.parentNode.removeChild(hideEl); }
+    // Belt-and-suspenders: clear any inline display:none on body
+    if (document.body) { document.body.style.display = ''; }
+  }
+
+  /**
+   * Resolve the prefix needed to reach the project root (where js/ lives).
+   *
+   * Strategy: find the <script> tag that loaded THIS file — its src attribute
+   * already encodes the correct relative depth (e.g. "../js/note-guard.js" or
+   * "js/note-guard.js"). Strip the filename and we have our prefix.
+   *
+   * Fallback: derive from script src path if document.currentScript is null.
    */
   function jsPrefix() {
-    // Count slashes in the path after the origin
-    var parts = window.location.pathname.split('/').filter(Boolean);
-    // Remove the filename (last segment)
-    var dirs = parts.length > 0 ? parts.length - 1 : 0;
-    var prefix = '';
-    for (var i = 0; i < dirs; i++) { prefix += '../'; }
-    return prefix;
+    // Try document.currentScript first (works in modern browsers)
+    var me = document.currentScript;
+    if (!me) {
+      // Fallback: scan all <script> tags for one whose src ends with note-guard.js
+      var scripts = document.getElementsByTagName('script');
+      for (var i = 0; i < scripts.length; i++) {
+        if (scripts[i].src && scripts[i].src.indexOf('note-guard.js') !== -1) {
+          me = scripts[i];
+          break;
+        }
+      }
+    }
+    if (me && me.src) {
+      // src is an absolute URL, e.g.
+      //   file:///...DIPLOMA/Cardiovascular%20System/foo.html  <-- page
+      //   file:///...DIPLOMA/js/note-guard.js                  <-- script src
+      // We want the directory part before "js/note-guard.js"
+      var src = me.src;                            // absolute URL
+      var jsIdx = src.lastIndexOf('/js/note-guard.js');
+      if (jsIdx !== -1) {
+        var root = src.substring(0, jsIdx + 1);   // "file:///...DIPLOMA/"
+        var pagePath = window.location.href.split('?')[0]; // strip query
+        // Count how many directories the page is below root
+        var relative = pagePath.replace(root, '');
+        var slashes = (relative.match(/\//g) || []).length;
+        // slashes = number of path separators AFTER root, which equals depth
+        // (filename has no slash, so slashes = dirs above file)
+        var prefix = '';
+        for (var d = 0; d < slashes; d++) { prefix += '../'; }
+        return prefix;
+      }
+    }
+    // Ultimate fallback: assume one level deep (most notes are in one subdir)
+    return '../';
   }
 
   /** Dynamically load a script and resolve when loaded. */
@@ -249,7 +292,7 @@
 
     // Step 2: Admins bypass publish check
     if (isAdmin) {
-      document.body.style.display = '';
+      reveal();
       return;
     }
 
@@ -265,8 +308,7 @@
     var noteId = resolveNoteId();
     if (!noteId) {
       // Unknown note — fail open for unregistered files so admin tools still work
-      // (Only truly unknown files reach here; all HUB_SEED notes are mapped above.)
-      document.body.style.display = '';
+      reveal();
       return;
     }
 
@@ -306,7 +348,7 @@
       }
 
       // ✅ All checks pass — reveal the page
-      document.body.style.display = '';
+      reveal();
 
     } catch (err) {
       // Network error or Supabase unavailable — fail closed
@@ -317,12 +359,34 @@
 
   // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
+  // Safety net: if the guard hasn't resolved within 8 seconds, reveal the body
+  // so users are never permanently stuck on a white screen due to a network error.
+  var _safetyTimer = setTimeout(function () {
+    console.warn('[note-guard] Safety timeout — revealing body');
+    reveal();
+  }, 8000);
+
+  async function runGuardSafe() {
+    try {
+      await runGuard();
+    } catch (e) {
+      // Only re-throw redirect errors; real errors → reveal body
+      if (e && e.message && e.message.indexOf('ACNHS: redirecting') === 0) {
+        throw e;
+      }
+      console.error('[note-guard] Unexpected error:', e);
+      reveal();
+    } finally {
+      clearTimeout(_safetyTimer);
+    }
+  }
+
   // Kick off guard immediately. Body is already hidden by inline style
   // (injected by inject-note-guard.py). Run as soon as the script executes.
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', runGuard);
+    document.addEventListener('DOMContentLoaded', runGuardSafe);
   } else {
-    runGuard();
+    runGuardSafe();
   }
 
 })();
