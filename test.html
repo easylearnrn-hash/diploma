@@ -5813,8 +5813,10 @@ function checkAnswer() {
 
   testState.answerStatus[question.id] = isCorrect ? 'correct' : 'incorrect';
   saveToLocalStorage();
-  
-  // Show feedback
+
+  // If a student is currently displayed in the cold call panel and hasn't been
+  // recorded yet, update their badge and record the result now.
+  coldCallUpdateBadgeIfPending(isCorrect);
   const feedbackEl = document.getElementById('answerFeedback');
   feedbackEl.style.display = 'block';
 
@@ -7422,6 +7424,33 @@ async function coldCallPickStudent() {
 }
 
 // ─── Rolling animation then reveal the name ──────────────────────────────────
+// ─── Live-update the cold call badge when Check Answer is clicked ────────────
+// Called from checkAnswer() immediately after answerStatus is written.
+// If a student is currently "on display" (lastPicked set, not yet recorded),
+// swap the "Not answered yet" badge for the real result and record it.
+function coldCallUpdateBadgeIfPending(isCorrect) {
+  // Only act when a student is picked and their result hasn't been recorded yet
+  if (!coldCallState.lastPicked || coldCallState.currentPickAnswered) return;
+
+  const display = document.getElementById('ccNameDisplay');
+  if (!display) return;
+
+  // Find the pending badge inside the display and replace it
+  const pending = display.querySelector('.cc-answered-badge');
+  if (!pending) return;
+
+  if (isCorrect) {
+    pending.className = 'cc-answered-badge correct';
+    pending.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> Correct`;
+  } else {
+    pending.className = 'cc-answered-badge wrong';
+    pending.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Wrong`;
+  }
+
+  // Record in analytics + Supabase (same path as the old button click)
+  coldCallRecordAnswer(isCorrect);
+}
+
 function coldCallAnimatePick(finalName) {
   return new Promise(resolve => {
     coldCallState.isRolling = true;
