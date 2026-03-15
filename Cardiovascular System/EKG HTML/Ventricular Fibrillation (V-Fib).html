@@ -232,8 +232,8 @@ rafId = requestAnimationFrame(frame);
 const magCanvas = document.getElementById('mag');
 const magCtx    = magCanvas.getContext('2d');
 
-const MAG_R      = 70;   // lens radius px (CSS pixels)
-const MAG_SCALE  = 5;    // zoom factor
+const MAG_R     = 80;   // lens radius in CSS px
+const MAG_SCALE = 3;    // zoom factor
 
 function resizeMag() {
   magCanvas.width  = Math.round(CW * DPR);
@@ -250,146 +250,125 @@ function drawMagnifier() {
   magCtx.clearRect(0, 0, magCanvas.width, magCanvas.height);
   if (!magVisible || !paused || magX < 0) return;
 
-  const scale = DPR;
-  const cx = magX * scale;   // centre in canvas pixels
-  const cy = magY * scale;
-  const r  = MAG_R * scale;
+  // All geometry in physical canvas pixels (multiplied by DPR)
+  const cx = magX * DPR;
+  const cy = magY * DPR;
+  const r  = MAG_R * DPR;
 
-  // ── clip to circle ──
+  // ── Source rect on the main canvas: the region under the lens at 1:1 ──
+  // srcW/srcH is what we'll zoom — a window of the main canvas centred on (cx,cy)
+  const srcW = (r * 2) / MAG_SCALE;   // physical px
+  const srcH = (r * 2) / MAG_SCALE;
+  let srcX = cx - srcW / 2;
+  let srcY = cy - srcH / 2;
+
+  // Clamp source rect so we never read outside the canvas
+  srcX = Math.max(0, Math.min(canvas.width  - srcW, srcX));
+  srcY = Math.max(0, Math.min(canvas.height - srcH, srcY));
+
+  // ── Clip to circle ──
   magCtx.save();
   magCtx.beginPath();
   magCtx.arc(cx, cy, r, 0, Math.PI * 2);
   magCtx.clip();
 
-  // ── dark green background (matches grid bg) ──
-  magCtx.fillStyle = '#000b00';
-  magCtx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  // ── Draw zoomed section of the main canvas (pixel-perfect, uses imageSmoothingQuality) ──
+  magCtx.imageSmoothingEnabled = true;
+  magCtx.imageSmoothingQuality = 'high';
+  magCtx.drawImage(
+    canvas,
+    srcX, srcY, srcW, srcH,   // source rect (physical px on main canvas)
+    cx - r, cy - r, r * 2, r * 2  // dest rect (fills the lens)
+  );
 
-  // ── draw zoomed grid inside lens ──
-  const sm = 3.78 * MAG_SCALE * scale;
+  // ── Draw zoomed grid lines on top ──
+  // Grid spacing at 3x zoom: 3.78mm * MAG_SCALE * DPR physical px
+  const sm = 3.78 * MAG_SCALE * DPR;
   const lg = sm * 5;
-  const ox = cx - magX * MAG_SCALE * scale;   // origin offset
-  const oy = cy - magY * MAG_SCALE * scale;
 
-  magCtx.strokeStyle = 'rgba(0, 160, 0, 0.18)';
-  magCtx.lineWidth = 1;
-  for (let x = ((cx - r - ox) / sm | 0) * sm + ox; x < cx + r; x += sm) {
+  // The grid origin in the zoomed view:
+  // A point at physical srcX,srcY maps to cx-r,cy-r in the dest.
+  // Scale factor = r*2 / srcW = MAG_SCALE
+  // So a source grid line at x=n*3.78 (physical) maps to dest = (cx-r) + (n*3.78 - srcX)*MAG_SCALE
+  // Equivalently: offset = (cx - r) - srcX * MAG_SCALE
+  const gox = (cx - r) - srcX * MAG_SCALE;
+  const goy = (cy - r) - srcY * MAG_SCALE;
+
+  magCtx.strokeStyle = 'rgba(0, 160, 0, 0.20)';
+  magCtx.lineWidth = DPR;
+  const x0 = Math.floor((cx - r - gox) / sm) * sm + gox;
+  for (let x = x0; x <= cx + r; x += sm) {
     magCtx.beginPath(); magCtx.moveTo(x, cy - r); magCtx.lineTo(x, cy + r); magCtx.stroke();
   }
-  for (let y = ((cy - r - oy) / sm | 0) * sm + oy; y < cy + r; y += sm) {
+  const y0 = Math.floor((cy - r - goy) / sm) * sm + goy;
+  for (let y = y0; y <= cy + r; y += sm) {
     magCtx.beginPath(); magCtx.moveTo(cx - r, y); magCtx.lineTo(cx + r, y); magCtx.stroke();
   }
-  magCtx.strokeStyle = 'rgba(0, 255, 120, 0.30)';
-  for (let x = ((cx - r - ox) / lg | 0) * lg + ox; x < cx + r; x += lg) {
+  magCtx.strokeStyle = 'rgba(0, 255, 120, 0.35)';
+  const lx0 = Math.floor((cx - r - gox) / lg) * lg + gox;
+  for (let x = lx0; x <= cx + r; x += lg) {
     magCtx.beginPath(); magCtx.moveTo(x, cy - r); magCtx.lineTo(x, cy + r); magCtx.stroke();
   }
-  for (let y = ((cy - r - oy) / lg | 0) * lg + oy; y < cy + r; y += lg) {
+  const ly0 = Math.floor((cy - r - goy) / lg) * lg + goy;
+  for (let y = ly0; y <= cy + r; y += lg) {
     magCtx.beginPath(); magCtx.moveTo(cx - r, y); magCtx.lineTo(cx + r, y); magCtx.stroke();
-  }
-
-  // ── draw zoomed waveform tile ──
-  // Source region: a strip of width 2*R/MAG_SCALE centred on magX in the frozen strip
-  const srcW  = (r * 2) / MAG_SCALE;
-  const srcH  = CH * scale;                   // full height of the tile
-  // Where in the TILE does magX fall?
-  const frozenSrcX = (frozenScrollPx + magX * scale) % (TILE_W * scale);
-  let tilePixelX = frozenSrcX / scale;         // tile coords (un-DPR)
-
-  // Source centre in tile space
-  const halfSrcW = srcW / (2 * scale);         // half-source-width in tile px
-  let srcLeft = tilePixelX - halfSrcW;
-  const dstLeft = cx - r;
-  const dstTop  = cy - r;
-  const dstW    = r * 2;
-  const dstH    = r * 2;
-
-  // How many pixels of the magnified canvas does CH cover?
-  const zoomedCH = CH * MAG_SCALE * scale;
-  // Vertical offset so the strip centre in the tile maps to the lens centre
-  const srcCenterY = CH * 0.58;               // BASE in tile coords
-  const dstCenterY = cy;
-  const scaledSrcCY = srcCenterY * MAG_SCALE * scale;
-  const tileDrawY   = dstCenterY - scaledSrcCY;
-
-  // Draw, wrapping tile if needed
-  if (srcLeft < 0) srcLeft += TILE_W;
-  const rightEdge = srcLeft + srcW / scale;
-
-  if (rightEdge <= TILE_W) {
-    magCtx.drawImage(
-      wfTile,
-      srcLeft, 0, srcW / scale, CH,
-      dstLeft, tileDrawY, dstW, zoomedCH
-    );
-  } else {
-    // wrap: draw two segments
-    const part1W = TILE_W - srcLeft;
-    const part1Dst = part1W * MAG_SCALE * scale;
-    magCtx.drawImage(
-      wfTile,
-      srcLeft, 0, part1W, CH,
-      dstLeft, tileDrawY, part1Dst, zoomedCH
-    );
-    const part2W = (srcW / scale) - part1W;
-    magCtx.drawImage(
-      wfTile,
-      0, 0, part2W, CH,
-      dstLeft + part1Dst, tileDrawY, part2W * MAG_SCALE * scale, zoomedCH
-    );
   }
 
   magCtx.restore();
 
-  // ── lens border ──
+  // ── Lens border ──
   magCtx.beginPath();
   magCtx.arc(cx, cy, r, 0, Math.PI * 2);
-  magCtx.strokeStyle = 'rgba(43, 255, 107, 0.55)';
-  magCtx.lineWidth = 2 * scale;
+  magCtx.strokeStyle = 'rgba(43, 255, 107, 0.65)';
+  magCtx.lineWidth = 2 * DPR;
   magCtx.stroke();
 
-  // ── crosshair ──
-  magCtx.strokeStyle = 'rgba(43, 255, 107, 0.25)';
-  magCtx.lineWidth = scale;
+  // ── Crosshair ──
+  const gap = 8 * DPR;
+  magCtx.strokeStyle = 'rgba(43, 255, 107, 0.30)';
+  magCtx.lineWidth = DPR;
   magCtx.beginPath();
-  magCtx.moveTo(cx - r + 6 * scale, cy);
-  magCtx.lineTo(cx + r - 6 * scale, cy);
-  magCtx.stroke();
+  magCtx.moveTo(cx - r + gap, cy); magCtx.lineTo(cx + r - gap, cy); magCtx.stroke();
   magCtx.beginPath();
-  magCtx.moveTo(cx, cy - r + 6 * scale);
-  magCtx.lineTo(cx, cy + r - 6 * scale);
-  magCtx.stroke();
+  magCtx.moveTo(cx, cy - r + gap); magCtx.lineTo(cx, cy + r - gap); magCtx.stroke();
 }
 
-// Track mouse/touch — only show when paused
-canvas.addEventListener('mousemove', e => {
-  if (!paused) { magVisible = false; drawMagnifier(); return; }
+// ── Input handlers ───────────────────────────────────────────────
+function updateMagPos(clientX, clientY) {
   const rect = canvas.getBoundingClientRect();
-  magX = e.clientX - rect.left;
-  magY = e.clientY - rect.top;
+  magX = clientX - rect.left;
+  magY = clientY - rect.top;
+}
+
+canvas.addEventListener('mousemove', e => {
+  if (!paused) { magVisible = false; magCtx.clearRect(0, 0, magCanvas.width, magCanvas.height); return; }
+  updateMagPos(e.clientX, e.clientY);
   magVisible = true;
   drawMagnifier();
 });
 canvas.addEventListener('mouseleave', () => {
   magVisible = false;
-  drawMagnifier();
+  magCtx.clearRect(0, 0, magCanvas.width, magCanvas.height);
 });
 canvas.addEventListener('touchmove', e => {
   if (!paused) return;
   e.preventDefault();
-  const rect = canvas.getBoundingClientRect();
-  magX = e.touches[0].clientX - rect.left;
-  magY = e.touches[0].clientY - rect.top;
+  updateMagPos(e.touches[0].clientX, e.touches[0].clientY);
   magVisible = true;
   drawMagnifier();
 }, { passive: false });
 canvas.addEventListener('touchend', () => {
   magVisible = false;
-  drawMagnifier();
+  magCtx.clearRect(0, 0, magCanvas.width, magCanvas.height);
 });
-// Hide magnifier when unpausing
+
+// Hide magnifier when unpausing (capture phase so it fires before paused toggles)
 pauseBtn.addEventListener('click', () => {
-  if (!paused) { magVisible = false; drawMagnifier(); }
-}, true);  // capture=true so it fires before the main handler toggles paused
+  if (!paused) {
+    magVisible = false;
+    magCtx.clearRect(0, 0, magCanvas.width, magCanvas.height);
+  }
+}, true);
 
 </script>
 </body>
