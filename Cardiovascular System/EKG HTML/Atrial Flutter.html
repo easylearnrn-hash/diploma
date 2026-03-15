@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Atrial Flutter</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR    = window.devicePixelRatio || 1;
+const CH     = 110;
+const VIEW_W = window.innerWidth;
+
+const MM             = 3.78;
+const STRIP_SECONDS  = 6;
+const CW    = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width  = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// Atrial Flutter: 3:1 block
+//   Atrial (flutter) rate  = 300 bpm  →  F-wave period = 0.20 sec
+//   Ventricular rate       = 100 bpm  →  QRS every 3 F-waves = 0.60 sec
+const HR_V   = 100;
+const RR_V   = 60 / HR_V;           // 0.60 sec per ventricular beat
+const RR_PX  = RR_V * SPEED;        // pixels per ventricular cycle
+const BASE   = CH * 0.55;
+const GAIN   = 1.28;
+
+// ── 3. Monitor grid ───────────────────────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(f, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+}
+function tri(f, peak, up, dn, amp) {
+  if (f >= peak - up && f < peak)       return amp * (f - (peak - up)) / up;
+  if (f >= peak      && f <= peak + dn) return amp * (1 - (f - peak) / dn);
+  return 0;
+}
+
+// One flutter (F) wave: classic atrial flutter morphology.
+// The wave LEANS BACK — slow gradual upstroke, then sharp fast downstroke.
+// This gives the backward-leaning sawtooth look of real atrial flutter.
+// f = 0..1 within a single F-wave sub-cycle.
+function fWave(f) {
+  if (f < 0.7) {
+    // slow gradual rise (the long back-lean)
+    return -2.6 * (f / 0.7);
+  }
+  // sharp fast drop back to baseline
+  return -2.6 * (1 - (f - 0.7) / 0.3);
+}
+
+// Full ventricular cycle (f = 0..1).
+// 3:1 block: 3 F-waves, then 1 QRS.
+//   F1: f = 0.000 – 0.333
+//   F2: f = 0.333 – 0.666
+//   F3: f = 0.666 – 0.750  (partial, cut by QRS)
+//   QRS: f = 0.750 – 0.830
+//   Recovery back to baseline for next F1
+function aflutterV(f) {
+  let v = 0;
+  const F_W = 1 / 3;         // each full F-wave = 1/3 of ventricular cycle
+  const QRS_START = 0.75;
+
+  // F1 — full flutter wave
+  if (f >= 0 && f < F_W) {
+    v += fWave(f / F_W);
+  }
+
+  // F2 — full flutter wave
+  if (f >= F_W && f < F_W * 2) {
+    v += fWave((f - F_W) / F_W);
+  }
+
+  // F3 — partial, only the slow upstroke/lean before QRS fires
+  if (f >= F_W * 2 && f < QRS_START) {
+    const ff = (f - F_W * 2) / F_W;
+    // only the gradual upslope portion (before the sharp drop)
+    v += -2.6 * Math.min(ff / 0.7, 1);
+  }
+
+  // QRS: sharp narrow spike — rises and falls fast
+  v += tri(f, 0.762, 5/1000,  4/1000, -0.6);   // Q dip
+  v += tri(f, 0.772, 6/1000,  6/1000, 13);     // R — tall spike
+  v += tri(f, 0.786, 4/1000,  9/1000, -2.8);   // S
+
+  // Short ST then small T, immediately rolls into next F1
+  if (f >= 0.8 && f <= 0.855) {
+    const prog = (f - 0.8) / 0.055;
+    v += -0.28 * (1 - prog);
+  }
+  v += gauss(f, 0.888, 28/1000, 1);
+
+  return v;
+}
+
+// ── 5. Bake waveform tile ─────────────────────────────────────────
+// 10 ventricular cycles in the tile = 30 flutter waves total
+const TILE_W = Math.round(RR_PX * 10);
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 4; i++) {
+    const x = i / 4;
+    const f = (x % RR_PX) / RR_PX;
+    const y = BASE - aflutterV(f) * MM * GAIN;
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.4;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation ─────────────────────────────────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t       = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
