@@ -91,33 +91,34 @@ function tri(f, peak, up, dn, amp) {
 }
 
 function svtV(f) {
-  // SVT at 200 bpm: RR = 0.30 sec
-  // Each f=0..1 maps to one full beat (0.30 sec).
-  // QRS is narrow (~0.06 sec = 0.20 of the cycle).
-  // T wave fills roughly 0.35–0.80 of the cycle.
-  // No P wave. Flat baseline only at very start and end of cycle.
+  // SVT at 200 bpm: RR = 0.30 sec, f = 0..1 per beat.
+  // Narrow QRS (~0.07 s = ~23% of cycle), hidden/absent P wave,
+  // T wave fully contained before f=0.95 so there is zero bleed
+  // across the tile boundary → every beat is perfectly identical.
   let v = 0;
 
-  // QRS: narrow spike centred at f=0.10
-  v += tri(f, 0.08,  5/1000,  4/1000, -0.35);  // tiny Q
-  v += tri(f, 0.1,   5/1000,  5/1000, 16);     // R — tall, narrow
-  v += tri(f, 0.112, 4/1000,  8/1000, -2);     // S
+  // QRS complex — narrow, symmetric, centred at f=0.12
+  v += tri(f, 0.100,  6/1000,  5/1000, -0.5);   // Q (tiny)
+  v += tri(f, 0.120,  8/1000,  8/1000, 15.0);   // R (tall, symmetric)
+  v += tri(f, 0.140,  6/1000,  9/1000, -2.2);   // S
 
-  // ST: short, slightly depressed, transitions into T
-  if (f >= 0.124 && f <= 0.21) {
-    const prog = (f - 0.124) / 0.086;
-    v += -0.22 * (1 - prog);
+  // ST segment: flat/near-baseline, brief
+  if (f >= 0.156 && f <= 0.22) {
+    v += -0.15 * (1 - (f - 0.156) / 0.064);
   }
 
-  // T wave: tall mountain, shifted late so it nearly touches the next QRS
-  v += gauss(f, 0.68, 110/1000, 5.5);
+  // T wave: contained well within the cycle, sigma tight enough
+  // that it is essentially 0 by f=0.88 and by f=0.0 of next beat
+  v += gauss(f, 0.52, 70/1000, 4.8);
 
+  // Flat baseline from ~f=0.88 → 1.0 (isoelectric before next QRS)
   return v;
 }
 
 // ── 5. Bake waveform tile ────────────────────────────────────────
-// 14 beats in the tile to ensure seamless looping at this fast rate
-const TILE_W = Math.round(RR_PX * 14);
+// Tile = exactly 20 beats → perfectly seamless loop at any scroll speed
+const TILE_BEATS = 20;
+const TILE_W = Math.round(RR_PX * TILE_BEATS);
 
 const wfTile = new OffscreenCanvas(TILE_W, CH);
 (function bakeWaveform() {
