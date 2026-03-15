@@ -45,15 +45,8 @@ const ctx = canvas.getContext('2d', { alpha: false });
 ctx.scale(DPR, DPR);
 
 // ── 2. Constants ─────────────────────────────────────────────────
-// Torsades de Pointes:
-//   Rate ~220 bpm, wide bizarre QRS complexes
-//   Classic "twisting around the baseline" — amplitude envelope is a slow
-//   sinusoid so peaks wax and wane over ~10–12 beats per spindle cycle.
-//   Polarity flips each half-spindle (positive → negative → positive).
-const HR     = 220;
-const RR_S   = 60 / HR;
-const RR_PX  = RR_S * SPEED;
-const BASE   = CH * 0.50;   // dead center — waveform twists both above and below
+const BASE = CH * 0.55;
+const GAIN = 1.28;
 
 // ── 3. Monitor grid ───────────────────────────────────────────────
 function drawGridStatic() {
@@ -79,35 +72,47 @@ function drawGridStatic() {
   }
 }
 
-// ── 4. Waveform math ─────────────────────────────────────────────
-function gauss(f, mu, sig, amp) {
-  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+// ── 4. Seeded RNG ─────────────────────────────────────────────────
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 0x100000000;
+  };
 }
 
-// Single wide bizarre QRS complex for Torsades.
-// f = position within one RR cycle (0..1).
-// polarity = +1 or -1 (flips each half-spindle).
-// env = amplitude scalar from the spindle envelope (0..1).
-function tdpBeat(f, polarity, env) {
+// ── 5. Bake waveform ──────────────────────────────────────────────
+const TILE_W = CW * 4;
+const rng    = makeRng(7);
+
+function makeComponents(count, freqMin, freqMax, ampMin, ampMax, rngFn) {
+  const comps = [];
+  for (let i = 0; i < count; i++) {
+    comps.push({
+      freq:  freqMin + rngFn() * (freqMax - freqMin),
+      amp:   ampMin  + rngFn() * (ampMax  - ampMin),
+      phase: rngFn() * Math.PI * 2
+    });
+  }
+  return comps;
+}
+
+const coarse = makeComponents(14, 0.13, 0.26, 1.2, 2.8, rng);
+const fine   = makeComponents(20, 0.28, 0.55, 0.2, 0.8, rng);
+const env    = makeComponents(4,  0.004, 0.012, 0.3, 0.7, rng);
+
+function vfibV(xPx) {
+  let envVal = 0.7;
+  for (const c of env) {
+    envVal += c.amp * Math.sin(c.freq * xPx + c.phase);
+  }
+  envVal = Math.max(0.3, Math.min(1.2, envVal));
+
   let v = 0;
-  // Wide slurred main deflection — broad Gaussian peak
-  v += gauss(f, 0.18, 55/1000, 11.0 * polarity);
-  // Opposite-polarity notch before/after (aberrant conduction slur)
-  v += gauss(f, 0.08, 22/1000, -3.5 * polarity);
-  v += gauss(f, 0.30, 28/1000, -4.2 * polarity);
-  // T wave — discordant (opposite to main deflection), merged at this rate
-  v += gauss(f, 0.62, 80/1000, -5.5 * polarity);
-  return v * env;
+  for (const c of coarse) v += c.amp * Math.sin(c.freq * xPx + c.phase);
+  for (const c of fine)   v += c.amp * Math.sin(c.freq * xPx + c.phase);
+  return v * envVal;
 }
-
-// ── 5. Bake tile ──────────────────────────────────────────────────
-// Tile = 3 full spindle cycles for a rich, long pattern before looping.
-// Each spindle = SPINDLE_BEATS beats. We use 11 beats per half-spindle
-// so one full spindle = 22 beats. Tile = 66 beats total.
-const SPINDLE_BEATS = 11;          // beats per half-spindle (one polarity)
-const FULL_SPINDLE  = SPINDLE_BEATS * 2;
-const TILE_BEATS    = FULL_SPINDLE * 3;
-const TILE_W        = Math.round(RR_PX * TILE_BEATS);
 
 const wfTile = new OffscreenCanvas(TILE_W, CH);
 (function bakeWaveform() {
@@ -115,28 +120,13 @@ const wfTile = new OffscreenCanvas(TILE_W, CH);
   g.clearRect(0, 0, TILE_W, CH);
 
   g.beginPath();
-  for (let i = 0; i <= TILE_W * 4; i++) {
-    const xPx  = i / 4;
-    const f    = (xPx % RR_PX) / RR_PX;
-
-    // Which beat number are we in (across the whole tile)?
-    const beatIdx = xPx / RR_PX;
-
-    // Position within the current spindle cycle (0..1)
-    const spindlePos = (beatIdx % FULL_SPINDLE) / FULL_SPINDLE;
-
-    // Amplitude envelope: sinusoidal spindle — peaks at 0.25 and 0.75
-    // (max amplitude at quarter and three-quarter points of each spindle)
-    const env = 0.15 + 0.85 * Math.abs(Math.sin(spindlePos * Math.PI));
-
-    // Polarity flips each half-spindle
-    const polarity = spindlePos < 0.5 ? +1 : -1;
-
-    const y = BASE - tdpBeat(f, polarity, env) * MM * 0.38;
+  for (let i = 0; i <= TILE_W * 2; i++) {
+    const xPx = i / 2;
+    const y   = BASE - vfibV(xPx) * MM * GAIN;
     i === 0 ? g.moveTo(xPx, y) : g.lineTo(xPx, y);
   }
   g.strokeStyle = '#2bff6b';
-  g.lineWidth   = 2.4;
+  g.lineWidth   = 2.2;
   g.lineJoin    = 'round';
   g.lineCap     = 'round';
   g.stroke();
