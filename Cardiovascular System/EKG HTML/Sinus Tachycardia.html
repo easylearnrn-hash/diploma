@@ -13,66 +13,45 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
+      position: relative;
     }
     canvas {
       width: 100vw;
-        position: relative;
       height: 110px;
       display: block;
     }
+    .pause-btn {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      background: rgba(0, 0, 0, 0.55);
+      color: #b7ffcf;
+      font-size: 14px;
+      cursor: pointer;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pause-btn:hover { background: rgba(0, 0, 0, 0.75); }
+    .pause-btn:active { transform: scale(0.96); }
   </style>
 </head>
 <body>
-      .pause-btn {
-        position: absolute;
-        top: 6px;
-        right: 8px;
-        width: 26px;
-        height: 26px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        background: rgba(0, 0, 0, 0.55);
-        color: #b7ffcf;
-        font-size: 14px;
-        cursor: pointer;
-        z-index: 5;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .pause-btn:hover { background: rgba(0, 0, 0, 0.75); }
-      .pause-btn:active { transform: scale(0.96); }
+<button id="pauseBtn" class="pause-btn" aria-label="Pause strip" title="Pause/Play">⏸</button>
 <canvas id="c"></canvas>
 <script>
 // ── 1. Setup ─────────────────────────────────────────────────────
-  <button id="pauseBtn" class="pause-btn" aria-label="Pause strip" title="Pause/Play">⏸</button>
 const canvas = document.getElementById('c');
 
 const DPR = window.devicePixelRatio || 1;
 const CH  = 110;
-  let paused = false;
-  let pauseStart = 0;
-  let rafId = null;
-
-  const pauseBtn = document.getElementById('pauseBtn');
-  pauseBtn.addEventListener('click', () => {
-    paused = !paused;
-    pauseBtn.textContent = paused ? '▶' : '⏸';
-    pauseBtn.setAttribute('aria-label', paused ? 'Play strip' : 'Pause strip');
-
-    if (paused) {
-      pauseStart = performance.now();
-      if (rafId) cancelAnimationFrame(rafId);
-      return;
-    }
-
-    if (pauseStart) t0 += performance.now() - pauseStart;
-    rafId = requestAnimationFrame(frame);
-  });
-
 const VIEW_W = window.innerWidth;
 
-// 6-second strip shown full screen width
 const MM    = 3.78;
 const STRIP_SECONDS = 6;
 const CW  = VIEW_W;
@@ -91,7 +70,6 @@ const HR    = 124;
 const RR_S  = 60 / HR;
 const RR_PX = RR_S * SPEED;
 const BASE  = CH * 0.58;
-  rafId = requestAnimationFrame(frame);
 const GAIN  = 0.95;
 
 // ── 3. Monitor grid (static, subtle) ─────────────────────────────
@@ -100,7 +78,6 @@ function drawGridStatic() {
   ctx.fillStyle = '#000b00';
   ctx.fillRect(0, 0, CW, CH);
 
-  // Minor grid (1 mm) — subtle
   ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
   ctx.lineWidth = 1;
   for (let x = 0; x <= CW; x += sm) {
@@ -110,7 +87,6 @@ function drawGridStatic() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
   }
 
-  // Major grid (5 mm) — a bit stronger
   ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
   ctx.lineWidth = 1;
   for (let x = 0; x <= CW; x += lg) {
@@ -131,35 +107,21 @@ function tri(f, peak, up, dn, amp) {
   return 0;
 }
 function tachyV(f) {
-  // Sinus tachycardia keeps normal sinus morphology; the rate is faster.
   let v = 0;
-
-  // baseline wander (very subtle)
   v += 0.04 * Math.sin(2 * Math.PI * f);
-
-  // P wave: present, normal, one before each QRS
   v += gauss(f, 0.16, 20/1000, 1.5);
-
-  // PR interval stays normal/constant; QRS remains narrow
-  v += tri(f, 0.272,  7/1000,  5/1000, -1.1);   // Q
-  v += tri(f, 0.284,  8/1000,  8/1000, 11.4);   // R
-  v += tri(f, 0.304,  6/1000, 10/1000, -3.1);   // S
-
-  // ST segment: near baseline
+  v += tri(f, 0.272,  7/1000,  5/1000, -1.1);
+  v += tri(f, 0.284,  8/1000,  8/1000, 11.4);
+  v += tri(f, 0.304,  6/1000, 10/1000, -3.1);
   if (f >= 0.325 && f <= 0.405) {
     v += 0.06 * (1 - (f - 0.325) / 0.08);
   }
-
-  // T wave: normal, but closer to the next P wave because of the fast rate
   v += gauss(f, 0.47, 42/1000, 2.5);
-
-  // tiny U wave: barely visible at this rate
   v += gauss(f, 0.58, 14/1000, 0.06);
-
   return v;
 }
 
-// ── 5. Animated 6-second strip window ───────────────────────────
+// ── 5. Bake waveform tile ────────────────────────────────────────
 const TILE_W = Math.round(RR_PX * 12);
 
 const wfTile = new OffscreenCanvas(TILE_W, CH);
@@ -171,7 +133,7 @@ const wfTile = new OffscreenCanvas(TILE_W, CH);
   for (let i = 0; i <= TILE_W * 4; i++) {
     const x = i / 4;
     const f = (x % RR_PX) / RR_PX;
-  const y = BASE - tachyV(f) * MM * GAIN;
+    const y = BASE - tachyV(f) * MM * GAIN;
     i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
   }
   g.strokeStyle = '#2bff6b';
@@ -183,7 +145,28 @@ const wfTile = new OffscreenCanvas(TILE_W, CH);
 
 // ── 6. Animation — animated 6-second strip ──────────────────────
 let t0 = null;
+let paused = false;
+let pauseStart = 0;
+let rafId = null;
+
+const pauseBtn = document.getElementById('pauseBtn');
+pauseBtn.addEventListener('click', () => {
+  paused = !paused;
+  pauseBtn.textContent = paused ? '▶' : '⏸';
+  pauseBtn.setAttribute('aria-label', paused ? 'Play strip' : 'Pause strip');
+
+  if (paused) {
+    pauseStart = performance.now();
+    if (rafId) cancelAnimationFrame(rafId);
+    return;
+  }
+
+  if (pauseStart) t0 += performance.now() - pauseStart;
+  rafId = requestAnimationFrame(frame);
+});
+
 function frame(ts) {
+  if (paused) return;
   if (!t0) t0 = ts;
 
   const t = (ts - t0) * 0.001;
@@ -201,9 +184,9 @@ function frame(ts) {
     srcX = 0;
   }
 
-  requestAnimationFrame(frame);
+  rafId = requestAnimationFrame(frame);
 }
-requestAnimationFrame(frame);
+rafId = requestAnimationFrame(frame);
 </script>
 </body>
 </html>
