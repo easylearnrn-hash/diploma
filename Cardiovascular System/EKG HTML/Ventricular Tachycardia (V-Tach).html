@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ventricular Tachycardia (V-Tach)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR    = window.devicePixelRatio || 1;
+const CH     = 110;
+const VIEW_W = window.innerWidth;
+
+const MM            = 3.78;
+const STRIP_SECONDS = 6;
+const CW    = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width  = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// V-Tach:
+//   Rate: 180 bpm — fast, regular
+//   No P waves
+//   Wide bizarre QRS (≥ 0.12 sec) — originates in ventricle, abnormal conduction
+//   QRS and T merge into one large wide complex — monomorphic
+const HR    = 180;
+const RR_S  = 60 / HR;
+const RR_PX = RR_S * SPEED;
+const BASE  = CH * 0.55;
+const GAIN  = 1.28;
+
+// ── 3. Monitor grid ───────────────────────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(f, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+}
+
+function vtachV(f) {
+  // V-Tach morphology:
+  //   • No P wave — flat baseline at start
+  //   • Wide slurred upstroke — slow rise from baseline (abnormal depolarisation)
+  //   • Broad rounded peak (no sharp R spike — this is ventricular origin)
+  //   • Slurred downstroke into deep S-like trough
+  //   • T wave inverted or merged — discordant with QRS direction
+  //   • Short flat return before next beat
+  //
+  // The entire QRS+T complex occupies ~60% of the RR cycle at this rate.
+  // f = 0..1 = one full RR cycle
+
+  let v = 0;
+
+  // ── Wide bizarre QRS: broad slow upstroke ────────────────────
+  // Slow rise starts at f=0.10, peaks broadly around f=0.30
+  v += gauss(f, 0.28, 85/1000, 13.5);   // main broad R hump — wide and tall
+
+  // Slurred notch on the upstroke (typical V-Tach aberrancy)
+  v += gauss(f, 0.18, 30/1000, 3.8);    // early shoulder/slur on way up
+
+  // Deep broad S wave / downstroke going well below baseline
+  v += gauss(f, 0.44, 55/1000, -8.5);   // S-trough — wide negative deflection
+
+  // ── Discordant T wave: inverted relative to QRS ───────────────
+  // At 180 bpm the T wave is close to the next beat
+  v += gauss(f, 0.68, 70/1000, -4.5);   // inverted T — discordant with tall R
+
+  return v;
+}
+
+// ── 5. Bake waveform tile ─────────────────────────────────────────
+const TILE_W = Math.round(RR_PX * 14);
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 4; i++) {
+    const x = i / 4;
+    const f = (x % RR_PX) / RR_PX;
+    const y = BASE - vtachV(f) * MM * GAIN;
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.4;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation ─────────────────────────────────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t        = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
