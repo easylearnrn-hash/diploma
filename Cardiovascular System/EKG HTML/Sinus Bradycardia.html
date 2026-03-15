@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Sinus Bradycardia</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR = window.devicePixelRatio || 1;
+const CH  = 110;
+const VIEW_W = window.innerWidth;
+
+// 6-second strip at standard ECG speed: 25 mm/s
+const MM    = 3.78;
+const STRIP_SECONDS = 6;
+const CW  = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+const HR    = 48;
+const RR_S  = 60 / HR;
+const RR_PX = RR_S * SPEED;
+const BASE  = CH * 0.62;
+const GAIN  = 1.28;
+
+// ── 3. Monitor grid (static, subtle) ─────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Minor grid (1 mm) — subtle
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  // Major grid (5 mm) — a bit stronger
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(f, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+}
+function tri(f, peak, up, dn, amp) {
+  if (f >= peak - up && f < peak)       return amp * (f - (peak - up)) / up;
+  if (f >= peak      && f <= peak + dn) return amp * (1 - (f - peak) / dn);
+  return 0;
+}
+function nsrV(f) {
+  // Sinus bradycardia keeps normal sinus morphology; only the rate is slower.
+  let v = 0;
+
+  // baseline wander (very subtle)
+  v += 0.08 * Math.sin(2 * Math.PI * f);
+
+  // P wave: present, normal, one before every QRS
+  v += gauss(f, 0.18, 24/1000, 1.8);
+
+  // PR interval remains normal and constant (~0.13-0.16 s visually)
+  // QRS: normal and narrow
+  v += tri(f, 0.292,  8/1000,  6/1000, -1.4);   // Q
+  v += tri(f, 0.304,  9/1000,  9/1000, 12.5);   // R
+  v += tri(f, 0.326,  7/1000, 12/1000, -3.8);   // S
+
+  // ST segment: essentially baseline / normal
+  if (f >= 0.35 && f <= 0.46) {
+    v += 0.12 * (1 - (f - 0.35) / 0.11);
+  }
+
+  // T wave: normal appearance
+  v += gauss(f, 0.58, 55/1000, 3.4);
+
+  // tiny U wave (optional, very subtle)
+  v += gauss(f, 0.74, 18/1000, 0.18);
+
+  return v;
+}
+
+// ── 5. Animated 6-second strip window ───────────────────────────
+const TILE_W = Math.round(RR_PX * 10);
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 4; i++) {
+    const x = i / 4;
+    const f = (x % RR_PX) / RR_PX;
+  const y = BASE - nsrV(f) * MM * GAIN;
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.4;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
