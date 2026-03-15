@@ -16,19 +16,60 @@
     }
     canvas {
       width: 100vw;
+        position: relative;
       height: 110px;
       display: block;
     }
   </style>
 </head>
 <body>
+      .pause-btn {
+        position: absolute;
+        top: 6px;
+        right: 8px;
+        width: 26px;
+        height: 26px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(0, 0, 0, 0.55);
+        color: #b7ffcf;
+        font-size: 14px;
+        cursor: pointer;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .pause-btn:hover { background: rgba(0, 0, 0, 0.75); }
+      .pause-btn:active { transform: scale(0.96); }
 <canvas id="c"></canvas>
 <script>
 // ── 1. Setup ─────────────────────────────────────────────────────
+  <button id="pauseBtn" class="pause-btn" aria-label="Pause strip" title="Pause/Play">⏸</button>
 const canvas = document.getElementById('c');
 
 const DPR = window.devicePixelRatio || 1;
 const CH  = 110;
+  let paused = false;
+  let pauseStart = 0;
+  let rafId = null;
+
+  const pauseBtn = document.getElementById('pauseBtn');
+  pauseBtn.addEventListener('click', () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? '▶' : '⏸';
+    pauseBtn.setAttribute('aria-label', paused ? 'Play strip' : 'Pause strip');
+
+    if (paused) {
+      pauseStart = performance.now();
+      if (rafId) cancelAnimationFrame(rafId);
+      return;
+    }
+
+    if (pauseStart) t0 += performance.now() - pauseStart;
+    rafId = requestAnimationFrame(frame);
+  });
+
 const VIEW_W = window.innerWidth;
 
 // 6-second strip shown full screen width
@@ -50,6 +91,7 @@ const HR    = 124;
 const RR_S  = 60 / HR;
 const RR_PX = RR_S * SPEED;
 const BASE  = CH * 0.58;
+  rafId = requestAnimationFrame(frame);
 const GAIN  = 0.95;
 
 // ── 3. Monitor grid (static, subtle) ─────────────────────────────
