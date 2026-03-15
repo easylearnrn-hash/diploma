@@ -76,13 +76,12 @@
   .ekg-wrap {
     position: relative;
     width: 100%;
-    height: 130px;
+    height: 110px;
     margin: 12px 0 6px;
     border-radius: 10px;
     overflow: hidden;
     background: #020a14;
     border: 1px solid rgba(45,212,191,.2);
-    /* subtle grid lines like real EKG paper */
     background-image:
       linear-gradient(rgba(45,212,191,.06) 1px, transparent 1px),
       linear-gradient(90deg, rgba(45,212,191,.06) 1px, transparent 1px),
@@ -90,18 +89,23 @@
       linear-gradient(90deg, rgba(45,212,191,.03) 1px, transparent 1px);
     background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
   }
-  .ekg-strip {
-    display: block;
-    height: 130px;
-    width: auto;
-    min-width: 200%;
-    object-fit: cover;
-    object-position: center;
+  /* Inner scroll track — holds two side-by-side copies of the image */
+  .ekg-track {
+    display: flex;
+    height: 100%;
     animation: ekg-scroll var(--ekg-speed, 8s) linear infinite;
     will-change: transform;
-    filter: brightness(1.1) saturate(0.8) sepia(0.2) hue-rotate(160deg) contrast(1.2);
   }
-  /* The glowing scan cursor line */
+  .ekg-track img {
+    display: block;
+    height: 110px;
+    width: auto;
+    flex-shrink: 0;
+    object-fit: contain;
+    object-position: center;
+    filter: brightness(1.05) saturate(0.75) sepia(0.15) hue-rotate(160deg) contrast(1.15);
+  }
+  /* Glowing scan cursor */
   .ekg-wrap::after {
     content: '';
     position: absolute;
@@ -121,15 +125,15 @@
     z-index: 3;
     pointer-events: none;
   }
-  /* Fade mask — dark edges left/right so strip appears to emerge from darkness */
+  /* Fade mask — edges fade to dark */
   .ekg-wrap::before {
     content: '';
     position: absolute;
     inset: 0;
     background: linear-gradient(to right,
       #020a14 0%,
-      transparent 8%,
-      transparent 75%,
+      transparent 6%,
+      transparent 78%,
       #020a14 100%);
     z-index: 2;
     pointer-events: none;
@@ -143,21 +147,20 @@
     from { left: 0%; }
     to   { left: 100%; }
   }
-  /* Per-rhythm speeds — matched to clinical heart rates */
-  .ekg-wrap.speed-brady   { --ekg-speed: 12s; }   /* <60 bpm — slow */
-  .ekg-wrap.speed-normal  { --ekg-speed: 8s;  }   /* 60–100 bpm */
-  .ekg-wrap.speed-tachy   { --ekg-speed: 5s;  }   /* 100–150 bpm */
-  .ekg-wrap.speed-svt     { --ekg-speed: 3.5s; }  /* >150 bpm */
-  .ekg-wrap.speed-flutter { --ekg-speed: 2.5s; }  /* 250–350 bpm */
-  .ekg-wrap.speed-vtach   { --ekg-speed: 3s;  }   /* 100–250 bpm */
-  .ekg-wrap.speed-vfib    { --ekg-speed: 2s;  }   /* chaotic/fast */
-  .ekg-wrap.speed-block1  { --ekg-speed: 9s;  }   /* normal rate */
-  .ekg-wrap.speed-block2  { --ekg-speed: 13s; }   /* 30–50 bpm */
-  .ekg-wrap.speed-block3  { --ekg-speed: 16s; }   /* 30–40 bpm — very slow */
-  .ekg-wrap.speed-asystole{ --ekg-speed: 20s; }   /* flatline — barely moves */
-  .ekg-wrap.speed-torsades{ --ekg-speed: 2s;  }   /* >200 bpm */
+  .ekg-wrap.speed-brady   { --ekg-speed: 12s; }
+  .ekg-wrap.speed-normal  { --ekg-speed: 8s;  }
+  .ekg-wrap.speed-tachy   { --ekg-speed: 5s;  }
+  .ekg-wrap.speed-svt     { --ekg-speed: 3.5s; }
+  .ekg-wrap.speed-flutter { --ekg-speed: 2.5s; }
+  .ekg-wrap.speed-vtach   { --ekg-speed: 3s;  }
+  .ekg-wrap.speed-vfib    { --ekg-speed: 2s;  }
+  .ekg-wrap.speed-block1  { --ekg-speed: 9s;  }
+  .ekg-wrap.speed-block2  { --ekg-speed: 13s; }
+  .ekg-wrap.speed-block3  { --ekg-speed: 16s; }
+  .ekg-wrap.speed-asystole{ --ekg-speed: 20s; }
+  .ekg-wrap.speed-torsades{ --ekg-speed: 2s;  }
   @media (prefers-reduced-motion: reduce) {
-    .ekg-strip { animation: none; }
+    .ekg-track { animation: none; }
     .ekg-wrap::after { animation: none; left: 50%; }
   }
 </style>
@@ -228,7 +231,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--green)">✅ Normal Sinus Rhythm</h3>
     <span class="hr-label">60–100 bpm</span>
-    <div class="ekg-wrap speed-normal"><img src="EKG/Normal_Sinus_Rhythm_.jpeg" alt="Normal Sinus Rhythm EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-normal"><div class="ekg-track"><img src="EKG/Normal_Sinus_Rhythm_.jpeg" alt="NSR"><img src="EKG/Normal_Sinus_Rhythm_.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Regular rhythm, consistent P waves before each narrow QRS</li>
       <li>PR interval 0.12–0.20 sec, flat ST segment</li>
@@ -240,7 +243,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--blue)">🐢 Sinus Bradycardia</h3>
     <span class="hr-label">&lt;60 bpm</span>
-    <div class="ekg-wrap speed-brady"><img src="EKG/Sinus_Bradycardia.jpeg" alt="Sinus Bradycardia EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-brady"><div class="ekg-track"><img src="EKG/Sinus_Bradycardia.jpeg" alt="Sinus Bradycardia"><img src="EKG/Sinus_Bradycardia.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Regular rhythm, normal P waves, normal PR interval</li>
       <li>Originates from SA node — just slow</li>
@@ -254,7 +257,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--orange)">⚡ Sinus Tachycardia</h3>
     <span class="hr-label">100–150 bpm</span>
-    <div class="ekg-wrap speed-tachy"><img src="EKG/Sinus_Tachycardia.jpeg" alt="Sinus Tachycardia EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-tachy"><div class="ekg-track"><img src="EKG/Sinus_Tachycardia.jpeg" alt="Sinus Tachycardia"><img src="EKG/Sinus_Tachycardia.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Regular rhythm, normal P waves, normal PR interval</li>
     </ul>
@@ -269,7 +272,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--purple)">🔼 SVT — Supraventricular Tachycardia</h3>
     <span class="hr-label">&gt;150 bpm</span>
-    <div class="ekg-wrap speed-svt"><img src="EKG/Supraventricular Tachycardia (SVT).jpeg" alt="SVT EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-svt"><div class="ekg-track"><img src="EKG/Supraventricular Tachycardia (SVT).jpeg" alt="SVT"><img src="EKG/Supraventricular Tachycardia (SVT).jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Regular, narrow QRS; P waves may be hidden in preceding T wave</li>
       <li>Rapid rhythm originating above ventricles</li>
@@ -287,7 +290,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">〰️ Atrial Flutter</h3>
     <span class="hr-label">Atrial: 250–350 bpm</span>
-    <div class="ekg-wrap speed-flutter"><img src="EKG/Atrial_Flutter.jpeg" alt="Atrial Flutter EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-flutter"><div class="ekg-track"><img src="EKG/Atrial_Flutter.jpeg" alt="Atrial Flutter"><img src="EKG/Atrial_Flutter.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Sawtooth-shaped <strong>flutter waves (F waves)</strong> between QRS complexes</li>
       <li>Risk of blood clot formation → <strong>risk of stroke</strong></li>
@@ -303,7 +306,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">〰️🌊 Atrial Fibrillation (A-Fib)</h3>
     <span class="hr-label">Irregular — variable rate</span>
-    <div class="ekg-wrap speed-tachy"><img src="EKG/Atrial_Fibrillation.jpeg" alt="Atrial Fibrillation EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-tachy"><div class="ekg-track"><img src="EKG/Atrial_Fibrillation.jpeg" alt="Atrial Fibrillation"><img src="EKG/Atrial_Fibrillation.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>No distinct P waves — <strong>wavy/chaotic baseline</strong></li>
       <li>Irregular rhythm; narrow QRS</li>
@@ -322,7 +325,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">💀 Ventricular Tachycardia (V-Tach)</h3>
     <span class="hr-label">100–250 bpm</span>
-    <div class="ekg-wrap speed-vtach"><img src="EKG/Ventricular_Tachycardia.jpeg" alt="Ventricular Tachycardia EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-vtach"><div class="ekg-track"><img src="EKG/Ventricular_Tachycardia.jpeg" alt="V-Tach"><img src="EKG/Ventricular_Tachycardia.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Wide, bizarre QRS complexes — <strong>no P waves</strong></li>
       <li>Often called "dead strip" or "dying patient rhythm"</li>
@@ -336,7 +339,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">💀 Ventricular Fibrillation (V-Fib)</h3>
     <span class="hr-label">No effective pulse</span>
-    <div class="ekg-wrap speed-vfib"><img src="EKG/Ventricular_Fibrillation.jpeg" alt="Ventricular Fibrillation EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-vfib"><div class="ekg-track"><img src="EKG/Ventricular_Fibrillation.jpeg" alt="V-Fib"><img src="EKG/Ventricular_Fibrillation.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Chaotic, irregular electrical activity — <strong>no QRS, no P waves</strong></li>
       <li>Immediately life-threatening — <em>shockable rhythm</em></li>
@@ -363,7 +366,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--green)">1° First-Degree AV Block</h3>
     <span class="hr-label">60–100 bpm (normal)</span>
-    <div class="ekg-wrap speed-block1"><img src="EKG/First-Degree AV Block.jpeg" alt="First-Degree AV Block EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-block1"><div class="ekg-track"><img src="EKG/First-Degree AV Block.jpeg" alt="1° AV Block"><img src="EKG/First-Degree AV Block.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Normal rhythm but <strong>prolonged PR interval</strong> (&gt;0.20 sec)</li>
       <li>Every P wave conducts — just slowly</li>
@@ -375,7 +378,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">2° Type I — Wenckebach (Mobitz I)</h3>
     <span class="hr-label">Variable</span>
-    <div class="ekg-wrap speed-block1"><img src="EKG/Second-Degree AV Block Type I.jpeg" alt="Second-Degree AV Block Type I EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-block1"><div class="ekg-track"><img src="EKG/Second-Degree AV Block Type I.jpeg" alt="2° Block Type I"><img src="EKG/Second-Degree AV Block Type I.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>PR interval <strong>progressively lengthens</strong> until a QRS is dropped (1 straight line between QRS groups)</li>
       <li>Caused by increased vagal tone or medications</li>
@@ -386,7 +389,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--orange)">2° Type II — Mobitz II</h3>
     <span class="hr-label">30–50 bpm (bradycardia)</span>
-    <div class="ekg-wrap speed-block2"><img src="EKG/Second-Degree AV Block Type II.jpeg" alt="Second-Degree AV Block Type II EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-block2"><div class="ekg-track"><img src="EKG/Second-Degree AV Block Type II.jpeg" alt="2° Block Type II"><img src="EKG/Second-Degree AV Block Type II.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Constant PR interval for conducted beats, but occasional non-conducted P waves</li>
       <li>Usually 2+ P waves before each QRS — <strong>multiple straight lines</strong></li>
@@ -398,7 +401,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">3° Complete Heart Block</h3>
     <span class="hr-label">30–40 bpm</span>
-    <div class="ekg-wrap speed-block3"><img src="EKG/Third-Degree AV Block.jpeg" alt="Third-Degree AV Block EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-block3"><div class="ekg-track"><img src="EKG/Third-Degree AV Block.jpeg" alt="3° AV Block"><img src="EKG/Third-Degree AV Block.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>P waves and QRS complexes are <strong>completely independent</strong> — no relationship</li>
       <li>No communication between atria and ventricles</li>
@@ -419,7 +422,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--muted)">📉 Asystole (Flatline)</h3>
     <span class="hr-label">No heart rate</span>
-    <div class="ekg-wrap speed-asystole"><img src="EKG/Asystole.jpeg" alt="Asystole EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-asystole"><div class="ekg-track"><img src="EKG/Asystole.jpeg" alt="Asystole"><img src="EKG/Asystole.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>Complete absence of electrical activity — <strong>flat line</strong></li>
       <li>No P waves, QRS, or T waves — <em>non-shockable rhythm</em></li>
@@ -433,7 +436,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--purple)">🌀 Torsades de Pointes</h3>
     <span class="hr-label">&gt;200 bpm</span>
-    <div class="ekg-wrap speed-torsades"><img src="EKG/Torsades de Pointes.jpeg" alt="Torsades de Pointes EKG strip" class="ekg-strip"></div>
+    <div class="ekg-wrap speed-torsades"><div class="ekg-track"><img src="EKG/Torsades de Pointes.jpeg" alt="Torsades de Pointes"><img src="EKG/Torsades de Pointes.jpeg" alt="" aria-hidden="true"></div></div>
     <ul>
       <li>QRS complexes <strong>twist around the baseline</strong> — characteristic "spindle" pattern</li>
       <li>Prolonged QT interval preceding onset</li>
