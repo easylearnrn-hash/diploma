@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Atrial Fibrillation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR    = window.devicePixelRatio || 1;
+const CH     = 110;
+const VIEW_W = window.innerWidth;
+
+const MM            = 3.78;
+const STRIP_SECONDS = 6;
+const CW    = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width  = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// A-Fib:
+//   No P waves — chaotic fibrillatory baseline
+//   Irregularly irregular QRS — RR intervals vary randomly
+//   Average ventricular rate ~120 bpm, range 80–160 bpm per beat
+//   Narrow QRS complexes
+const AVG_RR_S  = 60 / 120;        // average RR = 0.50 sec
+const BASE      = CH * 0.55;
+const GAIN      = 1.28;
+
+// ── 3. Monitor grid ───────────────────────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(x, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((x - mu) / sig) ** 2);
+}
+function tri(x, peak, up, dn, amp) {
+  if (x >= peak - up && x < peak)       return amp * (x - (peak - up)) / up;
+  if (x >= peak      && x <= peak + dn) return amp * (1 - (x - peak) / dn);
+  return 0;
+}
+
+// Seeded pseudo-random number generator — deterministic so tile is reproducible
+function makeRng(seed) {
+  let s = seed;
+  return function () {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+// Chaotic fibrillatory baseline: sum of several small sine waves at irregular
+// frequencies — produces the fine wiggly noise seen between QRS complexes.
+function fibBaseline(xPx, rng) {
+  // Fixed frequencies baked at tile-generation time using the rng offsets
+  return (
+    0.28 * Math.sin(xPx * 0.38 + 1.1) +
+    0.22 * Math.sin(xPx * 0.61 + 2.4) +
+    0.18 * Math.sin(xPx * 0.97 + 0.7) +
+    0.14 * Math.sin(xPx * 1.43 + 3.1) +
+    0.1  * Math.sin(xPx * 2.11 + 1.8) +
+    0.08 * Math.sin(xPx * 0.23 + 4.2)
+  );
+}
+
+// One QRS complex centred at pixel position cx, within the RR window.
+// f = (xPx - cx) in pixels, so the shape is always the same width
+function qrsAt(xPx, cx) {
+  const d = xPx - cx;
+  let v = 0;
+  v += tri(d, -3, 3, 2, -0.5);    // Q dip
+  v += tri(d,  0, 4, 4, 12.5);    // R — tall narrow spike
+  v += tri(d,  5, 3, 7, -2.6);    // S
+  return v;
+}
+
+// T wave after each QRS, centred ~20–25 px after cx
+function tWaveAt(xPx, cx, rrPx) {
+  const offset = rrPx * 0.28;
+  return gauss(xPx, cx + offset, rrPx * 0.09, 1.8);
+}
+
+// ── 5. Build irregular beat schedule and bake tile ───────────────
+// Tile = 3 full screen-widths so there is plenty of variation before looping
+const TILE_W = CW * 3;
+const rng    = makeRng(42);
+
+// Generate random RR intervals (in pixels) that fill the tile.
+// Each RR is drawn from AVG ± 40% to produce irregularly irregular spacing.
+const RR_AVG_PX = AVG_RR_S * SPEED;
+const beatPositions = [];
+let cursor = RR_AVG_PX * 0.5;   // first beat a half-RR in
+while (cursor < TILE_W) {
+  beatPositions.push(cursor);
+  // Random RR: 60–140% of average — true A-Fib irregularity
+  const jitter = 0.6 + rng() * 0.8;
+  cursor += RR_AVG_PX * jitter;
+}
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 2; i++) {
+    const xPx = i / 2;
+
+    // Start with fibrillatory baseline noise
+    let v = fibBaseline(xPx, rng);
+
+    // Add QRS and T contribution from every nearby beat
+    for (let b = 0; b < beatPositions.length; b++) {
+      const cx    = beatPositions[b];
+      const rrPx  = b + 1 < beatPositions.length
+        ? beatPositions[b + 1] - cx
+        : RR_AVG_PX;
+
+      // Only compute if we're within range of this beat
+      if (Math.abs(xPx - cx) < 30) {
+        v += qrsAt(xPx, cx);
+      }
+      if (Math.abs(xPx - (cx + rrPx * 0.28)) < rrPx * 0.25) {
+        v += tWaveAt(xPx, cx, rrPx);
+      }
+    }
+
+    const y = BASE - v * MM * GAIN;
+    i === 0 ? g.moveTo(xPx, y) : g.lineTo(xPx, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.2;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation ─────────────────────────────────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t        = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
