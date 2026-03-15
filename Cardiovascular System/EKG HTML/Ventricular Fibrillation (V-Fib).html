@@ -51,7 +51,7 @@ ctx.scale(DPR, DPR);
 //   No P waves, no QRS, no T waves
 //   The baseline writhes continuously with no repeating pattern
 const BASE = CH * 0.58;
-const GAIN = 0.72;
+const GAIN = 1.10;
 
 // ── 3. Monitor grid ───────────────────────────────────────────────
 function drawGridStatic() {
@@ -111,11 +111,11 @@ function makeComponents(count, freqMin, freqMax, ampMin, ampMax, rngFn) {
   return comps;
 }
 
-// Coarse V-Fib: equal amplitude, dense
-const coarse = makeComponents(18, 0.22, 0.42, 2, 2, rng);
+// Coarse V-Fib: reduced amplitude, dense
+const coarse = makeComponents(18, 0.22, 0.42, 0.6, 0.8, rng);
 
-// Fine V-Fib: equal amplitude, rapid ripples
-const fine   = makeComponents(28, 0.45, 0.9, 0.5, 0.5, rng);
+// Fine V-Fib: reduced amplitude, rapid ripples
+const fine   = makeComponents(28, 0.45, 0.9, 0.15, 0.25, rng);
 
 // Amplitude envelope: slow modulation so some areas look coarser/finer
 // (real V-Fib amplitude waxes and wanes)
@@ -129,7 +129,8 @@ function vfibV(xPx) {
   for (const c of fine) {
     v += c.amp * Math.sin(c.freq * xPx + c.phase);
   }
-  return v;
+  // clamp to ±3 so no single spike escapes the strip
+  return Math.max(-3, Math.min(3, v));
 }
 
 const wfTile = new OffscreenCanvas(TILE_W, CH);
