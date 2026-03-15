@@ -91,27 +91,26 @@ function tri(f, peak, up, dn, amp) {
 }
 
 function svtV(f) {
-  // SVT at 200 bpm: RR = 0.30 sec, f = 0..1 per beat.
-  // Narrow QRS (~0.07 s = ~23% of cycle), hidden/absent P wave,
-  // T wave fully contained before f=0.95 so there is zero bleed
-  // across the tile boundary → every beat is perfectly identical.
+  // SVT: narrow QRS, no P wave, regular rhythm.
+  // ALL components use gauss() — smooth & analytically peak-exact,
+  // so every beat has identical heights regardless of pixel alignment.
   let v = 0;
 
-  // QRS complex — narrow, symmetric, centred at f=0.12
-  v += tri(f, 0.100,  6/1000,  5/1000, -0.5);   // Q (tiny)
-  v += tri(f, 0.120,  8/1000,  8/1000, 15.0);   // R (tall, symmetric)
-  v += tri(f, 0.140,  6/1000,  9/1000, -2.2);   // S
+  // Q — tiny negative dip before R
+  v += gauss(f, 0.108, 5/1000, -0.6);
 
-  // ST segment: flat/near-baseline, brief
-  if (f >= 0.156 && f <= 0.22) {
-    v += -0.15 * (1 - (f - 0.156) / 0.064);
-  }
+  // R — tall, sharp, perfectly symmetric Gaussian
+  v += gauss(f, 0.120, 4/1000, 15.0);
 
-  // T wave: contained well within the cycle, sigma tight enough
-  // that it is essentially 0 by f=0.88 and by f=0.0 of next beat
-  v += gauss(f, 0.52, 70/1000, 4.8);
+  // S — narrow negative deflection after R
+  v += gauss(f, 0.133, 5/1000, -2.4);
 
-  // Flat baseline from ~f=0.88 → 1.0 (isoelectric before next QRS)
+  // ST: very slight negative curve, decays quickly
+  v += gauss(f, 0.175, 18/1000, -0.5);
+
+  // T wave: well-contained, decays to ~0 before f=0.90
+  v += gauss(f, 0.50, 65/1000, 4.8);
+
   return v;
 }
 
