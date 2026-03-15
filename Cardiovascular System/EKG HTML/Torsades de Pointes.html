@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Torsades de Pointes</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR    = window.devicePixelRatio || 1;
+const CH     = 110;
+const VIEW_W = window.innerWidth;
+
+const MM            = 3.78;
+const STRIP_SECONDS = 6;
+const CW    = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width  = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// Torsades de Pointes:
+//   Rate ~220 bpm, wide bizarre QRS complexes
+//   Classic "twisting around the baseline" — amplitude envelope is a slow
+//   sinusoid so peaks wax and wane over ~10–12 beats per spindle cycle.
+//   Polarity flips each half-spindle (positive → negative → positive).
+const HR     = 220;
+const RR_S   = 60 / HR;
+const RR_PX  = RR_S * SPEED;
+const BASE   = CH * 0.50;   // dead center — waveform twists both above and below
+
+// ── 3. Monitor grid ───────────────────────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(f, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+}
+
+// Single wide bizarre QRS complex for Torsades.
+// f = position within one RR cycle (0..1).
+// polarity = +1 or -1 (flips each half-spindle).
+// env = amplitude scalar from the spindle envelope (0..1).
+function tdpBeat(f, polarity, env) {
+  let v = 0;
+  // Wide slurred main deflection — broad Gaussian peak
+  v += gauss(f, 0.18, 55/1000, 11.0 * polarity);
+  // Opposite-polarity notch before/after (aberrant conduction slur)
+  v += gauss(f, 0.08, 22/1000, -3.5 * polarity);
+  v += gauss(f, 0.30, 28/1000, -4.2 * polarity);
+  // T wave — discordant (opposite to main deflection), merged at this rate
+  v += gauss(f, 0.62, 80/1000, -5.5 * polarity);
+  return v * env;
+}
+
+// ── 5. Bake tile ──────────────────────────────────────────────────
+// Tile = 3 full spindle cycles for a rich, long pattern before looping.
+// Each spindle = SPINDLE_BEATS beats. We use 11 beats per half-spindle
+// so one full spindle = 22 beats. Tile = 66 beats total.
+const SPINDLE_BEATS = 11;          // beats per half-spindle (one polarity)
+const FULL_SPINDLE  = SPINDLE_BEATS * 2;
+const TILE_BEATS    = FULL_SPINDLE * 3;
+const TILE_W        = Math.round(RR_PX * TILE_BEATS);
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 4; i++) {
+    const xPx  = i / 4;
+    const f    = (xPx % RR_PX) / RR_PX;
+
+    // Which beat number are we in (across the whole tile)?
+    const beatIdx = xPx / RR_PX;
+
+    // Position within the current spindle cycle (0..1)
+    const spindlePos = (beatIdx % FULL_SPINDLE) / FULL_SPINDLE;
+
+    // Amplitude envelope: sinusoidal spindle — peaks at 0.25 and 0.75
+    // (max amplitude at quarter and three-quarter points of each spindle)
+    const env = 0.15 + 0.85 * Math.abs(Math.sin(spindlePos * Math.PI));
+
+    // Polarity flips each half-spindle
+    const polarity = spindlePos < 0.5 ? +1 : -1;
+
+    const y = BASE - tdpBeat(f, polarity, env) * MM * 0.38;
+    i === 0 ? g.moveTo(xPx, y) : g.lineTo(xPx, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.4;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation ─────────────────────────────────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t        = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
