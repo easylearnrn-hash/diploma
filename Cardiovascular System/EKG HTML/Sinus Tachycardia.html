@@ -89,30 +89,28 @@ function tri(f, peak, up, dn, amp) {
   return 0;
 }
 function tachyV(f) {
-  // Sinus tachycardia keeps normal sinus morphology; the rate is faster.
+  // Sinus tachycardia: compressed intervals — P, PR, QRS, T all tighter
   let v = 0;
 
   // baseline wander (very subtle)
-  v += 0.04 * Math.sin(2 * Math.PI * f);
+  v += 0.03 * Math.sin(2 * Math.PI * f);
 
-  // P wave: present, normal, one before each QRS
-  v += gauss(f, 0.16, 20/1000, 1.5);
+  // P wave: earlier onset, slightly narrower at fast rate
+  v += gauss(f, 0.10, 16/1000, 1.5);
 
-  // PR interval stays normal/constant; QRS remains narrow
-  v += tri(f, 0.272,  7/1000,  5/1000, -1.1);   // Q
-  v += tri(f, 0.284,  8/1000,  8/1000, 11.4);   // R
-  v += tri(f, 0.304,  6/1000, 10/1000, -3.1);   // S
+  // PR interval compressed to ~0.14s at 124 bpm
+  // QRS: narrow, fires early
+  v += tri(f, 0.200,  6/1000,  4/1000, -1.1);   // Q
+  v += tri(f, 0.210,  7/1000,  7/1000, 11.4);   // R  ← much earlier
+  v += tri(f, 0.228,  5/1000,  8/1000, -3.1);   // S
 
-  // ST segment: near baseline
-  if (f >= 0.325 && f <= 0.405) {
-    v += 0.06 * (1 - (f - 0.325) / 0.08);
+  // ST segment: short, near baseline (tachycardia shortens ST)
+  if (f >= 0.244 && f <= 0.300) {
+    v += 0.05 * (1 - (f - 0.244) / 0.056);
   }
 
-  // T wave: normal, but closer to the next P wave because of the fast rate
-  v += gauss(f, 0.47, 42/1000, 2.5);
-
-  // tiny U wave: barely visible at this rate
-  v += gauss(f, 0.58, 14/1000, 0.06);
+  // T wave: compressed, peaks at ~0.36 (short QT at fast rate)
+  v += gauss(f, 0.355, 34/1000, 2.4);
 
   return v;
 }
