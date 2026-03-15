@@ -33,7 +33,7 @@ const VIEW_W = window.innerWidth;
 
 // 6-second strip shown full screen width
 const MM    = 3.78;
-const STRIP_SECONDS = 3.0;
+const STRIP_SECONDS = 6;
 const CW  = VIEW_W;
 const SPEED = CW / STRIP_SECONDS;
 
@@ -46,11 +46,11 @@ const ctx = canvas.getContext('2d', { alpha: false });
 ctx.scale(DPR, DPR);
 
 // ── 2. Constants ─────────────────────────────────────────────────
-const HR    = 145;
+const HR    = 124;
 const RR_S  = 60 / HR;
 const RR_PX = RR_S * SPEED;
-const BASE  = CH * 0.60;
-const GAIN  = 1.6;
+const BASE  = CH * 0.58;
+const GAIN  = 0.95;
 
 // ── 3. Monitor grid (static, subtle) ─────────────────────────────
 function drawGridStatic() {
@@ -89,27 +89,30 @@ function tri(f, peak, up, dn, amp) {
   return 0;
 }
 function tachyV(f) {
-  // Sinus tachycardia at 145 bpm — tight P-QRS-T, short QT, P merging toward T
+  // Sinus tachycardia keeps normal sinus morphology; the rate is faster.
   let v = 0;
 
-  // Slight baseline undulation
-  v += 0.03 * Math.sin(2 * Math.PI * f);
+  // baseline wander (very subtle)
+  v += 0.04 * Math.sin(2 * Math.PI * f);
 
-  // P wave: compact, early in cycle
-  v += gauss(f, 0.08, 14/1000, 1.4);
+  // P wave: present, normal, one before each QRS
+  v += gauss(f, 0.16, 20/1000, 1.5);
 
-  // QRS: narrow, fires quickly after P (short PR ~0.12s)
-  v += tri(f, 0.175,  5/1000,  4/1000, -1.0);   // Q
-  v += tri(f, 0.184,  6/1000,  6/1000, 12.2);   // R  ← tall sharp R
-  v += tri(f, 0.200,  5/1000,  7/1000, -3.0);   // S
+  // PR interval stays normal/constant; QRS remains narrow
+  v += tri(f, 0.272,  7/1000,  5/1000, -1.1);   // Q
+  v += tri(f, 0.284,  8/1000,  8/1000, 11.4);   // R
+  v += tri(f, 0.304,  6/1000, 10/1000, -3.1);   // S
 
-  // ST segment: very short (shortened at fast rate)
-  if (f >= 0.214 && f <= 0.265) {
-    v += 0.04 * (1 - (f - 0.214) / 0.051);
+  // ST segment: near baseline
+  if (f >= 0.325 && f <= 0.405) {
+    v += 0.06 * (1 - (f - 0.325) / 0.08);
   }
 
-  // T wave: short QT — T peak at ~0.32, close behind QRS
-  v += gauss(f, 0.315, 30/1000, 2.2);
+  // T wave: normal, but closer to the next P wave because of the fast rate
+  v += gauss(f, 0.47, 42/1000, 2.5);
+
+  // tiny U wave: barely visible at this rate
+  v += gauss(f, 0.58, 14/1000, 0.06);
 
   return v;
 }
