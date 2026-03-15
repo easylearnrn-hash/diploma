@@ -67,17 +67,19 @@ const ctx = canvas.getContext('2d', { alpha: false });
 ctx.scale(DPR, DPR);
 
 // ── 2. Constants ─────────────────────────────────────────────────
-// Cardiac tamponade: sinus tachy + low voltage + electrical alternans
+// Cardiac tamponade: sinus tachycardia (HR ~110) + low voltage + electrical alternans
 const HR    = 110;
 const RR_S  = 60 / HR;
 const RR_PX = RR_S * SPEED;
 const BASE  = CH * 0.58;
 const GAIN  = 0.95;
 
-// Alternans: beat-to-beat amplitude swing (low voltage overall)
-const ALT_A = 1.1;
-const ALT_B = 0.6;
-const LOW_VOLT = 0.9;
+// Alternans: even beats taller, odd beats shorter — both low voltage (~40-55% of normal)
+const AMP_A = 0.42;   // taller alternans beat
+const AMP_B = 0.26;   // shorter alternans beat
+
+// Tile holds 16 beats (8 alternans pairs) for seamless looping
+const TILE_BEATS = 16;
 
 // ── 3. Monitor grid (static, subtle) ─────────────────────────────
 function drawGridStatic() {
@@ -117,36 +119,23 @@ function tri(f, peak, up, dn, amp) {
 }
 
 function nsrV(f) {
-  // Normal sinus morphology (reused) — will be scaled down for low voltage
+  // Sinus tachycardia morphology — scaled by amp multiplier for low voltage + alternans
   let v = 0;
   v += 0.05 * Math.sin(2 * Math.PI * f);
-  v += gauss(f, 0.17, 22/1000, 1.6);
-  v += tri(f, 0.292,  7/1000,  5/1000, -1.2);
-  v += tri(f, 0.304,  8/1000,  8/1000, 11.8);
-  v += tri(f, 0.324,  6/1000, 11/1000, -3.2);
+  v += gauss(f, 0.17, 22/1000, 1.6);            // P wave
+  v += tri(f, 0.292,  7/1000,  5/1000, -1.2);   // Q
+  v += tri(f, 0.304,  8/1000,  8/1000, 11.8);   // R
+  v += tri(f, 0.324,  6/1000, 11/1000, -3.2);   // S
   if (f >= 0.345 && f <= 0.44) {
     v += 0.08 * (1 - (f - 0.345) / 0.095);
   }
-  v += gauss(f, 0.56, 50/1000, 2.8);
-  v += gauss(f, 0.72, 16/1000, 1/10);
+  v += gauss(f, 0.56, 50/1000, 2.8);            // T wave
+  v += gauss(f, 0.72, 16/1000, 0.1);            // U wave
   return v;
 }
 
-// ── 5. Bake waveform tile ─────────────────────────────────────────
-const TILE_W = Math.round(RR_PX * 16);
-const beats = [];
-let cursor = 0;
-let idx = 0;
-
-while (cursor < TILE_W + RR_PX) {
-  beats.push({
-    start: cursor,
-    rr: RR_PX,
-    amp: (idx % 2 === 0 ? ALT_A : ALT_B) * LOW_VOLT
-  });
-  cursor += RR_PX;
-  idx += 1;
-}
+// ── 5. Bake waveform tile (alternating amplitude beats) ──────────
+const TILE_W = Math.round(RR_PX * TILE_BEATS);
 
 const wfTile = new OffscreenCanvas(TILE_W, CH);
 (function bakeWaveform() {
@@ -154,21 +143,16 @@ const wfTile = new OffscreenCanvas(TILE_W, CH);
   g.clearRect(0, 0, TILE_W, CH);
 
   g.beginPath();
-  let beatIdx = 0;
-  let beat = beats[beatIdx];
-
   for (let i = 0; i <= TILE_W * 4; i++) {
     const x = i / 4;
-    while (x >= beat.start + beat.rr && beatIdx < beats.length - 1) {
-      beatIdx += 1;
-      beat = beats[beatIdx];
-    }
-
-    const f = (x - beat.start) / beat.rr;
-    const v = nsrV(f) * beat.amp;
+    const beatIdx = Math.floor(x / RR_PX);
+    const amp = (beatIdx % 2 === 0) ? AMP_A : AMP_B;
+    const f = (x % RR_PX) / RR_PX;
+    const v = nsrV(f) * amp;
     const y = BASE - v * MM * GAIN;
     i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
   }
+
   g.strokeStyle = '#2bff6b';
   g.lineWidth   = 2.4;
   g.lineJoin    = 'round';
