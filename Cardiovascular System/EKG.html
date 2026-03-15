@@ -72,98 +72,7 @@
   .badge.gold  { background: rgba(201,168,76,.15);  color: var(--gold); border: 1px solid rgba(201,168,76,.3); }
   .badge.blue  { background: rgba(96,165,250,.15);  color: var(--blue); border: 1px solid rgba(96,165,250,.3); }
 
-  /* ── EKG Strip Animation ─────────────────────────────────────────────── */
-  .ekg-wrap {
-    position: relative;
-    width: 100%;
-    height: 110px;
-    margin: 12px 0 6px;
-    border-radius: 10px;
-    overflow: hidden;
-    background: #020a14;
-    border: 1px solid rgba(45,212,191,.2);
-    background-image:
-      linear-gradient(rgba(45,212,191,.06) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(45,212,191,.06) 1px, transparent 1px),
-      linear-gradient(rgba(45,212,191,.03) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(45,212,191,.03) 1px, transparent 1px);
-    background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px;
-  }
-  /* Inner scroll track — holds two side-by-side copies of the image */
-  .ekg-track {
-    display: flex;
-    height: 100%;
-    animation: ekg-scroll var(--ekg-speed, 8s) linear infinite;
-    will-change: transform;
-  }
-  .ekg-track img {
-    display: block;
-    height: 110px;
-    width: auto;
-    flex-shrink: 0;
-    object-fit: contain;
-    object-position: center;
-    filter: brightness(1.05) saturate(0.75) sepia(0.15) hue-rotate(160deg) contrast(1.15);
-  }
-  /* Glowing scan cursor */
-  .ekg-wrap::after {
-    content: '';
-    position: absolute;
-    top: 0; bottom: 0;
-    left: 0;
-    width: 3px;
-    background: linear-gradient(to bottom,
-      transparent 0%,
-      rgba(74,222,128,.0) 10%,
-      rgba(74,222,128,.9) 45%,
-      rgba(74,222,128,1) 50%,
-      rgba(74,222,128,.9) 55%,
-      rgba(74,222,128,.0) 90%,
-      transparent 100%);
-    box-shadow: 0 0 8px 2px rgba(74,222,128,.6), 0 0 20px 4px rgba(74,222,128,.2);
-    animation: ekg-cursor var(--ekg-speed, 8s) linear infinite;
-    z-index: 3;
-    pointer-events: none;
-  }
-  /* Fade mask — edges fade to dark */
-  .ekg-wrap::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to right,
-      #020a14 0%,
-      transparent 6%,
-      transparent 78%,
-      #020a14 100%);
-    z-index: 2;
-    pointer-events: none;
-    border-radius: 10px;
-  }
-  @keyframes ekg-scroll {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-  }
-  @keyframes ekg-cursor {
-    from { left: 0%; }
-    to   { left: 100%; }
-  }
-  .ekg-wrap.speed-brady   { --ekg-speed: 12s; }
-  .ekg-wrap.speed-normal  { --ekg-speed: 8s;  }
-  .ekg-wrap.speed-tachy   { --ekg-speed: 5s;  }
-  .ekg-wrap.speed-svt     { --ekg-speed: 3.5s; }
-  .ekg-wrap.speed-flutter { --ekg-speed: 2.5s; }
-  .ekg-wrap.speed-vtach   { --ekg-speed: 3s;  }
-  .ekg-wrap.speed-vfib    { --ekg-speed: 2s;  }
-  .ekg-wrap.speed-block1  { --ekg-speed: 9s;  }
-  .ekg-wrap.speed-block2  { --ekg-speed: 13s; }
-  .ekg-wrap.speed-block3  { --ekg-speed: 16s; }
-  .ekg-wrap.speed-asystole{ --ekg-speed: 20s; }
-  .ekg-wrap.speed-torsades{ --ekg-speed: 2s;  }
-  @media (prefers-reduced-motion: reduce) {
-    .ekg-track { animation: none; }
-    .ekg-wrap::after { animation: none; left: 50%; }
-  }
-  /* Canvas-based live strip embed */
+  /* ── EKG iframe strips ──────────────────────────────────────────────── */
   .ekg-iframe {
     display: block;
     width: 100%;
@@ -172,6 +81,8 @@
     border-radius: 10px;
     margin: 12px 0 6px;
     overflow: hidden;
+    background: #000b00; /* dark bg while loading */
+    contain: strict;     /* layout/paint isolation — huge perf win */
   }
 </style>
   <link rel="stylesheet" href="../css/med-abbr-tooltip.css">
@@ -241,7 +152,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--green)">✅ Normal Sinus Rhythm</h3>
     <span class="hr-label">60–100 bpm</span>
-    <iframe src="EKG HTML/Normal Sinus Rhythm.html" class="ekg-iframe" title="Normal Sinus Rhythm live strip"></iframe>
+    <iframe data-src="EKG HTML/Normal Sinus Rhythm.html" class="ekg-iframe" title="Normal Sinus Rhythm live strip"></iframe>
     <ul>
       <li>Regular rhythm, consistent P waves before each narrow QRS</li>
       <li>PR interval 0.12–0.20 sec, flat ST segment</li>
@@ -253,7 +164,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--blue)">🐢 Sinus Bradycardia</h3>
     <span class="hr-label">&lt;60 bpm</span>
-    <iframe src="EKG HTML/Sinus Bradycardia.html" class="ekg-iframe" title="Sinus Bradycardia live strip"></iframe>
+    <iframe data-src="EKG HTML/Sinus Bradycardia.html" class="ekg-iframe" title="Sinus Bradycardia live strip"></iframe>
     <ul>
       <li>Regular rhythm, normal P waves, normal PR interval</li>
       <li>Originates from SA node — just slow</li>
@@ -267,7 +178,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--orange)">⚡ Sinus Tachycardia</h3>
     <span class="hr-label">100–150 bpm</span>
-    <iframe src="EKG HTML/Sinus Tachycardia.html" class="ekg-iframe" title="Sinus Tachycardia live strip"></iframe>
+    <iframe data-src="EKG HTML/Sinus Tachycardia.html" class="ekg-iframe" title="Sinus Tachycardia live strip"></iframe>
     <ul>
       <li>Regular rhythm, normal P waves, normal PR interval</li>
     </ul>
@@ -282,7 +193,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--purple)">🔼 SVT — Supraventricular Tachycardia</h3>
     <span class="hr-label">&gt;150 bpm</span>
-    <iframe src="EKG HTML/SVT — Supraventricular Tachycardia.html" class="ekg-iframe" title="SVT live strip"></iframe>
+    <iframe data-src="EKG HTML/SVT — Supraventricular Tachycardia.html" class="ekg-iframe" title="SVT live strip"></iframe>
     <ul>
       <li>Regular, narrow QRS; P waves may be hidden in preceding T wave</li>
       <li>Rapid rhythm originating above ventricles</li>
@@ -300,7 +211,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">〰️ Atrial Flutter</h3>
     <span class="hr-label">Atrial: 250–350 bpm</span>
-    <iframe src="EKG HTML/Atrial Flutter.html" class="ekg-iframe" title="Atrial Flutter live strip"></iframe>
+    <iframe data-src="EKG HTML/Atrial Flutter.html" class="ekg-iframe" title="Atrial Flutter live strip"></iframe>
     <ul>
       <li>Sawtooth-shaped <strong>flutter waves (F waves)</strong> between QRS complexes</li>
       <li>Risk of blood clot formation → <strong>risk of stroke</strong></li>
@@ -316,7 +227,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">〰️🌊 Atrial Fibrillation (A-Fib)</h3>
     <span class="hr-label">Irregular — variable rate</span>
-    <iframe src="EKG HTML/Atrial Fibrillation.html" class="ekg-iframe" title="Atrial Fibrillation live strip"></iframe>
+    <iframe data-src="EKG HTML/Atrial Fibrillation.html" class="ekg-iframe" title="Atrial Fibrillation live strip"></iframe>
     <ul>
       <li>No distinct P waves — <strong>wavy/chaotic baseline</strong></li>
       <li>Irregular rhythm; narrow QRS</li>
@@ -335,7 +246,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">💀 Ventricular Tachycardia (V-Tach)</h3>
     <span class="hr-label">100–250 bpm</span>
-    <iframe src="EKG HTML/Ventricular Tachycardia (V-Tach).html" class="ekg-iframe" title="Ventricular Tachycardia live strip"></iframe>
+    <iframe data-src="EKG HTML/Ventricular Tachycardia (V-Tach).html" class="ekg-iframe" title="Ventricular Tachycardia live strip"></iframe>
     <ul>
       <li>Wide, bizarre QRS complexes — <strong>no P waves</strong></li>
       <li>Often called "dead strip" or "dying patient rhythm"</li>
@@ -349,7 +260,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">💀 Ventricular Fibrillation (V-Fib)</h3>
     <span class="hr-label">No effective pulse</span>
-    <iframe src="EKG HTML/Ventricular Fibrillation (V-Fib).html" class="ekg-iframe" title="V-Fib EKG strip"></iframe>
+    <iframe data-src="EKG HTML/Ventricular Fibrillation (V-Fib).html" class="ekg-iframe" title="V-Fib EKG strip"></iframe>
     <ul>
       <li>Chaotic, irregular electrical activity — <strong>no QRS, no P waves</strong></li>
       <li>Immediately life-threatening — <em>shockable rhythm</em></li>
@@ -362,7 +273,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--blue)">〰️ NSR with PVCs</h3>
     <span class="hr-label">Regular with occasional irregular beats</span>
-    <iframe src="EKG HTML/NSR with PVC.html" class="ekg-iframe" title="NSR with PVCs EKG strip"></iframe>
+    <iframe data-src="EKG HTML/NSR with PVC.html" class="ekg-iframe" title="NSR with PVCs EKG strip"></iframe>
     <ul>
       <li>Normal beats with occasional <strong>wide, bizarre QRS</strong> (premature ventricular contractions)</li>
       <li>No P wave before PVC; compensatory pause follows</li>
@@ -377,7 +288,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--green)">1° First-Degree AV Block</h3>
     <span class="hr-label">60–100 bpm (normal)</span>
-    <iframe src="EKG HTML/First-Degree AV Block.html" class="ekg-iframe" title="1° AV Block EKG strip"></iframe>
+    <iframe data-src="EKG HTML/First-Degree AV Block.html" class="ekg-iframe" title="1° AV Block EKG strip"></iframe>
     <ul>
       <li>Normal rhythm but <strong>prolonged PR interval</strong> (&gt;0.20 sec)</li>
       <li>Every P wave conducts — just slowly</li>
@@ -389,7 +300,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--gold)">2° Type I — Wenckebach (Mobitz I)</h3>
     <span class="hr-label">Variable</span>
-    <iframe src="EKG HTML/Second-Degree AV Block Type I (Wenckebach).html" class="ekg-iframe" title="2° AV Block Type I EKG strip"></iframe>
+    <iframe data-src="EKG HTML/Second-Degree AV Block Type I (Wenckebach).html" class="ekg-iframe" title="2° AV Block Type I EKG strip"></iframe>
     <ul>
       <li>PR interval <strong>progressively lengthens</strong> until a QRS is dropped (1 straight line between QRS groups)</li>
       <li>Caused by increased vagal tone or medications</li>
@@ -400,7 +311,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--orange)">2° Type II — Mobitz II</h3>
     <span class="hr-label">30–50 bpm (bradycardia)</span>
-    <iframe src="EKG HTML/Second-Degree AV Block Type II (Mobitz II).html" class="ekg-iframe" title="2° AV Block Type II EKG strip"></iframe>
+    <iframe data-src="EKG HTML/Second-Degree AV Block Type II (Mobitz II).html" class="ekg-iframe" title="2° AV Block Type II EKG strip"></iframe>
     <ul>
       <li>Constant PR interval for conducted beats, but occasional non-conducted P waves</li>
       <li>Usually 2+ P waves before each QRS — <strong>multiple straight lines</strong></li>
@@ -412,7 +323,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--red)">3° Complete Heart Block</h3>
     <span class="hr-label">30–40 bpm</span>
-    <iframe src="EKG HTML/Third-Degree (Complete) Heart Block.html" class="ekg-iframe" title="3° Complete Heart Block EKG strip"></iframe>
+    <iframe data-src="EKG HTML/Third-Degree (Complete) Heart Block.html" class="ekg-iframe" title="3° Complete Heart Block EKG strip"></iframe>
     <ul>
       <li>P waves and QRS complexes are <strong>completely independent</strong> — no relationship</li>
       <li>No communication between atria and ventricles</li>
@@ -423,7 +334,7 @@
   <div class="section-title">Special Rhythms</div>
   <div class="rhythm-block">
     <h3 style="color:var(--blue)">📟 Artificial Pacemaker ECG</h3>
-    <iframe src="EKG HTML/Artificial Pacemaker ECG.html" class="ekg-iframe" title="Artificial Pacemaker ECG strip"></iframe>
+    <iframe data-src="EKG HTML/Artificial Pacemaker ECG.html" class="ekg-iframe" title="Artificial Pacemaker ECG strip"></iframe>
     <ul>
       <li>Regular rate dictated by pacemaker</li>
       <li><strong>Pacing spikes</strong> (small vertical lines) before P waves or QRS complexes</li>
@@ -434,7 +345,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--muted)">📉 Asystole (Flatline)</h3>
     <span class="hr-label">No heart rate</span>
-    <iframe src="EKG HTML/Asystole (Flatline).html" class="ekg-iframe" title="Asystole (Flatline) EKG strip"></iframe>
+    <iframe data-src="EKG HTML/Asystole (Flatline).html" class="ekg-iframe" title="Asystole (Flatline) EKG strip"></iframe>
     <ul>
       <li>Complete absence of electrical activity — <strong>flat line</strong></li>
       <li>No P waves, QRS, or T waves — <em>non-shockable rhythm</em></li>
@@ -448,7 +359,7 @@
   <div class="rhythm-block">
     <h3 style="color:var(--purple)">🌀 Torsades de Pointes</h3>
     <span class="hr-label">&gt;200 bpm</span>
-    <iframe src="EKG HTML/Torsades de Pointes.html" class="ekg-iframe" title="Torsades de Pointes live strip"></iframe>
+    <iframe data-src="EKG HTML/Torsades de Pointes.html" class="ekg-iframe" title="Torsades de Pointes live strip"></iframe>
     <ul>
       <li>QRS complexes <strong>twist around the baseline</strong> — characteristic "spindle" pattern</li>
       <li>Prolonged QT interval preceding onset</li>
@@ -462,7 +373,7 @@
 
   <!-- CARDIAC TAMPONADE EKG -->
   <div class="section-title">Cardiac Tamponade — EKG Findings</div>
-  <iframe src="EKG HTML/Cardiac Tamponade.html" class="ekg-iframe" title="Cardiac Tamponade EKG strip"></iframe>
+  <iframe data-src="EKG HTML/Cardiac Tamponade.html" class="ekg-iframe" title="Cardiac Tamponade EKG strip"></iframe>
   <div class="card red">
     <h3>EKG Signs of Tamponade</h3>
     <ul>
@@ -498,5 +409,47 @@
   <div class="alert teal"><strong>📌 NCLEX Priority Rule:</strong> Always check pulse first. Shockable = V-Fib / Pulseless V-Tach. Non-shockable = Asystole / PEA.</div>
 
 </div><!-- end note-body -->
+
+<script>
+// ── Lazy-load + viewport-pause for EKG strip iframes ─────────────
+// Strips only load their src when they scroll into view (±200px margin).
+// Strips that scroll out of view receive a pause message to stop their rAF loop.
+// Strips that scroll back in receive a play message.
+(function () {
+  const MARGIN = '200px';
+
+  // ── Loader: set src when near viewport ──
+  const loadObserver = new IntersectionObserver((entries) => {
+    entries.forEach(el => {
+      if (el.isIntersecting) {
+        const iframe = el.target;
+        if (!iframe.src || iframe.src === window.location.href) {
+          iframe.src = iframe.dataset.src;
+        }
+        loadObserver.unobserve(iframe);
+      }
+    });
+  }, { rootMargin: MARGIN });
+
+  // ── Pause/play: message strip when it enters/leaves viewport ──
+  const visObserver = new IntersectionObserver((entries) => {
+    entries.forEach(el => {
+      const iframe = el.target;
+      // Only message if already loaded
+      if (!iframe.src || iframe.src === window.location.href) return;
+      try {
+        iframe.contentWindow.postMessage(
+          el.isIntersecting ? 'ekgPlay' : 'ekgPause', '*'
+        );
+      } catch(e) {}
+    });
+  }, { rootMargin: '0px' });
+
+  document.querySelectorAll('iframe.ekg-iframe').forEach(iframe => {
+    loadObserver.observe(iframe);
+    visObserver.observe(iframe);
+  });
+}());
+</script>
 </body>
 </html>
