@@ -71,6 +71,8 @@
     HS:      'Hour of Sleep / Bedtime',
 
     // ── Cardiology ───────────────────────────────────────────────────
+    RV:      'Right Ventricle',
+    LV:      'Left Ventricle',
     MI:      'Myocardial Infarction',
     STEMI:   'ST-Elevation Myocardial Infarction',
     NSTEMI:  'Non-ST-Elevation Myocardial Infarction',
@@ -702,7 +704,7 @@
 
     // ── Surgical / Procedures ────────────────────────────────────────
     GA:      'General Anesthesia',
-    LA:      'Local Anesthesia',
+    LA:      'Left Atrium',
     RA_surg: 'Regional Anesthesia',
     Cx:      'Complication',
     POD:     'Postoperative Day',
@@ -1024,8 +1026,28 @@
   /* ─────────────────────────────────────────────
      PUBLIC API
   ───────────────────────────────────────────── */
+  function applyContextualOverrides(doc) {
+    let contextText = window.location.href.toLowerCase();
+    const tagEl = doc.querySelector('.note-tag') || doc.querySelector('.acnhs-pdf-tag') || doc.querySelector('.subtitle');
+    if (tagEl && tagEl.textContent) {
+      contextText += ' ' + tagEl.textContent.toLowerCase();
+    }
+    
+    // Cardiovascular context detection
+    if (contextText.includes('cardio') || contextText.includes('ekg') || contextText.includes('ecg') || contextText.includes('heart') || contextText.includes('blood') || contextText.includes('circulation') || contextText.includes('hemo') || contextText.includes('vascular')) {
+      ABBR_DICT['RA'] = 'Right Atrium';
+      ABBR_DICT['LA'] = 'Left Atrium';
+      ABBR_DICT['RV'] = 'Right Ventricle';
+      ABBR_DICT['LV'] = 'Left Ventricle';
+    } else {
+      ABBR_DICT['RA'] = 'Rheumatoid Arthritis';
+      ABBR_DICT['LA'] = 'Local Anesthesia';
+    }
+  }
+
   function init(root, doc) {
     const d = doc || document;
+    applyContextualOverrides(d);
     injectFallbackCSS(d);
     scan(root, d);
   }
