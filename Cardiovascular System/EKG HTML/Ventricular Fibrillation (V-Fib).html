@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ventricular Fibrillation (V-Fib)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR    = window.devicePixelRatio || 1;
+const CH     = 110;
+const VIEW_W = window.innerWidth;
+
+const MM            = 3.78;
+const STRIP_SECONDS = 6;
+const CW    = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width  = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width  = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// V-Fib:
+//   Completely chaotic — no organized complexes whatsoever
+//   Varying amplitude and frequency — coarse to fine fibrillation
+//   No P waves, no QRS, no T waves
+//   The baseline writhes continuously with no repeating pattern
+const BASE = CH * 0.58;
+const GAIN = 0.72;
+
+// ── 3. Monitor grid ───────────────────────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Seeded RNG ─────────────────────────────────────────────────
+function makeRng(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 0x100000000;
+  };
+}
+
+// ── 5. Bake V-Fib waveform ────────────────────────────────────────
+// V-Fib = sum of many sine components at chaotic frequencies/phases/amplitudes.
+// We use two layers:
+//   COARSE: slow large undulations (dominant in coarse V-Fib)
+//   FINE:   rapid small ripples superimposed (the "fibrillatory" texture)
+// Both layers use non-harmonic frequencies so they never perfectly repeat.
+// Tile = 4× screen width for a very long non-repeating stretch.
+
+const TILE_W = CW * 4;
+const rng    = makeRng(7);
+
+// Build random sine components for each layer
+function makeComponents(count, freqMin, freqMax, ampMin, ampMax, rngFn) {
+  const comps = [];
+  for (let i = 0; i < count; i++) {
+    comps.push({
+      freq:  freqMin + rngFn() * (freqMax - freqMin),
+      amp:   ampMin  + rngFn() * (ampMax  - ampMin),
+      phase: rngFn() * Math.PI * 2
+    });
+  }
+  return comps;
+}
+
+// Coarse V-Fib: equal amplitude, dense
+const coarse = makeComponents(18, 0.22, 0.42, 2, 2, rng);
+
+// Fine V-Fib: equal amplitude, rapid ripples
+const fine   = makeComponents(28, 0.45, 0.9, 0.5, 0.5, rng);
+
+// Amplitude envelope: slow modulation so some areas look coarser/finer
+// (real V-Fib amplitude waxes and wanes)
+const env = makeComponents(4, 0.004, 0.012, 0.3, 0.7, rng);
+
+function vfibV(xPx) {
+  let v = 0;
+  for (const c of coarse) {
+    v += c.amp * Math.sin(c.freq * xPx + c.phase);
+  }
+  for (const c of fine) {
+    v += c.amp * Math.sin(c.freq * xPx + c.phase);
+  }
+  return v;
+}
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  for (let i = 0; i <= TILE_W * 2; i++) {
+    const xPx = i / 2;
+    const y   = BASE - vfibV(xPx) * MM * GAIN;
+    i === 0 ? g.moveTo(xPx, y) : g.lineTo(xPx, y);
+  }
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.2;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation ─────────────────────────────────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t        = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
