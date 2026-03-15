@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Second-Degree AV Block Type II (Mobitz II)</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    canvas {
+      width: 100vw;
+      height: 110px;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+// ── 1. Setup ─────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+
+const DPR = window.devicePixelRatio || 1;
+const CH  = 110;
+const VIEW_W = window.innerWidth;
+
+// 6-second strip shown full screen width
+const MM    = 3.78;
+const STRIP_SECONDS = 6;
+const CW  = VIEW_W;
+const SPEED = CW / STRIP_SECONDS;
+
+canvas.width = Math.round(CW * DPR);
+canvas.height = Math.round(CH * DPR);
+canvas.style.width = CW + 'px';
+canvas.style.height = CH + 'px';
+
+const ctx = canvas.getContext('2d', { alpha: false });
+ctx.scale(DPR, DPR);
+
+// ── 2. Constants ─────────────────────────────────────────────────
+// Mobitz II: fixed PR interval with intermittent dropped QRS complexes
+const HR_BASE = 72;
+const RR_BASE_S  = 60 / HR_BASE;
+const RR_BASE_PX = RR_BASE_S * SPEED;
+const BASE  = CH * 0.58;
+const GAIN  = 0.95;
+
+// Pattern: 2 conducted beats then 1 dropped QRS (3:2 conduction)
+// PR interval stays constant on conducted beats
+const PR_SHIFT = 0.292; // normal PR start
+const PATTERN = [
+  { dropped: false },
+  { dropped: false },
+  { dropped: true }
+];
+
+// ── 3. Monitor grid (static, subtle) ─────────────────────────────
+function drawGridStatic() {
+  const sm = MM, lg = MM * 5;
+  ctx.fillStyle = '#000b00';
+  ctx.fillRect(0, 0, CW, CH);
+
+  // Minor grid (1 mm) — subtle
+  ctx.strokeStyle = 'rgba(0, 160, 0, 0.12)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += sm) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += sm) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+
+  // Major grid (5 mm) — a bit stronger
+  ctx.strokeStyle = 'rgba(0, 255, 120, 0.22)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= CW; x += lg) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CH); ctx.stroke();
+  }
+  for (let y = 0; y <= CH; y += lg) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CW, y); ctx.stroke();
+  }
+}
+
+// ── 4. Waveform math ─────────────────────────────────────────────
+function gauss(f, mu, sig, amp) {
+  return amp * Math.exp(-0.5 * ((f - mu) / sig) ** 2);
+}
+function tri(f, peak, up, dn, amp) {
+  if (f >= peak - up && f < peak)       return amp * (f - (peak - up)) / up;
+  if (f >= peak      && f <= peak + dn) return amp * (1 - (f - peak) / dn);
+  return 0;
+}
+
+function pWave(f) {
+  return gauss(f, 0.17, 22/1000, 1.6);
+}
+
+function qrsComplex(f, shift) {
+  const q = shift;
+  const r = shift + 0.012;
+  const s = shift + 0.032;
+  return (
+    tri(f, q, 7/1000, 5/1000, -1.2) +
+    tri(f, r, 8/1000, 8/1000, 11.8) +
+    tri(f, s, 6/1000, 11/1000, -3.2)
+  );
+}
+
+function stSegment(f, shift) {
+  const start = shift + 0.053;
+  const end = shift + 0.148;
+  if (f >= start && f <= end) {
+    return 0.08 * (1 - (f - start) / (end - start));
+  }
+  return 0;
+}
+
+function tWave(f, shift) {
+  return gauss(f, shift + 0.26, 50/1000, 2.8);
+}
+
+function uWave(f, shift) {
+  return gauss(f, shift + 0.42, 16/1000, 1/10);
+}
+
+function mobitzIIV(f, dropped) {
+  let v = 0;
+  v += 0.05 * Math.sin(2 * Math.PI * f);
+  v += pWave(f);
+
+  if (!dropped) {
+    v += qrsComplex(f, PR_SHIFT);
+    v += stSegment(f, PR_SHIFT);
+    v += tWave(f, PR_SHIFT);
+    v += uWave(f, PR_SHIFT);
+  }
+
+  return v;
+}
+
+// ── 5. Bake waveform tile ─────────────────────────────────────────
+const TILE_W = Math.round(RR_BASE_PX * 18);
+const beats = [];
+let cursor = 0;
+let idx = 0;
+
+while (cursor < TILE_W + RR_BASE_PX) {
+  const step = PATTERN[idx % PATTERN.length];
+  beats.push({
+    start: cursor,
+    rr: RR_BASE_PX,
+    dropped: step.dropped
+  });
+  cursor += RR_BASE_PX;
+  idx += 1;
+}
+
+const wfTile = new OffscreenCanvas(TILE_W, CH);
+(function bakeWaveform() {
+  const g = wfTile.getContext('2d');
+  g.clearRect(0, 0, TILE_W, CH);
+
+  g.beginPath();
+  let beatIdx = 0;
+  let beat = beats[beatIdx];
+
+  for (let i = 0; i <= TILE_W * 4; i++) {
+    const x = i / 4;
+    while (x >= beat.start + beat.rr && beatIdx < beats.length - 1) {
+      beatIdx += 1;
+      beat = beats[beatIdx];
+    }
+
+    const f = (x - beat.start) / beat.rr;
+    const v = mobitzIIV(f, beat.dropped);
+    const y = BASE - v * MM * GAIN;
+    i === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+  }
+
+  g.strokeStyle = '#2bff6b';
+  g.lineWidth   = 2.4;
+  g.lineJoin    = 'round';
+  g.lineCap     = 'round';
+  g.stroke();
+}());
+
+// ── 6. Animation — animated 6-second strip ──────────────────────
+let t0 = null;
+function frame(ts) {
+  if (!t0) t0 = ts;
+
+  const t = (ts - t0) * 0.001;
+  const scrollPx = (t * SPEED) % TILE_W;
+
+  drawGridStatic();
+
+  let srcX = scrollPx;
+  let dstX = 0;
+
+  while (dstX < CW) {
+    const sliceW = Math.min(TILE_W - srcX, CW - dstX);
+    ctx.drawImage(wfTile, srcX, 0, sliceW, CH, dstX, 0, sliceW, CH);
+    dstX += sliceW;
+    srcX = 0;
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
