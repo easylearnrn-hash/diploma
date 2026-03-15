@@ -33,7 +33,7 @@ const VIEW_W = window.innerWidth;
 
 // 6-second strip shown full screen width
 const MM    = 3.78;
-const STRIP_SECONDS = 3.5;
+const STRIP_SECONDS = 3.0;
 const CW  = VIEW_W;
 const SPEED = CW / STRIP_SECONDS;
 
@@ -46,11 +46,11 @@ const ctx = canvas.getContext('2d', { alpha: false });
 ctx.scale(DPR, DPR);
 
 // ── 2. Constants ─────────────────────────────────────────────────
-const HR    = 124;
+const HR    = 145;
 const RR_S  = 60 / HR;
 const RR_PX = RR_S * SPEED;
-const BASE  = CH * 0.62;
-const GAIN  = 1.28;
+const BASE  = CH * 0.60;
+const GAIN  = 1.6;
 
 // ── 3. Monitor grid (static, subtle) ─────────────────────────────
 function drawGridStatic() {
@@ -89,28 +89,27 @@ function tri(f, peak, up, dn, amp) {
   return 0;
 }
 function tachyV(f) {
-  // Sinus tachycardia: compressed intervals — P, PR, QRS, T all tighter
+  // Sinus tachycardia at 145 bpm — tight P-QRS-T, short QT, P merging toward T
   let v = 0;
 
-  // baseline wander (very subtle)
+  // Slight baseline undulation
   v += 0.03 * Math.sin(2 * Math.PI * f);
 
-  // P wave: earlier onset, slightly narrower at fast rate
-  v += gauss(f, 0.10, 16/1000, 1.5);
+  // P wave: compact, early in cycle
+  v += gauss(f, 0.08, 14/1000, 1.4);
 
-  // PR interval compressed to ~0.14s at 124 bpm
-  // QRS: narrow, fires early
-  v += tri(f, 0.200,  6/1000,  4/1000, -1.1);   // Q
-  v += tri(f, 0.210,  7/1000,  7/1000, 11.4);   // R  ← much earlier
-  v += tri(f, 0.228,  5/1000,  8/1000, -3.1);   // S
+  // QRS: narrow, fires quickly after P (short PR ~0.12s)
+  v += tri(f, 0.175,  5/1000,  4/1000, -1.0);   // Q
+  v += tri(f, 0.184,  6/1000,  6/1000, 12.2);   // R  ← tall sharp R
+  v += tri(f, 0.200,  5/1000,  7/1000, -3.0);   // S
 
-  // ST segment: short, near baseline (tachycardia shortens ST)
-  if (f >= 0.244 && f <= 0.300) {
-    v += 0.05 * (1 - (f - 0.244) / 0.056);
+  // ST segment: very short (shortened at fast rate)
+  if (f >= 0.214 && f <= 0.265) {
+    v += 0.04 * (1 - (f - 0.214) / 0.051);
   }
 
-  // T wave: compressed, peaks at ~0.36 (short QT at fast rate)
-  v += gauss(f, 0.355, 34/1000, 2.4);
+  // T wave: short QT — T peak at ~0.32, close behind QRS
+  v += gauss(f, 0.315, 30/1000, 2.2);
 
   return v;
 }
