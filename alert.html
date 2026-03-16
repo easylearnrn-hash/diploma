@@ -2058,17 +2058,8 @@
           showNotification('Alert created successfully!', 'success');
         }
 
-  // Reset form
-  document.getElementById('create-alert-form').reset();
-  const editor = document.getElementById('alert-message-editor');
-  if (editor) editor.innerHTML = '';
-  setSelectedPages([]);
-  toggleStudentSelector();
-  toggleDisplayOptions();
-  toggleDateOptions();
-  toggleResponseOptions();
-  const submitBtn = document.querySelector('#create-alert-form button[type="submit"]');
-  if (submitBtn) submitBtn.textContent = 'Publish Alert';
+        // Full reset regardless of create vs update
+        resetAlertForm();
         await loadAlerts();
 
         // Switch to manage tab
@@ -2451,7 +2442,16 @@
         if (targetTypeValue === 'group') {
           const groupField = document.getElementById('alert-group-selector');
           const groupValue = targetingRules.groups?.[0] || alert.target_group || '';
-          if (groupField) groupField.value = groupValue;
+          if (groupField && groupValue) {
+            // If the option doesn't exist yet, add it so the value sticks
+            if (!Array.from(groupField.options).find(o => o.value === groupValue)) {
+              const opt = document.createElement('option');
+              opt.value = groupValue;
+              opt.textContent = groupValue;
+              groupField.appendChild(opt);
+            }
+            groupField.value = groupValue;
+          }
         }
 
         if (targetTypeValue === 'individual') {
@@ -3392,7 +3392,34 @@
     }
 
     function openCreateModal() {
+      // Full form reset so we start fresh (not accidentally updating an existing alert)
+      resetAlertForm();
       document.querySelector('.tab[data-tab="create"]').click();
+    }
+
+    function resetAlertForm() {
+      const form = document.getElementById('create-alert-form');
+      if (form) {
+        form.reset();
+        delete form.dataset.editingAlertId;
+      }
+      const editor = document.getElementById('alert-message-editor');
+      if (editor) editor.innerHTML = '';
+      const hiddenMsg = document.getElementById('alert-message');
+      if (hiddenMsg) hiddenMsg.value = '';
+      const triggerField = document.getElementById('alert-trigger-selector');
+      if (triggerField) triggerField.value = '';
+      const dynButtons = document.getElementById('alert-dynamic-buttons');
+      if (dynButtons) dynButtons.innerHTML = '<option value="">2. Select a Button / Action...</option>';
+      const pageScannerSelect = document.getElementById('alert-page-scanner');
+      if (pageScannerSelect) pageScannerSelect.value = '';
+      setSelectedPages([]);
+      toggleStudentSelector();
+      toggleDisplayOptions();
+      toggleDateOptions();
+      toggleResponseOptions();
+      const submitBtn = document.querySelector('#create-alert-form button[type="submit"]');
+      if (submitBtn) submitBtn.textContent = 'Publish Alert';
     }
 
     // ==========================================
