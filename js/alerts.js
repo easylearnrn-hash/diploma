@@ -29,9 +29,21 @@
   function boot() {
     if (typeof initSupabase === 'function') { db = initSupabase(); }
     if (!db) { setTimeout(boot, 500); return; }
+    // Wait for student profile to be saved to sessionStorage (fetchStudentProfile is async)
+    waitForStudent(0);
+  }
+
+  function waitForStudent(attempts) {
     student = readStudent();
-    console.log('Alerts: ready. student=' + (student ? student.id : 'anon'));
-    run();
+    if (student || attempts >= 20) {
+      // Student found (or gave up after 10s) — run
+      console.log('Alerts: ready. student=' + (student ? (student.full_name || student.id) : 'anon') +
+                  (student ? ' group=' + (student.group || student.group_name || student.enrollment_group || student.program || 'none') : ''));
+      run();
+    } else {
+      // Student not in storage yet — retry in 500ms (profile is still loading)
+      setTimeout(function() { waitForStudent(attempts + 1); }, 500);
+    }
   }
 
   if (document.readyState === 'loading') {
@@ -56,9 +68,10 @@
             full_name:        p.full_name         || p.fullName         || null,
             email:            p.email             || null,
             // Keep ALL group fields so matchesAudience can check any of them
+            // Note: DB column is literally named "group" (reserved word) - stored as p.group
             enrollment_group: p.enrollment_group  || p.enrollmentGroup  || null,
             group_name:       p.group_name        || p.groupName        || null,
-            group:            p.group             || null,
+            group:            p['group']          || null,
             program:          p.program           || null
           };
         }
