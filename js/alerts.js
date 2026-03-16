@@ -29,20 +29,47 @@
   function boot() {
     if (typeof initSupabase === 'function') { db = initSupabase(); }
     if (!db) { setTimeout(boot, 500); return; }
-    // Wait for student profile to be saved to sessionStorage (fetchStudentProfile is async)
-    waitForStudent(0);
+    loadStudentThenRun(0);
   }
 
-  function waitForStudent(attempts) {
+  /* Try sessionStorage first; if not there yet, query Supabase directly */
+  async function loadStudentThenRun(attempts) {
     student = readStudent();
-    if (student || attempts >= 20) {
-      // Student found (or gave up after 10s) — run
-      console.log('Alerts: ready. student=' + (student ? (student.full_name || student.id) : 'anon') +
-                  (student ? ' group=' + (student.group || student.group_name || student.enrollment_group || student.program || 'none') : ''));
+    if (student) {
+      console.log('Alerts: student from storage — ' + (student.full_name || student.id) +
+        ' | group=' + (student['group'] || student.group_name || student.enrollment_group || student.program || 'none'));
       run();
+      return;
+    }
+    // Not in storage yet — try to load directly from Supabase using stored IDs
+    var recordId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId');
+    if (recordId && db) {
+      try {
+        var res = await db.from('students').select('id,student_id,full_name,email,program,group,group_name,enrollment_group').eq('id', recordId).maybeSingle();
+        if (res.data) {
+          student = {
+            id:               res.data.id,
+            student_id:       res.data.student_id || null,
+            full_name:        res.data.full_name   || null,
+            email:            res.data.email       || null,
+            enrollment_group: res.data.enrollment_group || null,
+            group_name:       res.data.group_name  || null,
+            group:            res.data['group']    || null,
+            program:          res.data.program     || null
+          };
+          console.log('Alerts: student from DB — ' + (student.full_name || student.id) +
+            ' | group=' + (student['group'] || student.group_name || student.program || 'none'));
+          run();
+          return;
+        }
+      } catch(e) { console.warn('Alerts: DB student lookup failed', e); }
+    }
+    if (attempts < 20) {
+      // Still waiting for profile load — retry
+      setTimeout(function() { loadStudentThenRun(attempts + 1); }, 500);
     } else {
-      // Student not in storage yet — retry in 500ms (profile is still loading)
-      setTimeout(function() { waitForStudent(attempts + 1); }, 500);
+      console.log('Alerts: no student found after 10s — running as anon');
+      run();
     }
   }
 
@@ -164,7 +191,7 @@
       var studentGroups = [
         student.enrollment_group,
         student.group_name,
-        student.group,
+        student['group'],
         student.program
       ].filter(Boolean).map(function(g){ return String(g).trim().toLowerCase(); });
 
@@ -175,8 +202,14 @@
       var tr   = safeJson(a.targeting_rules);
       var ruleGroups = Array.isArray(tr.groups) ? tr.groups : (flat ? [flat] : []);
 
-      // No group restriction set → show to all
+      // No group restriction set → show to everyone
       if (!ruleGroups.length && !flat) return true;
+
+      // Student has no group data → show anyway (don't punish missing metadata)
+      if (!studentGroups.length) {
+        console.log('Alerts: student has no group data — showing alert anyway');
+        return true;
+      }
 
       var candidates = ruleGroups.length ? ruleGroups : [flat];
       for (var i = 0; i < candidates.length; i++) {
