@@ -1029,26 +1029,23 @@
                   <select id="alert-page-scanner" class="form-control" style="width: 240px;" onchange="scanPageForButtons(this.value)">
                      <option value="">1. Pick a Page to Scan…</option>
                      <optgroup label="Student Portal">
-                       <option value="hub.html">Student Hub</option>
-                       <option value="studies-portal.html">Studies Portal</option>
-                       <option value="notes.html">Notes Library</option>
-                       <option value="student-email.html">Student Email</option>
-                       <option value="student-card.html">Student Card</option>
-                       <option value="invoice.html">Invoices / Financial</option>
-                       <option value="invoice-view.html">Invoice View</option>
-                       <option value="acceptance-letter.html">Acceptance Letter</option>
+                       <option value="Student-page.html">📋 Student Portal (Dashboard, Financial, Grades tabs)</option>
+                       <option value="hub.html">🏠 Student Hub (Sidebar nav)</option>
+                       <option value="studies-portal.html">📚 Studies Portal</option>
+                       <option value="invoice.html">💰 Invoices / Financial</option>
+                       <option value="student-email.html">📧 Student Email</option>
+                       <option value="student-card.html">🪪 Student Card</option>
+                       <option value="acceptance-letter.html">📄 Acceptance Letter</option>
                      </optgroup>
                      <optgroup label="Application Flow">
-                       <option value="admission-form.html">Admission Form</option>
-                       <option value="application-status.html">Application Status</option>
-                       <option value="final-form.html">Final Form</option>
-                       <option value="login.html">Login</option>
+                       <option value="admission-form.html">📝 Admission Form</option>
+                       <option value="application-status.html">📊 Application Status</option>
+                       <option value="final-form.html">✅ Final Form</option>
+                       <option value="login.html">🔐 Login</option>
                      </optgroup>
                      <optgroup label="Academic / Testing">
-                       <option value="test.html">Test Platform</option>
-                       <option value="fundamentals-nursing-nclex.html">Fundamentals NCLEX</option>
-                       <option value="informed-consent-nursing.html">Informed Consent</option>
-                       <option value="delegation-nursing-nclex.html">Delegation NCLEX</option>
+                       <option value="test.html">🧪 Test Platform</option>
+                       <option value="fundamentals-nursing-nclex.html">📖 Fundamentals NCLEX</option>
                      </optgroup>
                   </select>
                   <select id="alert-dynamic-buttons" class="form-control" style="flex: 1;" onchange="if(this.value) document.getElementById('alert-trigger-selector').value = this.value;">
@@ -1450,53 +1447,70 @@
         const text = await resp.text();
         const doc = new DOMParser().parseFromString(text, 'text/html');
 
-        // Collect all clickable elements
-        const els = doc.querySelectorAll('a[href], a[data-view], button, [onclick], input[type="submit"], input[type="button"]');
+        // Remove script/style/svg noise from cloned doc for text reading
+        doc.querySelectorAll('script, style, noscript').forEach(el => el.remove());
+
+        // Collect ALL clickable elements
+        const els = Array.from(doc.querySelectorAll(
+          'button, a[href], a[data-view], a[onclick], [onclick], input[type="submit"], input[type="button"], [data-tab], [data-section], [role="tab"], [role="button"]'
+        ));
 
         const options = [];
         const seen = new Set();
 
         els.forEach(el => {
-          let label = el.textContent.replace(/\s+/g, ' ').trim();
-          // Strip SVG text noise
+          // Build clean readable label — strip SVG text
           el.querySelectorAll('svg').forEach(s => s.remove());
-          label = el.textContent.replace(/\s+/g, ' ').trim();
-          if (!label || label.length < 2) label = el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('value') || '(icon button)';
-          if (label.length > 50) label = label.substring(0, 50) + '…';
+          let label = el.textContent.replace(/\s+/g, ' ').trim();
+          if (!label || label.length < 2) {
+            label = el.getAttribute('aria-label') || el.getAttribute('title') || el.getAttribute('value') || el.getAttribute('data-tab') || el.getAttribute('data-view') || null;
+          }
+          if (!label) return; // skip unlabelled buttons
+          if (label.length > 60) label = label.substring(0, 60) + '…';
 
+          // Build the BEST CSS selector — priority: id > data-tab > data-view > onclick fn > href > class
           let sel = '';
+          let hint = '';
+
           if (el.id) {
             sel = '#' + el.id;
-          } else if (el.dataset && el.dataset.view) {
-            sel = "[data-view='" + el.dataset.view + "']";
+            hint = 'by ID';
+          } else if (el.getAttribute('data-tab')) {
+            sel = "[data-tab='" + el.getAttribute('data-tab') + "']";
+            hint = 'by tab';
+          } else if (el.getAttribute('data-view')) {
+            sel = "[data-view='" + el.getAttribute('data-view') + "']";
+            hint = 'by view';
           } else if (el.getAttribute('onclick')) {
             const fn = (el.getAttribute('onclick').match(/(\w+)\s*\(/) || [])[1];
-            if (fn) sel = "[onclick*='" + fn + "']";
+            if (fn) { sel = "[onclick*='" + fn + "']"; hint = 'by function'; }
           } else if (el.getAttribute('href') && el.getAttribute('href') !== '#') {
             const href = el.getAttribute('href').replace(/[?#].*/, '').split('/').pop();
-            if (href) sel = "[href*='" + href + "']";
+            if (href) { sel = "[href*='" + href + "']"; hint = 'by link'; }
           } else if (el.classList.length) {
-            const best = Array.from(el.classList).find(c => !['active','show','hide'].includes(c));
-            if (best) sel = '.' + best;
+            const best = Array.from(el.classList).find(c => c.length > 2 && !['active','show','hide','btn','open'].includes(c));
+            if (best) { sel = '.' + best; hint = 'by class'; }
           }
 
           if (sel && !seen.has(sel)) {
             seen.add(sel);
-            options.push({ label, sel });
+            options.push({ label, sel, hint });
           }
         });
 
         if (!options.length) {
-          select.innerHTML = '<option value="">No buttons found on this page</option>';
+          select.innerHTML = '<option value="">No identifiable buttons found on this page</option>';
           return;
         }
 
-        select.innerHTML = '<option value="">— choose a button (' + options.length + ' found) —</option>'
-          + options.map(o => `<option value="${o.sel}">${o.label}  ·  ${o.sel}</option>`).join('');
+        select.innerHTML = '<option value="">— ' + options.length + ' buttons found — pick one —</option>'
+          + options.map(o =>
+            `<option value="${o.sel}">${o.label}   ·   ${o.sel}</option>`
+          ).join('');
 
       } catch (e) {
         console.error('Scanner error:', e);
-        select.innerHTML = '<option value="">⚠ Could not scan (must run on localhost:8000)</option>';
+        select.innerHTML = '<option value="">⚠ Must run on localhost:8000 (not file://)</option>';
       }
     }
 
