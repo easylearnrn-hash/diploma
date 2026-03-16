@@ -2424,8 +2424,8 @@
               </div>
 
               <div class="notes-empty" id="catsEmpty" style="display:none; margin-top:12px;">
-                <p><strong>No notes found in Notes Library.</strong></p>
-                <p style="font-size: 13px; margin-top: 8px; color: var(--text-muted);">Open <strong>notes.html</strong> to add study notes, then they'll appear here automatically.</p>
+                <p><strong>No notes have been published yet.</strong></p>
+                <p style="font-size: 13px; margin-top: 8px; color: var(--text-muted);">Your instructor hasn't published any notes yet. Check back soon.</p>
               </div>
             </section>
 
@@ -3852,51 +3852,98 @@
     async function resolveStudentId() {
       if (currentStudentId) return currentStudentId;
 
+      // ── 1. Direct UUID from hubStudentData.id ────────────────────────────
       if (studentData && studentData.id) {
         currentStudentId = studentData.id;
-        console.log('✅ Current student ID (database UUID):', currentStudentId);
+        sessionStorage.setItem('studentRecordId', currentStudentId);
+        console.log('✅ Student UUID from hubStudentData.id:', currentStudentId);
         return currentStudentId;
       }
 
-      const storedRecordId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId');
+      // ── 2. Previously cached UUID in sessionStorage only ─────────────────
+      // NOTE: localStorage is intentionally NOT used here — it persists across
+      // sessions and could contain a stale UUID from a different student's hub.
+      // sessionStorage is tab-scoped and therefore safe to use as a fallback.
+      const storedRecordId = sessionStorage.getItem('studentRecordId');
       if (storedRecordId) {
-        currentStudentId = storedRecordId;
-        console.log('✅ Current student ID loaded from storage:', currentStudentId);
-        return currentStudentId;
+        // Cross-check: if we have a studentId text, make sure this UUID actually
+        // belongs to THIS student before trusting it.
+        const myStudentIdText = studentData?.studentId || studentData?.student_id || null;
+        if (myStudentIdText && myStudentIdText !== 'N/A') {
+          // Verify ownership — fetch the row and compare student_id
+          try {
+            const { data: check } = await db
+              .from('students')
+              .select('id, student_id')
+              .eq('id', storedRecordId)
+              .maybeSingle();
+            if (check && check.student_id === myStudentIdText) {
+              currentStudentId = storedRecordId;
+              console.log('✅ Student UUID from sessionStorage (verified):', currentStudentId);
+              return currentStudentId;
+            } else {
+              console.warn('⚠️ Stale studentRecordId in sessionStorage — does not match current student. Clearing.', storedRecordId);
+              sessionStorage.removeItem('studentRecordId');
+            }
+          } catch (_) {
+            // DB check failed — fall through to re-resolve below
+          }
+        } else {
+          // No text ID to cross-check against — trust sessionStorage as-is
+          currentStudentId = storedRecordId;
+          console.log('✅ Student UUID from sessionStorage (unverified):', currentStudentId);
+          return currentStudentId;
+        }
       }
 
+      // ── 3. Look up by text student_id (e.g. ACNHS-xxxxxxx) ───────────────
       const urlParams = new URLSearchParams(window.location.search);
       const urlStudentId = urlParams.get('student');
       const studentIdText = studentData?.studentId || studentData?.student_id || urlStudentId || null;
 
-      if (!studentIdText) {
-        console.error('❌ studentData.id not found - notes filtering will fail');
-        console.log('🔍 Available studentData keys:', studentData ? Object.keys(studentData) : 'studentData is null');
-        return null;
-      }
-
-      try {
-        const { data, error } = await db
-          .from('students')
-          .select('id, student_id')
-          .eq('student_id', studentIdText)
-          .single();
-
-        if (error) throw error;
-
-        if (data?.id) {
-          currentStudentId = data.id;
-          if (studentData) studentData.id = data.id;
-          sessionStorage.setItem('studentRecordId', data.id);
-          localStorage.setItem('studentRecordId', data.id);
-          console.log('✅ Resolved student UUID from student_id:', studentIdText, '→', data.id);
-          return currentStudentId;
+      if (studentIdText && studentIdText !== 'N/A') {
+        try {
+          const { data, error } = await db
+            .from('students')
+            .select('id')
+            .eq('student_id', studentIdText)
+            .single();
+          if (!error && data?.id) {
+            currentStudentId = data.id;
+            if (studentData) studentData.id = data.id;
+            sessionStorage.setItem('studentRecordId', data.id);
+            // NOTE: intentionally NOT writing to localStorage — stale UUIDs across sessions cause wrong-student bugs
+            console.log('✅ Resolved UUID via student_id text:', studentIdText, '→', data.id);
+            return currentStudentId;
+          }
+        } catch (err) {
+          console.warn('⚠️ student_id lookup failed:', err.message);
         }
-      } catch (err) {
-        console.error('❌ Failed to resolve student UUID:', err);
       }
 
-      console.error('❌ No student ID available - notes filtering will fail');
+      // ── 4. Last resort: look up by email ─────────────────────────────────
+      const email = studentData?.email || sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      if (email && email !== 'N/A') {
+        try {
+          const { data, error } = await db
+            .from('students')
+            .select('id')
+            .eq('email', email)
+            .single();
+          if (!error && data?.id) {
+            currentStudentId = data.id;
+            if (studentData) studentData.id = data.id;
+            sessionStorage.setItem('studentRecordId', data.id);
+            // NOTE: intentionally NOT writing to localStorage — stale UUIDs across sessions cause wrong-student bugs
+            console.log('✅ Resolved UUID via email:', email, '→', data.id);
+            return currentStudentId;
+          }
+        } catch (err) {
+          console.warn('⚠️ Email lookup failed:', err.message);
+        }
+      }
+
+      console.error('❌ Could not resolve student UUID — notes will not load. studentData:', JSON.stringify(studentData));
       return null;
     }
 
@@ -4664,10 +4711,12 @@
       // so we never re-seed a note that was moved to a different category
       const allNotesByFile = {};
       const allNotesById   = {};
+      const allNotesByTitleAndTopic = {};
       topics.forEach(topic => {
         (topic.notes || []).forEach(note => {
           if (note.htmlFile) allNotesByFile[note.htmlFile] = note;
           if (note.id)       allNotesById[note.id]         = note;
+          if (topic.title && note.title) allNotesByTitleAndTopic[topic.title + '::' + note.title] = note;
         });
       });
 
@@ -4686,10 +4735,20 @@
           if (deletedNotes[entry.id] || deletedNotes[entry.htmlFile]) return;
 
           // If this note already exists ANYWHERE (any topic), just migrate its id if stale
-          const globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
+          let globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
+          
+          if (!globalExisting && allNotesByTitleAndTopic[topicTitle + '::' + entry.title]) {
+            globalExisting = allNotesByTitleAndTopic[topicTitle + '::' + entry.title];
+          }
+
           if (globalExisting) {
             if (entry.id && globalExisting.id !== entry.id) {
               globalExisting.id = entry.id;
+              dirty = true;
+            }
+            if (entry.htmlFile && !globalExisting.htmlFile) {
+              globalExisting.htmlFile = entry.htmlFile;
+              globalExisting.type = 'html';
               dirty = true;
             }
             return; // Note already lives in some topic — don't move it back

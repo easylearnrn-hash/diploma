@@ -7550,10 +7550,20 @@ function coldCallStartNewCycle() {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
+  
+  // Anti-repeat constraint: If the queue was empty (meaning we just finished a cycle)
+  // and the new cycle's first pick is the EXACT SAME person who was picked last,
+  // push them to the end of the line so they never get called back-to-back.
+  if (coldCallState.lastPicked && arr.length > 1 && arr[0].id === coldCallState.lastPicked.id) {
+    const first = arr.shift();
+    arr.push(first);
+  }
+
   coldCallState.queue = arr;
   coldCallState.calledThisRound = [];
   coldCallState.cycleComplete = false;
-  coldCallState.lastPicked = null;
+  // Note: We DO NOT reset coldCallState.lastPicked here so that the UI keeps showing
+  // the very last person called until the user clicks "Pick" again!
 }
 
 // ─── Pick the next student ────────────────────────────────────────────────────

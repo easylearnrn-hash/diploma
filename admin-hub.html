@@ -5058,6 +5058,20 @@
 
         if (error) throw error;
 
+        // ── SYNC TO STUDENTS TABLE ──
+        // Ensure the 'group' column on the 'students' table matches the group name directly.
+        // First, clear the group from everyone who previously had this group name (to handle removals)
+        const nameToClear = currentEditingGroup ? currentEditingGroup.name : name;
+        await db.from('students').update({ group: null }).eq('group', nameToClear);
+
+        // Then, assign the new group name to exactly the checked students
+        if (studentIds.length > 0) {
+          const { error: stuUpdateErr } = await db.from('students')
+            .update({ group: name })
+            .in('id', studentIds);
+          if (stuUpdateErr) console.error("Error applying group to students:", stuUpdateErr);
+        }
+
         console.log('✅ Group saved to Supabase:', groupToSave.name);
         
         // Reload groups from database
@@ -8178,8 +8192,123 @@
           { id: 'note_cv_22', title: 'Troponin, BNP & Cardiac Biomarkers',               htmlFile: 'Cardiovascular System/Cardiac-Biomarkers.html' },
           { id: 'note_cv_23', title: 'Cardiovascular Medications',                        htmlFile: 'Cardiovascular System/Cardiovascular-Medications.html' },
         ],
-        'Medical Terminology': [
-          { id: 'note_mt_1', title: 'Medical Terminology', htmlFile: 'medical-terminology.html' },
+        'Respiratory System': [
+          { id: 'note_resp_1', title: 'Respiratory Medications',                  htmlFile: 'Respiratory System/Respiratory-Medications.html' },
+          { id: 'note_resp_2', title: 'Incentive Spirometry & Pulmonary Hygiene', htmlFile: 'Respiratory System/Incentive-Spirometry-Pulmonary-Hygiene.html' },
+          { id: 'note_resp_3', title: 'Pleural Effusion',                         htmlFile: 'Respiratory System/Pleural-Effusion.html' },
+          { id: 'note_resp_4', title: 'Tracheostomy',                             htmlFile: 'Respiratory System/Tracheostomy.html' },
+          { id: 'note_resp_5', title: 'Sleep Apnea',                              htmlFile: 'Respiratory System/Sleep-Apnea.html' },
+          { id: 'note_resp_6', title: 'Physiology of Breathing',                  htmlFile: 'Respiratory System/Physiology-of-Breathing.html' },
+          { id: 'note_resp_7', title: 'COPD',                                     htmlFile: 'Respiratory System/COPD.html' },
+          { id: 'note_resp_8', title: 'Chronic Bronchitis',                       htmlFile: 'Respiratory System/Chronic-Bronchitis.html' },
+          { id: 'note_resp_9', title: 'Asthma',                                   htmlFile: 'Respiratory System/Asthma.html' },
+          { id: 'note_resp_10', title: 'Emphysema',                               htmlFile: 'Respiratory System/Emphysema.html' },
+          { id: 'note_resp_11', title: 'Pneumonia',                               htmlFile: 'Respiratory System/Pneumonia.html' },
+          { id: 'note_resp_12', title: 'Tuberculosis (TB)',                       htmlFile: 'Respiratory System/Tuberculosis.html' },
+          { id: 'note_resp_13', title: 'Hemothorax & Pneumothorax',              htmlFile: 'Respiratory System/Hemothorax-and-Pneumothorax.html' },
+          { id: 'note_resp_14', title: 'Mask Types & Oxygen Delivery',           htmlFile: 'Respiratory System/Mask-Types-and-Respiratory-System.html' },
+          { id: 'note_resp_15', title: 'Pulmonary Embolism (PE)',                htmlFile: 'Respiratory System/Pulmonary-Embolism.html' },
+          { id: 'note_resp_16', title: 'ARDS',                                   htmlFile: 'Respiratory System/ARDS.html' },
+        ],
+        'Endocrine System': [
+          { id: 'note_endo_1', title: 'Diabetes Mellitus',               htmlFile: 'Endocrine System/Diabetes-Mellitus.html' },
+          { id: 'note_endo_2', title: 'Insulin Patch',                   htmlFile: 'Endocrine System/Insulin-Patch.html' },
+          { id: 'note_endo_3', title: 'Insulin Storage & Checking',      htmlFile: 'Endocrine System/Insulin-Storage-and-Checking.html' },
+          { id: 'note_endo_4', title: 'Insulin Types & Administration',  htmlFile: 'Endocrine System/Insulin.html' },
+          { id: 'note_endo_5', title: 'Mixing of Insulin Guidelines',    htmlFile: 'Endocrine System/Mixing-of-Insulin-Guidelines.html' },
+          { id: 'note_endo_6', title: 'Metformin',                       htmlFile: 'Endocrine System/Metformin.html' },
+          { id: 'note_endo_7', title: 'Endocrine Medications',          htmlFile: 'Endocrine System/Endocrine-Medications.html' },
+          { id: 'note_endo_8', title: 'Thyroid Gland & Hormones',       htmlFile: 'Endocrine System/Thyroid-Gland-and-Hormones.html' },
+          { id: 'note_endo_9', title: 'Thyroid Gland — Structure',      htmlFile: 'Endocrine System/Thyroid-Gland.html' },
+          { id: 'note_endo_10', title: 'Parathyroid Disorders',         htmlFile: 'Endocrine System/Parathyroid-Disorders.html' },
+          { id: 'note_endo_11', title: 'Diabetes Insipidus & SIADH',    htmlFile: 'Endocrine System/Diabetes-Insipidus-and-SIADH.html' },
+          { id: 'note_endo_12', title: "Adrenal Gland — Addison's & Cushing's", htmlFile: 'Endocrine System/Adrenal-Gland-AD-and-CD.html' },
+          { id: 'note_endo_13', title: 'DKA & HHNS',                            htmlFile: 'Endocrine System/DKA-and-HHNS.html' },
+        ],
+        'Gastrointestinal & Hepatic System': [
+          { id: 'note_gi_1', title: 'NG Tube & TPN',                htmlFile: 'Gastrointestinal & Hepatic System/NG-Tube-and-TPN.html' },
+          { id: 'note_gi_2', title: 'Vitamins & Minerals',          htmlFile: 'Gastrointestinal & Hepatic System/Vitamins-and-Minerals.html' },
+          { id: 'note_gi_3', title: 'Digestive System',             htmlFile: 'Gastrointestinal & Hepatic System/Digestive-System.html' },
+          { id: 'note_gi_4', title: 'Dumping Syndrome',             htmlFile: 'Gastrointestinal & Hepatic System/Dumping-Syndrome.html' },
+          { id: 'note_gi_5', title: 'GI Medications',               htmlFile: 'Gastrointestinal & Hepatic System/Gastrointestinal-Medications.html' },
+          { id: 'note_gi_6', title: 'Roux-en-Y Gastric Bypass',     htmlFile: 'Gastrointestinal & Hepatic System/Roux-en-Y-Gastric-Bypass.html' },
+          { id: 'note_gi_7', title: 'Physical Examination Sounds', htmlFile: 'Gastrointestinal & Hepatic System/Physical-Examination-Sounds.html' },
+          { id: 'note_gi_8', title: 'Liver Cirrhosis',             htmlFile: 'Gastrointestinal & Hepatic System/Liver-Cirrhosis.html' },
+          { id: 'note_gi_9', title: 'Lactose Intolerance',         htmlFile: 'Gastrointestinal & Hepatic System/Lactose-Intolerance.html' },
+          { id: 'note_gi_10', title: 'Vegan & Vegetarian Diets',   htmlFile: 'Gastrointestinal & Hepatic System/Vegan-Vegetarian-Diets.html' },
+          { id: 'note_gi_11', title: 'Peritonitis & Sepsis',         htmlFile: 'Gastrointestinal & Hepatic System/Peritonitis-and-Sepsis.html' },
+          { id: 'note_gi_12', title: 'Lead Poisoning',             htmlFile: 'Gastrointestinal & Hepatic System/Lead-Poisoning.html' },
+          { id: 'note_gi_13', title: 'Botulism',                   htmlFile: 'Gastrointestinal & Hepatic System/Botulism.html' },
+          { id: 'note_gi_14', title: 'Abdominal Quadrants',        htmlFile: 'Gastrointestinal & Hepatic System/Abdominal-Quadrants.html' },
+          { id: 'note_gi_15', title: 'Gastroesophageal Issues',    htmlFile: 'Gastrointestinal & Hepatic System/Gastroesophageal-Issues.html' },
+          { id: 'note_gi_16', title: 'Central Line vs PICC Line',  htmlFile: 'Gastrointestinal & Hepatic System/Central-Line-vs-PICC-Line.html' },
+          { id: 'note_gi_17', title: 'Colonoscopy',                htmlFile: 'Gastrointestinal & Hepatic System/Colonoscopy.html' },
+          { id: 'note_gi_18', title: 'Physical Exam & Bowel Sounds', htmlFile: 'Gastrointestinal & Hepatic System/Physical-Exam-and-Bowel-Sounds.html' },
+          { id: 'note_gi_19', title: 'Portal Vein & Liver Circulation', htmlFile: 'Gastrointestinal & Hepatic System/Portal-Vein.html' },
+          { id: 'note_gi_20', title: 'Colostomy',                  htmlFile: 'Gastrointestinal & Hepatic System/Colostomy.html' },
+          { id: 'note_gi_21', title: 'B Vitamins',                 htmlFile: 'Gastrointestinal & Hepatic System/B-Vitamins.html' },
+          { id: 'note_gi_22', title: 'Metabolic Syndrome',         htmlFile: 'Gastrointestinal & Hepatic System/Metabolic-Syndrome.html' },
+          { id: 'note_gi_23', title: 'Phenylketonuria (PKU)',      htmlFile: 'Gastrointestinal & Hepatic System/Phenylketonuria-PKU.html' },
+          { id: 'note_gi_24', title: 'Celiac Disease',             htmlFile: 'Gastrointestinal & Hepatic System/Celiac-Disease.html' },
+          { id: 'note_gi_25', title: 'GERD',                       htmlFile: 'Gastrointestinal & Hepatic System/GERD.html' },
+          { id: 'note_gi_26', title: 'PUD & Gastritis',            htmlFile: 'Gastrointestinal & Hepatic System/PUD-and-Gastritis.html' },
+          { id: 'note_gi_27', title: 'Gastric & Peptic Ulcers',    htmlFile: 'Gastrointestinal & Hepatic System/Gastric-and-Peptic-Ulcers.html' },
+          { id: 'note_gi_28', title: 'Cholecystitis & Cholelithiasis', htmlFile: 'Gastrointestinal & Hepatic System/Cholecystitis-and-Cholelithiasis.html' },
+          { id: 'note_gi_29', title: 'Pancreatitis',               htmlFile: 'Gastrointestinal & Hepatic System/Pancreatitis.html' },
+          { id: 'note_gi_30', title: 'Alcoholism',                 htmlFile: 'Gastrointestinal & Hepatic System/Alcoholism.html' },
+          { id: 'note_gi_31', title: 'Pyloric Stenosis',           htmlFile: 'Gastrointestinal & Hepatic System/Pyloric-Stenosis.html' },
+          { id: 'note_gi_32', title: 'Intussusception',            htmlFile: 'Gastrointestinal & Hepatic System/Intussusception.html' },
+          { id: 'note_gi_33', title: 'Hirschsprung Disease',       htmlFile: 'Gastrointestinal & Hepatic System/Hirschsprung-Disease.html' },
+          { id: 'note_gi_34', title: 'Ulcerative Colitis',         htmlFile: 'Gastrointestinal & Hepatic System/Ulcerative-Colitis.html' },
+          { id: 'note_gi_35', title: "Crohn's Disease",            htmlFile: 'Gastrointestinal & Hepatic System/Crohns-Disease.html' },
+          { id: 'note_gi_36', title: 'Irritable Bowel Syndrome (IBS)', htmlFile: 'Gastrointestinal & Hepatic System/Irritable-Bowel-Syndrome.html' },
+          { id: 'note_gi_37', title: 'Diverticulosis & Diverticulitis', htmlFile: 'Gastrointestinal & Hepatic System/Diverticulosis-and-Diverticulitis.html' },
+          { id: 'note_gi_38', title: 'SBO vs LBO',                htmlFile: 'Gastrointestinal & Hepatic System/SBO-vs-LBO.html' },
+          { id: 'note_gi_39', title: 'Lower GI Obstruction',      htmlFile: 'Gastrointestinal & Hepatic System/Lower-GI-Obstruction.html' },
+          { id: 'note_gi_40', title: 'Appendicitis',              htmlFile: 'Gastrointestinal & Hepatic System/Appendicitis.html' },
+          { id: 'note_gi_41', title: 'Cystic Fibrosis',           htmlFile: 'Gastrointestinal & Hepatic System/Cystic-Fibrosis.html' },
+          { id: 'note_gi_42', title: 'Epiglottitis',              htmlFile: 'Gastrointestinal & Hepatic System/Epiglottitis.html' },
+        ],
+        'Renal System': [
+          { id: 'note_renal_1',  title: 'Pheochromocytoma',                 htmlFile: 'Renal System/Pheochromocytoma.html' },
+          { id: 'note_renal_2',  title: 'Urinary Tract Infections',         htmlFile: 'Renal System/Urinary-Tract-Infections.html' },
+          { id: 'note_renal_3',  title: 'Urine Sample Collection',          htmlFile: 'Renal System/Urine-Sample-Collection.html' },
+          { id: 'note_renal_4',  title: 'Pyelonephritis',                   htmlFile: 'Renal System/Pyelonephritis.html' },
+          { id: 'note_renal_5',  title: 'Wilms Tumor',                      htmlFile: 'Renal System/Wilms-Tumor.html' },
+          { id: 'note_renal_6',  title: 'Glomerulonephritis',               htmlFile: 'Renal System/Glomerulonephritis.html' },
+          { id: 'note_renal_7',  title: 'Hemolytic Uremic Syndrome',        htmlFile: 'Renal System/Hemolytic-Uremic-Syndrome.html' },
+          { id: 'note_renal_8',  title: 'Nephrotic Syndrome',               htmlFile: 'Renal System/Nephrotic-Syndrome.html' },
+          { id: 'note_renal_9',  title: 'Polycystic Kidney Disease',        htmlFile: 'Renal System/Polycystic-Kidney-Disease.html' },
+          { id: 'note_renal_10', title: 'Renal & Urinary Medications',      htmlFile: 'Renal System/Renal-Urinary-Medications.html' },
+          { id: 'note_renal_11', title: 'Urinary Catheters & CBI',          htmlFile: 'Renal System/Urinary-Catheters-and-CBI.html' },
+          { id: 'note_renal_12', title: 'Dialysis Disequilibrium Syndrome', htmlFile: 'Renal System/Dialysis-Disequilibrium-Syndrome.html' },
+          { id: 'note_renal_13', title: 'Urinary Incontinence',            htmlFile: 'Renal System/Urinary-Incontinence.html' },
+          { id: 'note_renal_14', title: 'Kidney Anatomy',                  htmlFile: 'Renal System/Kidney-Anatomy.html' },
+          { id: 'note_renal_15', title: 'Cystitis',                        htmlFile: 'Renal System/Cystitis.html' },
+          { id: 'note_renal_16', title: 'Renal Calculi (Kidney Stones)',   htmlFile: 'Renal System/Renal-Calculi.html' },
+          { id: 'note_renal_17', title: 'Acute Kidney Injury (AKI)',       htmlFile: 'Renal System/Acute-Kidney-Injury.html' },
+          { id: 'note_renal_18', title: 'Chronic Kidney Disease (CKD)',    htmlFile: 'Renal System/Chronic-Kidney-Disease.html' },
+          { id: 'note_renal_19', title: 'Dialysis',                        htmlFile: 'Renal System/Dialysis.html' },
+        ],
+        'Fluids, Electrolytes & Nutrition': [
+          { id: 'note_fen_1', title: 'IV Fluids, Electrolytes & Medications',  htmlFile: 'Fluids, Electrolytes & Nutrition/IV-Fluids-and-Medications.html' },
+          { id: 'note_fen_2', title: 'Electrolyte Imbalances',                 htmlFile: 'Fluids, Electrolytes & Nutrition/Electrolyte-Imbalances.html' },
+          { id: 'note_fen_3', title: 'IV Therapy & Complications',             htmlFile: 'Fluids, Electrolytes & Nutrition/IV-Therapy-and-Complications.html' },
+          { id: 'note_fen_4', title: 'Acid-Base Balance & ABG Interpretation', htmlFile: 'Fluids, Electrolytes & Nutrition/Acid-Base-Balance-and-ABGs.html' },
+        ],
+        'Maternal Health': [
+          { id: 'note_mh_1', title: 'Menstrual Cycle & Hormones',                  htmlFile: 'Maternal Health/Menstrual-Cycle-and-Hormones.html' },
+          { id: 'note_mh_2', title: 'Reproductive Anatomy & Fertilization',        htmlFile: 'Maternal Health/Reproductive-Anatomy-and-Fertilization.html' },
+          { id: 'note_mh_3', title: 'Organ Disorders, Cancer & Women\'s Health',   htmlFile: 'Maternal Health/Organ-Disorders-Cancer-Womens-Health.html' },
+          { id: 'note_mh_4', title: 'Naegele\'s Rule, Antepartum & Complications', htmlFile: 'Maternal Health/Naegeles-Rule-Antepartum-Complications.html' },
+          { id: 'note_mh_5', title: 'GDM & Gestational Hypertension',             htmlFile: 'Maternal Health/GDM-and-Gestational-Hypertension.html' },
+          { id: 'note_mh_6', title: 'Intrapartum Care, Leopold & VEAL CHOP',      htmlFile: 'Maternal Health/Intrapartum-Care-Leopold-VEAL-CHOP.html' },
+          { id: 'note_mh_7', title: 'Placenta Previa & Abruption',                htmlFile: 'Maternal Health/Placenta-Previa-and-Abruption.html' },
+          { id: 'note_mh_8', title: 'Postpartum, Newborn & APGAR',                htmlFile: 'Maternal Health/Postpartum-and-Newborn-Care.html' },
+          { id: 'note_mh_9', title: 'TORCH Infections & Maternal Medications',    htmlFile: 'Maternal Health/TORCH-Infections-and-Medications.html' },
+        ],
+              'Medical Terminology': [
+          { id: 'note_mt_1', title: 'Medical Terminology', htmlFile: 'medical-terminology.html', isModule: true },
         ],
         'Autoimmune Diseases': [
           { id: 'note_auto_1', title: 'Lupus (Systemic Lupus Erythematosus)',           htmlFile: 'Autoimmune & Infectious Disorders/Lupus.html' },
@@ -8210,120 +8339,6 @@
           { id: 'note_neuro_17', title: 'Spinal Cord Injury (SCI)',                  htmlFile: 'Neurology/Spinal-Cord-Injury-Full.html' },
           { id: 'note_neuro_18', title: 'Vertigo & Ménière\'s Disease',              htmlFile: 'Neurology/Vertigo-Menieres.html' },
         ],
-        'Cancer': [
-          { id: 'note_cancer_1',  title: 'Cancer — Overview & Fundamentals',  htmlFile: 'Cancer/Cancer-Overview.html' },
-          { id: 'note_cancer_2',  title: 'Tumor Grading & Staging',           htmlFile: 'Cancer/Tumor-Grading.html' },
-          { id: 'note_cancer_3',  title: 'All Cancer Overview',               htmlFile: 'Cancer/All-Cancer-Overview.html' },
-          { id: 'note_cancer_4',  title: 'Hematological (Blood) Cancers',     htmlFile: 'Cancer/Hematological-Cancers.html' },
-          { id: 'note_cancer_5',  title: 'GI Cancers',                        htmlFile: 'Cancer/GI-Cancers.html' },
-          { id: 'note_cancer_6',  title: 'Large Organ Cancers',               htmlFile: 'Cancer/Large-Organ-Cancers.html' },
-          { id: 'note_cancer_7',  title: 'Small Cell Lung Cancer (SCLC)',     htmlFile: 'Cancer/SCLC.html' },
-          { id: 'note_cancer_8',  title: 'Female Reproductive Cancers',       htmlFile: 'Cancer/Female-Reproductive-Cancers.html' },
-          { id: 'note_cancer_9',  title: 'Male Reproductive Cancers',         htmlFile: 'Cancer/Male-Reproductive-Cancers.html' },
-          { id: 'note_cancer_10', title: 'Skin Cancer',                       htmlFile: 'Cancer/Skin-Cancer.html' },
-        ],
-        'Pediatrics': [
-          { id: 'note_ped_1',  title: 'Kawasaki Disease',                                         htmlFile: 'Pediatrics/Kawasaki-Disease.html' },
-          { id: 'note_ped_2',  title: 'Amblyopia',                                                htmlFile: 'Pediatrics/Amblyopia.html' },
-          { id: 'note_ped_3',  title: 'Congenital Cataracts',                                     htmlFile: 'Pediatrics/Congenital-Cataracts.html' },
-          { id: 'note_ped_4',  title: 'Pediatric Conjunctivitis',                                 htmlFile: 'Pediatrics/Pediatric-Conjunctivitis.html' },
-          { id: 'note_ped_5',  title: 'Retinopathy of Prematurity (ROP)',                         htmlFile: 'Pediatrics/Retinopathy-of-Prematurity.html' },
-          { id: 'note_ped_6',  title: 'Strabismus',                                               htmlFile: 'Pediatrics/Strabismus.html' },
-          { id: 'note_ped_7',  title: 'Pediatric Developmental Stages',                           htmlFile: 'Pediatrics/Pediatric-Developmental-Stages.html' },
-          { id: 'note_ped_8',  title: 'Pediatric Medications',                                    htmlFile: 'Pediatrics/Pediatric-Medications.html' },
-          { id: 'note_ped_9',  title: 'Rickets',                                                  htmlFile: 'Pediatrics/Rickets.html' },
-          { id: 'note_ped_10', title: 'Pediatric Orthopaedics',                                   htmlFile: 'Pediatrics/Pediatric-Ortho.html' },
-          { id: 'note_ped_11', title: 'Omphalocele',                                              htmlFile: 'Pediatrics/Omphalocele.html' },
-          { id: 'note_ped_12', title: 'Pediatric Medication Administration',                      htmlFile: 'Pediatrics/Pediatric-Medication-Administration.html' },
-          { id: 'note_ped_13', title: 'Care of the Newborn',                                      htmlFile: 'Pediatrics/Care-of-the-Newborn.html' },
-          { id: 'note_ped_14', title: 'Pediatric Respiratory Disorders',                          htmlFile: 'Pediatrics/Pediatric-Respiratory-Disorders.html' },
-          { id: 'note_ped_15', title: 'Pediatric Cardiovascular Nursing',                         htmlFile: 'Pediatrics/Pediatric-Cardiovascular-Nursing.html' },
-          { id: 'note_ped_16', title: 'Pediatric Neurologic, Cognitive & Psychosocial Disorders', htmlFile: 'Pediatrics/Pediatric-Neuro-Psych-Disorders.html' },
-          { id: 'note_ped_17', title: 'Pediatric Diabetes Mellitus',                              htmlFile: 'Pediatrics/Pediatric-Diabetes.html' },
-          { id: 'note_ped_18', title: 'Pediatric Fever, Dehydration & PKU',                       htmlFile: 'Pediatrics/Pediatric-Fever-Dehydration-PKU.html' },
-          { id: 'note_ped_19', title: 'Pediatric Gastrointestinal Disorders',                     htmlFile: 'Pediatrics/Pediatric-GI-Disorders.html' },
-          { id: 'note_ped_20', title: 'Pediatric Hematological & Oncological Disorders',          htmlFile: 'Pediatrics/Pediatric-Hematological-Oncological.html' },
-          { id: 'note_ped_21', title: 'Pediatric Infectious & Communicable Diseases',             htmlFile: 'Pediatrics/Pediatric-Infectious-Diseases.html' },
-          { id: 'note_ped_22', title: 'Pediatric Renal, Urinary & GU Disorders',                  htmlFile: 'Pediatrics/Pediatric-Renal-GU.html' },
-          { id: 'note_ped_23', title: 'Pediatric Musculoskeletal Disorders',                      htmlFile: 'Pediatrics/Pediatric-Musculoskeletal.html' },
-          { id: 'note_ped_24', title: 'Pediatric Integumentary Dysfunction',                      htmlFile: 'Pediatrics/Pediatric-Integumentary.html' },
-          { id: 'note_ped_25', title: 'Pediatric Eye, Ear & Throat Disorders',                    htmlFile: 'Pediatrics/Pediatric-Eye-Ear-Throat.html' },
-          { id: 'note_ped_26', title: 'Pediatric Cognitive, Neurologic & Psychosocial Nursing',   htmlFile: 'Pediatrics/Pediatric-Cognitive-Neuro-Psych.html' },
-        ],
-        'Reproductive Health': [
-          { id: 'note_rep_1',  title: 'Reproductive Anatomy',                                     htmlFile: 'ReproductiveHealth/Reproductive-Anatomy.html' },
-          { id: 'note_rep_2',  title: 'Female Reproductive Cycle, Fertilization & Implantation',  htmlFile: 'ReproductiveHealth/Female-Reproductive-Cycle.html' },
-          { id: 'note_rep_3',  title: 'Contraception & Family Planning',                          htmlFile: 'ReproductiveHealth/Contraception-Family-Planning.html' },
-          { id: 'note_rep_4',  title: 'STIs / STDs',                                              htmlFile: 'ReproductiveHealth/STI-STD.html' },
-          { id: 'note_rep_5',  title: 'Reproductive Complications',                               htmlFile: 'ReproductiveHealth/Reproductive-Complications.html' },
-          { id: 'note_rep_6',  title: 'Infertility',                                              htmlFile: 'ReproductiveHealth/Infertility.html' },
-          { id: 'note_rep_7',  title: 'Benign Prostatic Hyperplasia (BPH)',                       htmlFile: 'ReproductiveHealth/BPH.html' },
-          { id: 'note_rep_8',  title: 'TURP — Transurethral Resection of the Prostate',           htmlFile: 'ReproductiveHealth/TURP-Prostatectomy.html' },
-          { id: 'note_rep_9',  title: 'Priapism',                                                 htmlFile: 'ReproductiveHealth/Priapism.html' },
-          { id: 'note_rep_10', title: 'Sexual Health in Nursing',                                 htmlFile: 'ReproductiveHealth/Sexual-Health-Nursing.html' },
-          { id: 'note_rep_11', title: 'Reproductive Health — NCLEX Overview',                    htmlFile: 'ReproductiveHealth/Reproductive-Health-Overview.html' },
-        ],
-        'Burns & Skin': [
-          { id: 'note_burns_1', title: 'Burns',                           htmlFile: 'BurnsSkin/Burns.html' },
-          { id: 'note_burns_2', title: 'Burns & Dermatology Medications', htmlFile: 'BurnsSkin/Burns-Dermatology-Meds.html' },
-          { id: 'note_burns_3', title: 'Common Skin Disorders',           htmlFile: 'BurnsSkin/Common-Skin-Disorders.html' },
-          { id: 'note_burns_4', title: 'Skin Conditions Overview',        htmlFile: 'BurnsSkin/Skin-Conditions-Overview.html' },
-          { id: 'note_burns_5', title: 'Dermatitis & Cellulitis',         htmlFile: 'BurnsSkin/Dermatitis-Cellulitis.html' },
-          { id: 'note_burns_6', title: 'DVT vs. Cellulitis',              htmlFile: 'BurnsSkin/DVT-vs-Cellulitis.html' },
-          { id: 'note_burns_7', title: 'Periorbital Cellulitis',          htmlFile: 'BurnsSkin/Periorbital-Cellulitis.html' },
-          { id: 'note_burns_8', title: 'Pressure Ulcers (Bedsores)',      htmlFile: 'BurnsSkin/Pressure-Ulcers.html' },
-          { id: 'note_burns_9', title: 'Burns & Skin — NCLEX Overview',   htmlFile: 'BurnsSkin/Burns-Skin-Overview.html' },
-        ],
-        'Eye Disorders': [
-          { id: 'note_eye_1',  title: 'Eye Anatomy',                         htmlFile: 'EyeDisorders/Eye-Anatomy.html' },
-          { id: 'note_eye_2',  title: 'Glaucoma',                            htmlFile: 'EyeDisorders/Glaucoma.html' },
-          { id: 'note_eye_3',  title: 'Cataracts',                           htmlFile: 'EyeDisorders/Cataracts.html' },
-          { id: 'note_eye_4',  title: 'Retinal Detachment',                  htmlFile: 'EyeDisorders/Retinal-Detachment.html' },
-          { id: 'note_eye_5',  title: 'Macular Degeneration (AMD)',          htmlFile: 'EyeDisorders/Macular-Degeneration.html' },
-          { id: 'note_eye_6',  title: 'Diabetic Retinopathy',                htmlFile: 'EyeDisorders/Diabetic-Retinopathy.html' },
-          { id: 'note_eye_7',  title: 'Conjunctivitis',                      htmlFile: 'EyeDisorders/Conjunctivitis.html' },
-          { id: 'note_eye_8',  title: 'Conjunctivitis vs. Keratitis',        htmlFile: 'EyeDisorders/Conjunctivitis-vs-Keratitis.html' },
-          { id: 'note_eye_9',  title: 'Vision Disorders Overview',           htmlFile: 'EyeDisorders/Vision-Disorders.html' },
-          { id: 'note_eye_10', title: 'Ophthalmic Medication Administration',htmlFile: 'EyeDisorders/Eye-Medications.html' },
-          { id: 'note_eye_11', title: 'Eye Disorders — NCLEX Overview',      htmlFile: 'EyeDisorders/Eye-Disorders-Overview.html' },
-        ],
-        'Musculoskeletal Disorders': [
-          { id: 'note_msk_1', title: 'Fractures',                                htmlFile: 'MusculoskeletalDisorders/Fractures.html' },
-          { id: 'note_msk_2', title: 'Osteomyelitis',                            htmlFile: 'MusculoskeletalDisorders/Osteomyelitis.html' },
-          { id: 'note_msk_3', title: 'Musculoskeletal Conditions',               htmlFile: 'MusculoskeletalDisorders/Musculoskeletal-Conditions.html' },
-          { id: 'note_msk_4', title: 'Sprains, Strains & Dislocations',          htmlFile: 'MusculoskeletalDisorders/Sprains-Strains-Dislocations.html' },
-          { id: 'note_msk_5', title: 'Connective Tissue Disorders',              htmlFile: 'MusculoskeletalDisorders/Connective-Tissue-Disorders.html' },
-          { id: 'note_msk_6', title: 'Mobility & Assistive Devices',             htmlFile: 'MusculoskeletalDisorders/Mobility-Assistive-Devices.html' },
-          { id: 'note_msk_7', title: 'Intercostal Spaces (ICS)',                 htmlFile: 'MusculoskeletalDisorders/Intercostal-Spaces.html' },
-          { id: 'note_msk_8', title: 'MSK — Always Prioritize',                  htmlFile: 'MusculoskeletalDisorders/Always-Prioritize.html' },
-          { id: 'note_msk_9', title: 'Musculoskeletal Disorders — NCLEX Overview', htmlFile: 'MusculoskeletalDisorders/MSK-Overview.html' },
-        ],
-        'Psycho-Social Aspects': [
-          { id: 'note_psa_1', title: 'Abuse & Violence',                      htmlFile: 'PsychoSocialAspects/Abuse-Violence.html' },
-          { id: 'note_psa_2', title: 'Aging: Physiological & Psychosocial Changes', htmlFile: 'PsychoSocialAspects/Aging-Changes.html' },
-          { id: 'note_psa_3', title: 'End-of-Life (EOL) Care',                htmlFile: 'PsychoSocialAspects/End-of-Life-Care.html' },
-          { id: 'note_psa_4', title: 'Psycho-Social Aspects — NCLEX Overview', htmlFile: 'PsychoSocialAspects/PsychoSocial-Overview.html' },
-        ],
-        'EENT': [
-          { id: 'note_eent_1', title: 'EENT & Upper Airway',                       htmlFile: 'EENT/EENT-Upper-Airway.html' },
-          { id: 'note_eent_2', title: 'EENT Medications',                          htmlFile: 'EENT/EENT-Medications.html' },
-          { id: 'note_eent_3', title: 'Eye, Ear, Nose, Throat Disorders Overview', htmlFile: 'EENT/EENT-Disorders-Overview.html' },
-          { id: 'note_eent_4', title: 'Ear Disorders',                             htmlFile: 'EENT/Ear-Disorders.html' },
-          { id: 'note_eent_5', title: 'Nose Disorders',                            htmlFile: 'EENT/Nose-Disorders.html' },
-          { id: 'note_eent_6', title: 'Throat & Upper Airway',                     htmlFile: 'EENT/Throat-Upper-Airway.html' },
-          { id: 'note_eent_7', title: 'Gingivitis',                                htmlFile: 'EENT/Gingivitis.html' },
-          { id: 'note_eent_8', title: 'EENT — NCLEX Master Overview',              htmlFile: 'EENT/EENT-Master-Overview.html' },
-        ],
-        'Medical-Surgical Care': [
-          { id: 'note_medsurg_1', title: 'Med-Surg Pharmacology',                              htmlFile: 'MedSurg/MedSurg-Pharmacology.html' },
-          { id: 'note_medsurg_2', title: 'Orthopedic Post-Op Care',                            htmlFile: 'MedSurg/Orthopedic-PostOp-Care.html' },
-          { id: 'note_medsurg_3', title: 'Emergency, Shock & Surgical Medications',            htmlFile: 'MedSurg/Emergency-Shock-Surgical-Meds.html' },
-          { id: 'note_medsurg_4', title: 'Med-Surg Priorities',                                htmlFile: 'MedSurg/MedSurg-Priorities.html' },
-          { id: 'note_medsurg_5', title: 'Postoperative Surgical Emergencies & Complications', htmlFile: 'MedSurg/Postoperative-Surgical-Emergencies.html' },
-          { id: 'note_medsurg_6', title: 'Preoperative & Postoperative Care',                  htmlFile: 'MedSurg/Preoperative-Postoperative-Care.html' },
-          { id: 'note_medsurg_7', title: 'Shock Management & Emergency Care',                  htmlFile: 'MedSurg/Shock-Management-Emergency-Care.html' },
-          { id: 'note_medsurg_8', title: 'Medical-Surgical Care — NCLEX Master Overview',      htmlFile: 'MedSurg/MedSurg-Master-Overview.html' },
-        ],
         'Infections': [
           { id: 'note_infect_1',  title: 'Chickenpox (Varicella)',              htmlFile: 'Infections/Chickenpox-Varicella.html' },
           { id: 'note_infect_2',  title: 'Lyme Disease',                        htmlFile: 'Infections/Lyme-Disease.html' },
@@ -8337,7 +8352,7 @@
           { id: 'note_infect_10', title: 'Meningitis',                          htmlFile: 'Infections/Meningitis.html' },
           { id: 'note_infect_11', title: 'HIV',                                 htmlFile: 'Infections/HIV.html' },
           { id: 'note_infect_12', title: 'SARS & Covid-19',                     htmlFile: 'Infections/SARS-Covid.html' },
-          { id: 'note_infect_13', title: 'Infections \u2014 NCLEX Master Overview', htmlFile: 'Infections/Infections-Master-Overview.html' },
+          { id: 'note_infect_13', title: 'Infections — NCLEX Master Overview',  htmlFile: 'Infections/Infections-Master-Overview.html' },
         ],
         'Pharmacology': [
           { id: 'note_pharm_1',  title: 'General Pharmacology',                          htmlFile: 'Pharmacology/General-Pharmacology.html' },
@@ -8363,6 +8378,120 @@
           { id: 'note_pharm_21', title: 'Infectious Diseases Medications',               htmlFile: 'Pharmacology/Infectious-Diseases-Medications.html' },
           { id: 'note_pharm_22', title: 'Autoimmune & Inflammatory Disorder Medications',htmlFile: 'Pharmacology/Autoimmune-Inflammatory-Medications.html' },
         ],
+        'Cancer': [
+          { id: 'note_cancer_1',  title: 'Cancer — Overview & Fundamentals',  htmlFile: 'Cancer/Cancer-Overview.html' },
+          { id: 'note_cancer_2',  title: 'Tumor Grading & Staging',           htmlFile: 'Cancer/Tumor-Grading.html' },
+          { id: 'note_cancer_3',  title: 'All Cancer Overview',               htmlFile: 'Cancer/All-Cancer-Overview.html' },
+          { id: 'note_cancer_4',  title: 'Hematological (Blood) Cancers',     htmlFile: 'Cancer/Hematological-Cancers.html' },
+          { id: 'note_cancer_5',  title: 'GI Cancers',                        htmlFile: 'Cancer/GI-Cancers.html' },
+          { id: 'note_cancer_6',  title: 'Large Organ Cancers',               htmlFile: 'Cancer/Large-Organ-Cancers.html' },
+          { id: 'note_cancer_7',  title: 'Small Cell Lung Cancer (SCLC)',     htmlFile: 'Cancer/SCLC.html' },
+          { id: 'note_cancer_8',  title: 'Female Reproductive Cancers',       htmlFile: 'Cancer/Female-Reproductive-Cancers.html' },
+          { id: 'note_cancer_9',  title: 'Male Reproductive Cancers',         htmlFile: 'Cancer/Male-Reproductive-Cancers.html' },
+          { id: 'note_cancer_10', title: 'Skin Cancer',                       htmlFile: 'Cancer/Skin-Cancer.html' },
+        ],
+        'Pediatrics': [
+          { id: 'note_ped_1',  title: 'Kawasaki Disease',                                    htmlFile: 'Pediatrics/Kawasaki-Disease.html' },
+          { id: 'note_ped_2',  title: 'Amblyopia',                                           htmlFile: 'Pediatrics/Amblyopia.html' },
+          { id: 'note_ped_3',  title: 'Congenital Cataracts',                                htmlFile: 'Pediatrics/Congenital-Cataracts.html' },
+          { id: 'note_ped_4',  title: 'Pediatric Conjunctivitis',                            htmlFile: 'Pediatrics/Pediatric-Conjunctivitis.html' },
+          { id: 'note_ped_5',  title: 'Retinopathy of Prematurity (ROP)',                    htmlFile: 'Pediatrics/Retinopathy-of-Prematurity.html' },
+          { id: 'note_ped_6',  title: 'Strabismus',                                          htmlFile: 'Pediatrics/Strabismus.html' },
+          { id: 'note_ped_7',  title: 'Pediatric Developmental Stages',                      htmlFile: 'Pediatrics/Pediatric-Developmental-Stages.html' },
+          { id: 'note_ped_8',  title: 'Pediatric Medications',                               htmlFile: 'Pediatrics/Pediatric-Medications.html' },
+          { id: 'note_ped_9',  title: 'Rickets',                                             htmlFile: 'Pediatrics/Rickets.html' },
+          { id: 'note_ped_10', title: 'Pediatric Orthopaedics',                              htmlFile: 'Pediatrics/Pediatric-Ortho.html' },
+          { id: 'note_ped_11', title: 'Omphalocele',                                         htmlFile: 'Pediatrics/Omphalocele.html' },
+          { id: 'note_ped_12', title: 'Pediatric Medication Administration',                 htmlFile: 'Pediatrics/Pediatric-Medication-Administration.html' },
+          { id: 'note_ped_13', title: 'Care of the Newborn',                                 htmlFile: 'Pediatrics/Care-of-the-Newborn.html' },
+          { id: 'note_ped_14', title: 'Pediatric Respiratory Disorders',                     htmlFile: 'Pediatrics/Pediatric-Respiratory-Disorders.html' },
+          { id: 'note_ped_15', title: 'Pediatric Cardiovascular Nursing',                    htmlFile: 'Pediatrics/Pediatric-Cardiovascular-Nursing.html' },
+          { id: 'note_ped_16', title: 'Pediatric Neurologic, Cognitive & Psychosocial Disorders', htmlFile: 'Pediatrics/Pediatric-Neuro-Psych-Disorders.html' },
+          { id: 'note_ped_17', title: 'Pediatric Diabetes Mellitus',                         htmlFile: 'Pediatrics/Pediatric-Diabetes.html' },
+          { id: 'note_ped_18', title: 'Pediatric Fever, Dehydration & PKU',                  htmlFile: 'Pediatrics/Pediatric-Fever-Dehydration-PKU.html' },
+          { id: 'note_ped_19', title: 'Pediatric Gastrointestinal Disorders',                htmlFile: 'Pediatrics/Pediatric-GI-Disorders.html' },
+          { id: 'note_ped_20', title: 'Pediatric Hematological & Oncological Disorders',     htmlFile: 'Pediatrics/Pediatric-Hematological-Oncological.html' },
+          { id: 'note_ped_21', title: 'Pediatric Infectious & Communicable Diseases',        htmlFile: 'Pediatrics/Pediatric-Infectious-Diseases.html' },
+          { id: 'note_ped_22', title: 'Pediatric Renal, Urinary & GU Disorders',             htmlFile: 'Pediatrics/Pediatric-Renal-GU.html' },
+          { id: 'note_ped_23', title: 'Pediatric Musculoskeletal Disorders',                 htmlFile: 'Pediatrics/Pediatric-Musculoskeletal.html' },
+          { id: 'note_ped_24', title: 'Pediatric Integumentary Dysfunction',                 htmlFile: 'Pediatrics/Pediatric-Integumentary.html' },
+          { id: 'note_ped_25', title: 'Pediatric Eye, Ear & Throat Disorders',               htmlFile: 'Pediatrics/Pediatric-Eye-Ear-Throat.html' },
+          { id: 'note_ped_26', title: 'Pediatric Cognitive, Neurologic & Psychosocial Nursing', htmlFile: 'Pediatrics/Pediatric-Cognitive-Neuro-Psych.html' },
+        ],
+        'Reproductive Health': [
+          { id: 'note_rep_1',  title: 'Reproductive Anatomy',                                      htmlFile: 'ReproductiveHealth/Reproductive-Anatomy.html' },
+          { id: 'note_rep_2',  title: 'Female Reproductive Cycle, Fertilization & Implantation',   htmlFile: 'ReproductiveHealth/Female-Reproductive-Cycle.html' },
+          { id: 'note_rep_3',  title: 'Contraception & Family Planning',                           htmlFile: 'ReproductiveHealth/Contraception-Family-Planning.html' },
+          { id: 'note_rep_4',  title: 'STIs / STDs',                                               htmlFile: 'ReproductiveHealth/STI-STD.html' },
+          { id: 'note_rep_5',  title: 'Reproductive Complications',                                htmlFile: 'ReproductiveHealth/Reproductive-Complications.html' },
+          { id: 'note_rep_6',  title: 'Infertility',                                               htmlFile: 'ReproductiveHealth/Infertility.html' },
+          { id: 'note_rep_7',  title: 'Benign Prostatic Hyperplasia (BPH)',                        htmlFile: 'ReproductiveHealth/BPH.html' },
+          { id: 'note_rep_8',  title: 'TURP — Transurethral Resection of the Prostate',            htmlFile: 'ReproductiveHealth/TURP-Prostatectomy.html' },
+          { id: 'note_rep_9',  title: 'Priapism',                                                  htmlFile: 'ReproductiveHealth/Priapism.html' },
+          { id: 'note_rep_10', title: 'Sexual Health in Nursing',                                  htmlFile: 'ReproductiveHealth/Sexual-Health-Nursing.html' },
+          { id: 'note_rep_11', title: 'Reproductive Health — NCLEX Overview',                      htmlFile: 'ReproductiveHealth/Reproductive-Health-Overview.html' },
+        ],
+        'Burns & Skin': [
+          { id: 'note_burns_1', title: 'Burns',                           htmlFile: 'BurnsSkin/Burns.html' },
+          { id: 'note_burns_2', title: 'Burns & Dermatology Medications', htmlFile: 'BurnsSkin/Burns-Dermatology-Meds.html' },
+          { id: 'note_burns_3', title: 'Common Skin Disorders',           htmlFile: 'BurnsSkin/Common-Skin-Disorders.html' },
+          { id: 'note_burns_4', title: 'Skin Conditions Overview',        htmlFile: 'BurnsSkin/Skin-Conditions-Overview.html' },
+          { id: 'note_burns_5', title: 'Dermatitis & Cellulitis',         htmlFile: 'BurnsSkin/Dermatitis-Cellulitis.html' },
+          { id: 'note_burns_6', title: 'DVT vs. Cellulitis',              htmlFile: 'BurnsSkin/DVT-vs-Cellulitis.html' },
+          { id: 'note_burns_7', title: 'Periorbital Cellulitis',          htmlFile: 'BurnsSkin/Periorbital-Cellulitis.html' },
+          { id: 'note_burns_8', title: 'Pressure Ulcers (Bedsores)',      htmlFile: 'BurnsSkin/Pressure-Ulcers.html' },
+          { id: 'note_burns_9', title: 'Burns & Skin — NCLEX Overview',   htmlFile: 'BurnsSkin/Burns-Skin-Overview.html' },
+        ],
+        'Eye Disorders': [
+          { id: 'note_eye_1',  title: 'Eye Anatomy',                          htmlFile: 'EyeDisorders/Eye-Anatomy.html' },
+          { id: 'note_eye_2',  title: 'Glaucoma',                             htmlFile: 'EyeDisorders/Glaucoma.html' },
+          { id: 'note_eye_3',  title: 'Cataracts',                            htmlFile: 'EyeDisorders/Cataracts.html' },
+          { id: 'note_eye_4',  title: 'Retinal Detachment',                   htmlFile: 'EyeDisorders/Retinal-Detachment.html' },
+          { id: 'note_eye_5',  title: 'Macular Degeneration (AMD)',           htmlFile: 'EyeDisorders/Macular-Degeneration.html' },
+          { id: 'note_eye_6',  title: 'Diabetic Retinopathy',                 htmlFile: 'EyeDisorders/Diabetic-Retinopathy.html' },
+          { id: 'note_eye_7',  title: 'Conjunctivitis',                       htmlFile: 'EyeDisorders/Conjunctivitis.html' },
+          { id: 'note_eye_8',  title: 'Conjunctivitis vs. Keratitis',         htmlFile: 'EyeDisorders/Conjunctivitis-vs-Keratitis.html' },
+          { id: 'note_eye_9',  title: 'Vision Disorders Overview',            htmlFile: 'EyeDisorders/Vision-Disorders.html' },
+          { id: 'note_eye_10', title: 'Ophthalmic Medication Administration', htmlFile: 'EyeDisorders/Eye-Medications.html' },
+          { id: 'note_eye_11', title: 'Eye Disorders — NCLEX Overview',       htmlFile: 'EyeDisorders/Eye-Disorders-Overview.html' },
+        ],
+        'Musculoskeletal Disorders': [
+          { id: 'note_msk_1', title: 'Fractures',                                   htmlFile: 'MusculoskeletalDisorders/Fractures.html' },
+          { id: 'note_msk_2', title: 'Osteomyelitis',                               htmlFile: 'MusculoskeletalDisorders/Osteomyelitis.html' },
+          { id: 'note_msk_3', title: 'Musculoskeletal Conditions',                  htmlFile: 'MusculoskeletalDisorders/Musculoskeletal-Conditions.html' },
+          { id: 'note_msk_4', title: 'Sprains, Strains & Dislocations',             htmlFile: 'MusculoskeletalDisorders/Sprains-Strains-Dislocations.html' },
+          { id: 'note_msk_5', title: 'Connective Tissue Disorders',                 htmlFile: 'MusculoskeletalDisorders/Connective-Tissue-Disorders.html' },
+          { id: 'note_msk_6', title: 'Mobility & Assistive Devices',                htmlFile: 'MusculoskeletalDisorders/Mobility-Assistive-Devices.html' },
+          { id: 'note_msk_7', title: 'Intercostal Spaces (ICS)',                    htmlFile: 'MusculoskeletalDisorders/Intercostal-Spaces.html' },
+          { id: 'note_msk_8', title: 'MSK — Always Prioritize',                     htmlFile: 'MusculoskeletalDisorders/Always-Prioritize.html' },
+          { id: 'note_msk_9', title: 'Musculoskeletal Disorders — NCLEX Overview',  htmlFile: 'MusculoskeletalDisorders/MSK-Overview.html' },
+        ],
+        'Psycho-Social Aspects': [
+          { id: 'note_psa_1', title: 'Abuse & Violence',                       htmlFile: 'PsychoSocialAspects/Abuse-Violence.html' },
+          { id: 'note_psa_2', title: 'Aging: Physiological & Psychosocial Changes', htmlFile: 'PsychoSocialAspects/Aging-Changes.html' },
+          { id: 'note_psa_3', title: 'End-of-Life (EOL) Care',                 htmlFile: 'PsychoSocialAspects/End-of-Life-Care.html' },
+          { id: 'note_psa_4', title: 'Psycho-Social Aspects — NCLEX Overview', htmlFile: 'PsychoSocialAspects/PsychoSocial-Overview.html' },
+        ],
+        'EENT': [
+          { id: 'note_eent_1', title: 'EENT & Upper Airway',                       htmlFile: 'EENT/EENT-Upper-Airway.html' },
+          { id: 'note_eent_2', title: 'EENT Medications',                          htmlFile: 'EENT/EENT-Medications.html' },
+          { id: 'note_eent_3', title: 'Eye, Ear, Nose, Throat Disorders Overview', htmlFile: 'EENT/EENT-Disorders-Overview.html' },
+          { id: 'note_eent_4', title: 'Ear Disorders',                             htmlFile: 'EENT/Ear-Disorders.html' },
+          { id: 'note_eent_5', title: 'Nose Disorders',                            htmlFile: 'EENT/Nose-Disorders.html' },
+          { id: 'note_eent_6', title: 'Throat & Upper Airway',                     htmlFile: 'EENT/Throat-Upper-Airway.html' },
+          { id: 'note_eent_7', title: 'Gingivitis',                                htmlFile: 'EENT/Gingivitis.html' },
+          { id: 'note_eent_8', title: 'EENT — NCLEX Master Overview',              htmlFile: 'EENT/EENT-Master-Overview.html' },
+        ],
+        'Medical-Surgical Care': [
+          { id: 'note_medsurg_1', title: 'Med-Surg Pharmacology',                              htmlFile: 'MedSurg/MedSurg-Pharmacology.html' },
+          { id: 'note_medsurg_2', title: 'Orthopedic Post-Op Care',                            htmlFile: 'MedSurg/Orthopedic-PostOp-Care.html' },
+          { id: 'note_medsurg_3', title: 'Emergency, Shock & Surgical Medications',            htmlFile: 'MedSurg/Emergency-Shock-Surgical-Meds.html' },
+          { id: 'note_medsurg_4', title: 'Med-Surg Priorities',                                htmlFile: 'MedSurg/MedSurg-Priorities.html' },
+          { id: 'note_medsurg_5', title: 'Postoperative Surgical Emergencies & Complications', htmlFile: 'MedSurg/Postoperative-Surgical-Emergencies.html' },
+          { id: 'note_medsurg_6', title: 'Preoperative & Postoperative Care',                  htmlFile: 'MedSurg/Preoperative-Postoperative-Care.html' },
+          { id: 'note_medsurg_7', title: 'Shock Management & Emergency Care',                  htmlFile: 'MedSurg/Shock-Management-Emergency-Care.html' },
+          { id: 'note_medsurg_8', title: 'Medical-Surgical Care — NCLEX Master Overview',      htmlFile: 'MedSurg/MedSurg-Master-Overview.html' },
+        ],
       };
 
       // Read from storage
@@ -8387,10 +8516,12 @@
       // so we never re-seed a note that was moved to a different category by admin
       const allNotesByFile = {};
       const allNotesById   = {};
+      const allNotesByTitleAndTopic = {};
       topics.forEach(topic => {
         (topic.notes || []).forEach(note => {
           if (note.htmlFile) allNotesByFile[note.htmlFile] = note;
           if (note.id)       allNotesById[note.id]         = note;
+          if (topic.title && note.title) allNotesByTitleAndTopic[topic.title + '::' + note.title] = note;
         });
       });
 
@@ -8409,10 +8540,20 @@
           if (deletedNotes[entry.id] || deletedNotes[entry.htmlFile]) return;
 
           // If note already exists ANYWHERE, just migrate its id if stale — never move it back
-          const globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
+          let globalExisting = allNotesByFile[entry.htmlFile] || allNotesById[entry.id];
+          
+          if (!globalExisting && allNotesByTitleAndTopic[topicTitle + '::' + entry.title]) {
+            globalExisting = allNotesByTitleAndTopic[topicTitle + '::' + entry.title];
+          }
+
           if (globalExisting) {
             if (entry.id && globalExisting.id !== entry.id) {
               globalExisting.id = entry.id;
+              storageDirty = true;
+            }
+            if (entry.htmlFile && !globalExisting.htmlFile) {
+              globalExisting.htmlFile = entry.htmlFile;
+              globalExisting.type = 'html';
               storageDirty = true;
             }
             return;

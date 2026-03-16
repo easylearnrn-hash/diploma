@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ProProfs → Export to DOCX</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0; padding: 28px 32px 60px;
+      max-width: 1020px; background: #f7f8fa; color: #111;
+    }
+    h1 { font-size: 22px; margin: 0 0 4px; font-weight: 700; }
+    .sub { font-size: 13px; color: #555; margin: 0 0 20px; }
+    .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 700px) { .panes { grid-template-columns: 1fr; } }
+    .pane-label { font-size: 11px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+    textarea {
+      width: 100%; height: 500px; resize: vertical; padding: 14px;
+      border: 1.5px solid #d0d5dd; border-radius: 10px; background: #fff;
+      color: #111;
+      font: 13px/1.55 ui-monospace, Menlo, Consolas, monospace;
+      outline: none; transition: border-color .15s;
+    }
+    textarea:focus { border-color: #4f8ef7; }
+    .preview {
+      height: 500px; overflow-y: auto;
+      background: #fff; border: 1.5px solid #d0d5dd; border-radius: 10px;
+      padding: 16px 18px; font-size: 13.5px; line-height: 1.65;
+    }
+    .preview-empty { color: #aaa; font-style: italic; }
+    .q-block { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #eee; }
+    .q-block:last-child { border-bottom: none; margin-bottom: 0; }
+    .q-text { font-weight: 600; margin-bottom: 6px; }
+    .ans { padding: 1px 0; color: #333; }
+    .ans.correct { font-weight: 700; color: #b8860b; }
+    .ans.correct::after { content: ' ✓'; font-size: 11px; }
+    .bar { display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+    button { padding: 10px 22px; border-radius: 10px; border: none; background: #111; color: #fff; cursor: pointer; font-weight: 700; font-size: 14px; transition: background .15s; }
+    button:hover { background: #333; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .status { font-size: 13px; color: #444; }
+    .preview-warn { color: #92400e; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 8px; padding: 12px 14px; font-size: 13px; line-height: 1.6; }
+    .preview-warn strong { display: block; margin-bottom: 4px; }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+</head>
+<body>
+  <h1>ProProfs &#x2192; Export to DOCX</h1>
+  <p class="sub">Paste a ProProfs quiz export on the left. Correct answers appear <strong style="color:#b8860b">gold</strong> in the preview and <strong>bold</strong> in the DOCX.</p>
+  <div class="panes">
+    <div>
+      <div class="pane-label">Paste ProProfs text here</div>
+      <textarea id="src" placeholder="Paste your ProProfs quiz export here..." spellcheck="false"></textarea>
+    </div>
+    <div>
+      <div class="pane-label">Live preview &mdash; <span id="qcount">0 questions</span></div>
+      <div class="preview" id="preview"><span class="preview-empty">Preview will appear as you paste...</span></div>
+    </div>
+  </div>
+  <div class="bar">
+    <button id="exportBtn" disabled>Export to DOCX</button>
+    <span class="status" id="statusMsg"></span>
+  </div>
+
+<script>
+function parseProProfs(raw) {
+  var lines = raw.replace(/\r\n/g, '\n').split('\n').map(function(l){ return l.trim(); });
+  var questions = [];
+  // qLines accumulates all parts of the question text (may span multiple lines/blanks)
+  var qLines = [], answers = [], correctLetter = '', awaitCorrect = false;
+
+  function commit() {
+    var qText = qLines.join(' ').replace(/\s{2,}/g, ' ').trim();
+    if (qText && answers.length >= 2) {
+      questions.push({
+        question: qText,
+        answers: answers.map(function(a){ return { letter: a.letter, text: a.text, correct: a.letter === correctLetter }; })
+      });
+    }
+    qLines = []; answers = []; correctLetter = ''; awaitCorrect = false;
+  }
+
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i];
+
+    // ── Correct Answer handlers ──────────────────────────────────────────────
+    if (/^Correct\s+Answers?\s*:?\s*$/i.test(line)) { awaitCorrect = true; continue; }
+
+    var inlineCA = line.match(/^Correct\s+Answers?\s*:\s*([A-D])/i);
+    if (inlineCA) { correctLetter = inlineCA[1].toUpperCase(); awaitCorrect = false; if (answers.length >= 2) commit(); continue; }
+
+    // Bare letter on its own line after "Correct Answer:" (e.g. just "B")
+    var bareLetterMatch = line.match(/^([A-D])$/i);
+    if (bareLetterMatch && awaitCorrect) { correctLetter = bareLetterMatch[1].toUpperCase(); awaitCorrect = false; if (answers.length >= 2) commit(); continue; }
+
+    // ── Answer choice (A. B. C. D.) ─────────────────────────────────────────
+    var ansMatch = line.match(/^([A-D])\.\s+(.+)/i);
+    if (ansMatch) {
+      var letter = ansMatch[1].toUpperCase(), text = ansMatch[2].trim();
+      if (awaitCorrect) { correctLetter = letter; awaitCorrect = false; if (answers.length >= 2) commit(); }
+      else if (qLines.length > 0) { answers.push({ letter: letter, text: text }); }
+      continue;
+    }
+
+    // ── Lines to skip entirely ───────────────────────────────────────────────
+    if (!line) {
+      // Blank line: skip, but don't reset qLines — question text may span blank lines
+      continue;
+    }
+    if (/^Rationale\s*:?/i.test(line) || /^Explanation\s*:/i.test(line) || /^View\s+Explanation/i.test(line) ||
+        /^Answer\s+Explanation/i.test(line) || /^Points?\s*:/i.test(line) || /^Category\s*:/i.test(line) ||
+        /^Difficulty\s*:/i.test(line) || /^Tags?\s*:/i.test(line) || /^Your\s+Answer/i.test(line) ||
+        /^[\s\-=_\u2014\u2013\u2015\u2012\uFE58\uFE63\uFF0D\u2500\u2501]{2,}$/.test(line) || /^\d+\s*$/.test(line)) { continue; }
+
+    // ── "Question N" header — commit previous, start fresh ──────────────────
+    if (/^Question\s+\d+/i.test(line)) { if (answers.length >= 2) commit(); continue; }
+
+    // ── Skip pure separator lines (any combo of dashes, underscores, equals, spaces) ──
+    if (/^[\s\-=_\u2014\u2013\u2015\u2012\uFE58\uFE63\uFF0D\u2500\u2501]+$/.test(line)) { continue; }
+
+    // ── If we already have a full question+answers block, commit it first ────
+    if (answers.length >= 2) commit();
+
+    // ── Accumulate question text (handles multi-line questions) ─────────────
+    // Strip leading "Q N." / "N." / "N)" numbering from the very first line only
+    var cleaned = qLines.length === 0
+      ? line.replace(/^Q?\s*\d+[\.\)\s]+/, '').trim()
+      : line;
+    // Strip any leading dash/em-dash separators that bleed onto the question line
+    cleaned = cleaned.replace(/^[\-\u2014\u2013\u2015\u2012\uFE58\uFE63\uFF0D\u2500\u2501\s]+/, '').trim();
+    if (cleaned) qLines.push(cleaned);
+  }
+  if (answers.length >= 2) commit();
+  return questions;
+}
+
+var parsed = [];
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function updatePreview() {
+  var raw = document.getElementById('src').value;
+  parsed = parseProProfs(raw);
+  var preview = document.getElementById('preview');
+  var qcount = document.getElementById('qcount');
+  var btn = document.getElementById('exportBtn');
+  var status = document.getElementById('statusMsg');
+
+  qcount.textContent = parsed.length + ' question' + (parsed.length !== 1 ? 's' : '');
+
+  if (parsed.length === 0) {
+    preview.innerHTML = raw.trim()
+      ? '<div class="preview-warn"><strong>No questions found.</strong>Make sure the text has A. B. C. D. answer choices and a Correct Answer: line. Rationale text is skipped automatically.</div>'
+      : '<span class="preview-empty">Preview will appear as you paste...</span>';
+    btn.disabled = true; status.textContent = ''; return;
+  }
+
+  btn.disabled = false;
+  status.textContent = '✅ ' + parsed.length + ' question' + (parsed.length !== 1 ? 's' : '') + ' ready to export';
+  preview.innerHTML = parsed.map(function(q, i) {
+    return '<div class="q-block"><div class="q-text">' + (i+1) + '. ' + esc(q.question) + '</div>' +
+      q.answers.map(function(a) {
+        return '<div class="ans' + (a.correct ? ' correct' : '') + '">' + esc(a.letter) + '. ' + esc(a.text) + '</div>';
+      }).join('') + '</div>';
+  }).join('');
+}
+
+document.getElementById('src').addEventListener('input', updatePreview);
+
+async function exportDocx() {
+  if (!parsed.length) return;
+  var D = window.docx;
+  function para(text, bold, spaceBefore) {
+    return new D.Paragraph({
+      spacing: { before: spaceBefore || 0, after: 60 },
+      children: [new D.TextRun({ text: text, bold: !!bold, font: 'Calibri', size: 24 })]
+    });
+  }
+  var children = [];
+  parsed.forEach(function(q, idx) {
+    children.push(para((idx+1) + '. ' + q.question, false, idx === 0 ? 0 : 280));
+    q.answers.forEach(function(a) { children.push(para(a.letter + '. ' + a.text, a.correct)); });
+  });
+  var blob = await D.Packer.toBlob(new D.Document({ sections: [{ properties: {}, children: children }] }));
+  saveAs(blob, 'ProProfs-Questions.docx');
+}
+
+document.getElementById('exportBtn').addEventListener('click', exportDocx);
+</script>
+</body>
+</html>
