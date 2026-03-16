@@ -142,14 +142,18 @@
     if (!inDateWindow(a))    return 'outside date window';
 
     var freq = safeJson(a.frequency_rules);
-    var cap  = freq.cap_type || a.display_mode || 'once_ever';
+    // Default to every_load for click-triggered alerts, once_ever for page-load alerts
+    var tr = safeJson(a.trigger_rules);
+    var defaultCap = tr.on_click_selector ? 'every_load' : 'once_ever';
+    var cap  = freq.cap_type || a.display_mode || defaultCap;
 
-    // 1. Session dismissing always trumps all other rules. If they clicked 'X', it stays closed until refresh.
-    if (sessionStorage.getItem(DISMISS_KEY + a.id) === '1') return 'dismissed this session';
+    // Session dismissing blocks re-show (except every_load — cleared at click time)
+    if (cap !== 'every_load' && sessionStorage.getItem(DISMISS_KEY + a.id) === '1') return 'dismissed this session';
 
     if (cap === 'every_load') return null;
 
     var shown = getShownData(a.id);
+    console.log('Alerts: cap=' + cap + ' shown=' + shown.count + ' today=' + shown.today + ' for "' + a.title + '"');
 
     if (cap === 'once_ever' && shown.count > 0)
       return 'already shown (once_ever)';
@@ -312,6 +316,16 @@
       document.addEventListener('click', function(e) {
           var target = e.target.closest(sel);
           if (!target) return;
+
+          var freq = safeJson(a.frequency_rules);
+          var cap  = freq.cap_type || a.display_mode || 'once_ever';
+
+          // For every_load click alerts: clear dismiss so it always re-shows on click
+          if (cap === 'every_load') {
+            sessionStorage.removeItem(DISMISS_KEY + a.id);
+            sessionStorage.removeItem(SHOWN_KEY + a.id);
+          }
+
           // Full frequency/dismiss check at click-time
           var reason = shouldBlock(a);
           if (!reason) {
