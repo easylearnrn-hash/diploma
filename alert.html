@@ -391,10 +391,13 @@
       color: var(--text-muted);
       pointer-events: none;
     }
+    /* Force ALL child nodes to inherit the light text colour —
+       browser contenteditable / execCommand can inject inline black styles */
+    .rte-editor *, .rte-editor *:not(a) { color: inherit !important; }
     .rte-editor b, .rte-editor strong { font-weight: 700; }
     .rte-editor i, .rte-editor em { font-style: italic; }
     .rte-editor u { text-decoration: underline; }
-    .rte-editor a { color: var(--gold-light); text-decoration: underline; }
+    .rte-editor a { color: var(--gold-light) !important; text-decoration: underline; }
     .rte-editor ul { padding-left: 20px; list-style: disc; }
     .rte-editor ol { padding-left: 20px; list-style: decimal; }
 
@@ -1852,6 +1855,31 @@
       // Sync on every input
       editor.addEventListener('input', syncEditorToTextarea);
 
+      // Strip inline colors from pasted content so it always matches the dark theme
+      editor.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const html = e.clipboardData.getData('text/html');
+        if (html) {
+          // Parse, strip color styles, insert sanitized HTML
+          const tmp = document.createElement('div');
+          tmp.innerHTML = html;
+          tmp.querySelectorAll('[style]').forEach(el => {
+            el.style.removeProperty('color');
+            el.style.removeProperty('background-color');
+            el.style.removeProperty('background');
+            el.style.removeProperty('font-family');
+            el.style.removeProperty('font-size');
+            if (!el.getAttribute('style').trim()) el.removeAttribute('style');
+          });
+          document.execCommand('insertHTML', false, tmp.innerHTML);
+        } else {
+          // Plain text fallback
+          const text = e.clipboardData.getData('text/plain');
+          document.execCommand('insertText', false, text);
+        }
+        syncEditorToTextarea();
+      });
+
       // Toolbar button handling
       toolbar.querySelectorAll('.rte-btn[data-cmd]').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -2369,7 +2397,16 @@
         if (titleField) titleField.value = alert.title || '';
         // Restore message into the rich-text editor
         const editorEl = document.getElementById('alert-message-editor');
-        if (editorEl) editorEl.innerHTML = alert.message_html || '';
+        if (editorEl) {
+          editorEl.innerHTML = alert.message_html || '';
+          // Strip any inline color/background styles injected by the browser
+          editorEl.querySelectorAll('[style]').forEach(el => {
+            el.style.removeProperty('color');
+            el.style.removeProperty('background-color');
+            el.style.removeProperty('background');
+            if (!el.getAttribute('style').trim()) el.removeAttribute('style');
+          });
+        }
         if (messageField) messageField.value = alert.message_html || '';
   if (severityField) severityField.value = alert.severity || 'info';
   const requiresResponse = alert.requires_response ?? alert.interaction_rules?.required_response ?? false;
