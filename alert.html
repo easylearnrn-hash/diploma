@@ -1009,13 +1009,7 @@
           <div id="group-selector-container" style="display: none;" class="form-group full-width">
             <label>Select Group</label>
             <select id="alert-group-selector" class="form-control">
-              <option value="">Choose a group...</option>
-              <option value="group_a">Group A</option>
-              <option value="group_b">Group B</option>
-              <option value="group_c">Group C</option>
-              <option value="enrolled">Enrolled Students</option>
-              <option value="pending">Pending Applications</option>
-              <option value="accepted">Accepted (Not Enrolled)</option>
+              <option value="">Choose a group/program...</option>
             </select>
           </div>
 
@@ -1026,6 +1020,13 @@
             </div>
           </div>
 
+          <!-- Trigger Action -->
+          <div class="form-group full-width" style="margin-top:20px; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border);">
+            <label>Trigger Setup <span style="font-weight:400; font-size:12px; color:var(--text-muted);">(Leave empty to trigger on page load)</span></label>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; margin-top: -6px;">Specify a CSS selector if you want the alert to show ONLY when a student clicks a specific button (e.g. <code>.btn-pay</code> or <code>#submit-btn</code>).</p>
+            <input type="text" id="alert-trigger-selector" placeholder="e.g. .btn-checkout, #upgrade-btn" class="form-control">
+          </div>
+          
           <!-- Page targeting — full list with multi-select checkboxes -->
           <div class="form-group full-width">
             <label>Target Pages
@@ -1065,6 +1066,9 @@
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="vital-signs-interpretation-nursing.html"> vital-signs-interpretation-nursing.html</label>
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="head-to-toe-assessment-nursing.html"> head-to-toe-assessment-nursing.html</label>
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="pain-assessment-nursing-nclex.html"> pain-assessment-nursing-nclex.html</label>
+<label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="EKG.html"> EKG.html</label>
+<label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="anatomy.html"> anatomy.html</label>
+<label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="medical-terminology.html"> medical-terminology.html</label>
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="oxygenation-basics-nursing-nclex.html"> oxygenation-basics-nursing-nclex.html</label>
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="nutrition-feeding-nursing-nclex.html"> nutrition-feeding-nursing-nclex.html</label>
                 <label class="page-checkbox"><input type="checkbox" name="page-target-cb" value="nursing-calculations-nclex.html"> nursing-calculations-nclex.html</label>
@@ -1396,6 +1400,31 @@
     // ==========================================
     // LOAD ALERTS
     // ==========================================
+
+    async function loadGroups() {
+      try {
+        const select = document.getElementById('alert-group-selector');
+        // Fetch valid groups/programs from students
+        const { data, error } = await db.from('students').select('program, group_name');
+        if (error) throw error;
+        
+        let groups = new Set(['enrolled', 'pending', 'accepted']); // keep standard status-like groups
+        
+        data.forEach(s => {
+           if (s.program) groups.add(s.program);
+           if (s.group_name) groups.add(s.group_name);
+        });
+        
+        let opts = '<option value="">Choose a group/program...</option>';
+        [...groups].sort().forEach(g => {
+           if(g && g.trim() !== '') opts += `<option value="${g}">${g}</option>`;
+        });
+        select.innerHTML = opts;
+      } catch (err) {
+        console.error("Failed to load dynamic groups", err);
+      }
+    }
+
     async function loadAlerts() {
       const container = document.getElementById('alerts-list');
       
@@ -1959,13 +1988,16 @@
       const displayPosition = document.getElementById('alert-display-position').value;
       const pageTargets = getSelectedPages();
 
+      const clickSelector = (document.getElementById('alert-trigger-selector')?.value || '').trim();
+      
       const trigger_rules = {
         when: ['on_login'],
         pages_whitelist: pageTargets,
         pages_blacklist: [],
         display_position: displayPosition,
         time_window: null,
-        audience: targetType === 'public' ? 'public' : 'students'
+        audience: targetType === 'public' ? 'public' : 'students',
+        on_click_selector: clickSelector || null
       };
 
       // Build interaction_rules JSON

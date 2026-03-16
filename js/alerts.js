@@ -55,7 +55,7 @@
             student_id:       p.student_id       || p.studentId       || null,
             full_name:        p.full_name         || p.fullName         || null,
             email:            p.email             || null,
-            enrollment_group: p.enrollment_group  || p.enrollmentGroup  || null
+            enrollment_group: p.enrollment_group || p.enrollmentGroup || p.group_name || p.group || p.program || null
           };
         }
       } catch(e) {}
@@ -71,10 +71,18 @@
     var alerts = res.data || [];
     console.log('Alerts: ' + alerts.length + ' active in DB');
     for (var i = 0; i < alerts.length; i++) {
-      var reason = shouldBlock(alerts[i]);
-      if (reason) { console.log('skip "' + alerts[i].title + '": ' + reason); continue; }
-      await show(alerts[i]);
-      return;
+      var a = alerts[i];
+      var tr = safeJson(a.trigger_rules);
+      
+      var reason = shouldBlock(a);
+      if (reason) { console.log('skip "' + a.title + '": ' + reason); continue; }
+      
+      if (tr.on_click_selector) {
+         setupClickListener(a, tr.on_click_selector);
+      } else {
+         await show(a);
+         return; // standard alerts only show one at a time to prevent modal stacking
+      }
     }
   }
 
@@ -109,9 +117,10 @@
     var tr    = safeJson(a.trigger_rules);
     var pages = Array.isArray(tr.pages_whitelist) ? tr.pages_whitelist : [];
     if (!pages.length) return true;
-    var file  = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase().replace(/[?#].*/, '');
+    var file  = (window.location.pathname.split('/').pop() || 'index.html').toLowerCase().replace(/[?#].*/, '').replace(/\.html$/, '');
     for (var i = 0; i < pages.length; i++) {
-      if (pages[i].toLowerCase() === file) return true;
+      var p = pages[i].toLowerCase().replace(/\.html$/, '');
+      if (p === file) return true;
     }
     return false;
   }
@@ -212,6 +221,21 @@
       busy = false; run();
     }, 300);
   }
+
+  var _clickAlerts = {};
+  function setupClickListener(a, sel) {
+      if (_clickAlerts[a.id]) return;
+      _clickAlerts[a.id] = true;
+      document.addEventListener('click', function(e) {
+          if (e.target.closest(sel)) {
+              var reason = shouldBlock(a);
+              if (!reason) {
+                  show(a);
+              }
+          }
+      });
+  }
+
   /* ── colours / icons ── */
   var COL = { info:'#c9a84c', success:'#2dd4bf', warn:'#d4b56a', critical:'#ef4444' };
   var ICO = {
