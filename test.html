@@ -7697,45 +7697,7 @@ function coldCallRefreshActiveStudent() {
   `;
 }
 
-// --- COLD CALL ACTIVE STUDENT MULTI-QUESTION HOOK ---
-function coldCallRefreshActiveStudent() {
-  const display = document.getElementById('ccNameDisplay');
-  if (!display || coldCallState.isRolling || !coldCallState.lastPicked) return;
-  
-  display.className = 'cc-name-display revealed';
 
-  const currentQ = testState.questions[testState.currentIndex];
-  const status = currentQ ? testState.answerStatus[currentQ.id] : undefined;
-  const isCorrect = status === 'correct';
-  const isWrong   = status === 'incorrect';
-
-  let resultBadge;
-  if (isCorrect) {
-    resultBadge = `<div class="cc-answered-badge correct"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>Correct</div>`;
-  } else if (isWrong) {
-    resultBadge = `<div class="cc-answered-badge wrong"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Wrong</div>`;
-  } else {
-    resultBadge = `<div class="cc-answered-badge" style="background:rgba(100,116,139,0.18);border-color:rgba(100,116,139,0.35);color:#94a3b8;"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Not answered yet</div>`;
-  }
-
-  const key = coldCallState.lastPicked.id || coldCallState.lastPicked.full_name;
-  const stat = coldCallState.analytics.get(key);
-  const totalAnswered = stat ? (stat.correct + stat.wrong) : 0;
-
-  display.innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom: 8px;">
-      <div class="cc-called-label" style="margin:0; text-align:left;">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg> 
-        Called on
-      </div>
-      <div style="font-size: 10px; color: #94a3b8; background: rgba(255,255,255,0.08); padding: 2px 6px; border-radius: 4px; font-weight: 600;">
-        ${totalAnswered} Answered
-      </div>
-    </div>
-    <div class="cc-name-text">${escapeHtml(coldCallState.lastPicked.full_name)}</div>
-    ${resultBadge}
-  `;
-}
 
 function coldCallUpdateBadgeIfPending(isCorrect) {
   // Only act when a student is picked and their result hasn't been recorded yet
@@ -7765,16 +7727,19 @@ function coldCallAnimatePick(finalName) {
       // Updated logic: We render the final badge including stats
       const currentQ = testState.questions[testState.currentIndex];
       const status = currentQ ? testState.answerStatus[currentQ.id] : undefined;
-      const hasResult = status === 'correct' || status === 'incorrect';
-      
-      coldCallState.isRolling = false; // Must be false for the refresh to actually run!
-      coldCallRefreshActiveStudent();
-      if (pickBtn) pickBtn.disabled = false;
+      const isCorrect = status === 'correct';
+      const isWrong   = status === 'incorrect';
+      const hasResult = isCorrect || isWrong;
 
-      // Auto-record the result (only if the question has been checked)
+      // Auto-record the result BEFORE refreshing so analytics are ready
       if (hasResult) {
         coldCallRecordAnswer(isCorrect);
       }
+
+      coldCallState.isRolling = false; // Must be false for the refresh to actually run!
+      coldCallRefreshActiveStudent();
+      
+      if (pickBtn) pickBtn.disabled = false;
 
       resolve();
     }, 700);
