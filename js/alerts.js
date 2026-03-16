@@ -51,11 +51,15 @@
         var id = p.id || p.student_id_pk;
         if (id) {
           return {
-            id: id,
+            id:               id,
             student_id:       p.student_id       || p.studentId       || null,
             full_name:        p.full_name         || p.fullName         || null,
             email:            p.email             || null,
-            enrollment_group: p.enrollment_group || p.enrollmentGroup || p.group_name || p.group || p.program || null
+            // Keep ALL group fields so matchesAudience can check any of them
+            enrollment_group: p.enrollment_group  || p.enrollmentGroup  || null,
+            group_name:       p.group_name        || p.groupName        || null,
+            group:            p.group             || null,
+            program:          p.program           || null
           };
         }
       } catch(e) {}
@@ -73,15 +77,20 @@
     for (var i = 0; i < alerts.length; i++) {
       var a = alerts[i];
       var tr = safeJson(a.trigger_rules);
-      
-      var reason = shouldBlock(a);
-      if (reason) { console.log('skip "' + a.title + '": ' + reason); continue; }
-      
+
       if (tr.on_click_selector) {
-         setupClickListener(a, tr.on_click_selector);
+        // For click-triggered alerts: only skip if page/audience/date don't match.
+        // Frequency cap is checked at click-time inside setupClickListener, not here —
+        // otherwise once_ever would prevent the listener from ever being registered.
+        if (!matchesPage(a))     { console.log('skip (click) "' + a.title + '": page mismatch'); continue; }
+        if (!matchesAudience(a)) { console.log('skip (click) "' + a.title + '": audience mismatch'); continue; }
+        if (!inDateWindow(a))    { console.log('skip (click) "' + a.title + '": outside date window'); continue; }
+        setupClickListener(a, tr.on_click_selector);
       } else {
-         await show(a);
-         return; // standard alerts only show one at a time to prevent modal stacking
+        var reason = shouldBlock(a);
+        if (reason) { console.log('skip "' + a.title + '": ' + reason); continue; }
+        await show(a);
+        return; // standard alerts only show one at a time to prevent modal stacking
       }
     }
   }
@@ -122,6 +131,7 @@
       var p = pages[i].toLowerCase().replace(/\.html$/, '');
       if (p === file) return true;
     }
+    console.log('Alerts: page mismatch — current="' + file + '" allowed=' + JSON.stringify(pages));
     return false;
   }
 
@@ -161,6 +171,7 @@
         if (!cand) continue;
         if (studentGroups.indexOf(cand) !== -1) return true;
       }
+      console.log('Alerts: audience mismatch — student groups=' + JSON.stringify(studentGroups) + ' required=' + JSON.stringify(candidates));
       return false;
     }
     return true;
@@ -251,12 +262,16 @@
   function setupClickListener(a, sel) {
       if (_clickAlerts[a.id]) return;
       _clickAlerts[a.id] = true;
+      console.log('Alerts: click listener attached for "' + a.title + '" on selector: ' + sel);
       document.addEventListener('click', function(e) {
-          if (e.target.closest(sel)) {
-              var reason = shouldBlock(a);
-              if (!reason) {
-                  show(a);
-              }
+          var target = e.target.closest(sel);
+          if (!target) return;
+          // Full frequency/dismiss check at click-time
+          var reason = shouldBlock(a);
+          if (!reason) {
+              show(a);
+          } else {
+              console.log('Alerts: click blocked for "' + a.title + '": ' + reason);
           }
       });
   }
