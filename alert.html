@@ -401,6 +401,33 @@
     .rte-editor ul { padding-left: 20px; list-style: disc; }
     .rte-editor ol { padding-left: 20px; list-style: decimal; }
 
+    /* ── TRIGGER TAGS ── */
+    .trigger-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(201,168,76,0.12);
+      border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 6px;
+      padding: 3px 10px 3px 10px;
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      color: var(--gold-light);
+      white-space: nowrap;
+    }
+    .trigger-tag button {
+      background: none;
+      border: none;
+      color: rgba(201,168,76,0.6);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+      margin: 0;
+      transition: color 0.15s;
+    }
+    .trigger-tag button:hover { color: #f87171; }
+
     /* ── PAGE PICKER ── */
     .page-picker {
       background: rgba(255,255,255,0.02);
@@ -1026,7 +1053,7 @@
           <!-- Trigger Action -->
           <div class="form-group full-width" style="margin-top:20px; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border);">
             <label>Trigger Setup <span style="font-weight:400; font-size:12px; color:var(--text-muted);">(Leave empty to trigger on page load)</span></label>
-            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; margin-top: -6px;">Specify a CSS selector if you want the alert to show ONLY when a student clicks a specific button (e.g. <code>.btn-pay</code> or <code>#submit-btn</code>).</p>
+            <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; margin-top: -6px;">Pick buttons from the scanner — the alert fires when a student clicks <strong>any</strong> of them.</p>
             <div style="display: flex; flex-direction: column; gap: 8px;">
                <div style="display: flex; gap: 8px;">
                   <select id="alert-page-scanner" class="form-control" style="width: 240px;" onchange="scanPageForButtons(this.value)">
@@ -1051,13 +1078,22 @@
                        <option value="fundamentals-nursing-nclex.html">📖 Fundamentals NCLEX</option>
                      </optgroup>
                   </select>
-                  <select id="alert-dynamic-buttons" class="form-control" style="flex: 1;" onchange="if(this.value) document.getElementById('alert-trigger-selector').value = this.value;">
-                     <option value="">2. Select a Button / Action...</option>
+                  <select id="alert-dynamic-buttons" class="form-control" style="flex: 1;" onchange="addTriggerSelector(this.value); this.selectedIndex = 0;">
+                     <option value="">2. Select a Button to Add…</option>
                   </select>
                </div>
-               <div style="display: flex; align-items: center; gap: 8px;">
-                 <span style="color: var(--text-muted); font-size: 13px;">Selected Trigger:</span>
-                 <input type="text" id="alert-trigger-selector" placeholder="e.g. .btn-checkout, #upgrade-btn" class="form-control" style="flex: 1; min-height: 38px;">
+               <!-- Multi-trigger tag pills -->
+               <div style="display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+                 <span style="color: var(--text-muted); font-size: 13px; padding-top:7px; white-space:nowrap;">Selected Triggers:</span>
+                 <div id="trigger-tags" style="display:flex; flex-wrap:wrap; gap:6px; flex:1; min-height:36px; padding:4px 0;"></div>
+               </div>
+               <!-- Hidden input keeps the comma-separated value for getFormData() -->
+               <input type="hidden" id="alert-trigger-selector">
+               <!-- Optional: type one manually -->
+               <div style="display:flex; gap:8px; align-items:center;">
+                 <input type="text" id="alert-trigger-manual" placeholder="Or type a selector manually and press Enter / + (e.g. #tab-grades)" class="form-control" style="flex:1; min-height:36px; font-size:13px;" onkeydown="if(event.key==='Enter'){event.preventDefault();addTriggerSelector(this.value);this.value='';}">
+                 <button type="button" class="btn btn-secondary" style="min-height:36px; padding:0 14px; font-size:13px;" onclick="addTriggerSelector(document.getElementById('alert-trigger-manual').value); document.getElementById('alert-trigger-manual').value='';">+ Add</button>
+                 <button type="button" class="btn btn-secondary" style="min-height:36px; padding:0 14px; font-size:13px; color:#f87171;" onclick="clearTriggerSelectors()">Clear All</button>
                </div>
             </div>
           </div>
@@ -1437,6 +1473,52 @@
     // ==========================================
     // BUTTON SCANNER
     // ==========================================
+
+    // ── Multi-trigger selector management ──
+    var _triggerSelectors = [];
+
+    function getTriggerSelectors() { return _triggerSelectors; }
+
+    function addTriggerSelector(val) {
+      if (!val || !val.trim()) return;
+      var parts = val.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+      parts.forEach(function(sel) {
+        if (_triggerSelectors.indexOf(sel) === -1) _triggerSelectors.push(sel);
+      });
+      renderTriggerTags();
+    }
+
+    function removeTriggerSelector(sel) {
+      _triggerSelectors = _triggerSelectors.filter(function(s){ return s !== sel; });
+      renderTriggerTags();
+    }
+
+    function clearTriggerSelectors() {
+      _triggerSelectors = [];
+      renderTriggerTags();
+    }
+
+    function setTriggerSelectors(arr) {
+      _triggerSelectors = Array.isArray(arr) ? arr.slice() : (arr ? arr.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : []);
+      renderTriggerTags();
+    }
+
+    function renderTriggerTags() {
+      var container = document.getElementById('trigger-tags');
+      var hidden = document.getElementById('alert-trigger-selector');
+      if (!container) return;
+      if (_triggerSelectors.length === 0) {
+        container.innerHTML = '<span style="color:var(--text-muted);font-size:12px;padding-top:6px;">No triggers selected — alert fires on page load</span>';
+        if (hidden) hidden.value = '';
+        return;
+      }
+      container.innerHTML = _triggerSelectors.map(function(sel) {
+        var escaped = sel.replace(/"/g, '&quot;');
+        return '<span class="trigger-tag"><code style="font-family:inherit;">' + escapeHtml(sel) + '</code>' +
+               '<button type="button" title="Remove" onclick="removeTriggerSelector(\'' + escaped + '\')">&times;</button></span>';
+      }).join('');
+      if (hidden) hidden.value = _triggerSelectors.join(', ');
+    }
 
     async function scanPageForButtons(pageFile) {
       const select = document.getElementById('alert-dynamic-buttons');
@@ -2520,26 +2602,8 @@
         const pages = alert.trigger_rules?.pages_whitelist || [];
         setSelectedPages(pages);
 
-        // Restore click trigger selector
-        const triggerSelectorField = document.getElementById('alert-trigger-selector');
-        const savedSelector = alert.trigger_rules?.on_click_selector || '';
-        if (triggerSelectorField) triggerSelectorField.value = savedSelector;
-        // Also update the button dropdown to show the saved value as selected if possible
-        const dynamicButtonsSelect = document.getElementById('alert-dynamic-buttons');
-        if (dynamicButtonsSelect && savedSelector) {
-          // Try to find and select the matching option
-          const existingOpt = Array.from(dynamicButtonsSelect.options).find(o => o.value === savedSelector);
-          if (existingOpt) {
-            existingOpt.selected = true;
-          } else {
-            // Add a placeholder option showing the saved selector so it's visible
-            const opt = document.createElement('option');
-            opt.value = savedSelector;
-            opt.textContent = '✓ Saved: ' + savedSelector;
-            opt.selected = true;
-            dynamicButtonsSelect.insertBefore(opt, dynamicButtonsSelect.options[1]);
-          }
-        }
+        // Restore click trigger selectors (supports comma-separated multiple)
+        setTriggerSelectors(alert.trigger_rules?.on_click_selector || '');
 
         // Session repeat behavior
         const sessionRepeatField = document.getElementById('alert-allow-session-repeat');
@@ -3409,6 +3473,7 @@
       if (hiddenMsg) hiddenMsg.value = '';
       const triggerField = document.getElementById('alert-trigger-selector');
       if (triggerField) triggerField.value = '';
+      clearTriggerSelectors();
       const dynButtons = document.getElementById('alert-dynamic-buttons');
       if (dynButtons) dynButtons.innerHTML = '<option value="">2. Select a Button / Action...</option>';
       const pageScannerSelect = document.getElementById('alert-page-scanner');

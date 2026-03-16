@@ -312,9 +312,11 @@
   function setupClickListener(a, sel) {
       if (_clickAlerts[a.id]) return;
       _clickAlerts[a.id] = true;
-      console.log('Alerts: click listener attached for "' + a.title + '" on selector: ' + sel);
+      // Normalise: trim each selector in the comma-separated list
+      var normSel = sel.split(',').map(function(s){ return s.trim(); }).filter(Boolean).join(', ');
+      console.log('Alerts: click listener attached for "' + a.title + '" on selector: ' + normSel);
       document.addEventListener('click', function(e) {
-          var target = e.target.closest(sel);
+          var target = e.target.closest(normSel);
           if (!target) return;
 
           var freq = safeJson(a.frequency_rules);
