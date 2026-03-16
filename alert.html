@@ -1026,13 +1026,30 @@
             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; margin-top: -6px;">Specify a CSS selector if you want the alert to show ONLY when a student clicks a specific button (e.g. <code>.btn-pay</code> or <code>#submit-btn</code>).</p>
             <div style="display: flex; flex-direction: column; gap: 8px;">
                <div style="display: flex; gap: 8px;">
-                  <select id="alert-page-scanner" class="form-control" style="width: 220px;" onchange="scanPageForButtons(this.value)">
-                     <option value="">1. Pick a Page to Scan...</option>
-                     <option value="hub.html">Student Hub (Menu/Sidebar)</option>
-                     <option value="invoice.html">Invoices / Financial</option>
-                     <option value="studies-portal.html">Studies Portal</option>
-                     <option value="test.html">Test platform</option>
-                     <option value="student-dashboard.html">Dashboard</option>
+                  <select id="alert-page-scanner" class="form-control" style="width: 240px;" onchange="scanPageForButtons(this.value)">
+                     <option value="">1. Pick a Page to Scan…</option>
+                     <optgroup label="Student Portal">
+                       <option value="hub.html">Student Hub</option>
+                       <option value="studies-portal.html">Studies Portal</option>
+                       <option value="notes.html">Notes Library</option>
+                       <option value="student-email.html">Student Email</option>
+                       <option value="student-card.html">Student Card</option>
+                       <option value="invoice.html">Invoices / Financial</option>
+                       <option value="invoice-view.html">Invoice View</option>
+                       <option value="acceptance-letter.html">Acceptance Letter</option>
+                     </optgroup>
+                     <optgroup label="Application Flow">
+                       <option value="admission-form.html">Admission Form</option>
+                       <option value="application-status.html">Application Status</option>
+                       <option value="final-form.html">Final Form</option>
+                       <option value="login.html">Login</option>
+                     </optgroup>
+                     <optgroup label="Academic / Testing">
+                       <option value="test.html">Test Platform</option>
+                       <option value="fundamentals-nursing-nclex.html">Fundamentals NCLEX</option>
+                       <option value="informed-consent-nursing.html">Informed Consent</option>
+                       <option value="delegation-nursing-nclex.html">Delegation NCLEX</option>
+                     </optgroup>
                   </select>
                   <select id="alert-dynamic-buttons" class="form-control" style="flex: 1;" onchange="if(this.value) document.getElementById('alert-trigger-selector').value = this.value;">
                      <option value="">2. Select a Button / Action...</option>
@@ -1375,6 +1392,7 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
       db = initSupabase();
+      await loadGroups();
       await loadAlerts();
       await loadTemplates();
       await loadStudents();
@@ -1413,6 +1431,73 @@
           document.getElementById(`tab-${targetTab}`).classList.add('active');
         });
       });
+    }
+
+    // ==========================================
+    // BUTTON SCANNER
+    // ==========================================
+
+    async function scanPageForButtons(pageFile) {
+      const select = document.getElementById('alert-dynamic-buttons');
+      select.innerHTML = '<option value="">Scanning…</option>';
+      if (!pageFile) {
+        select.innerHTML = '<option value="">2. Select a Button / Action...</option>';
+        return;
+      }
+      try {
+        const resp = await fetch(pageFile + '?nocache=' + Date.now());
+        if (!resp.ok) throw new Error('Fetch failed');
+        const text = await resp.text();
+        const doc = new DOMParser().parseFromString(text, 'text/html');
+
+        // Collect all clickable elements
+        const els = doc.querySelectorAll('a[href], a[data-view], button, [onclick], input[type="submit"], input[type="button"]');
+
+        const options = [];
+        const seen = new Set();
+
+        els.forEach(el => {
+          let label = el.textContent.replace(/\s+/g, ' ').trim();
+          // Strip SVG text noise
+          el.querySelectorAll('svg').forEach(s => s.remove());
+          label = el.textContent.replace(/\s+/g, ' ').trim();
+          if (!label || label.length < 2) label = el.getAttribute('title') || el.getAttribute('aria-label') || el.getAttribute('value') || '(icon button)';
+          if (label.length > 50) label = label.substring(0, 50) + '…';
+
+          let sel = '';
+          if (el.id) {
+            sel = '#' + el.id;
+          } else if (el.dataset && el.dataset.view) {
+            sel = "[data-view='" + el.dataset.view + "']";
+          } else if (el.getAttribute('onclick')) {
+            const fn = (el.getAttribute('onclick').match(/(\w+)\s*\(/) || [])[1];
+            if (fn) sel = "[onclick*='" + fn + "']";
+          } else if (el.getAttribute('href') && el.getAttribute('href') !== '#') {
+            const href = el.getAttribute('href').replace(/[?#].*/, '').split('/').pop();
+            if (href) sel = "[href*='" + href + "']";
+          } else if (el.classList.length) {
+            const best = Array.from(el.classList).find(c => !['active','show','hide'].includes(c));
+            if (best) sel = '.' + best;
+          }
+
+          if (sel && !seen.has(sel)) {
+            seen.add(sel);
+            options.push({ label, sel });
+          }
+        });
+
+        if (!options.length) {
+          select.innerHTML = '<option value="">No buttons found on this page</option>';
+          return;
+        }
+
+        select.innerHTML = '<option value="">— choose a button (' + options.length + ' found) —</option>'
+          + options.map(o => `<option value="${o.sel}">${o.label}  ·  ${o.sel}</option>`).join('');
+
+      } catch (e) {
+        console.error('Scanner error:', e);
+        select.innerHTML = '<option value="">⚠ Could not scan (must run on localhost:8000)</option>';
+      }
     }
 
     // ==========================================

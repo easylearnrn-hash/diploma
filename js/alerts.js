@@ -129,14 +129,39 @@
     var type = a.target_type || 'all';
     if (type === 'all' || type === 'public') return true;
     if (!student) return false;
+
     if (type === 'individual') {
       var ids = a.target_student_ids || [];
       if (typeof ids === 'string') { try { ids = JSON.parse(ids); } catch(e) {} }
       return Array.isArray(ids) && ids.indexOf(student.id) !== -1;
     }
+
     if (type === 'group') {
-      var g = a.target_group || '';
-      return !g || (student.enrollment_group || '') === g;
+      // Collect every group the student could belong to (DB has reserved col "group")
+      var studentGroups = [
+        student.enrollment_group,
+        student.group_name,
+        student.group,
+        student.program
+      ].filter(Boolean).map(function(g){ return String(g).trim().toLowerCase(); });
+
+      // Check flat target_group column
+      var flat = a.target_group || '';
+
+      // Check targeting_rules.groups array (new rule engine)
+      var tr   = safeJson(a.targeting_rules);
+      var ruleGroups = Array.isArray(tr.groups) ? tr.groups : (flat ? [flat] : []);
+
+      // No group restriction set → show to all
+      if (!ruleGroups.length && !flat) return true;
+
+      var candidates = ruleGroups.length ? ruleGroups : [flat];
+      for (var i = 0; i < candidates.length; i++) {
+        var cand = String(candidates[i]).trim().toLowerCase();
+        if (!cand) continue;
+        if (studentGroups.indexOf(cand) !== -1) return true;
+      }
+      return false;
     }
     return true;
   }
