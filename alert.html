@@ -1024,7 +1024,23 @@
           <div class="form-group full-width" style="margin-top:20px; padding: 16px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border);">
             <label>Trigger Setup <span style="font-weight:400; font-size:12px; color:var(--text-muted);">(Leave empty to trigger on page load)</span></label>
             <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; margin-top: -6px;">Specify a CSS selector if you want the alert to show ONLY when a student clicks a specific button (e.g. <code>.btn-pay</code> or <code>#submit-btn</code>).</p>
-            <input type="text" id="alert-trigger-selector" placeholder="e.g. .btn-checkout, #upgrade-btn" class="form-control">
+            <div style="display: flex; gap: 8px;">
+              <select id="alert-trigger-preset" class="form-control" style="width: 250px;" onchange="if(this.value) document.getElementById('alert-trigger-selector').value = this.value;">
+                 <option value="">-- Custom CSS --</option>
+                 <option value="[data-view='dashboard']">Dashboard Button</option>
+                 <option value="[data-view='notes']">Notes Library Button</option>
+                 <option value="[data-view='videos']">Video Library Button</option>
+                 <option value="[data-view='courses']">Courses Button</option>
+                 <option value="[data-view='assignments']">Assignments Button</option>
+                 <option value="[data-view='calendar']">Schedule Button</option>
+                 <option value="[data-view='grades']">Grades Button</option>
+                 <option value="[data-view='downloads']">Downloads Button</option>
+                 <option value="[onclick*='openTestPlatform']">Test Platform Button</option>
+                 <option value="[data-view='support']">Support Button</option>
+                 <option value=".invoice-pay-btn, [href*='invoice']">Pay Invoice / Financial Buttons</option>
+              </select>
+              <input type="text" id="alert-trigger-selector" placeholder="e.g. .btn-checkout, #upgrade-btn" class="form-control" style="flex: 1;">
+            </div>
           </div>
           
           <!-- Page targeting — full list with multi-select checkboxes -->
@@ -1404,16 +1420,27 @@
     async function loadGroups() {
       try {
         const select = document.getElementById('alert-group-selector');
-        // Fetch valid groups/programs from students
-        const { data, error } = await db.from('students').select('program, group_name');
-        if (error) throw error;
         
         let groups = new Set(['enrolled', 'pending', 'accepted']); // keep standard status-like groups
         
-        data.forEach(s => {
-           if (s.program) groups.add(s.program);
-           if (s.group_name) groups.add(s.group_name);
-        });
+        // Fetch from student_groups table if exists
+        try {
+            const { data: sgData, error: sgErr } = await db.from('student_groups').select('name');
+            if (!sgErr && sgData) {
+                sgData.forEach(g => { if (g.name) groups.add(g.name); });
+            }
+        } catch(e) {}
+        
+        // Fetch valid groups/programs from students
+        try {
+            const { data, error } = await db.from('students').select('program, group_name');
+            if (!error && data) {
+                data.forEach(s => {
+                   if (s.program) groups.add(s.program);
+                   if (s.group_name) groups.add(s.group_name);
+                });
+            }
+        } catch(e) {}
         
         let opts = '<option value="">Choose a group/program...</option>';
         [...groups].sort().forEach(g => {
