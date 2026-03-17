@@ -7768,8 +7768,10 @@ const coldCallState = {
   selectedGroup: null,   // currently selected group name
   students: [],          // full student list for current group
   queue: [],             // remaining students not yet called this round
-  calledThisRound: [],   // students already called this round
+  calledThisRound: [],   // students already called this round (in order)
   lastPicked: null,      // last student shown
+  lastCycleEndIds: [],   // IDs of the last few students from the previous cycle — kept to
+                         // prevent them from appearing at the start of the next cycle
   isLoading: false,
   isRolling: false,
   cycleComplete: false,
@@ -7841,6 +7843,7 @@ async function onColdCallGroupChange() {
   coldCallState.queue = [];
   coldCallState.calledThisRound = [];
   coldCallState.lastPicked = null;
+  coldCallState.lastCycleEndIds = [];
   coldCallState.cycleComplete = false;
 
   coldCallUpdateUI();
@@ -7890,19 +7893,53 @@ async function coldCallLoadStudentsForGroup(groupName) {
 // ─── Start a fresh cycle (shuffle the full student list) ─────────────────────
 function coldCallStartNewCycle() {
   if (coldCallState.students.length === 0) return;
+
+  // Remember the tail of the cycle we're about to replace so we can keep those
+  // students away from the START of the new cycle.
+  // We save up to min(3, floor(n/2)) IDs so we don't over-constrain small groups.
+  const tail = coldCallState.calledThisRound;
+  const guardCount = Math.min(3, Math.floor(coldCallState.students.length / 2));
+  if (tail.length > 0) {
+    // Take the last `guardCount` students who were called (end of the old cycle)
+    coldCallState.lastCycleEndIds = tail
+      .slice(-guardCount)
+      .map(s => s.id);
+  }
+
   // Fisher-Yates shuffle
   const arr = [...coldCallState.students];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  
-  // Anti-repeat constraint: If the queue was empty (meaning we just finished a cycle)
-  // and the new cycle's first pick is the EXACT SAME person who was picked last,
-  // push them to the end of the line so they never get called back-to-back.
-  if (coldCallState.lastPicked && arr.length > 1 && arr[0].id === coldCallState.lastPicked.id) {
-    const first = arr.shift();
-    arr.push(first);
+
+  // Anti-repeat: push any guarded student found at the front toward the back.
+  // We iterate forward through the queue and, for each position up to guardCount,
+  // if the student at that slot is in lastCycleEndIds, swap them with a random
+  // student from the second half of the array so the front stays fresh.
+  if (coldCallState.lastCycleEndIds.length > 0 && arr.length > 1) {
+    const guardSet = new Set(coldCallState.lastCycleEndIds);
+    // How many positions at the front are we protecting?
+    const frontGuard = Math.min(guardCount, arr.length - 1);
+    for (let pos = 0; pos < frontGuard; pos++) {
+      if (guardSet.has(arr[pos].id)) {
+        // Find a swap candidate in the back half that is NOT guarded
+        const backStart = Math.max(frontGuard, Math.floor(arr.length / 2));
+        let swapIdx = -1;
+        for (let k = backStart; k < arr.length; k++) {
+          if (!guardSet.has(arr[k].id)) { swapIdx = k; break; }
+        }
+        // Fallback: any non-guarded position beyond frontGuard
+        if (swapIdx === -1) {
+          for (let k = frontGuard; k < arr.length; k++) {
+            if (!guardSet.has(arr[k].id)) { swapIdx = k; break; }
+          }
+        }
+        if (swapIdx !== -1) {
+          [arr[pos], arr[swapIdx]] = [arr[swapIdx], arr[pos]];
+        }
+      }
+    }
   }
 
   coldCallState.queue = arr;
