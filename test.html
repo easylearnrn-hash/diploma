@@ -398,6 +398,104 @@ body{
   flex-shrink: 0;
 }
 
+/* ── ZOOM PICKER ── */
+.zoom-picker {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(255,255,255,0.05);
+  border: 1.5px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+}
+
+.zoom-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  color: #94a3b8;
+  letter-spacing: 0.3px;
+  transition: all 0.15s;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.zoom-btn:hover {
+  background: rgba(255,255,255,0.07);
+  color: #f1f5f9;
+}
+
+.zoom-btn.active {
+  background: linear-gradient(135deg, rgba(201,168,76,0.22), rgba(201,168,76,0.10));
+  border: 1px solid rgba(201,168,76,0.45);
+  color: var(--gold-primary);
+}
+
+.zoom-btn[data-size="small"]  { font-size: 11px; }
+.zoom-btn[data-size="medium"] { font-size: 13px; }
+.zoom-btn[data-size="large"]  { font-size: 16px; }
+
+/* ── ZOOM SIZE MODIFIERS on question panel content ── */
+/* Default (small) — already set by individual element rules */
+
+/* Medium */
+body[data-zoom="medium"] .question-stem {
+  font-size: 19px;
+  line-height: 1.8;
+}
+body[data-zoom="medium"] .option-text {
+  font-size: 17px;
+  line-height: 1.7;
+}
+body[data-zoom="medium"] .option-letter {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  font-size: 14px;
+}
+body[data-zoom="medium"] .option {
+  padding: 16px 20px;
+}
+body[data-zoom="medium"] .question-number {
+  font-size: 16px;
+}
+body[data-zoom="medium"] .question-type-badge {
+  font-size: 11px;
+}
+
+/* Large */
+body[data-zoom="large"] .question-stem {
+  font-size: 23px;
+  line-height: 1.85;
+}
+body[data-zoom="large"] .option-text {
+  font-size: 20px;
+  line-height: 1.75;
+}
+body[data-zoom="large"] .option-letter {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  font-size: 16px;
+}
+body[data-zoom="large"] .option {
+  padding: 18px 22px;
+  margin-bottom: 13px;
+}
+body[data-zoom="large"] .question-number {
+  font-size: 18px;
+}
+body[data-zoom="large"] .question-type-badge {
+  font-size: 12px;
+}
+
 /* Armenian text hint on question stem */
 .lang-badge {
   display: inline-flex;
@@ -613,7 +711,29 @@ body{
   box-shadow: 0 8px 32px rgba(0,0,0,0.2);
   display: flex;
   flex-direction: column;
+  /* Fixed height so zoom changes never resize the container */
+  min-height: 780px;
+  height: 780px;
+  overflow: hidden;
 }
+
+/* The stem + options area scrolls inside the fixed panel */
+.question-panel-scrollable {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--navy-border) transparent;
+  display: flex;
+  flex-direction: column;
+  padding-right: 4px;
+  padding-bottom: 8px;
+  min-height: 0; /* required for flex children to shrink & scroll */
+}
+.question-panel-scrollable::-webkit-scrollbar { width: 4px; }
+.question-panel-scrollable::-webkit-scrollbar-track { background: transparent; }
+.question-panel-scrollable::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 99px; }
+.question-panel-scrollable::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,0.4); }
 
 .question-header {
   display: flex;
@@ -763,6 +883,8 @@ body{
   line-height: 1.6;
   color: #cbd5e1;
   font-weight: 500;
+  pointer-events: none; /* let clicks fall through to the .option div handler */
+  user-select: none;
 }
 
 .option.selected .option-text {
@@ -775,6 +897,31 @@ body{
 
 .option.incorrect .option-text {
   color: #fca5a5;
+}
+
+/* Inline Check Answer button — lives inside the selected option row */
+.option-check-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: none;
+  background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+  color: var(--navy-primary);
+  font-size: 12px;
+  font-weight: 800;
+  font-family: 'Inter', sans-serif;
+  letter-spacing: 0.4px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(201,168,76,0.35);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.option-check-btn:hover {
+  transform: scale(1.04);
+  box-shadow: 0 4px 16px rgba(201,168,76,0.5);
 }
 
 /* NAVIGATION BUTTONS */
@@ -2395,6 +2542,13 @@ body{
           </svg>
           <span>Flag</span>
         </button>
+        <!-- TEXT SIZE PICKER -->
+        <div class="zoom-picker" id="zoomPicker" title="Text size">
+          <button class="zoom-btn active" data-size="small"  onclick="setZoom('small')"  title="Small text">A</button>
+          <button class="zoom-btn"        data-size="medium" onclick="setZoom('medium')" title="Medium text">A</button>
+          <button class="zoom-btn"        data-size="large"  onclick="setZoom('large')"  title="Large text">A</button>
+        </div>
+
         <!-- LANGUAGE PICKER — visible to all users once a test session is active -->
         <div class="lang-picker" id="langPicker" style="display:none" title="Switch language / Փոխել լեզուն">
           <button class="lang-btn active" id="langBtnEn" onclick="switchLanguage('en')" title="English">
@@ -2430,7 +2584,9 @@ body{
         <div class="question-number" id="questionNumber">Question 1</div>
         <div class="question-type-badge" id="questionType">Single Answer</div>
       </div>
-      
+
+      <!-- Scrollable middle: stem + options + feedback -->
+      <div class="question-panel-scrollable">
       <div class="question-stem" id="questionStem">Loading question...</div>
       
       <!-- No-translation notice shown when Armenian is selected but question lacks translation -->
@@ -2445,6 +2601,7 @@ body{
       
       <!-- ANSWER FEEDBACK -->
       <div id="answerFeedback" style="display:none;margin:24px 0;padding:20px;border-radius:12px;font-weight:600;font-size:16px;"></div>
+      </div><!-- /.question-panel-scrollable -->
       
       <div class="question-actions">
         <button class="btn-secondary" id="backBtn" onclick="previousQuestion()" disabled>
@@ -2455,12 +2612,8 @@ body{
         </button>
         <div class="right-actions">
           <button class="btn-secondary" onclick="clearAnswer()">Clear Answer</button>
-          <button class="btn btn-primary" id="checkAnswerBtn" onclick="checkAnswer()" style="display:none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-right:6px">
-              <polyline points="20 6 9 17 4 12"/>
-            </svg>
-            Check Answer
-          </button>
+          <!-- checkAnswerBtn is now rendered inline on the selected option row; keep in DOM for JS refs -->
+          <button class="btn btn-primary" id="checkAnswerBtn" onclick="checkAnswer()" style="display:none!important;position:absolute;pointer-events:none;visibility:hidden;" aria-hidden="true" tabindex="-1"></button>
           <button class="btn-secondary" id="nextBtn" onclick="nextQuestion()">
             Next
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;margin-left:6px">
@@ -4364,6 +4517,24 @@ function applyLanguagePicker() {
   }
 }
 
+// ── TEXT SIZE (ZOOM) ───────────────────────────────────────────────────────
+const ZOOM_LEVELS = ['small', 'medium', 'large'];
+
+function setZoom(level) {
+  if (!ZOOM_LEVELS.includes(level)) level = 'small';
+  document.body.setAttribute('data-zoom', level);
+  localStorage.setItem('acnhs_test_zoom', level);
+  // Update picker button states
+  document.querySelectorAll('#zoomPicker .zoom-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === level);
+  });
+}
+
+(function initZoom() {
+  const saved = localStorage.getItem('acnhs_test_zoom') || 'small';
+  setZoom(saved);
+})();
+
 // Language switch — called by the picker buttons
 function switchLanguage(lang) {
   if (lang === testState.language) return;
@@ -5772,22 +5943,25 @@ function renderQuestion() {
     letterSpan.className = 'option-letter';
     letterSpan.textContent = letter;
 
-    const label = document.createElement('label');
-    label.htmlFor = input.id;
-    label.className = 'option-text';
-    label.textContent = option.text; // Language-specific text
-    
-  div.appendChild(input);
-  div.appendChild(letterSpan);
-  div.appendChild(label);
-  frag.appendChild(div);
-    
-    // Make entire div clickable
-    div.onclick = (e) => {
-      if (e.target !== input) {
-        input.click();
-      }
-    };
+    const textSpan = document.createElement('span');
+    textSpan.className = 'option-text';
+    textSpan.textContent = option.text; // Language-specific text
+
+    div.appendChild(input);
+    div.appendChild(letterSpan);
+    div.appendChild(textSpan);
+    frag.appendChild(div);
+
+    // Make the entire row clickable — toggle the hidden input directly.
+    // Avoid double-fire: if the click landed ON the input itself, the browser
+    // already toggled it, so we do nothing extra.
+    div.addEventListener('click', (e) => {
+      // Ignore clicks on the inline Check Answer button
+      if (e.target.closest('.option-check-btn')) return;
+      // Ignore clicks directly on the input (browser already handled it)
+      if (e.target === input) return;
+      input.click();
+    });
   });
 
   container.replaceChildren(frag);
@@ -5804,13 +5978,13 @@ function renderQuestion() {
   const backBtn = document.getElementById('backBtn');
   backBtn.disabled = !TEST_CONFIG.showBackButton || testState.currentIndex === 0;
   
-  // Hide answer feedback and check button when question changes
+  // Hide answer feedback and remove inline check button when question changes
   document.getElementById('answerFeedback').style.display = 'none';
-  document.getElementById('checkAnswerBtn').style.display = 'none';
+  removeInlineCheckBtn();
   
-  // STUDENT VIEW: Hide check answer button completely
+  // STUDENT VIEW: never show Check Answer button
   if (TEACHER_MODE.isStudent && !TEACHER_MODE.enabled) {
-    document.getElementById('checkAnswerBtn').style.display = 'none';
+    // nothing to show
   } else {
     const existingStatus = testState.answerStatus[question.id];
     // Rationale text in the active language (falls back to EN)
@@ -5865,14 +6039,22 @@ function renderQuestion() {
         }
       });
 
-      // Check button should stay hidden — answer already revealed
-      document.getElementById('checkAnswerBtn').style.display = 'none';
+      // Answer already revealed — no inline check button needed
+      removeInlineCheckBtn();
 
     } else {
-      // Not yet checked — show check button only if an answer is selected
+      // Not yet checked — if answer is already selected (saved), show inline check button
       const savedAnswer = testState.answers[question.id];
       if (savedAnswer && (Array.isArray(savedAnswer) ? savedAnswer.length > 0 : true)) {
-        document.getElementById('checkAnswerBtn').style.display = 'inline-flex';
+        const selectedOpt = document.querySelector('.option.selected');
+        if (selectedOpt) {
+          const btn = document.createElement('button');
+          btn.className = 'option-check-btn';
+          btn.id = 'inlineCheckAnswerBtn';
+          btn.onclick = (e) => { e.stopPropagation(); checkAnswer(); };
+          btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:inline"><polyline points="20 6 9 17 4 12"/></svg> Check`;
+          selectedOpt.appendChild(btn);
+        }
       }
     }
   }
@@ -5911,14 +6093,26 @@ function handleAnswerChange(questionId, isMulti) {
       opt.classList.remove('selected');
     }
   });
-  
-  // Show check answer button if question is answered
+
+  // Remove any existing inline check button from all options
+  removeInlineCheckBtn();
+
+  // Show inline Check Answer button on the selected option row
   const hasAnswer = testState.answers[questionId];
-  const checkBtn = document.getElementById('checkAnswerBtn');
-  if (hasAnswer && (isMulti ? hasAnswer.length > 0 : true)) {
-    checkBtn.style.display = 'inline-flex';
-  } else {
-    checkBtn.style.display = 'none';
+  const isStudent = TEACHER_MODE.isStudent && !TEACHER_MODE.enabled;
+  if (hasAnswer && (isMulti ? hasAnswer.length > 0 : true) && !isStudent) {
+    // For single-answer: find the selected option div; for multi: use the last checked
+    const selectedOpt = isMulti
+      ? document.querySelector(`.option input[name="${inputName}"]:checked`)?.closest('.option')
+      : document.querySelector(`.option.selected`);
+    if (selectedOpt) {
+      const btn = document.createElement('button');
+      btn.className = 'option-check-btn';
+      btn.id = 'inlineCheckAnswerBtn';
+      btn.onclick = (e) => { e.stopPropagation(); checkAnswer(); };
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="display:inline"><polyline points="20 6 9 17 4 12"/></svg> Check`;
+      selectedOpt.appendChild(btn);
+    }
   }
   
   // Hide feedback when answer changes
@@ -5926,6 +6120,12 @@ function handleAnswerChange(questionId, isMulti) {
   
   saveToLocalStorage();
   renderQuestionNavigator();
+}
+
+// Remove the inline check button from whichever option it's currently on
+function removeInlineCheckBtn() {
+  const existing = document.getElementById('inlineCheckAnswerBtn');
+  if (existing) existing.remove();
 }
 
 function checkAnswer() {
@@ -6031,7 +6231,7 @@ function checkAnswer() {
   });
   
   // Hide check button after checking
-  document.getElementById('checkAnswerBtn').style.display = 'none';
+  removeInlineCheckBtn();
 
   renderQuestionNavigator();
   
@@ -6129,7 +6329,7 @@ function clearAnswer() {
   
   // Clear feedback
   document.getElementById('answerFeedback').style.display = 'none';
-  document.getElementById('checkAnswerBtn').style.display = 'none';
+  removeInlineCheckBtn();
   
   // Re-enable all options
   document.querySelectorAll('.option').forEach(opt => {
