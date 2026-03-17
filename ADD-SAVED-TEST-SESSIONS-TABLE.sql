@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS saved_test_sessions (
 -- Ensure snapshot columns exist for older deployments
 ALTER TABLE IF EXISTS saved_test_sessions
   ADD COLUMN IF NOT EXISTS session_snapshot_en JSONB,
-  ADD COLUMN IF NOT EXISTS session_snapshot_hy JSONB;
+  ADD COLUMN IF NOT EXISTS session_snapshot_hy JSONB,
+  ADD COLUMN IF NOT EXISTS shuffle_seed BIGINT;
 
 -- Create indexes for performance (idempotent)
 CREATE INDEX IF NOT EXISTS idx_saved_sessions_student ON saved_test_sessions(student_id);
