@@ -8082,39 +8082,33 @@ function coldCallUpdateBadgeIfPending(isCorrect) {
 }
 
 function coldCallAnimatePick(finalName) {
-  return new Promise(resolve => {
-    coldCallState.isRolling = true;
-    coldCallState.currentPickAnswered = false;
-    const display = document.getElementById('ccNameDisplay');
-    const pickBtn = document.getElementById('ccPickBtn');
-    if (pickBtn) pickBtn.disabled = true;
+  // Instant reveal — queue is pre-shuffled so no suspense delay needed.
+  // isRolling is kept false throughout so the button is never blocked.
+  coldCallState.isRolling = false;
+  coldCallState.currentPickAnswered = false;
 
-    // Show rolling dots
-    display.className = 'cc-name-display rolling';
-    display.innerHTML = '<div class="cc-rolling-dots"><span>·</span><span>·</span><span>·</span></div>';
+  // Auto-record if the current question already has a result
+  const currentQ = testState.questions[testState.currentIndex];
+  const status = currentQ ? testState.answerStatus[currentQ.id] : undefined;
+  const isCorrect = status === 'correct';
+  const isWrong   = status === 'incorrect';
+  if (isCorrect || isWrong) {
+    coldCallRecordAnswer(isCorrect);
+  }
 
-    // After 300ms show the name + auto-derived answer result
-    setTimeout(() => {
-      // Updated logic: We render the final badge including stats
-      const currentQ = testState.questions[testState.currentIndex];
-      const status = currentQ ? testState.answerStatus[currentQ.id] : undefined;
-      const isCorrect = status === 'correct';
-      const isWrong   = status === 'incorrect';
-      const hasResult = isCorrect || isWrong;
+  // Render the name with a quick pop-in CSS animation
+  coldCallRefreshActiveStudent();
 
-      // Auto-record the result BEFORE refreshing so analytics are ready
-      if (hasResult) {
-        coldCallRecordAnswer(isCorrect);
-      }
+  // Trigger the animate-in class so the name has a subtle pop feel
+  const nameEl = document.querySelector('#ccNameDisplay .cc-name-text');
+  if (nameEl) {
+    nameEl.classList.remove('animate-in');
+    // Force reflow so re-adding the class restarts the animation
+    void nameEl.offsetWidth;
+    nameEl.classList.add('animate-in');
+  }
 
-      coldCallState.isRolling = false; // Must be false for the refresh to actually run!
-      coldCallRefreshActiveStudent();
-      
-      if (pickBtn) pickBtn.disabled = false;
-
-      resolve();
-    }, 700);
-  });
+  return Promise.resolve();
 }
 
 // ─── Get current question stem (first 200 chars) ─────────────────────────────
