@@ -8,7 +8,10 @@ let db = null;
 function initializeSupabase() {
   try {
     if (typeof setSupabaseOwnerHeader === 'function') {
-      setSupabaseOwnerHeader(getOwnerId());
+      // SESSION_ROLE may not be populated yet on first call (before DOMContentLoaded).
+      // refreshSupabaseOwner() will re-set the correct role header once the role is known.
+      const role = (SESSION_ROLE && SESSION_ROLE.userRole) || 'student';
+      setSupabaseOwnerHeader(getOwnerId(), role);
     }
     db = initSupabase();
     if (!db) {
@@ -301,6 +304,10 @@ function generateSessionId() {
 
 // Create a new teacher session in database
 async function createTeacherSession(testId, questionOrder) {
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[ACNHS] createTeacherSession() blocked: student role.');
+    return null;
+  }
   if (!TEACHER_MODE.sessionId) {
     TEACHER_MODE.sessionId = generateSessionId();
   }
@@ -452,6 +459,10 @@ function handleTeacherSessionUpdate(sessionData) {
 
 // Broadcast session state update (teacher only)
 async function broadcastSessionUpdate() {
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[ACNHS] broadcastSessionUpdate() blocked: student role.');
+    return;
+  }
   if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
   
   try {
@@ -474,6 +485,10 @@ async function broadcastSessionUpdate() {
 
 // Send heartbeat to keep session alive
 async function sendSessionHeartbeat() {
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[ACNHS] sendSessionHeartbeat() blocked: student role.');
+    return;
+  }
   if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
   
   try {
@@ -488,6 +503,10 @@ async function sendSessionHeartbeat() {
 
 // Start heartbeat interval (teacher only)
 function startSessionHeartbeat() {
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[ACNHS] startSessionHeartbeat() blocked: student role.');
+    return;
+  }
   if (!TEACHER_MODE.enabled) return;
   
   TEACHER_MODE.heartbeatInterval = setInterval(() => {
@@ -499,6 +518,10 @@ function startSessionHeartbeat() {
 
 // Cleanup session on disconnect
 async function endTeacherSession() {
+  if (!SESSION_ROLE.isTeacher) {
+    console.warn('[ACNHS] endTeacherSession() blocked: student role.');
+    return;
+  }
   if (!TEACHER_MODE.enabled || !TEACHER_MODE.sessionId) return;
   
   try {
@@ -931,7 +954,8 @@ let testState = {
   shuffleSeed: null,
   testConfig: null,
   studentId: null,
-  savedSessionDbId: null,
+  savedSessionDbId: null, // DB id of a manually-named saved session
+  autoSaveDbId: null,     // DB id of the auto-save (is_in_progress=true) row
   // ── Bilingual session snapshot ────────────────────────────────────────
   // Built once at session creation, never changes.
   // snapshot.en  — array of {id,stem,options,correct,rationale,multi,points,category}
@@ -978,13 +1002,15 @@ function setLoadingStatus(message) {
 function refreshSupabaseOwner() {
   if (typeof setSupabaseOwnerHeader === 'function') {
     const ownerId = getOwnerId();
+    const ownerRole = SESSION_ROLE.userRole || 'student';
     // Ensure the base client exists before injecting the header —
     // setSupabaseOwnerHeader only rebuilds if supabaseClient is already set.
     if (!db) initializeSupabase();
-    setSupabaseOwnerHeader(ownerId);
+    // Pass both owner id AND role — RLS policies use both headers.
+    setSupabaseOwnerHeader(ownerId, ownerRole);
     // Always rebind db so every subsequent query uses the updated headers.
     db = initSupabase();
-    console.log('✓ Owner header set for:', ownerId);
+    console.log(`✓ Owner header set for: ${ownerId} (role: ${ownerRole})`);
   }
 }
 
@@ -1477,7 +1503,88 @@ function showNoTranslationAlert() {
   document.body.appendChild(overlay);
 }
 
-let saveTimer = null;
+let saveTimer     = null;
+let autoSaveTimer = null; // cloud auto-save debounce
+
+// ============================================================
+// AUTO-SAVE TO CLOUD  (every answer → debounced 5 s → Supabase)
+// ============================================================
+// Keeps a live is_in_progress=true row in saved_test_sessions so any
+// device logged in as the same owner+role can resume the active session.
+// ============================================================
+async function autoSaveToCloud() {
+  if (!testState.sessionId || !testState.questions || testState.questions.length === 0) return;
+  if (!db) { if (!initializeSupabase()) return; }
+  if (window.location.protocol === 'file:') return;
+  const ownerId = getOwnerId();
+  if (!ownerId || ownerId.startsWith('anon_')) return;
+
+  try {
+    refreshSupabaseOwner();
+
+    const answeredCount  = Object.keys(testState.answers).length;
+    const totalQuestions = testState.questions.length;
+
+    const autoName = (() => {
+      const topics = TEST_CONFIG.selectedTopicNames && TEST_CONFIG.selectedTopicNames.length
+        ? TEST_CONFIG.selectedTopicNames.slice(0, 2).join(', ')
+        : 'Test';
+      const dt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      return `${topics} — ${dt}`;
+    })();
+
+    const payload = {
+      ...(testState.autoSaveDbId ? { id: testState.autoSaveDbId } : {}),
+      session_name:           autoName,
+      student_id:             ownerId,
+      user_role:              SESSION_ROLE.userRole || 'student',
+      test_id:                TEST_CONFIG.testId || '',
+      session_id:             testState.sessionId,
+      shuffle_seed:           testState.shuffleSeed || null,
+      current_question_index: testState.currentIndex,
+      answers:                testState.answers,
+      answer_status:          testState.answerStatus || {},
+      flagged_questions:      Array.from(testState.flagged),
+      questions:              testState.questions.map(q => ({ id: q.id, topic_id: q.topic_id || null })),
+      test_config: {
+        testId:             TEST_CONFIG.testId,
+        selectedTopicIds:   TEST_CONFIG.selectedTopicIds   || [],
+        selectedTopicNames: TEST_CONFIG.selectedTopicNames || [],
+        categoryFilter:     TEST_CONFIG.categoryFilter     || null,
+        questionCount:      TEST_CONFIG.questionCount      || null,
+        shuffleQuestions:   TEST_CONFIG.shuffleQuestions,
+        shuffleOptions:     TEST_CONFIG.shuffleOptions
+      },
+      start_time:             new Date(testState.startTime).toISOString(),
+      total_questions:        totalQuestions,
+      answered_questions:     answeredCount,
+      progress_percent:       Math.round((answeredCount / totalQuestions) * 100),
+      is_in_progress:         true,
+      last_auto_saved_at:     new Date().toISOString(),
+      session_snapshot_en:    null,
+      session_snapshot_hy:    null
+    };
+
+    const { data, error } = await db
+      .from('saved_test_sessions')
+      .upsert([payload], { onConflict: 'id' })
+      .select('id')
+      .single();
+
+    if (!error && data && data.id) {
+      testState.autoSaveDbId = data.id;
+    }
+    if (error) {
+      const msg = String(error.message || '');
+      if (!msg.includes('saved_test_sessions') && error.code !== '42P01') {
+        console.warn('[autoSave] cloud save skipped:', msg);
+      }
+    }
+  } catch (e) {
+    console.warn('[autoSave] exception:', e);
+  }
+}
+
 function saveToLocalStorage() {
   // Debounce to avoid repeated sync writes during rapid interactions
   if (saveTimer) clearTimeout(saveTimer);
@@ -1501,6 +1608,10 @@ function saveToLocalStorage() {
     } catch (e) {
       console.warn('Failed to save session to localStorage, possibly quota exceeded:', e);
     }
+
+    // Cloud auto-save — debounced a further 5 s to avoid hammering Supabase
+    if (autoSaveTimer) clearTimeout(autoSaveTimer);
+    autoSaveTimer = setTimeout(autoSaveToCloud, 5000);
   }, 120);
 }
 
@@ -3110,11 +3221,19 @@ async function saveTestSession() {
     const progressPercent = Math.round((answeredCount / totalQuestions) * 100);
 
     const sessionData = {
-      ...(testState.savedSessionDbId ? { id: testState.savedSessionDbId } : {}),
+      // If the auto-save row already exists, promote it to the named save;
+      // otherwise fall back to any previously-named row id or let Supabase create one.
+      ...(testState.autoSaveDbId
+        ? { id: testState.autoSaveDbId }
+        : testState.savedSessionDbId
+          ? { id: testState.savedSessionDbId }
+          : {}),
       session_name: sessionName,
       student_id: getOwnerId(),
+      user_role: SESSION_ROLE.userRole || 'student',
       test_id: TEST_CONFIG.testId,
       session_id: testState.sessionId,
+      shuffle_seed: testState.shuffleSeed || null,
       current_question_index: testState.currentIndex,
       answers: testState.answers,
       answer_status: testState.answerStatus,
@@ -3137,6 +3256,8 @@ async function saveTestSession() {
       total_questions: totalQuestions,
       answered_questions: answeredCount,
       progress_percent: progressPercent,
+      is_in_progress: false,          // manually saved → no longer "in progress"
+      last_auto_saved_at: new Date().toISOString(),
       session_snapshot_en: null,
       session_snapshot_hy: null
     };
@@ -3163,7 +3284,12 @@ async function saveTestSession() {
 
     if (data && data.id) {
       testState.savedSessionDbId = data.id;
+      // The auto-save row was promoted to the named session — clear its reference
+      testState.autoSaveDbId = null;
     }
+
+    // Cancel any pending auto-save — the session is now a named save (is_in_progress=false)
+    if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
 
     closeSaveModal();
     showToast('Test saved successfully! You can resume it anytime.', 'success');
@@ -3222,12 +3348,22 @@ async function loadSavedSessions() {
     // Refresh owner header so RLS recognises this user
     refreshSupabaseOwner();
 
-    const { data: savedSessions, error } = await withTimeout(
-      db
+    // ── Fetch ALL sessions for this owner+role ────────────────────────────
+    // Filter by user_role so teachers never see student sessions and vice-versa.
+    // The column may not exist on older deployments — fall back gracefully.
+    const role = SESSION_ROLE.userRole || 'student';
+
+    const buildQuery = (roleFilter) => {
+      let q = db
         .from('saved_test_sessions')
         .select('*')
-        .eq('student_id', getOwnerId())
-        .order('created_at', { ascending: false }),
+        .eq('student_id', getOwnerId());
+      if (roleFilter) q = q.eq('user_role', roleFilter);
+      return q.order('created_at', { ascending: false });
+    };
+
+    const { data: savedSessions, error } = await withTimeout(
+      buildQuery(role),
       6000,
       'Loading saved sessions timed out'
     );
@@ -3264,8 +3400,96 @@ async function loadSavedSessions() {
     
     container.style.display = 'block';
     listContainer.innerHTML = '';
-    
-    savedSessions.forEach((session, idx) => {
+
+    // ── Split: active (in-progress) vs named saved sessions ─────────────────
+    const activeSessions = savedSessions.filter(s => s.is_in_progress === true);
+    const namedSessions  = savedSessions.filter(s => s.is_in_progress !== true);
+
+    // ── "Resume Active Session" banner (cross-device live sessions) ──────────
+    activeSessions.forEach(session => {
+      const progress = session.progress_percent || 0;
+      const answered = session.answered_questions || 0;
+      const total    = session.total_questions || 0;
+      const lastSaved = session.last_auto_saved_at
+        ? new Date(session.last_auto_saved_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+        : '';
+
+      let topicNames = [];
+      try {
+        const cfg = typeof session.test_config === 'string'
+          ? JSON.parse(session.test_config) : (session.test_config || {});
+        if (Array.isArray(cfg.selectedTopicNames) && cfg.selectedTopicNames.length) {
+          topicNames = cfg.selectedTopicNames;
+        }
+      } catch (e) { /* ignore */ }
+      if (!topicNames.length) {
+        try {
+          const qs = typeof session.questions === 'string'
+            ? JSON.parse(session.questions) : (session.questions || []);
+          topicNames = [...new Set(qs.map(q => q.category).filter(Boolean))];
+        } catch (e) { /* ignore */ }
+      }
+      const topicLabel = topicNames.length
+        ? topicNames.slice(0, 2).join(', ') + (topicNames.length > 2 ? ` +${topicNames.length - 2}` : '')
+        : 'Active Session';
+
+      const banner = document.createElement('div');
+      banner.style.cssText = [
+        'background:linear-gradient(135deg,rgba(201,168,76,0.12) 0%,rgba(201,168,76,0.06) 100%)',
+        'border:1.5px solid rgba(201,168,76,0.55)',
+        'border-radius:16px',
+        'padding:18px 22px',
+        'margin-bottom:14px',
+        'position:relative',
+        'overflow:hidden',
+        'box-shadow:0 0 24px rgba(201,168,76,0.15),0 4px 20px rgba(0,0,0,0.4)',
+      ].join(';');
+
+      banner.innerHTML = `
+        <!-- pulsing glow strip -->
+        <div style="position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.9),transparent);animation:activePulse 2s ease-in-out infinite"></div>
+        <style>@keyframes activePulse{0%,100%{opacity:0.4}50%{opacity:1}}</style>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">
+            <!-- live dot -->
+            <div style="position:relative;flex-shrink:0">
+              <div style="width:12px;height:12px;border-radius:50%;background:#c9a84c;animation:activePulse 1.4s ease-in-out infinite"></div>
+              <div style="position:absolute;inset:-4px;border-radius:50%;background:rgba(201,168,76,0.25);animation:activePulse 1.4s ease-in-out infinite"></div>
+            </div>
+            <div style="min-width:0">
+              <div style="display:flex;align-items:center;gap:7px;margin-bottom:3px">
+                <span style="font-family:'Inter',sans-serif;font-size:11px;font-weight:800;letter-spacing:0.8px;text-transform:uppercase;color:#c9a84c">Active Session</span>
+                ${lastSaved ? `<span style="font-size:10.5px;color:#64748b;font-weight:500">· saved ${lastSaved}</span>` : ''}
+              </div>
+              <div style="font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${topicLabel}</div>
+              <div style="margin-top:6px;display:flex;align-items:center;gap:8px">
+                <div style="flex:1;max-width:160px;background:rgba(255,255,255,0.08);border-radius:100px;height:5px;overflow:hidden">
+                  <div style="background:linear-gradient(90deg,#c9a84c,#d4b56a);height:100%;width:${progress}%;border-radius:100px;box-shadow:0 0 6px rgba(201,168,76,0.5)"></div>
+                </div>
+                <span style="font-size:12px;color:#94a3b8;font-weight:600">${answered}/${total}</span>
+              </div>
+            </div>
+          </div>
+
+          <button onclick="loadSavedSession('${session.id}')"
+            style="flex-shrink:0;background:linear-gradient(135deg,#c9a84c 0%,#d4b56a 100%);color:#020617;border:none;padding:10px 20px;border-radius:10px;font-family:'Inter',sans-serif;font-weight:800;cursor:pointer;font-size:13px;letter-spacing:0.3px;transition:all 0.2s;box-shadow:0 2px 12px rgba(201,168,76,0.30);display:flex;align-items:center;gap:7px;white-space:nowrap"
+            onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 6px 20px rgba(201,168,76,0.45)'"
+            onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 12px rgba(201,168,76,0.30)'">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Resume
+          </button>
+        </div>
+      `;
+      listContainer.appendChild(banner);
+    });
+
+    // ── Named saved sessions ─────────────────────────────────────────────────
+    if (namedSessions.length === 0 && activeSessions.length > 0) {
+      // Only active sessions exist — no named saves to show, that's fine
+    }
+
+    namedSessions.forEach((session, idx) => {
       const savedDate = new Date(session.saved_at);
       const progress = session.progress_percent || 0;
       const answered = session.answered_questions || 0;
@@ -3756,11 +3980,15 @@ async function loadSavedTestsInModal() {
       }
     }
     
-    const { data: savedSessions, error } = await db
-      .from('saved_test_sessions')
+    const role = SESSION_ROLE.userRole || 'student';
+    let modalQuery = db.from('saved_test_sessions')
       .select('*')
       .eq('student_id', getOwnerId())
+      .eq('is_in_progress', false)   // modal shows only named/completed saves
+      .eq('user_role', role)
       .order('created_at', { ascending: false });
+
+    const { data: savedSessions, error } = await modalQuery;
     
     if (error) {
       console.error('Error loading sessions:', error);
@@ -4024,6 +4252,19 @@ function submitTest(autoSubmit = false) {
   testState.endTime = Date.now();
   clearInterval(testState.timerInterval);
   window.removeEventListener('beforeunload', handleBeforeUnload);
+
+  // Cancel any pending auto-saves
+  if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
+
+  // Mark the auto-save row as complete so it won't show as "resume" on other devices
+  if (testState.autoSaveDbId && db) {
+    db.from('saved_test_sessions')
+      .update({ is_in_progress: false, last_auto_saved_at: new Date().toISOString() })
+      .eq('id', testState.autoSaveDbId)
+      .then(() => {})
+      .catch(() => {});
+    testState.autoSaveDbId = null;
+  }
   
   // Calculate results
   const results = calculateResults();
@@ -5056,8 +5297,60 @@ document.addEventListener('DOMContentLoaded', () => {
   initSessionRole();
   applySessionRole();
 
-  // Initialize Supabase first
+  // ── STUDENT HARDENING — runs immediately after role is resolved ────────
+  // Locks down features that must NEVER be accessible to students, even via
+  // browser console, DevTools injection, or direct API calls.
+  if (!SESSION_ROLE.isTeacher) {
+
+    // 1. Replace revealAllAnswers on the window object with a silent no-op.
+    //    Even if a student types revealAllAnswers() in DevTools they get nothing.
+    window.revealAllAnswers = function _revealAllBlocked() {
+      console.warn('[ACNHS] revealAllAnswers() is not available in student mode.');
+    };
+
+    // 2. MutationObserver: destroy any #revealAllModal that gets injected into
+    //    the DOM regardless of how it arrives (XSS, paste attack, extension, etc).
+    const _revealGuard = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          // Catch the modal itself OR any wrapper that contains it
+          if (node.id === 'revealAllModal' ||
+              node.querySelector?.('#revealAllModal')) {
+            const target = node.id === 'revealAllModal'
+              ? node : node.querySelector('#revealAllModal');
+            if (target) {
+              target.remove();
+              console.warn('[ACNHS] Blocked revealAllModal injection (student session).');
+            }
+          }
+        }
+      }
+    });
+    _revealGuard.observe(document.body, { childList: true, subtree: true });
+
+    // 3. Block all teacher_sessions DB access at the JS layer.
+    //    Override the teacher-session functions with no-ops so no student
+    //    can reach the teacher_sessions table even via the console.
+    const _teacherFnBlocked = (name) => function() {
+      console.warn(`[ACNHS] ${name}() is not available in student mode.`);
+      return Promise.resolve(null);
+    };
+    window.createTeacherSession    = _teacherFnBlocked('createTeacherSession');
+    window.broadcastSessionUpdate  = _teacherFnBlocked('broadcastSessionUpdate');
+    window.sendSessionHeartbeat    = _teacherFnBlocked('sendSessionHeartbeat');
+    window.endTeacherSession       = _teacherFnBlocked('endTeacherSession');
+    window.startSessionHeartbeat   = _teacherFnBlocked('startSessionHeartbeat');
+    // subscribeToTeacherSession / loadTeacherSessionState are kept available
+    // for student VIEW (following a teacher session), but teacher WRITE paths
+    // are locked above.
+  }
+  // ── END STUDENT HARDENING ──────────────────────────────────────────────
+
+  // Initialize Supabase first, then immediately stamp the role header so
+  // ALL subsequent DB queries carry both x-owner-id and x-owner-role.
   initializeSupabase();
+  refreshSupabaseOwner();   // re-sets headers now that SESSION_ROLE is fully resolved
   
   // Apply logo using centralized function
   if (typeof window.applyAcnshLogo === 'function') {

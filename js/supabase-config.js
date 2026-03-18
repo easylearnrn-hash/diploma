@@ -38,17 +38,23 @@ const SUPABASE_CONFIG = {
 // Initialize Supabase client
 let supabaseClient = null;
 
-function setSupabaseOwnerHeader(ownerId) {
+function setSupabaseOwnerHeader(ownerId, ownerRole) {
   if (!ownerId) return;
   SUPABASE_CONFIG.options.global = SUPABASE_CONFIG.options.global || {};
   SUPABASE_CONFIG.options.global.headers = SUPABASE_CONFIG.options.global.headers || {};
-  
-  // Prevent rebuilding the client if the header is already correctly set
-  if (SUPABASE_CONFIG.options.global.headers['x-owner-id'] === ownerId) {
+
+  const role = (ownerRole || 'student').toLowerCase().trim();
+
+  // Prevent rebuilding the client if both headers are already correctly set
+  if (
+    SUPABASE_CONFIG.options.global.headers['x-owner-id']   === ownerId &&
+    SUPABASE_CONFIG.options.global.headers['x-owner-role'] === role
+  ) {
     return;
   }
-  
-  SUPABASE_CONFIG.options.global.headers['x-owner-id'] = ownerId;
+
+  SUPABASE_CONFIG.options.global.headers['x-owner-id']   = ownerId;
+  SUPABASE_CONFIG.options.global.headers['x-owner-role'] = role;
 
   // If a client already exists, rebuild so new headers apply immediately.
   if (supabaseClient && typeof window !== 'undefined' && window.supabase) {

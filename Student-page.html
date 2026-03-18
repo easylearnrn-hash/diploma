@@ -3498,6 +3498,91 @@ function updateStandingBadge(statusText = 'Good Standing') {
   }
 }
 
+// ─── Live GPA / Credits refresh ───────────────────────────────────────────────
+// Queries student_grades (and transfer_credits) directly each page load so the
+// Academic Performance card always reflects the latest teacher-entered grades,
+// even if metadata was not yet updated in the students table.
+async function refreshLiveGpaMetrics() {
+  const profile = portalState.profile;
+  if (!profile || !profile.id) return;
+
+  try {
+    const supabase = initSupabase();
+    if (!supabase) return;
+
+    // Fetch official course grades (student_id is UUID FK)
+    const { data: sgData } = await supabase
+      .from('student_grades')
+      .select('credits, grade_points, grade')
+      .eq('student_id', profile.id);
+
+    // Fetch approved transfer credits (student_id is ACNHS text ID)
+    const { data: tcData } = await supabase
+      .from('transfer_credits')
+      .select('credits, grade_points')
+      .eq('student_id', profile.student_id)
+      .eq('status', 'approved');
+
+    const grades    = sgData  || [];
+    const transfers = tcData  || [];
+
+    // Nothing in DB yet — leave whatever defaults are already rendered
+    if (!grades.length && !transfers.length) return;
+
+    let totalCredits = 0;
+    let weightedSum  = 0;
+    [...grades, ...transfers].forEach(row => {
+      const c = parseFloat(row.credits    || 0);
+      const p = parseFloat(row.grade_points || 0);
+      const g = (row.grade || '').toUpperCase();
+      // Skip in-progress markers
+      if (g !== 'IP' && g !== 'IN PROGRESS' && g !== 'INC') {
+        totalCredits += c;
+        weightedSum  += c * p;
+      }
+    });
+
+    const gpa = totalCredits > 0
+      ? (weightedSum / totalCredits).toFixed(2)
+      : '0.00';
+
+    const creditsRequired = Number(
+      portalState.dataset?.metrics?.creditsRequired
+      ?? DEFAULT_PORTAL_DATA.metrics.creditsRequired
+      ?? 72
+    );
+    const progressPercent = computeProgressPercent(totalCredits, creditsRequired);
+    const progressLabel   = `${progressPercent}%`;
+    const progressDetail  = `${totalCredits} / ${creditsRequired} credits`;
+
+    // Update KPI elements directly
+    setElementText('dashboardGpaValue',       Number(gpa).toFixed(2));
+    setElementText('creditsCompletedValue',   totalCredits);
+    setProgressBar('graduationProgressFill',  progressPercent);
+    setProgressBar('dashboardProgressFill',   progressPercent);
+    setElementText('graduationProgressLabel', progressLabel);
+    setElementText('dashboardProgressDetail', progressDetail);
+
+    // Propagate values so openStudentHub() sends correct data to hub.html
+    profile.current_gpa          = parseFloat(gpa);
+    profile.total_credits_earned = Math.floor(totalCredits);
+    if (!profile.metadata) profile.metadata = {};
+    profile.metadata.cumulative_gpa = parseFloat(gpa);
+    profile.metadata.total_credits  = totalCredits;
+
+    // Keep dataset in sync for downstream consumers
+    if (portalState.dataset?.metrics) {
+      portalState.dataset.metrics.cumulativeGpa  = gpa;
+      portalState.dataset.metrics.creditsEarned  = totalCredits;
+      portalState.dataset.metrics.progressPercent = progressPercent;
+    }
+
+    console.log(`✅ Live GPA refreshed: ${gpa} (${totalCredits} credits from ${grades.length} course(s) + ${transfers.length} transfer(s))`);
+  } catch (err) {
+    console.warn('refreshLiveGpaMetrics error:', err?.message || err);
+  }
+}
+
 function updateDashboardMetrics(metrics = {}) {
   const cumulativeGpa = metrics.cumulativeGpa ?? 0;
   setElementText('dashboardGpaValue', Number.isFinite(Number(cumulativeGpa)) ? Number(cumulativeGpa).toFixed(2) : cumulativeGpa);
@@ -4822,6 +4907,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   renderPortalSections(portalState.dataset);
+  refreshLiveGpaMetrics(); // async — overwrites KPIs with live DB values after initial render
   wireDocumentVaultEvents();
   wirePolicyListeners();
 
@@ -6668,9 +6754,16 @@ async function openStudentHub() {
     group: studentProfile.group || sessionStorage.getItem('studentGroup') || '',
     
     // ===== ACADEMIC PROGRESS =====
-    creditsEarned: studentProfile.credits_earned || studentProfile.total_credits_earned || 0,
+    // GPA and credits live in metadata JSONB (direct columns were removed Jan 2026)
+    creditsEarned: studentProfile.metadata?.credits_earned
+               ?? studentProfile.metadata?.total_credits
+               ?? studentProfile.credits_earned
+               ?? studentProfile.total_credits_earned
+               ?? 0,
     creditsRequired: studentProfile.credits_required || 72,
-    cumulativeGpa: studentProfile.cumulative_gpa || studentProfile.current_gpa || '0.00',
+    cumulativeGpa: studentProfile.metadata?.cumulative_gpa != null
+               ? String(studentProfile.metadata.cumulative_gpa)
+               : (studentProfile.cumulative_gpa || studentProfile.current_gpa || '0.00'),
     transferGpa: studentProfile.transfer_gpa || 'N/A',
     acnhsGpa: studentProfile.acnhs_gpa || 'N/A',
     
@@ -6738,7 +6831,10 @@ async function openStudentHub() {
     applicationId: studentProfile.application_id || 'N/A'
   };
   
-  sessionStorage.setItem('hubStudentData', JSON.stringify(hubData));
+  // Use localStorage so hub.html (opened in a new tab) can read it.
+  // sessionStorage is tab-scoped — a new tab gets a fresh empty sessionStorage.
+  localStorage.setItem('hubStudentData', JSON.stringify(hubData));
+  sessionStorage.setItem('hubStudentData', JSON.stringify(hubData)); // keep for same-tab fallback
   
   // Open hub in new tab
   window.open('hub.html', '_blank');

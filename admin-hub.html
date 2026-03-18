@@ -3207,9 +3207,11 @@
           full_name: s.full_name,
           program: s.program,
           current_semester: s.current_semester,
-          cumulative_gpa: s.cumulative_gpa || s.current_gpa || 0,
-          credits_earned: s.credits_earned || s.total_credits_earned || 0,
-          academic_standing: s.academic_standing
+          // GPA and credits live in metadata JSONB (not standalone columns)
+          cumulative_gpa: s.metadata?.cumulative_gpa ?? s.cumulative_gpa ?? s.current_gpa ?? 0,
+          credits_earned: s.metadata?.credits_earned ?? s.metadata?.total_credits ?? s.credits_earned ?? s.total_credits_earned ?? 0,
+          academic_standing: s.metadata?.academic_standing ?? s.academic_standing,
+          metadata: s.metadata || {}
         }));
 
         filteredGradeData = [...allGradeData];
@@ -4152,16 +4154,24 @@
           }
         }
 
-        // Update student's GPA
+        // Update student's GPA — stored in metadata JSONB (cumulative_gpa and credits_earned
+        // are not standalone columns; they live inside the metadata object)
+        const existingMeta = currentEditingStudent.metadata || {};
+        const updatedMeta = {
+          ...existingMeta,
+          cumulative_gpa: parseFloat(calculatedGPA),
+          credits_earned: totalCredits,
+          total_credits: totalCredits
+        };
         const { error: updateError } = await db
           .from('students')
-          .update({ 
-            cumulative_gpa: calculatedGPA,
-            credits_earned: totalCredits
-          })
+          .update({ metadata: updatedMeta })
           .eq('id', currentEditingStudent.id);
 
         if (updateError) throw updateError;
+
+        // Keep local cache in sync so re-renders don't show stale values
+        currentEditingStudent.metadata = updatedMeta;
 
         alert(`✅ Grades saved successfully!\n\nCalculated GPA: ${calculatedGPA}\nTotal Credits: ${totalCredits}`);
         
