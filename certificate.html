@@ -1632,21 +1632,34 @@ async function fetchStudentPersonalEmail(studentId, institutionalEmail = '') {
 async function ensureHtml2Canvas() {
   if (typeof html2canvas !== 'undefined') return;
 
+  const waitForHtml2Canvas = () => new Promise((resolve, reject) => {
+    const timeoutMs = 4000;
+    const start = Date.now();
+    const poll = setInterval(() => {
+      if (typeof html2canvas !== 'undefined') {
+        clearInterval(poll);
+        resolve();
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(poll);
+        reject(new Error('html2canvas did not initialize in time'));
+      }
+    }, 50);
+  });
+
   // html2canvas is bundled inside html2pdf.bundle.min.js — load it to get html2canvas
   await new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-html2pdf-bundle="true"]');
     if (existing) {
-      // already loading/loaded
-      const poll = setInterval(() => {
-        if (typeof html2canvas !== 'undefined') { clearInterval(poll); resolve(); }
-      }, 50);
+      waitForHtml2Canvas().then(resolve).catch(reject);
       return;
     }
     const script = document.createElement('script');
     script.src = 'js/html2pdf.bundle.min.js';
     script.async = true;
     script.dataset.html2pdfBundle = 'true';
-    script.onload = resolve;
+    script.onload = () => waitForHtml2Canvas().then(resolve).catch(reject);
     script.onerror = () => reject(new Error('Could not load html2pdf bundle'));
     document.head.appendChild(script);
   });
