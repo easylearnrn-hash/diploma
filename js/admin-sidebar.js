@@ -117,6 +117,12 @@
         permission: 'view_reports'
       },
       { 
+        href: 'certificate.html', 
+        icon: '🏅', 
+        text: 'Certificates', 
+        permission: 'view_reports'
+      }, 
+      { 
         href: 'admin-analytics.html', 
         icon: '📈', 
         text: 'Analytics', 
