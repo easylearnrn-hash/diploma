@@ -247,7 +247,7 @@ body {
   background: #071b30;
   border: 1px solid var(--border-gold);
   border-radius: 10px;
-  z-index: 100;
+  z-index: 9999;
   max-height: 240px;
   overflow-y: auto;
   box-shadow: 0 12px 36px rgba(0,0,0,0.55);
@@ -614,13 +614,20 @@ body {
   justify-content: center;
   gap: 20mm;
   width: 100%;
-  margin-top: 8mm;
-  padding-bottom: 2mm;
+  margin-top: 4mm;
+  padding-bottom: 5mm;
 }
 .cert-sig-block {
   text-align: center;
   width: 62mm;
   flex-shrink: 0;
+}
+.cert-sig-top {
+  height: 16mm;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  margin-bottom: 0.5mm;
 }
 .cert-signature-script {
   font-family: 'Great Vibes', 'Brush Script MT', 'Snell Roundhand', cursive;
@@ -633,6 +640,15 @@ body {
   transform: rotate(-1deg);
   text-shadow: none;
   opacity: 0.92;
+}
+.cert-sig-seal {
+  width: 14mm;
+  height: 14mm;
+  object-fit: contain;
+  border-radius: 50%;
+  border: 1px solid rgba(150,115,45,0.28);
+  padding: 1px;
+  background: rgba(255,253,246,0.9);
 }
 .cert-sig-line {
   width: 100%;
@@ -794,6 +810,29 @@ body {
         Issue Certificate
       </button>
     </div>
+  </div>
+
+  <!-- LOAD ISSUED CERTIFICATE -->
+  <div class="issue-card" style="margin-bottom:16px;overflow:visible;position:relative;z-index:10;">
+    <div class="card-eyebrow">Load Issued Certificate</div>
+    <h2 style="margin-bottom:14px;">Reload &amp; Resend an Existing Certificate</h2>
+    <div class="form-grid" style="grid-template-columns:1fr auto;gap:10px;align-items:flex-end;">
+      <div class="form-group" style="margin:0;">
+        <label class="form-label">Search by student name or certificate number</label>
+        <div class="search-wrap">
+          <input type="text" class="form-input" id="loadCertSearch"
+            placeholder="e.g. Lusine or CERT-ACNHS-…"
+            autocomplete="off"
+            oninput="searchIssuedCerts(this.value)">
+          <div class="search-dropdown" id="loadCertDropdown"></div>
+        </div>
+      </div>
+      <button class="btn-admin ghost" id="resendEmailBtn" style="display:none;white-space:nowrap;" onclick="resendCertificateEmail()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Resend Email
+      </button>
+    </div>
+    <div class="status-bar" id="loadStatusBar" style="margin-top:10px;"></div>
   </div>
 
   <!-- ISSUE FORM -->
@@ -1038,7 +1077,9 @@ body {
       <!-- Signatures -->
       <div class="cert-sig-row">
         <div class="cert-sig-block">
-          <div class="cert-signature-script" aria-hidden="true">Hrachya Vardanyan</div>
+          <div class="cert-sig-top">
+            <div class="cert-signature-script" aria-hidden="true">Hrachya Vardanyan</div>
+          </div>
           <div class="cert-sig-line"></div>
           <div class="cert-sig-name" id="certOfficer">Dr. Hrachya A. Vardanyan</div>
           <div class="cert-sig-title" id="certOfficerTitle">Dean of Academic Affairs</div>
@@ -1049,6 +1090,9 @@ body {
           <div class="cert-sig-title" id="certSig2Title">—</div>
         </div>
         <div class="cert-sig-block">
+          <div class="cert-sig-top">
+            <img class="cert-sig-seal" id="certSigSeal" alt="Institutional Seal">
+          </div>
           <div class="cert-sig-line"></div>
           <div class="cert-sig-name">Armenian College of Nursing<br>&amp; Health Sciences</div>
           <div class="cert-sig-title">Official Institutional Seal</div>
@@ -1092,7 +1136,7 @@ try { db = initSupabase(); } catch(e) { console.warn('Supabase not available:', 
     || window.ACNHS_LOGO_EMAIL_URL
     || (window.ACNHS_LOGO_BASE64 ? `data:image/png;base64,${window.ACNHS_LOGO_BASE64}` : '');
   if (!src) return;
-  const ids = ['adminSealImg', 'certSeal', 'certWatermark'];
+  const ids = ['adminSealImg', 'certSeal', 'certSigSeal', 'certWatermark'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (el) el.src = src;
@@ -1113,6 +1157,53 @@ function generateCertNo() {
   crypto.getRandomValues(array);
   const hex = Array.from(array, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
   return `CERT-ACNHS-${hex}`;
+}
+
+async function persistCertificateRecord(certData) {
+  if (typeof saveCertificateToDatabase === 'function') {
+    return saveCertificateToDatabase(certData);
+  }
+
+  if (!db) throw new Error('Supabase client not initialized');
+
+  const MAX_RETRIES = 5;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const certNumber = certData.cert_number || generateCertNo();
+    const record = {
+      cert_number: certNumber,
+      student_id: certData.student_id || '',
+      student_name: certData.student_name,
+      program: certData.program || '',
+      exam_title: certData.exam_title || '',
+      score: certData.score || null,
+      grade: certData.grade || '',
+      semester: certData.semester || null,
+      academic_year: certData.academic_year || null,
+      issue_date: certData.issue_date,
+      officer: certData.officer || null,
+      officer_title: certData.officer_title || null,
+      signatory2: certData.signatory2 || null,
+      signatory2_title: certData.signatory2_title || null,
+      status: 'valid'
+    };
+
+    const { data, error } = await db
+      .from('certificates')
+      .insert([record])
+      .select()
+      .single();
+
+    if (!error) return data;
+
+    if (error.code === '23505' && attempt < MAX_RETRIES) {
+      certData.cert_number = '';
+      continue;
+    }
+
+    throw error;
+  }
+
+  throw new Error('Could not save certificate after multiple attempts');
 }
 
 // ── Grade auto-calculation from score ────────────────────────────
@@ -1323,6 +1414,158 @@ function populateFromData(d) {
     document.getElementById('studentSearch').value = d.studentName || d.fullName;
 }
 
+async function fetchStudentPersonalEmail(studentId, institutionalEmail = '') {
+  if (!db || (!studentId && !institutionalEmail)) return null;
+
+  try {
+    let studentQuery = db
+      .from('students')
+      .select('application_id, email')
+      .limit(1);
+
+    if (studentId) {
+      studentQuery = studentQuery.eq('student_id', studentId);
+    } else {
+      studentQuery = studentQuery.eq('email', institutionalEmail);
+    }
+
+    const { data: studentRow, error: studentError } = await studentQuery.maybeSingle();
+    if (studentError) throw studentError;
+
+    if (studentRow?.application_id) {
+      const { data: appRow, error: appError } = await db
+        .from('applications')
+        .select('email, institutional_email')
+        .eq('id', studentRow.application_id)
+        .maybeSingle();
+
+      if (appError) throw appError;
+      return appRow?.email || null;
+    }
+
+    if (institutionalEmail || studentRow?.email) {
+      const campusEmail = institutionalEmail || studentRow?.email;
+      const { data: appRowByCampus, error: campusError } = await db
+        .from('applications')
+        .select('email, institutional_email')
+        .eq('institutional_email', campusEmail)
+        .order('submission_date', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (campusError) throw campusError;
+      return appRowByCampus?.email || null;
+    }
+  } catch (err) {
+    console.warn('Could not resolve personal email for certificate:', err);
+  }
+
+  return null;
+}
+
+async function ensureHtml2PdfBundle() {
+  if (typeof html2pdf !== 'undefined') return;
+
+  await new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-html2pdf-bundle="true"]');
+    if (existing) {
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'js/html2pdf.bundle.min.js';
+    script.async = true;
+    script.dataset.html2pdfBundle = 'true';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('Could not load html2pdf bundle from js/html2pdf.bundle.min.js'));
+    document.head.appendChild(script);
+  });
+}
+
+async function buildCertificatePdfAttachment(certNumber, studentName) {
+  if (window.location.protocol === 'file:') {
+    throw new Error('PDF email attachments require serving `certificate.html` over localhost or HTTPS, not file://');
+  }
+
+  await ensureHtml2PdfBundle();
+
+  const element = document.getElementById('certOuter');
+  if (!element) throw new Error('Certificate preview element not found');
+
+  const opt = {
+    margin: 0,
+    filename: `${(studentName || 'student').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'student'}-${certNumber}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#fffdf6'
+    },
+    jsPDF: {
+      unit: 'mm',
+      format: 'a4',
+      orientation: 'landscape'
+    }
+  };
+
+  const worker = html2pdf().set(opt).from(element).toPdf();
+  const pdf = await worker.get('pdf');
+  const dataUri = pdf.output('datauristring');
+  const base64 = dataUri.split(',')[1];
+
+  return {
+    filename: opt.filename,
+    content: base64,
+    type: 'application/pdf'
+  };
+}
+
+async function emailCertificatePdf({
+  to,
+  studentName,
+  certNumber,
+  examTitle,
+  issueDate,
+  attachment
+}) {
+  if (!db) throw new Error('Supabase client not initialized');
+  if (!to) throw new Error('Student personal email is missing');
+
+  const html = `
+    <div style="font-family:Inter,Arial,sans-serif;background:#071b30;color:#f0ece3;padding:32px;line-height:1.7;">
+      <div style="max-width:680px;margin:0 auto;background:rgba(4,17,31,0.88);border:1px solid rgba(201,168,76,0.28);border-radius:18px;padding:32px;">
+        <div style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#d4b56a;margin-bottom:10px;">Certificate Issued</div>
+        <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:34px;line-height:1.15;color:#f0e3bc;margin:0 0 14px;">Your ACNHS certificate is ready</h1>
+        <p style="margin:0 0 16px;color:#c8bfb2;">Dear ${studentName},</p>
+        <p style="margin:0 0 16px;color:#c8bfb2;">Attached is the official PDF version of your <strong style="color:#f0ece3;">${examTitle}</strong> certificate issued by the Armenian College of Nursing &amp; Health Sciences.</p>
+        <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:18px 20px;margin:20px 0;">
+          <div style="margin-bottom:8px;color:#f0ece3;"><strong>Certificate No.</strong> ${certNumber}</div>
+          <div style="color:#f0ece3;"><strong>Date Issued</strong> ${issueDate}</div>
+        </div>
+        <p style="margin:0;color:#8a8070;font-size:13px;">Please keep this document for your records. If you have any questions, contact the Registrar’s Office.</p>
+      </div>
+    </div>
+  `;
+
+  const { data, error } = await db.functions.invoke('send-email', {
+    body: {
+      to,
+      subject: `Your ACNHS Certificate of Achievement — ${certNumber}`,
+      html,
+      text: `Dear ${studentName},\n\nAttached is the official PDF version of your ${examTitle} certificate.\nCertificate No.: ${certNumber}\nDate Issued: ${issueDate}\n\nArmenian College of Nursing & Health Sciences`,
+      from: 'registrar@acnhs.am',
+      fromName: 'Registrar Office - ACNHS',
+      attachments: [attachment]
+    }
+  });
+
+  if (error) throw error;
+  if (data?.success === false) throw new Error(data?.error || 'Certificate email failed');
+  return data;
+}
+
 // ── Render Certificate ────────────────────────────────────────────
 async function issueCertificate() {
   const name = document.getElementById('fieldStudentName').value.trim();
@@ -1340,19 +1583,23 @@ async function issueCertificate() {
 
   // Generate cert number now (will be confirmed/overwritten after DB save)
   let certNo = get('fieldCertNo') || generateCertNo();
+  const studentId = get('fieldStudentId');
+  const institutionalEmail = get('studentSearch').includes('@') ? get('studentSearch') : '';
+  const examTitle = get('fieldExamTitle') || 'Midterm Examination I';
+  const issueDate = get('fieldIssueDate') || todayFormatted();
 
   try {
-    const saved = await saveCertificateToDatabase({
+    const saved = await persistCertificateRecord({
       cert_number:     certNo,
-      student_id:      get('fieldStudentId'),
+      student_id:      studentId,
       student_name:    name,
       program:         get('fieldProgram'),
-      exam_title:      get('fieldExamTitle') || 'Midterm Examination I',
+      exam_title:      examTitle,
       score:           get('fieldScore') || null,
       grade:           document.getElementById('fieldGrade')?.value || 'A',
       semester:        get('fieldSemester') || null,
       academic_year:   get('fieldAcademicYear') || null,
-      issue_date:      get('fieldIssueDate') || todayFormatted(),
+      issue_date:      issueDate,
       officer:         get('fieldOfficer') || 'Dr. Hrachya A. Vardanyan',
       officer_title:   get('fieldOfficerTitle') || 'Dean of Academic Affairs',
       signatory2:      get('fieldSignatory2') || null,
@@ -1364,10 +1611,33 @@ async function issueCertificate() {
     document.getElementById('fieldCertNo').value = certNo;
 
     renderCertificate();
-    showStatus('✅ Certificate saved & issued. Certificate No. ' + certNo + ' — Use Print / Save PDF to export.', 'success');
+
+    let emailStatus = 'Certificate saved & issued.';
+    const personalEmail = await fetchStudentPersonalEmail(studentId, institutionalEmail);
+    if (personalEmail) {
+      try {
+        const attachment = await buildCertificatePdfAttachment(certNo, name);
+        await emailCertificatePdf({
+          to: personalEmail,
+          studentName: name,
+          certNumber: certNo,
+          examTitle,
+          issueDate,
+          attachment
+        });
+        emailStatus = `Certificate saved, issued, and emailed to ${personalEmail}.`;
+      } catch (emailErr) {
+        console.warn('Certificate email skipped:', emailErr);
+        emailStatus = `Certificate saved & issued, but email delivery was skipped: ${emailErr.message || emailErr}`;
+      }
+    } else {
+      emailStatus = 'Certificate saved & issued, but no personal email was found for the student.';
+    }
+
+    showStatus('✅ ' + emailStatus + ' Certificate No. ' + certNo, 'success');
   } catch (err) {
     console.error('Certificate save error:', err);
-    showStatus('⚠️ Could not save to database: ' + (err.message || err) + '. Certificate rendered locally only.', 'error');
+    showStatus('⚠️ Could not complete certificate issue/email flow: ' + (err.message || err) + '. Certificate rendered locally only.', 'error');
     // Still render even if save failed, so admin can print
     renderCertificate();
   } finally {
@@ -1405,7 +1675,7 @@ function renderCertificate() {
   document.getElementById('certExamSub').textContent = sub || 'Official Academic Assessment';
 
   // Score / Grade / Date
-  document.getElementById('certScore').textContent  = score     || '—';
+  document.getElementById('certScore').textContent  = score ? (score.includes('%') ? score : score + ' %') : '—';
   document.getElementById('certGrade').textContent  = grade;
   document.getElementById('certDate').textContent   = issueDate;
 
@@ -1443,10 +1713,15 @@ function renderCertificate() {
   ];
   document.getElementById('certMicrotext').textContent = (microParts.join(' · ') + ' · ').repeat(3);
 
-  // QR code
+  // QR code — always show on the preview; only PDF export is blocked on file://
   const verifyUrl = `https://www.acnhs.am/verify-transcript.html?cert=${encodeURIComponent(certNo)}`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&color=2a1c04&bgcolor=fffdf6&data=${encodeURIComponent(verifyUrl)}`;
-  document.getElementById('certQr').src = qrUrl;
+  const qrEl = document.getElementById('certQr');
+  if (qrEl) {
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&color=2a1c04&bgcolor=fffdf6&data=${encodeURIComponent(verifyUrl)}`;
+    qrEl.src = qrUrl;
+    qrEl.alt = 'Verification QR';
+    qrEl.style.display = '';
+  }
 
   // Auto-generate cert number if blank
   if (!get('fieldCertNo')) {
@@ -1484,6 +1759,165 @@ function hideStatus() {
   const bar = document.getElementById('statusBar');
   bar.className = 'status-bar';
 }
+function showLoadStatus(msg, type = 'success') {
+  const bar = document.getElementById('loadStatusBar');
+  if (!bar) return;
+  bar.textContent = type === 'success' ? '✓ ' + msg : type === 'error' ? '✕ ' + msg : '⏳ ' + msg;
+  bar.className = `status-bar ${type} show`;
+  if (type === 'success') setTimeout(() => { bar.className = 'status-bar'; }, 5000);
+}
+
+// ── Load / search issued certificates ────────────────────────────
+let loadCertDebounce = null;
+
+async function searchIssuedCerts(query) {
+  const dropdown = document.getElementById('loadCertDropdown');
+  clearTimeout(loadCertDebounce);
+  if (!query || query.length < 2) { dropdown.classList.remove('open'); return; }
+
+  loadCertDebounce = setTimeout(async () => {
+    try {
+      if (!db) { showLoadStatus('Supabase not available.', 'error'); return; }
+
+      const { data, error } = await db
+        .from('certificates')
+        .select('cert_number, student_name, student_id, exam_title, issue_date, grade, score')
+        .or(`student_name.ilike.%${query}%,cert_number.ilike.%${query}%,student_id.ilike.%${query}%`)
+        .order('created_at', { ascending: false })
+        .limit(12);
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        dropdown.innerHTML = `<div class="search-item"><div class="search-item-meta">No issued certificates found for "${query}"</div></div>`;
+        dropdown.classList.add('open');
+        return;
+      }
+
+      dropdown.innerHTML = data.map(c => `
+        <div class="search-item" onclick="loadCertificateRecord(${JSON.stringify(c.cert_number).replace(/"/g,'&quot;')})">
+          <div class="search-item-name">${c.student_name || '—'}</div>
+          <div class="search-item-meta">${c.cert_number} &nbsp;·&nbsp; ${c.exam_title || ''} &nbsp;·&nbsp; ${c.issue_date || ''} &nbsp;·&nbsp; ${c.grade || ''}</div>
+        </div>
+      `).join('');
+      dropdown.classList.add('open');
+    } catch (e) {
+      console.error('Search issued certs error:', e);
+      showLoadStatus('Search failed: ' + (e.message || e), 'error');
+    }
+  }, 280);
+}
+
+async function loadCertificateRecord(certNumber) {
+  document.getElementById('loadCertDropdown').classList.remove('open');
+  showLoadStatus('Loading certificate…', 'info');
+
+  try {
+    if (!db) throw new Error('Supabase not available');
+
+    const { data, error } = await db
+      .from('certificates')
+      .select('*')
+      .eq('cert_number', certNumber)
+      .single();
+
+    if (error) throw error;
+    if (!data) throw new Error('Certificate not found');
+
+    // Populate form fields
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+    set('fieldStudentName',    data.student_name);
+    set('fieldStudentId',      data.student_id);
+    set('fieldProgram',        data.program);
+    set('fieldExamTitle',      data.exam_title);
+    set('fieldScore',          data.score);
+    set('fieldIssueDate',      data.issue_date);
+    set('fieldCertNo',         data.cert_number);
+    set('fieldOfficer',        data.officer);
+    set('fieldOfficerTitle',   data.officer_title);
+    set('fieldSignatory2',     data.signatory2);
+    set('fieldSignatory2Title',data.signatory2_title);
+    if (data.grade) document.getElementById('fieldGrade').value = data.grade;
+
+    // Semester and academic year selects
+    const semEl = document.getElementById('fieldSemester');
+    if (semEl && data.semester) {
+      const match = Array.from(semEl.options).find(o => o.value === data.semester);
+      if (match) semEl.value = data.semester;
+    }
+    const yrEl = document.getElementById('fieldAcademicYear');
+    if (yrEl && data.academic_year) {
+      const match = Array.from(yrEl.options).find(o => o.value === data.academic_year);
+      if (match) yrEl.value = data.academic_year;
+    }
+
+    document.getElementById('studentSearch').value = data.student_name || '';
+
+    renderCertificate();
+
+    // Show resend button and store loaded cert number
+    const resendBtn = document.getElementById('resendEmailBtn');
+    if (resendBtn) {
+      resendBtn.style.display = '';
+      resendBtn.dataset.certNumber = data.cert_number;
+    }
+
+    showLoadStatus(`Loaded: ${data.cert_number} — ${data.student_name}`, 'success');
+
+    // Scroll to form
+    document.getElementById('fieldStudentName').closest('.issue-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (e) {
+    console.error('Load certificate error:', e);
+    showLoadStatus('Could not load certificate: ' + (e.message || e), 'error');
+  }
+}
+
+async function resendCertificateEmail() {
+  const btn = document.getElementById('resendEmailBtn');
+  const certNo = btn?.dataset?.certNumber || document.getElementById('fieldCertNo')?.value?.trim();
+  const name   = document.getElementById('fieldStudentName')?.value?.trim();
+  const studentId = document.getElementById('fieldStudentId')?.value?.trim();
+  const examTitle = document.getElementById('fieldExamTitle')?.value?.trim() || 'Midterm Examination I';
+  const issueDate = document.getElementById('fieldIssueDate')?.value?.trim() || todayFormatted();
+
+  if (!certNo || !name) { showLoadStatus('Load a certificate first.', 'error'); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Sending…'; }
+  showLoadStatus('Sending email…', 'info');
+
+  try {
+    const personalEmail = await fetchStudentPersonalEmail(studentId, '');
+    if (!personalEmail) {
+      showLoadStatus('No personal email on record for this student.', 'error');
+      return;
+    }
+
+    const attachment = await buildCertificatePdfAttachment(certNo, name);
+    await emailCertificatePdf({
+      to: personalEmail,
+      studentName: name,
+      certNumber: certNo,
+      examTitle,
+      issueDate,
+      attachment
+    });
+
+    showLoadStatus(`Certificate emailed to ${personalEmail}.`, 'success');
+  } catch (e) {
+    console.warn('Resend email error:', e);
+    showLoadStatus('Email failed: ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '✉ Resend Email'; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Resend Email'; }
+  }
+}
+
+// Close load-cert dropdown on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#loadCertSearch') && !e.target.closest('#loadCertDropdown')) {
+    const dd = document.getElementById('loadCertDropdown');
+    if (dd) dd.classList.remove('open');
+  }
+});
 
 // ── Live preview on every input change ───────────────────────────
 document.querySelectorAll('.form-input, .form-select').forEach(el => {
