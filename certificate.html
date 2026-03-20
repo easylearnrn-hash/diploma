@@ -1629,60 +1629,76 @@ async function fetchStudentPersonalEmail(studentId, institutionalEmail = '') {
   return null;
 }
 
-async function ensureHtml2PdfBundle() {
-  if (typeof html2pdf !== 'undefined') return;
+async function ensureHtml2Canvas() {
+  if (typeof html2canvas !== 'undefined') return;
 
+  // html2canvas is bundled inside html2pdf.bundle.min.js — load it to get html2canvas
   await new Promise((resolve, reject) => {
     const existing = document.querySelector('script[data-html2pdf-bundle="true"]');
     if (existing) {
-      existing.addEventListener('load', resolve, { once: true });
-      existing.addEventListener('error', reject, { once: true });
+      // already loading/loaded
+      const poll = setInterval(() => {
+        if (typeof html2canvas !== 'undefined') { clearInterval(poll); resolve(); }
+      }, 50);
       return;
     }
-
     const script = document.createElement('script');
     script.src = 'js/html2pdf.bundle.min.js';
     script.async = true;
     script.dataset.html2pdfBundle = 'true';
     script.onload = resolve;
-    script.onerror = () => reject(new Error('Could not load html2pdf bundle from js/html2pdf.bundle.min.js'));
+    script.onerror = () => reject(new Error('Could not load html2pdf bundle'));
     document.head.appendChild(script);
   });
 }
 
-async function buildCertificatePdfAttachment(certNumber, studentName) {
-  await ensureHtml2PdfBundle();
+async function buildCertificateJpegAttachment(certNumber, studentName) {
+  await ensureHtml2Canvas();
 
   const element = document.getElementById('certOuter');
   if (!element) throw new Error('Certificate preview element not found');
 
-  const opt = {
-    margin: 0,
-    filename: `${(studentName || 'student').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'student'}-${certNumber}.pdf`,
-    image: { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
+  // Temporarily remove the SVG noise background — Safari taints the canvas with feTurbulence SVGs
+  const noiseEl = element.querySelector('.cert-noise, [class*="noise"]');
+  const prevNoiseDisplay = noiseEl ? noiseEl.style.display : null;
+  if (noiseEl) noiseEl.style.display = 'none';
+
+  // Also hide the noise via the cert-outer's own background if needed
+  const prevBg = element.style.backgroundImage;
+  element.style.backgroundImage = element.style.backgroundImage?.replace(/url\("data:image\/svg[^"]*feTurbulence[^"]*"\)\s*,?\s*/g, '') || element.style.backgroundImage;
+
+  let canvas;
+  try {
+    canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
-      backgroundColor: '#fffdf6'
-    },
-    jsPDF: {
-      unit: 'mm',
-      format: 'a4',
-      orientation: 'landscape'
-    }
-  };
+      allowTaint: false,
+      backgroundColor: '#fffdf6',
+      logging: false,
+      foreignObjectRendering: false
+    });
+  } finally {
+    // Restore original styles
+    if (noiseEl) noiseEl.style.display = prevNoiseDisplay;
+    element.style.backgroundImage = prevBg;
+  }
 
-  const worker = html2pdf().set(opt).from(element).toPdf();
-  const pdf = await worker.get('pdf');
-  const dataUri = pdf.output('datauristring');
-  const base64 = dataUri.split(',')[1];
+  // Safari: use toBlob via a synchronous quality=0.92 JPEG export
+  const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
 
+  const safeName = (studentName || 'student').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'student';
   return {
-    filename: opt.filename,
+    filename: `${safeName}-${certNumber}.jpg`,
     content: base64,
-    type: 'application/pdf'
+    type: 'image/jpeg'
   };
 }
+
+// Keep the old name as alias so any other callers still work
+async function buildCertificatePdfAttachment(certNumber, studentName) {
+  return buildCertificateJpegAttachment(certNumber, studentName);
+}
+
 
 async function emailCertificatePdf({
   to,
@@ -1701,7 +1717,7 @@ async function emailCertificatePdf({
         <div style="font-size:12px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#d4b56a;margin-bottom:10px;">Certificate Issued</div>
         <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:34px;line-height:1.15;color:#f0e3bc;margin:0 0 14px;">Your ACNHS certificate is ready</h1>
         <p style="margin:0 0 16px;color:#c8bfb2;">Dear ${studentName},</p>
-        <p style="margin:0 0 16px;color:#c8bfb2;">Attached is the official PDF version of your <strong style="color:#f0ece3;">${examTitle}</strong> certificate issued by the Armenian College of Nursing &amp; Health Sciences.</p>
+        <p style="margin:0 0 16px;color:#c8bfb2;">Attached is the official certificate image for your <strong style="color:#f0ece3;">${examTitle}</strong> certificate issued by the Armenian College of Nursing &amp; Health Sciences.</p>
         <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:12px;padding:18px 20px;margin:20px 0;">
           <div style="margin-bottom:8px;color:#f0ece3;"><strong>Certificate No.</strong> ${certNumber}</div>
           <div style="color:#f0ece3;"><strong>Date Issued</strong> ${issueDate}</div>
@@ -1716,7 +1732,7 @@ async function emailCertificatePdf({
       to,
       subject: `Your ACNHS Certificate of Achievement — ${certNumber}`,
       html,
-      text: `Dear ${studentName},\n\nAttached is the official PDF version of your ${examTitle} certificate.\nCertificate No.: ${certNumber}\nDate Issued: ${issueDate}\n\nArmenian College of Nursing & Health Sciences`,
+      text: `Dear ${studentName},\n\nAttached is your official ${examTitle} certificate image.\nCertificate No.: ${certNumber}\nDate Issued: ${issueDate}\n\nArmenian College of Nursing & Health Sciences`,
       from: 'registrar@acnhs.am',
       fromName: 'Registrar Office - ACNHS',
       attachments: [attachment]
