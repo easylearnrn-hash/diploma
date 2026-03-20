@@ -835,6 +835,10 @@ body {
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
         Resend Email
       </button>
+      <button class="btn-admin" id="deleteCertBtn" style="display:none;white-space:nowrap;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.30);" onclick="deleteLoadedCertificate()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+        Delete Certificate
+      </button>
     </div>
     <div class="status-bar" id="loadStatusBar" style="margin-top:10px;"></div>
   </div>
@@ -1862,11 +1866,17 @@ async function loadCertificateRecord(certNumber) {
 
     renderCertificate();
 
-    // Show resend button and store loaded cert number
+    // Show resend + delete buttons and store loaded cert number
     const resendBtn = document.getElementById('resendEmailBtn');
     if (resendBtn) {
       resendBtn.style.display = '';
       resendBtn.dataset.certNumber = data.cert_number;
+    }
+    const deleteBtn = document.getElementById('deleteCertBtn');
+    if (deleteBtn) {
+      deleteBtn.style.display = '';
+      deleteBtn.dataset.certNumber = data.cert_number;
+      deleteBtn.dataset.studentName = data.student_name;
     }
 
     showLoadStatus(`Loaded: ${data.cert_number} — ${data.student_name}`, 'success');
@@ -1915,6 +1925,48 @@ async function resendCertificateEmail() {
     showLoadStatus('Email failed: ' + (e.message || e), 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = '✉ Resend Email'; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg> Resend Email'; }
+  }
+}
+
+async function deleteLoadedCertificate() {
+  const btn = document.getElementById('deleteCertBtn');
+  const certNo = btn?.dataset?.certNumber;
+  const studentName = btn?.dataset?.studentName || 'this student';
+
+  if (!certNo) { showLoadStatus('No certificate loaded.', 'error'); return; }
+
+  const confirmed = window.confirm(`⚠️ Permanently delete certificate ${certNo} for ${studentName}?\n\nThis cannot be undone.`);
+  if (!confirmed) return;
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Deleting…';
+  showLoadStatus('Deleting certificate…', 'info');
+
+  try {
+    if (!db) throw new Error('Supabase not available');
+
+    const { error } = await db
+      .from('certificates')
+      .delete()
+      .eq('cert_number', certNo);
+
+    if (error) throw error;
+
+    // Clear the form and hide action buttons
+    resetForm();
+    btn.style.display = 'none';
+    btn.removeAttribute('data-cert-number');
+    const resendBtn = document.getElementById('resendEmailBtn');
+    if (resendBtn) { resendBtn.style.display = 'none'; resendBtn.removeAttribute('data-cert-number'); }
+    document.getElementById('loadCertSearch').value = '';
+
+    showLoadStatus(`✅ Certificate ${certNo} deleted successfully.`, 'success');
+  } catch (e) {
+    console.error('Delete certificate error:', e);
+    showLoadStatus('Delete failed: ' + (e.message || e), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg> Delete Certificate';
   }
 }
 
