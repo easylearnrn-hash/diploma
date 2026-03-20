@@ -1633,7 +1633,7 @@ async function ensureHtml2Canvas() {
   if (typeof html2canvas !== 'undefined') return;
 
   const waitForHtml2Canvas = () => new Promise((resolve, reject) => {
-    const timeoutMs = 4000;
+    const timeoutMs = 3000;
     const start = Date.now();
     const poll = setInterval(() => {
       if (typeof html2canvas !== 'undefined') {
@@ -1648,21 +1648,33 @@ async function ensureHtml2Canvas() {
     }, 50);
   });
 
-  // html2canvas is bundled inside html2pdf.bundle.min.js — load it to get html2canvas
-  await new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-html2pdf-bundle="true"]');
+  const loadScriptOnce = (src, dataAttr) => new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[${dataAttr}="true"]`);
     if (existing) {
-      waitForHtml2Canvas().then(resolve).catch(reject);
+      resolve();
       return;
     }
     const script = document.createElement('script');
-    script.src = 'js/html2pdf.bundle.min.js';
+    script.src = src;
     script.async = true;
-    script.dataset.html2pdfBundle = 'true';
-    script.onload = () => waitForHtml2Canvas().then(resolve).catch(reject);
-    script.onerror = () => reject(new Error('Could not load html2pdf bundle'));
+    script.dataset[dataAttr] = 'true';
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Could not load ${src}`));
     document.head.appendChild(script);
   });
+
+  // First try: html2pdf bundle (includes html2canvas)
+  try {
+    await loadScriptOnce('js/html2pdf.bundle.min.js', 'html2pdfBundle');
+    await waitForHtml2Canvas();
+    return;
+  } catch (e) {
+    console.warn('html2canvas not available from html2pdf bundle, trying fallback.', e);
+  }
+
+  // Fallback: dedicated html2canvas bundle
+  await loadScriptOnce('js/html2canvas.min.js', 'html2canvasBundle');
+  await waitForHtml2Canvas();
 }
 
 async function buildCertificateJpegAttachment(certNumber, studentName) {
