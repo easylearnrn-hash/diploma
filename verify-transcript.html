@@ -189,12 +189,15 @@
     <p>Verify transcripts and application authenticity</p>
     
     <!-- Tabs -->
-    <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;">
+    <div style="display:flex;gap:16px;justify-content:center;margin-top:30px;flex-wrap:wrap;">
       <button onclick="switchTab('transcript')" id="transcriptTab" class="tab-btn active">
         Transcript Verification
       </button>
       <button onclick="switchTab('application')" id="applicationTab" class="tab-btn">
         Application Authenticity
+      </button>
+      <button onclick="switchTab('certificate')" id="certificateTab" class="tab-btn">
+        🏅 Certificate Verification
       </button>
     </div>
   </div>
@@ -228,6 +231,23 @@
       >
       <br>
       <button onclick="checkApplicationStatus()">🔍 Verify Authenticity</button>
+    </div>
+  </div>
+
+  <!-- Certificate Verification Section -->
+  <div class="verification-input-section" id="certificateSection" style="display:none;">
+    <div class="verification-code-input">
+      <label class="input-label" for="certNumber">Certificate Number</label>
+      <input 
+        type="text" 
+        id="certNumber" 
+        placeholder="CERT-ACNHS-XXXXXXXXXX"
+        maxlength="30"
+        autocomplete="off"
+        style="letter-spacing:2px;"
+      >
+      <br>
+      <button onclick="verifyCertificate()">🏅 Verify Certificate</button>
     </div>
   </div>
   
@@ -327,36 +347,38 @@ function handleAlertEscape(e) {
 function switchTab(tab) {
   const transcriptTab = document.getElementById('transcriptTab');
   const applicationTab = document.getElementById('applicationTab');
+  const certificateTab = document.getElementById('certificateTab');
   const transcriptSection = document.getElementById('transcriptSection');
   const applicationSection = document.getElementById('applicationSection');
+  const certificateSection = document.getElementById('certificateSection');
   const resultDiv = document.getElementById('verificationResult');
   
   // Hide results
   resultDiv.style.display = 'none';
   resultDiv.className = 'verification-result';
-  
+
+  // Reset all tabs
+  [transcriptTab, applicationTab, certificateTab].forEach(btn => {
+    if (!btn) return;
+    btn.style.background = 'transparent';
+    btn.style.borderColor = 'rgba(201,168,76,0.28)';
+    btn.style.color = 'rgba(240,236,227,0.5)';
+  });
+  [transcriptSection, applicationSection, certificateSection].forEach(sec => {
+    if (sec) sec.style.display = 'none';
+  });
+
+  // Activate selected tab
+  const activeStyle = { background: 'rgba(201,168,76,0.15)', borderColor: '#c9a84c', color: '#c9a84c' };
   if (tab === 'transcript') {
-    transcriptTab.style.background = 'rgba(201,168,76,0.15)';
-    transcriptTab.style.borderColor = '#c9a84c';
-    transcriptTab.style.color = '#c9a84c';
-    
-    applicationTab.style.background = 'transparent';
-    applicationTab.style.borderColor = 'rgba(201,168,76,0.28)';
-    applicationTab.style.color = 'rgba(240,236,227,0.5)';
-    
+    Object.assign(transcriptTab.style, activeStyle);
     transcriptSection.style.display = 'block';
-    applicationSection.style.display = 'none';
-  } else {
-    applicationTab.style.background = 'rgba(201,168,76,0.15)';
-    applicationTab.style.borderColor = '#c9a84c';
-    applicationTab.style.color = '#c9a84c';
-    
-    transcriptTab.style.background = 'transparent';
-    transcriptTab.style.borderColor = 'rgba(201,168,76,0.28)';
-    transcriptTab.style.color = 'rgba(240,236,227,0.5)';
-    
-    transcriptSection.style.display = 'none';
+  } else if (tab === 'application') {
+    Object.assign(applicationTab.style, activeStyle);
     applicationSection.style.display = 'block';
+  } else if (tab === 'certificate') {
+    Object.assign(certificateTab.style, activeStyle);
+    certificateSection.style.display = 'block';
   }
 }
 
@@ -490,6 +512,181 @@ async function checkApplicationStatus() {
   }
 }
 
+// ── Certificate Verification ──────────────────────────────────────
+async function verifyCertificate() {
+  const input = document.getElementById('certNumber');
+  const certNum = input.value.trim().toUpperCase();
+  const loading = document.getElementById('loading');
+  const resultDiv = document.getElementById('verificationResult');
+  const resultContent = document.getElementById('resultContent');
+
+  if (!certNum) {
+    showCustomAlert('Please enter a certificate number');
+    return;
+  }
+
+  loading.classList.add('active');
+  resultDiv.style.display = 'none';
+  resultDiv.className = 'verification-result';
+
+  let cert = null;
+  try {
+    initSupabase();
+    cert = await verifyCertificateCode(certNum);
+  } catch (err) {
+    loading.classList.remove('active');
+    resultDiv.className = 'verification-result invalid';
+    resultContent.innerHTML = `
+      <span class="error-icon">❌</span>
+      <h2 class="result-title">Database Error</h2>
+      <p class="result-description">Error verifying certificate: ${err.message}</p>
+    `;
+    resultDiv.style.display = 'block';
+    resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+
+  loading.classList.remove('active');
+
+  const ts = new Date().toLocaleString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Yerevan'
+  });
+
+  if (!cert) {
+    resultDiv.className = 'verification-result invalid';
+    resultContent.innerHTML = `
+      <span class="status-badge invalid">❌ Not Found</span>
+      <h2 class="result-title" style="color:#ff6b6b;">Certificate Not Found</h2>
+      <p class="result-description">
+        The certificate number <strong style="color:#fff;font-family:'Courier New',monospace;letter-spacing:1px;">${certNum}</strong>
+        does not match any official ACNHS certificate in our records.
+      </p>
+      <div style="background:rgba(239,68,68,0.1);border:1px solid rgba(239,68,68,0.3);border-radius:8px;padding:24px;margin:24px 0;">
+        <div class="error-icon">⚠️</div>
+        <p style="color:rgba(255,255,255,0.85);margin:0;font-size:15px;line-height:1.8;">
+          <strong style="color:#ff6b6b;display:block;margin-bottom:12px;">Possible Reasons:</strong>
+          • Incorrect or mistyped certificate number<br>
+          • Certificate was not issued through the ACNHS system<br>
+          • Potentially fraudulent or altered document
+        </p>
+      </div>
+      <p style="color:rgba(255,255,255,0.6);font-size:14px;text-align:center;">
+        If you believe this is an error, contact
+        <a href="mailto:registrar@acnhs.am" style="color:var(--accent);font-weight:600;text-decoration:none;">registrar@acnhs.am</a>
+      </p>
+      <div class="verification-timestamp">Verification attempted on ${ts} (Yerevan Time)</div>
+    `;
+  } else if (cert.status === 'revoked') {
+    resultDiv.className = 'verification-result revoked';
+    resultContent.innerHTML = `
+      <span class="status-badge revoked">⚠️ Revoked</span>
+      <h2 class="result-title" style="color:#ffa94d;">Certificate Revoked</h2>
+      <p class="result-description">This certificate has been officially revoked and is no longer valid.</p>
+      <div class="transcript-details">
+        <div class="detail-row"><span class="label">Certificate No.</span><span class="value" style="font-family:'Courier New',monospace;">${cert.cert_number}</span></div>
+        <div class="detail-row"><span class="label">Student Name</span><span class="value">${cert.student_name}</span></div>
+        <div class="detail-row"><span class="label">Program</span><span class="value">${cert.program || '—'}</span></div>
+        <div class="detail-row"><span class="label">Issue Date</span><span class="value">${cert.issue_date || '—'}</span></div>
+      </div>
+      <div class="verification-timestamp">Verified on ${ts} (Yerevan Time)</div>
+    `;
+  } else {
+    // ── Valid certificate — render the full certificate display ──
+    resultDiv.className = 'verification-result valid';
+    const scoreRow = cert.score
+      ? `<div class="detail-row"><span class="label">Score</span><span class="value">${cert.score}</span></div>` : '';
+    const semRow = cert.semester
+      ? `<div class="detail-row"><span class="label">Semester</span><span class="value">${cert.semester}</span></div>` : '';
+    const yearRow = cert.academic_year
+      ? `<div class="detail-row"><span class="label">Academic Year</span><span class="value">${cert.academic_year}</span></div>` : '';
+    const sigRow = cert.signatory2
+      ? `<div class="detail-row"><span class="label">Co-Signatory</span><span class="value">${cert.signatory2}${cert.signatory2_title ? ', ' + cert.signatory2_title : ''}</span></div>` : '';
+
+    resultContent.innerHTML = `
+      <span class="status-badge valid">✓ Verified</span>
+      <h2 class="result-title" style="color:#51cf66;">Certificate Authenticated</h2>
+      <p class="result-description">
+        This is an <strong style="color:#51cf66;">authentic official certificate</strong> issued by the
+        Armenian College of Nursing &amp; Health Sciences. All details have been verified against official records.
+      </p>
+
+      <!-- Full Certificate Preview -->
+      <div style="margin:32px 0;background:linear-gradient(135deg,#fdf8ec 0%,#fffdf6 50%,#fdf5e0 100%);border:3px solid #c9a84c;border-radius:12px;padding:40px 48px;box-shadow:0 8px 40px rgba(0,0,0,0.4),inset 0 0 60px rgba(201,168,76,0.06);color:#1a0e00;position:relative;overflow:hidden;">
+        <!-- Gold band top -->
+        <div style="position:absolute;top:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#8b6914,#c9a84c,#e2cc92,#c9a84c,#8b6914);"></div>
+        <!-- Gold band bottom -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:6px;background:linear-gradient(90deg,#8b6914,#c9a84c,#e2cc92,#c9a84c,#8b6914);"></div>
+
+        <div style="text-align:center;margin-bottom:24px;">
+          <div style="font-size:10px;font-weight:800;letter-spacing:4px;color:#8b6914;text-transform:uppercase;margin-bottom:6px;">Armenian College of Nursing &amp; Health Sciences</div>
+          <div style="font-size:10px;color:#b0914a;letter-spacing:2px;">Official Certificate of Achievement</div>
+        </div>
+
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:11px;color:#8b6914;letter-spacing:2px;margin-bottom:6px;">THIS CERTIFIES THAT</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-size:28px;font-weight:800;color:#1a0e00;letter-spacing:1px;">${cert.student_name}</div>
+          ${cert.student_id ? `<div style="font-size:11px;color:#8b6914;margin-top:4px;letter-spacing:1px;">${cert.student_id}</div>` : ''}
+        </div>
+
+        <div style="text-align:center;margin-bottom:20px;">
+          <div style="font-size:11px;color:#8b6914;letter-spacing:2px;margin-bottom:8px;">HAS SUCCESSFULLY COMPLETED</div>
+          <div style="font-family:'Playfair Display',Georgia,serif;font-size:20px;font-weight:700;color:#1a0e00;">${cert.exam_title || '—'}</div>
+          ${cert.program ? `<div style="font-size:12px;color:#5a4020;margin-top:4px;">${cert.program}${cert.semester ? ' · ' + cert.semester : ''}${cert.academic_year ? ' · ' + cert.academic_year : ''}</div>` : ''}
+        </div>
+
+        ${cert.grade ? `
+        <div style="text-align:center;margin:20px 0;">
+          <div style="display:inline-block;background:linear-gradient(135deg,#c9a84c,#e2cc92);color:#1a0e00;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:22px;font-weight:900;font-family:'Playfair Display',Georgia,serif;box-shadow:0 4px 16px rgba(201,168,76,0.5);">${cert.grade}</div>
+          ${cert.score ? `<div style="font-size:12px;color:#8b6914;margin-top:6px;">${cert.score}</div>` : ''}
+        </div>` : ''}
+
+        <div style="border-top:1px solid rgba(139,105,20,0.3);margin-top:24px;padding-top:20px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:16px;">
+          <div>
+            <div style="font-size:10px;letter-spacing:1.5px;color:#8b6914;margin-bottom:4px;">AUTHORIZED OFFICER</div>
+            <div style="font-weight:700;font-size:13px;color:#1a0e00;">${cert.officer || 'Dr. Hrachya A. Vardanyan'}</div>
+            <div style="font-size:11px;color:#5a4020;">${cert.officer_title || 'Dean of Academic Affairs'}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:10px;letter-spacing:1.5px;color:#8b6914;margin-bottom:4px;">ISSUE DATE</div>
+            <div style="font-weight:700;font-size:13px;color:#1a0e00;">${cert.issue_date || '—'}</div>
+            <div style="font-size:10px;color:#8b6914;font-family:'Courier New',monospace;margin-top:4px;">${cert.cert_number}</div>
+          </div>
+        </div>
+        <!-- Gold band bottom buffer -->
+        <div style="height:6px;"></div>
+      </div>
+
+      <!-- Verified details table -->
+      <div class="transcript-details">
+        <div class="detail-row"><span class="label">Certificate No.</span><span class="value" style="font-family:'Courier New',monospace;letter-spacing:1px;">${cert.cert_number}</span></div>
+        <div class="detail-row"><span class="label">Student Name</span><span class="value">${cert.student_name}</span></div>
+        ${cert.student_id ? `<div class="detail-row"><span class="label">Student ID</span><span class="value" style="font-family:'Courier New',monospace;">${cert.student_id}</span></div>` : ''}
+        ${cert.program ? `<div class="detail-row"><span class="label">Program</span><span class="value">${cert.program}</span></div>` : ''}
+        <div class="detail-row"><span class="label">Examination</span><span class="value">${cert.exam_title || '—'}</span></div>
+        ${scoreRow}${semRow}${yearRow}
+        ${cert.grade ? `<div class="detail-row"><span class="label">Grade Awarded</span><span class="value" style="font-weight:800;color:var(--accent);font-size:18px;">${cert.grade}</span></div>` : ''}
+        <div class="detail-row"><span class="label">Issue Date</span><span class="value">${cert.issue_date || '—'}</span></div>
+        <div class="detail-row"><span class="label">Authorized Officer</span><span class="value">${cert.officer || '—'}${cert.officer_title ? ', ' + cert.officer_title : ''}</span></div>
+        ${sigRow}
+      </div>
+
+      <div style="background:rgba(16,185,129,0.1);border:1px solid rgba(16,185,129,0.3);border-radius:8px;padding:24px;margin-top:28px;">
+        <p style="color:rgba(255,255,255,0.85);margin:0;font-size:14px;line-height:1.8;">
+          <strong style="color:#51cf66;display:block;margin-bottom:8px;">🛡️ Security Verified:</strong>
+          This certificate has passed all authenticity checks. The certificate number
+          <strong style="font-family:'Courier New',monospace;">${cert.cert_number}</strong>
+          is uniquely registered in the official ACNHS certificate registry.
+        </p>
+      </div>
+      <div class="verification-timestamp">Verification completed on ${ts} (Yerevan Time)</div>
+    `;
+  }
+
+  resultDiv.style.display = 'block';
+  resultDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function getStatusColor(status) {
   const normalized = status.toLowerCase();
   
@@ -536,6 +733,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const codeFromUrl = urlParams.get('code');
   const ctrlFromUrl = urlParams.get('ctrl');
+  const certFromUrl = urlParams.get('cert');
   
   // Also check for /verify/transcript/{CODE} path format
   const pathMatch = window.location.pathname.match(/\/verify\/transcript\/([^\/]+)$/);
@@ -543,17 +741,18 @@ window.addEventListener('DOMContentLoaded', () => {
   
   const code = codeFromPath || codeFromUrl;
   
+  // Handle QR code scan with certificate number
+  if (certFromUrl) {
+    console.log('🏅 QR Code Scan: Certificate number detected -', certFromUrl);
+    switchTab('certificate');
+    document.getElementById('certNumber').value = certFromUrl;
+    setTimeout(() => verifyCertificate(), 500);
+  }
   // Handle QR code scan with control number (from acceptance letter)
-  if (ctrlFromUrl) {
+  else if (ctrlFromUrl) {
     console.log('🔍 QR Code Scan: Control Number detected -', ctrlFromUrl);
-    
-    // Switch to Application Status tab
     switchTab('application');
-    
-    // Auto-fill the control number
     document.getElementById('controlNumber').value = ctrlFromUrl;
-    
-    // Auto-check the status after a brief delay
     setTimeout(() => {
       console.log('🔍 Auto-checking application status...');
       checkApplicationStatus();
@@ -800,6 +999,13 @@ document.getElementById('verificationCode').addEventListener('keypress', (e) => 
 document.getElementById('controlNumber').addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     checkApplicationStatus();
+  }
+});
+
+// Allow Enter key to verify certificate
+document.getElementById('certNumber').addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    verifyCertificate();
   }
 });
 

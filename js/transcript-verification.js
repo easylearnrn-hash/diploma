@@ -155,6 +155,94 @@ async function getStudentTranscripts(studentId) {
   return data;
 }
 
+// ── Certificate Functions ─────────────────────────────────────────
+
+/**
+ * Generate a cryptographically secure, unique certificate number.
+ * Format: CERT-ACNHS-XXXXXXXXXXXXXXXX (8 random hex chars)
+ */
+function generateSecureCertNumber() {
+  const array = new Uint8Array(5);
+  crypto.getRandomValues(array);
+  const hex = Array.from(array, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  return `CERT-ACNHS-${hex}`;
+}
+
+/**
+ * Save a certificate record to the public.certificates table.
+ * Retries up to 5 times on collision (23505).
+ * @param {Object} certData - Certificate fields
+ * @returns {Promise<Object>} Saved row including cert_number
+ */
+async function saveCertificateToDatabase(certData) {
+  const client = initSupabase();
+  if (!client) throw new Error('Supabase client not initialized');
+
+  const MAX_RETRIES = 5;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const certNumber = certData.cert_number || generateSecureCertNumber();
+
+    const record = {
+      cert_number:     certNumber,
+      student_id:      certData.student_id      || '',
+      student_name:    certData.student_name,
+      program:         certData.program         || '',
+      exam_title:      certData.exam_title      || '',
+      score:           certData.score           || null,
+      grade:           certData.grade           || '',
+      semester:        certData.semester        || null,
+      academic_year:   certData.academic_year   || null,
+      issue_date:      certData.issue_date,
+      officer:         certData.officer         || null,
+      officer_title:   certData.officer_title   || null,
+      signatory2:      certData.signatory2      || null,
+      signatory2_title:certData.signatory2_title|| null,
+      status:          'valid'
+    };
+
+    const { data, error } = await client
+      .from('certificates')
+      .insert([record])
+      .select()
+      .single();
+
+    if (!error) return data;
+
+    if (error.code === '23505' && attempt < MAX_RETRIES) {
+      console.warn(`Certificate number collision on attempt ${attempt}, retrying...`);
+      // clear so a new one is generated next iteration
+      delete certData.cert_number;
+      continue;
+    }
+
+    console.error('Error saving certificate:', error);
+    throw error;
+  }
+}
+
+/**
+ * Verify a certificate by its cert_number.
+ * @param {string} certNumber - e.g. "CERT-ACNHS-A3F7..."
+ * @returns {Promise<Object|null>}
+ */
+async function verifyCertificateCode(certNumber) {
+  const client = initSupabase();
+  if (!client) throw new Error('Supabase client not initialized');
+
+  const { data, error } = await client
+    .from('certificates')
+    .select('*')
+    .eq('cert_number', certNumber)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') return null; // not found
+    console.error('Error verifying certificate:', error);
+    throw error;
+  }
+  return data;
+}
+
 // Export functions
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -163,6 +251,9 @@ if (typeof module !== 'undefined' && module.exports) {
     saveTranscriptToDatabase,
     verifyTranscriptCode,
     updateTranscriptStatus,
-    getStudentTranscripts
+    getStudentTranscripts,
+    generateSecureCertNumber,
+    saveCertificateToDatabase,
+    verifyCertificateCode
   };
 }
