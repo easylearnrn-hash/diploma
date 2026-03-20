@@ -349,6 +349,14 @@ body {
     linear-gradient(160deg, #fffef9 0%, #fdf8ee 45%, #faf4e8 100%);
 }
 
+/* Capture mode: remove SVG noise + heavy blends to avoid Safari canvas taint */
+body.capture-mode .cert-outer {
+  background-image: linear-gradient(160deg, #fffef9 0%, #fdf8ee 45%, #faf4e8 100%) !important;
+}
+body.capture-mode .cert-watermark {
+  display: none !important;
+}
+
 /* ── Outer border double-rule ── */
 .cert-border-outer {
   position: absolute;
@@ -1683,14 +1691,9 @@ async function buildCertificateJpegAttachment(certNumber, studentName) {
   const element = document.getElementById('certOuter');
   if (!element) throw new Error('Certificate preview element not found');
 
-  // Temporarily remove the SVG noise background — Safari taints the canvas with feTurbulence SVGs
-  const noiseEl = element.querySelector('.cert-noise, [class*="noise"]');
-  const prevNoiseDisplay = noiseEl ? noiseEl.style.display : null;
-  if (noiseEl) noiseEl.style.display = 'none';
-
-  // Also hide the noise via the cert-outer's own background if needed
-  const prevBg = element.style.backgroundImage;
-  element.style.backgroundImage = element.style.backgroundImage?.replace(/url\("data:image\/svg[^"]*feTurbulence[^"]*"\)\s*,?\s*/g, '') || element.style.backgroundImage;
+  // Temporarily remove SVG noise + watermark — Safari taints canvas with feTurbulence SVGs
+  const prevBodyClass = document.body.classList.contains('capture-mode');
+  document.body.classList.add('capture-mode');
 
   let canvas;
   try {
@@ -1704,8 +1707,7 @@ async function buildCertificateJpegAttachment(certNumber, studentName) {
     });
   } finally {
     // Restore original styles
-    if (noiseEl) noiseEl.style.display = prevNoiseDisplay;
-    element.style.backgroundImage = prevBg;
+    if (!prevBodyClass) document.body.classList.remove('capture-mode');
   }
 
   // Safari: use toBlob via a synchronous quality=0.92 JPEG export
