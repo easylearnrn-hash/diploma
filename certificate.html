@@ -25,6 +25,8 @@
 
 <!-- Logo base64 -->
 <script src="js/acnhs-logo-base64.js"></script>
+<!-- QR code generator (local, no cross-origin canvas taint) -->
+<script src="js/qrcode.min.js"></script>
 <!-- Supabase -->
 <script src="js/supabase.min.js"></script>
 <script src="js/supabase-config.js"></script>
@@ -75,7 +77,7 @@ body {
 #adminShell {
   display: block;
   padding: 32px 40px 0;
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
@@ -299,8 +301,9 @@ body {
 /* ── CERTIFICATE PREVIEW WRAPPER ────────────────────────── */
 #certificateSection {
   padding: 0 40px 56px;
-  max-width: 1100px;
+  max-width: 1200px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .preview-label {
@@ -680,9 +683,10 @@ body {
   text-align: center;
   z-index: 5;
 }
-.cert-qr-block img {
-  width: 18mm;
-  height: 18mm;
+.cert-qr-block img,
+.cert-qr-block canvas {
+  width: 18mm !important;
+  height: 18mm !important;
   display: block;
 }
 .cert-qr-label {
@@ -1103,7 +1107,7 @@ body {
 
     <!-- QR code -->
     <div class="cert-qr-block">
-      <img id="certQr" src="" alt="Verification QR">
+      <div id="certQr"></div>
       <div class="cert-qr-label">Verify</div>
     </div>
 
@@ -1485,10 +1489,6 @@ async function ensureHtml2PdfBundle() {
 }
 
 async function buildCertificatePdfAttachment(certNumber, studentName) {
-  if (window.location.protocol === 'file:') {
-    throw new Error('PDF email attachments require serving `certificate.html` over localhost or HTTPS, not file://');
-  }
-
   await ensureHtml2PdfBundle();
 
   const element = document.getElementById('certOuter');
@@ -1713,14 +1713,21 @@ function renderCertificate() {
   ];
   document.getElementById('certMicrotext').textContent = (microParts.join(' · ') + ' · ').repeat(3);
 
-  // QR code — always show on the preview; only PDF export is blocked on file://
+  // QR code — generated locally via qrcode.js (no cross-origin canvas taint)
   const verifyUrl = `https://www.acnhs.am/verify-transcript.html?cert=${encodeURIComponent(certNo)}`;
   const qrEl = document.getElementById('certQr');
   if (qrEl) {
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&color=2a1c04&bgcolor=fffdf6&data=${encodeURIComponent(verifyUrl)}`;
-    qrEl.src = qrUrl;
-    qrEl.alt = 'Verification QR';
-    qrEl.style.display = '';
+    qrEl.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+      new QRCode(qrEl, {
+        text: verifyUrl,
+        width: 68,
+        height: 68,
+        colorDark: '#2a1c04',
+        colorLight: '#fffdf6',
+        correctLevel: QRCode.CorrectLevel.M
+      });
+    }
   }
 
   // Auto-generate cert number if blank
