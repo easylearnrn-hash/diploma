@@ -2376,17 +2376,17 @@
 
     // ── HOST: subscribe to new lobby requests in real time ────────
     function subscribeLobby() {
-      if (!db || !state.sessionId) return;
+      if (!db || !state.sessionCode) return;
       if (state.lobbySubscription) {
         db.removeChannel(state.lobbySubscription);
       }
       state.lobbySubscription = db
-        .channel(`lobby-${state.sessionId}`)
+        .channel(`lobby-${state.sessionCode}`)
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'video_call_lobby',
-          filter: `session_id=eq.${state.sessionId}`
+          filter: `session_code=eq.${state.sessionCode}`
         }, (payload) => {
           const req = payload.new;
           // Avoid duplicates
@@ -2476,11 +2476,11 @@
 
     // ── HOST: load existing waiting requests (e.g. after page restore) ──
     async function fetchLobbyRequests() {
-      if (!db || !state.sessionId) return;
+      if (!db || !state.sessionCode) return;
       const { data } = await db
         .from('video_call_lobby')
         .select('*')
-        .eq('session_id', state.sessionId)
+        .eq('session_code', state.sessionCode)
         .order('requested_at', { ascending: true });
       if (data) {
         state.lobbyRequests = data;
