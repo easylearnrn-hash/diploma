@@ -1862,9 +1862,13 @@
           state.sessionName = 'ACNHS Conference Room';
           state.sessionStart = new Date().toISOString();
         } else if (!data) {
-          showNotice(`No session found with code "${code}". Please check the code and try again.`);
-          updateCallStatus('idle');
-          return;
+          // Session not found in DB — fall back to local mode so students can still
+          // join via the invite link even if the host started in local mode
+          console.warn('⚠️ Session code not found in DB, joining in local mode:', code);
+          state.sessionId = `local-${code}`;
+          state.sessionCode = code;
+          state.sessionName = 'ACNHS Conference Room';
+          state.sessionStart = new Date().toISOString();
         } else {
           state.sessionId = data.session_id;
           state.sessionCode = data.room_code;
@@ -2570,6 +2574,8 @@
       if (sessionCode) {
         // Populate the session code input
         dom.sessionCode.value = sessionCode;
+        // Pre-select Student role in the sign-in modal (most likely user joining via invite)
+        if (dom.signinRole) dom.signinRole.value = 'Student';
         // Update sign-in modal to mention the session they're joining
         if (dom.signinSubtitle) {
           dom.signinSubtitle.textContent = `You've been invited to session ${sessionCode}. Sign in to join.`;
