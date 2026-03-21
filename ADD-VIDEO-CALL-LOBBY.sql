@@ -39,29 +39,34 @@ CREATE INDEX IF NOT EXISTS idx_vcl_status
 ALTER TABLE public.video_call_lobby ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS Policies (anon role — matches rest of project)
+-- DROP first so this script is safe to re-run
+DROP POLICY IF EXISTS vcl_anon_insert ON public.video_call_lobby;
+DROP POLICY IF EXISTS vcl_anon_select ON public.video_call_lobby;
+DROP POLICY IF EXISTS vcl_anon_update ON public.video_call_lobby;
+DROP POLICY IF EXISTS vcl_anon_delete ON public.video_call_lobby;
 
 -- Students can insert their own join request
-CREATE POLICY IF NOT EXISTS vcl_anon_insert
+CREATE POLICY vcl_anon_insert
   ON public.video_call_lobby
   FOR INSERT TO anon
   WITH CHECK (true);
 
 -- Students can read their own row (polling for admit/deny);
 -- hosts can read all rows for their session
-CREATE POLICY IF NOT EXISTS vcl_anon_select
+CREATE POLICY vcl_anon_select
   ON public.video_call_lobby
   FOR SELECT TO anon
   USING (true);
 
 -- Host updates status to 'admitted' or 'denied' via anon client
-CREATE POLICY IF NOT EXISTS vcl_anon_update
+CREATE POLICY vcl_anon_update
   ON public.video_call_lobby
   FOR UPDATE TO anon
   USING (true)
   WITH CHECK (true);
 
 -- Optional: allow cleanup of old lobby rows (host ends session)
-CREATE POLICY IF NOT EXISTS vcl_anon_delete
+CREATE POLICY vcl_anon_delete
   ON public.video_call_lobby
   FOR DELETE TO anon
   USING (true);
