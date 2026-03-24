@@ -4068,6 +4068,34 @@ async function loadTransferCreditsForStudent(studentProfile) {
     }
     studentProfile.metadata.gradebook = gradebook;
     studentProfile.metadata.academic_progress = academicProgress;
+    
+    // Inject Certificates into Exams
+    let certificates = [];
+    try {
+      const { data: certs } = await supabase.from('certificates').select('*').eq('student_id', studentProfile.student_id).eq('status', 'valid');
+      if (certs?.length) certificates = certs;
+      else if (studentProfile.full_name) {
+        const { data: allCerts } = await supabase.from('certificates').select('*').eq('status', 'valid');
+        if (allCerts) certificates = allCerts.filter(c => (c.student_name || '').toLowerCase() === studentProfile.full_name.toLowerCase());
+      }
+    } catch (_) {}
+    if (certificates.length > 0) {
+      const examList = studentProfile.metadata.exams || [];
+      certificates.forEach(c => {
+        if (!examList.some(e => e.cert_id === c.id)) {
+          examList.push({
+            cert_id: c.id,
+            name: c.exam_title || 'Certificate Exam',
+            score: c.score ? `${Number(c.score).toFixed(1)}%` : (c.grade || '—'),
+            status: c.grade || 'Valid',
+            reviewer: c.officer || '—',
+            date: c.issue_date || c.created_at
+          });
+        }
+      });
+      studentProfile.metadata.exams = examList;
+    }
+
     studentProfile.metadata.cumulative_gpa = parseFloat(cumulativeGpa);
     studentProfile.metadata.total_credits = totalCredits;
     studentProfile.current_gpa = parseFloat(cumulativeGpa);

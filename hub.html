@@ -2583,6 +2583,34 @@
 
           </div><!-- /.og-section -->
 
+          <!-- ═══════════════════════════════════════════════════════
+               CERTIFICATE GRADES (Exam certificates from admin)
+               ═══════════════════════════════════════════════════════ -->
+          <div class="og-section" id="certSection" style="display:none; margin-top: 32px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 32px;">
+            <div class="og-section-heading">
+              <div>
+                <h3>📜 Certified Exam Grades</h3>
+                <p>Grades from your officially issued certificates.</p>
+              </div>
+            </div>
+            
+            <div id="certTableWrap" class="og-table-wrap">
+              <table class="og-table">
+                <thead>
+                  <tr>
+                    <th>Exam Title</th>
+                    <th>Program</th>
+                    <th>Score</th>
+                    <th>Grade</th>
+                    <th>Semester</th>
+                    <th>Issue Date</th>
+                  </tr>
+                </thead>
+                <tbody id="certTableBody"></tbody>
+              </table>
+            </div>
+          </div>
+
         </div>
 
         <!-- CALENDAR VIEW (Hidden by default, shown when view=calendar) -->
@@ -4043,10 +4071,48 @@
         } catch (_) { /* table may not exist yet */ }
       }
 
+      // ── Fetch certificates ────────────────────────────────────────────────
+      let certGrades = [];
+      try {
+        if (studentIdText) {
+          const { data: byId } = await db.from('certificates')
+            .select('*').eq('student_id', studentIdText).eq('status', 'valid').order('created_at', { ascending: false });
+          if (byId?.length) certGrades = byId;
+        }
+        if (!certGrades.length && studentData?.fullName) {
+          const nameLower = studentData.fullName.toLowerCase().trim();
+          const { data: all } = await db.from('certificates').select('*').eq('status', 'valid').order('created_at', { ascending: false });
+          if (all) {
+            certGrades = all.filter(c => (c.student_name || '').toLowerCase().trim() === nameLower);
+          }
+        }
+      } catch (_) { /* ignore cert fetch error */ }
+
       // ── Nothing found ──────────────────────────────────────────────────────
-      if (!courseGrades.length && !calcGrades.length) {
+      if (!courseGrades.length && !calcGrades.length && !certGrades.length) {
         renderOfficialGradesEmpty('No official grades posted yet. Check back after your instructor updates your record.');
         return;
+      }
+
+      // ── Render Certificate Grades ──────────────────────────────────────────
+      if (certGrades.length > 0) {
+        document.getElementById('certSection').style.display = '';
+        document.getElementById('certTableBody').innerHTML = certGrades.map(c => {
+          const gradeVal   = (c.grade || '').toUpperCase().trim();
+          const badgeClass = gradeVal.toLowerCase().replace('+', '\\+').replace('-', '-');
+          const scoreDisplay = c.score ? `${Number(c.score).toFixed(1)}%` : '—';
+          return `
+            <tr>
+              <td><strong style="color:var(--text-primary);font-weight:700">${escapeHtmlHub(c.exam_title || 'Exam')}</strong>
+              ${c.cert_number ? `<div style="font-size:11px;color:var(--text-muted);opacity:0.6;margin-top:2px;font-family:monospace">${escapeHtmlHub(c.cert_number)}</div>` : ''}</td>
+              <td style="color:var(--text-muted);font-size:13px">${escapeHtmlHub(c.program || '—')}</td>
+              <td style="color:var(--gold-400);font-weight:700">${scoreDisplay}</td>
+              <td><span class="cg-badge ${badgeClass}">${escapeHtmlHub(gradeVal || '—')}</span></td>
+              <td style="color:var(--text-secondary);white-space:nowrap">${escapeHtmlHub(c.semester || c.academic_year || '—')}</td>
+              <td style="color:var(--text-muted);white-space:nowrap">${escapeHtmlHub(c.issue_date || '—')}</td>
+            </tr>
+          `;
+        }).join('');
       }
 
       // ── GPA Banner ─────────────────────────────────────────────────────────
