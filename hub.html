@@ -4007,6 +4007,27 @@
         } catch (_) { /* table may not exist yet */ }
       }
 
+      // ── Fetch courses table to get grade_items templates (name + weight) ──
+      // grade_items in student_grades is {"item1":85,"item2":72} (score by id)
+      // grade_items in courses is [{id:"item1",name:"Midterm Examination",weight:20},...]
+      let courseTemplates = {}; // keyed by course_code
+      if (courseGrades.length) {
+        try {
+          const codes = [...new Set(courseGrades.map(g => g.course_code).filter(Boolean))];
+          const { data: coursesData } = await db
+            .from('courses')
+            .select('code, grade_items')
+            .in('code', codes);
+          if (coursesData) {
+            coursesData.forEach(c => {
+              let items = c.grade_items;
+              if (typeof items === 'string') { try { items = JSON.parse(items); } catch (_) { items = []; } }
+              courseTemplates[c.code] = Array.isArray(items) ? items : [];
+            });
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+
       // ── Fetch student_grades_calculator (end-of-sem calculator results) ───
       let calcGrades = [];
       // calculator stores student_id as text (ACNHS-xxxxxxx or UUID)
@@ -4074,32 +4095,55 @@
             ? Number(g.grade_points).toFixed(2)
             : hubLetterToPoints(gradeVal).toFixed(2);
 
-          // Parse grade_items JSON (individual exam/quiz scores)
-          let gradeItems = [];
+          // ── Parse grade_items scores: {"item1":85,"item2":72,...} ─────────
+          let scoresObj = {};
           if (g.grade_items) {
             try {
               const parsed = typeof g.grade_items === 'string'
                 ? JSON.parse(g.grade_items) : g.grade_items;
-              if (Array.isArray(parsed)) gradeItems = parsed;
-            } catch (_) { /* ignore malformed JSON */ }
+              // Could be plain object OR an array — handle both
+              if (Array.isArray(parsed)) {
+                // Old array format: [{name, score, weight}]
+                parsed.forEach((item, i) => {
+                  scoresObj[item.id || `item${i+1}`] = item.score;
+                });
+              } else if (parsed && typeof parsed === 'object') {
+                scoresObj = parsed; // correct format: {"item1":85,...}
+              }
+            } catch (_) { /* ignore */ }
           }
 
-          const giHtml = gradeItems.length ? `
-            <div class="gi-row">
-              ${gradeItems.map(item => {
-                const score = item.score != null ? `${Number(item.score).toFixed(1)}%` : '—';
-                const weight = item.weight != null ? `${item.weight}%` : null;
-                return `<span class="gi-chip">
-                  <span class="gi-name">${escapeHtmlHub(item.name || 'Item')}</span>
-                  <span class="gi-score">${score}</span>
-                  ${weight ? `<span class="gi-weight">·&nbsp;${weight} wt</span>` : ''}
-                </span>`;
-              }).join('')}
-            </div>` : '';
+          // ── Get course template (names + weights for each item id) ────────
+          const template = courseTemplates[g.course_code] || [];
 
-          // Display score_percent as the numeric score if grade is numeric
+          // Build the grade item chips
+          let giHtml = '';
+          if (template.length && Object.keys(scoresObj).length) {
+            const chips = template.map(item => {
+              const score = scoresObj[item.id];
+              if (score == null) return ''; // admin didn't enter this item
+              const pct = Number(score).toFixed(1);
+              return `<span class="gi-chip">
+                <span class="gi-name">${escapeHtmlHub(item.name || item.id)}</span>
+                <span class="gi-score">${pct}%</span>
+                ${item.weight != null ? `<span class="gi-weight">· ${item.weight}% wt</span>` : ''}
+              </span>`;
+            }).filter(Boolean).join('');
+            if (chips) giHtml = `<div class="gi-row">${chips}</div>`;
+          } else if (Object.keys(scoresObj).length) {
+            // No template — just show raw key: value pairs
+            const chips = Object.entries(scoresObj).map(([k, v]) =>
+              `<span class="gi-chip">
+                <span class="gi-name">${escapeHtmlHub(k)}</span>
+                <span class="gi-score">${Number(v).toFixed(1)}%</span>
+              </span>`
+            ).join('');
+            if (chips) giHtml = `<div class="gi-row">${chips}</div>`;
+          }
+
+          // Numeric average score (grade column stores the weighted average)
           const numericGrade = Number(g.grade);
-          const scoreDisplay = Number.isFinite(numericGrade) ? `${numericGrade.toFixed(1)}%` : gradeVal;
+          const hasNumericGrade = Number.isFinite(numericGrade) && numericGrade > 0;
 
           return `
             <tr>
@@ -4111,7 +4155,7 @@
               <td style="color:var(--text-muted);text-align:center">${Number(g.credits) || '—'}</td>
               <td>
                 <span class="cg-badge ${badgeClass}">${escapeHtmlHub(gradeVal || '—')}</span>
-                ${Number.isFinite(numericGrade) ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;text-align:center">${numericGrade.toFixed(1)}%</div>` : ''}
+                ${hasNumericGrade ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;text-align:center">${numericGrade.toFixed(1)}%</div>` : ''}
               </td>
               <td style="color:var(--text-secondary)">${points}</td>
               <td style="color:var(--text-muted);white-space:nowrap">${escapeHtmlHub(g.term || g.semester || '—')}</td>
