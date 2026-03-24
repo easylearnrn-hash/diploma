@@ -3858,6 +3858,24 @@ async function loadTransferCreditsForStudent(studentProfile) {
       console.log('No grades or transfer credits found');
       return;
     }
+
+    // Fetch courses table to get templates for grade_items so we can display Midterm etc.
+    let courseTemplates = {};
+    if (grades.length > 0) {
+      try {
+        const codes = [...new Set(grades.map(g => g.course_code).filter(Boolean))];
+        if (codes.length) {
+          const { data: cData } = await supabase.from('courses').select('code, grade_items').in('code', codes);
+          if (cData) {
+            cData.forEach(c => {
+              let items = c.grade_items;
+              if (typeof items === 'string') { try { items = JSON.parse(items); } catch (_) { items = []; } }
+              courseTemplates[c.code] = Array.isArray(items) ? items : [];
+            });
+          }
+        }
+      } catch (err) { console.warn('Could not load course templates for grades', err); }
+    }
     
     console.log(`✅ Loaded ${transfers.length} transfer credits, ${grades.length} ACNHS grades`);
     
@@ -3994,13 +4012,46 @@ async function loadTransferCreditsForStudent(studentProfile) {
             courses: []
           };
         }
+        let titleHtml = g.course_name || g.course_title;
+
+        // Parse grade_items identical to hub.html logic
+        let scoresObj = {};
+        if (g.grade_items) {
+          try {
+            const parsed = typeof g.grade_items === 'string' ? JSON.parse(g.grade_items) : g.grade_items;
+            if (Array.isArray(parsed)) {
+              parsed.forEach((item, i) => scoresObj[item.id || `item${i+1}`] = item.score);
+            } else if (parsed && typeof parsed === 'object') {
+              scoresObj = parsed;
+            }
+          } catch (_) { /* ignore */ }
+        }
+
+        const template = courseTemplates[g.course_code] || [];
+        let giHtml = '';
+        if (template.length && Object.keys(scoresObj).length) {
+          const chips = template.map(item => {
+            const score = scoresObj[item.id];
+            if (score == null) return '';
+            return `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-size:11px;margin:4px 4px 0 0;color:var(--text-secondary);">
+              <span style="color:var(--text-muted);margin-right:6px">${escapeHtml(item.name || item.id)}</span>
+              <strong style="color:var(--gold-400)">${Number(score).toFixed(1)}%</strong>
+              ${item.weight != null ? `<span style="opacity:0.5;margin-left:4px">· ${item.weight}%</span>` : ''}
+            </span>`;
+          }).filter(Boolean).join('');
+          if (chips) giHtml = `<div style="display:flex;flex-wrap:wrap;margin-top:4px;">${chips}</div>`;
+        }
+        
+        if (giHtml) titleHtml += giHtml;
+
         gradesByTerm[termKey].creditsEarned += parseFloat(g.credits || 0);
         gradesByTerm[termKey].courses.push({
           code: g.course_code || g.course_id,
-          title: g.course_name || g.course_title,
+          title: titleHtml,
           credits: parseFloat(g.credits).toFixed(1),
           grade: isInProgress ? 'In Progress' : (g.letter_grade || g.grade),
-          status: isInProgress ? 'In Progress' : 'Complete'
+          status: isInProgress ? 'In Progress' : 'Complete',
+          isHtmlTitle: true
         });
       });
       
@@ -4221,10 +4272,10 @@ function renderAcademicProgress(progressList = []) {
     const rows = courses.length ? courses.map(course => `
       <tr>
         <td>${escapeHtml(course.code || '—')}</td>
-        <td>${escapeHtml(course.title || '—')}</td>
+        <td>${course.isHtmlTitle ? course.title : escapeHtml(course.title || '—')}</td>
         <td>${escapeHtml(course.credits ?? course.credit_hours ?? '—')}</td>
-        <td>${escapeHtml(course.grade || course.status || '—')}</td>
-        <td>${escapeHtml(course.status || '—')}</td>
+        <td><strong style="color:var(--text-primary)">${escapeHtml(course.grade || course.status || '—')}</strong></td>
+        <td><span class="status-badge ${((course.status||'').toLowerCase().includes('progress')) ? 'warning' : 'success'}">${escapeHtml(course.status || '—')}</span></td>
       </tr>
     `).join('') : '<tr><td colspan="5">This term has no recorded courses yet.</td></tr>';
 
