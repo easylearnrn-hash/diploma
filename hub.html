@@ -2002,6 +2002,38 @@
     .og-table tr:last-child td { border-bottom: none; }
     .og-table tr:hover td { background: rgba(201,168,76,0.04); }
 
+    /* Grade item breakdown chips (Midterm I, Final, etc.) */
+    .gi-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 7px;
+    }
+    .gi-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 99px;
+      border: 1px solid rgba(201,168,76,0.2);
+      background: rgba(201,168,76,0.06);
+      color: var(--text-secondary, #94a3b8);
+      white-space: nowrap;
+    }
+    .gi-chip .gi-name {
+      color: var(--text-muted, #64748b);
+      font-weight: 600;
+    }
+    .gi-chip .gi-score {
+      color: var(--gold-400, #c9a84c);
+      font-weight: 900;
+    }
+    .gi-chip .gi-weight {
+      color: #475569;
+    }
+
     /* Grade badge pills (course grades) */
     .cg-badge {
       display: inline-flex;
@@ -4036,19 +4068,53 @@
       if (courseGrades.length) {
         tableWrap.style.display = '';
         tbody.innerHTML = courseGrades.map(g => {
-          const gradeVal   = (g.grade || '').toUpperCase().trim();
+          const gradeVal   = (g.letter_grade || g.grade || '').toUpperCase().trim();
           const badgeClass = gradeVal.toLowerCase().replace('+', '\\+').replace('-', '-');
           const points     = Number.isFinite(Number(g.grade_points))
             ? Number(g.grade_points).toFixed(2)
             : hubLetterToPoints(gradeVal).toFixed(2);
+
+          // Parse grade_items JSON (individual exam/quiz scores)
+          let gradeItems = [];
+          if (g.grade_items) {
+            try {
+              const parsed = typeof g.grade_items === 'string'
+                ? JSON.parse(g.grade_items) : g.grade_items;
+              if (Array.isArray(parsed)) gradeItems = parsed;
+            } catch (_) { /* ignore malformed JSON */ }
+          }
+
+          const giHtml = gradeItems.length ? `
+            <div class="gi-row">
+              ${gradeItems.map(item => {
+                const score = item.score != null ? `${Number(item.score).toFixed(1)}%` : '—';
+                const weight = item.weight != null ? `${item.weight}%` : null;
+                return `<span class="gi-chip">
+                  <span class="gi-name">${escapeHtmlHub(item.name || 'Item')}</span>
+                  <span class="gi-score">${score}</span>
+                  ${weight ? `<span class="gi-weight">·&nbsp;${weight} wt</span>` : ''}
+                </span>`;
+              }).join('')}
+            </div>` : '';
+
+          // Display score_percent as the numeric score if grade is numeric
+          const numericGrade = Number(g.grade);
+          const scoreDisplay = Number.isFinite(numericGrade) ? `${numericGrade.toFixed(1)}%` : gradeVal;
+
           return `
             <tr>
               <td><strong style="color:var(--gold-400);font-weight:800">${escapeHtmlHub(g.course_code || '—')}</strong></td>
-              <td style="color:var(--text-primary);font-weight:600">${escapeHtmlHub(g.course_name || '—')}</td>
+              <td style="color:var(--text-primary);font-weight:600">
+                ${escapeHtmlHub(g.course_name || '—')}
+                ${giHtml}
+              </td>
               <td style="color:var(--text-muted);text-align:center">${Number(g.credits) || '—'}</td>
-              <td><span class="cg-badge ${badgeClass}">${escapeHtmlHub(gradeVal || '—')}</span></td>
+              <td>
+                <span class="cg-badge ${badgeClass}">${escapeHtmlHub(gradeVal || '—')}</span>
+                ${Number.isFinite(numericGrade) ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;text-align:center">${numericGrade.toFixed(1)}%</div>` : ''}
+              </td>
               <td style="color:var(--text-secondary)">${points}</td>
-              <td style="color:var(--text-muted);white-space:nowrap">${escapeHtmlHub(g.term || '—')}</td>
+              <td style="color:var(--text-muted);white-space:nowrap">${escapeHtmlHub(g.term || g.semester || '—')}</td>
             </tr>`;
         }).join('');
       }
