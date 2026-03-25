@@ -1873,16 +1873,71 @@
           if (data) { matched = { id: data.id, name: data.full_name, email: data.email }; matchedRole = 'Teacher'; }
         }
 
-        // ── 3. Student ────────────────────────────────────────────
+        // ── 3. Student (via applications table, matching login.html) ──
         if (!matched && selectedRole === 'Student') {
-          const { data } = await db
-            .from('students')
-            .select('id, full_name, institutional_email, student_id')
-            .or(`institutional_email.ilike.${identifier},student_id.ilike.${identifier}`)
-            .eq('password_hash', passwordHash)
-            .limit(1)
-            .maybeSingle();
-          if (data) { matched = { id: data.id, name: data.full_name, email: data.institutional_email }; matchedRole = 'Student'; }
+          const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+
+          // Try email match
+          let appRow = null;
+          let res = await db.from('applications').select(selectFields).eq('email', identifier).limit(1);
+          if (res.data && res.data.length > 0) appRow = res.data[0];
+
+          // Try username match
+          if (!appRow) {
+            res = await db.from('applications').select(selectFields).eq('username', identifier).limit(1);
+            if (res.data && res.data.length > 0) appRow = res.data[0];
+          }
+
+          // Try institutional email in payload
+          if (!appRow) {
+            res = await db.from('applications').select(selectFields).eq('payload->>institutionalEmail', identifier).limit(1);
+            if (res.data && res.data.length > 0) appRow = res.data[0];
+          }
+
+          if (appRow) {
+            // Check eligible enrollment status
+            const appStatus = (appRow.status || '').toString().trim().toLowerCase();
+            const eligible = ['enroll', 'student', 'active', 'confirmed', 'registered'].some(kw => appStatus.includes(kw));
+
+            if (eligible) {
+              // Extract stored password hash from multiple possible locations
+              const appPayload = appRow.payload || {};
+              const storedHash = appRow.password_hash
+                || appPayload.passwordHash
+                || appPayload.password_hash
+                || appPayload?.studentPortal?.passwordHash
+                || appPayload?.studentPortal?.credentials?.passwordHash
+                || appPayload?.studentCredentials?.passwordHash
+                || appPayload?.portalCredentials?.passwordHash
+                || appPayload?.credentials?.passwordHash
+                || appPayload?.applicationCredentials?.passwordHash
+                || null;
+
+              if (storedHash && storedHash === passwordHash) {
+                // Fetch linked student record for full profile data
+                let studentName = appRow.applicant_name || appPayload.fullName || appPayload.applicantName || '';
+                let studentEmail = appRow.email || identifier;
+                let studentId = appRow.id;
+
+                // Try to get the student record for proper student_id
+                const { data: sRec } = await db
+                  .from('students')
+                  .select('id, full_name, student_id, email')
+                  .eq('application_id', appRow.id)
+                  .limit(1)
+                  .maybeSingle();
+
+                if (sRec) {
+                  studentId = sRec.id;
+                  studentName = sRec.full_name || studentName;
+                  studentEmail = sRec.email || studentEmail;
+                }
+
+                matched = { id: studentId, name: studentName, email: studentEmail };
+                matchedRole = 'Student';
+              }
+            }
+          }
         }
 
         if (!matched) {
