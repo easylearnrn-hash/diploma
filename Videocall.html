@@ -2021,20 +2021,31 @@
         document.getElementById('panelControlGroup')?.classList.remove('hidden');
         document.getElementById('sidePanel')?.classList.remove('hidden');
         document.getElementById('inviteBtn')?.classList.remove('hidden');
+        document.getElementById('attendancePanelBtn')?.classList.remove('hidden');
+        document.getElementById('endCallBtn')?.classList.remove('hidden');
+        document.getElementById('attendanceTabBtn')?.style.removeProperty('display');
+        
         dom.startSessionBtn.disabled = false;
         dom.endCallBtn.disabled = false;
         dom.startSessionBtn.title = '';
 
-      // ── Student: video + own media controls only ─────────────────
+      // ── Student: video + own media controls + chat/participants ─────────────────
       } else {
         // Hide the entire session-grid (Session Control + Details + Attendance Insights)
         document.getElementById('sessionGrid')?.classList.add('hidden');
         // Hide screen-share (students don't share screen)
         document.getElementById('shareScreenBtn')?.classList.add('hidden');
-        // Hide the panel buttons row (Chat, Participants, Attendance, End Call)
-        document.getElementById('panelControlGroup')?.classList.add('hidden');
-        // Hide the side panel entirely
-        document.getElementById('sidePanel')?.classList.add('hidden');
+        
+        // Let students see the panel group and side panel, but hide Attendance and End Call
+        document.getElementById('panelControlGroup')?.classList.remove('hidden');
+        document.getElementById('sidePanel')?.classList.remove('hidden');
+        document.getElementById('attendancePanelBtn')?.classList.add('hidden');
+        document.getElementById('endCallBtn')?.classList.add('hidden');
+        
+        // Hide host-only tabs in the side panel
+        if (document.getElementById('attendanceTabBtn')) document.getElementById('attendanceTabBtn').style.display = 'none';
+        if (document.getElementById('lobbyTabBtn')) document.getElementById('lobbyTabBtn').style.display = 'none';
+
         // Hide the Invite button in the stage header
         document.getElementById('inviteBtn')?.classList.add('hidden');
         // Disable host-only buttons just in case
@@ -2490,6 +2501,36 @@
       });
     }
 
+    function showGridEmptyState(reason = 'empty') {
+      let title = 'Room empty';
+      let sub = 'Awaiting participants';
+      let status = 'Waiting';
+      let statusColor = '';
+
+      if (reason === 'ended') {
+        title = 'Session Ended';
+        sub = 'The live session is no longer active';
+        status = 'Ended';
+        statusColor = 'style="background:var(--danger)"';
+      } else if (reason === 'left') {
+        title = 'You left the session';
+        sub = 'Ready to rejoin';
+        status = 'Ready';
+        statusColor = 'style="background:var(--warning)"';
+      }
+
+      dom.videoGrid.innerHTML = `
+        <div class="video-tile" data-empty="true">
+          <div class="tile-status"><span ${statusColor}></span>${status}</div>
+          <div class="video-avatar">AC</div>
+          <div class="tile-name-bar">
+            <div class="tile-name">${title}</div>
+            <div class="tile-role">${sub}</div>
+          </div>
+          <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
+        </div>`;
+    }
+
     async function leaveSession() {
       await updateAttendance('leave');
       
@@ -2662,18 +2703,9 @@
         state.attendanceRowsDeduped = [];
 
         // Reset video grid to empty
-        dom.videoGrid.innerHTML = `
-          <div class="video-tile" data-empty="true">
-            <div class="tile-status"><span></span>Waiting</div>
-            <div class="video-avatar">AC</div>
-            <div class="tile-name-bar">
-              <div class="tile-name">Room empty</div>
-              <div class="tile-role">Awaiting participants</div>
-            </div>
-            <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
-          </div>`;
+        showGridEmptyState('ended');
 
-        updateCallStatus('idle');
+        updateCallStatus('ended');
         updateSessionDetails();
 
         // Show disconnection notice to the participant
@@ -3121,18 +3153,9 @@
             state.sessionId = null;
             state.sessionCode = null;
             state.sessionName = null;
-            updateCallStatus('idle');
+            updateCallStatus('ended');
             updateSessionDetails();
-            dom.videoGrid.innerHTML = `
-              <div class="video-tile" data-empty="true">
-                <div class="tile-status"><span></span>Waiting</div>
-                <div class="video-avatar">AC</div>
-                <div class="tile-name-bar">
-                  <div class="tile-name">Room empty</div>
-                  <div class="tile-role">Awaiting participants</div>
-                </div>
-                <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
-              </div>`;
+            showGridEmptyState('ended');
             showNotice('The host has ended this session.');
             setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
             return;
@@ -3235,18 +3258,9 @@
       state.attendanceRowsDeduped = [];
 
       // Reset video grid to empty
-      dom.videoGrid.innerHTML = `
-        <div class="video-tile" data-empty="true">
-          <div class="tile-status"><span></span>Waiting</div>
-          <div class="video-avatar">AC</div>
-          <div class="tile-name-bar">
-            <div class="tile-name">Room empty</div>
-            <div class="tile-role">Awaiting participants</div>
-          </div>
-          <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
-        </div>`;
+      showGridEmptyState('ended');
 
-      updateCallStatus('idle');
+      updateCallStatus('ended');
       updateSessionDetails();
       showNotice('Session ended. All participants have been disconnected.');
       setTimeout(() => dom.authNotice.classList.remove('show'), 4000);

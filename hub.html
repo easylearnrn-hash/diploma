@@ -6384,8 +6384,41 @@
         }
 
         const studentGroup = getHubStudentGroup();
-        
-        // Query ALL active links, then filter client-side for reliability
+
+        const joinButton = document.getElementById('hubJoinClassButton');
+        const joinBanner = document.getElementById('hubJoinClassBanner');
+        if (!joinButton && !joinBanner) {
+          console.warn('🔗 Hub: Join Class elements not found in DOM');
+          return;
+        }
+
+        // 1. Check native ACNHS Video Call Sessions FIRST
+        const { data: sessions, error: sessionErr } = await db
+          .from('video_call_sessions')
+          .select('room_code, room_name, host_name')
+          .in('status', ['live', 'connecting'])
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (!sessionErr && sessions && sessions.length > 0) {
+          console.log('🔗 Hub: Active native video session found:', sessions[0]);
+          hubActiveClassLink = {
+            url: `Videocall.html?session=${encodeURIComponent(sessions[0].room_code)}`,
+            group_id: 'all',
+            isInternal: true
+          };
+
+          if (joinBanner) {
+            joinBanner.querySelector('div > div > div').innerHTML = `🟢 Live Class: ${escapeHtml(sessions[0].room_name || 'ACNHS Room')}`;
+            joinBanner.querySelector('p').textContent = `Hosted by ${escapeHtml(sessions[0].host_name || 'Instructor')}. Click to join the live session.`;
+          }
+
+          if (joinButton) joinButton.style.display = 'block';
+          if (joinBanner) joinBanner.style.display = 'block';
+          return;
+        }
+
+        // 2. Fallback to external class_join_links
         const { data, error } = await db
           .from('class_join_links')
           .select('*')
@@ -6400,13 +6433,6 @@
         }
         
         console.log('🔗 Hub: Active class links found:', data?.length || 0, data);
-
-        const joinButton = document.getElementById('hubJoinClassButton');
-        const joinBanner = document.getElementById('hubJoinClassBanner');
-        if (!joinButton && !joinBanner) {
-          console.warn('🔗 Hub: Join Class elements not found in DOM');
-          return;
-        }
 
         // Filter links matching this student's group or "all"
         const matchingLinks = (data || []).filter(link => {
