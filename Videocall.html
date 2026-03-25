@@ -1949,6 +1949,15 @@
 
         // Store identity exactly as the existing login pages do
         const isAdmin = matchedRole === 'Admin';
+
+        // ── Wipe ALL stale identity keys first (prevents old admin session leaking) ──
+        const IDENTITY_KEYS = [
+          'isAdmin','isLoggedIn','userId','userName','userEmail','userRole',
+          'teacherId','teacherName','teacherEmail','studentRecordId',
+          'studentFullName','studentInstitutionalEmail','viewerActiveStudentId'
+        ];
+        IDENTITY_KEYS.forEach(k => { sessionStorage.removeItem(k); localStorage.removeItem(k); });
+
         sessionStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('isLoggedIn', 'true');
         sessionStorage.setItem('userId', matched.id);
@@ -1989,11 +1998,12 @@
     }
 
     function enforceRoleControls() {
-      // Determine host status
+      // Determine host status — only trust isAdmin if the user is actually logged in
+      const isLoggedIn = ss('isLoggedIn') === 'true';
       const roleStr = (user.role || '').toLowerCase();
-      const isAdminStorage = ss('isAdmin') === 'true';
+      const isAdminStorage = isLoggedIn && ss('isAdmin') === 'true';
       state.isHost = isAdminStorage
-        || ['admin', 'teacher', 'super_admin', 'super admin', 'instructor'].includes(roleStr);
+        || (isLoggedIn && ['admin', 'teacher', 'super_admin', 'super admin', 'instructor'].includes(roleStr));
 
       // ── Host/Admin/Teacher: full UI ──────────────────────────────
       if (state.isHost) {
@@ -2351,9 +2361,15 @@
 
       let rows;
       if (state.attendanceRows.length) {
+        // Deduplicate by participant_user_id — keep the most recent (last) row per user
+        const deduped = new Map();
+        state.attendanceRows.forEach(r => {
+          if (r.participant_user_id) deduped.set(r.participant_user_id, r);
+        });
         // Put local user first, then everyone else
-        const others = state.attendanceRows.filter(r => r.participant_user_id !== user.id);
-        const localFromDB = state.attendanceRows.find(r => r.participant_user_id === user.id);
+        const localFromDB = deduped.get(user.id);
+        deduped.delete(user.id);
+        const others = Array.from(deduped.values());
         rows = [localFromDB || localRow, ...others];
       } else {
         rows = [localRow];
