@@ -1784,6 +1784,8 @@
         await updateAttendance('join');
         await fetchAttendance();
         subscribeAttendance();
+        setupWebRTC();
+        if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
         startTimer();
         showNotice('Session restored after refresh.');
         setTimeout(() => dom.authNotice.classList.remove('show'), 3000);
@@ -2043,11 +2045,15 @@
       updateSessionDetails();
       updateVideoGrid();
       persistSession();
+      logActivity('session_started');
       await startLocalMedia();
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
       setupWebRTC();
+      // Host: listen for lobby join requests from students
+      subscribeLobby();
+      fetchLobbyRequests();
       startTimer();
     }
 
@@ -2108,6 +2114,8 @@
       await fetchAttendance();
       subscribeAttendance();
       setupWebRTC();
+      // Host joining via code: also listen for lobby requests
+      if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
       startTimer();
     }
 
@@ -2275,41 +2283,45 @@
     }
 
     function updateVideoGrid() {
-      const rows = state.attendanceRows.length ? state.attendanceRows : [{
+      if (!state.sessionId) return;
+
+      // Build participant list: always include local user first
+      const localRow = {
+        participant_user_id: user.id,
         participant_name: user.name,
         participant_role: user.role,
         is_present: true,
         _isLocal: true
-      }];
+      };
 
-      if (!state.sessionId) {
-        return;
+      let rows;
+      if (state.attendanceRows.length) {
+        // Put local user first, then everyone else
+        const others = state.attendanceRows.filter(r => r.participant_user_id !== user.id);
+        const localFromDB = state.attendanceRows.find(r => r.participant_user_id === user.id);
+        rows = [localFromDB || localRow, ...others];
+      } else {
+        rows = [localRow];
       }
 
-      dom.videoGrid.innerHTML = rows.map((row, idx) => {
-        const isLocal = idx === 0 && !state.attendanceRows.length;
+      dom.videoGrid.innerHTML = rows.map((row) => {
+        const isLocal = row.participant_user_id === user.id || row._isLocal;
+        const uid = row.participant_user_id || '';
         const initials = (row.participant_name || 'AC').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
-        const tileId = isLocal ? 'id="localVideoTile"' : '';
-        const cameraOn = isLocal && state.media.camera;
-        let avatarStyle = cameraOn ? 'style="display:none"' : '';
         const displayName = escapeHtml(row.participant_name || 'Participant') + (isLocal ? ' (You)' : '');
         const displayRole = escapeHtml(row.participant_role || 'Student');
         const statusText = row.is_present === false ? 'Offline' : 'Live';
-        
-        let videoElement = '';
-        if (state.remoteStreams[row.participant_user_id]) {
-           avatarStyle = 'style="display:none"';
-           videoElement = `<video autoplay playsinline srcObject class="remote-video" data-uid="${row.participant_user_id}" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>`;
-        } else if (isLocal && state.localStream && state.media.camera) {
-           avatarStyle = 'style="display:none"';
-           videoElement = `<video autoplay playsinline muted class="remote-video" id="localVideoEl" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md); transform: scaleX(-1);"></video>`;
-        }
+
+        // Determine if this tile should show video
+        const hasRemoteStream = !isLocal && state.remoteStreams[uid];
+        const hasLocalVideo = isLocal && state.localStream && (state.media.camera || state.media.screen);
+        const showVideo = hasRemoteStream || hasLocalVideo;
+        const avatarStyle = showVideo ? 'style="display:none"' : '';
 
         return `
-          <div class="video-tile" ${tileId}>
+          <div class="video-tile" data-uid="${escapeHtml(uid)}" ${isLocal ? 'id="localVideoTile"' : ''}>
             <div class="tile-status"><span></span>${statusText}</div>
             <div class="video-avatar" ${avatarStyle}>${escapeHtml(initials)}</div>
-            ${videoElement}
             <div class="tile-name-bar">
               <div class="tile-name">${displayName}</div>
               <div class="tile-role">${displayRole}</div>
@@ -2317,35 +2329,57 @@
           </div>`;
       }).join('');
 
-      // Re-attach live camera/screen stream if already running
-      if (state.localStream || state.screenStream) {
-        attachLocalVideo();
-      }
+      // Now attach actual video elements (can't use srcObject in innerHTML)
+      rows.forEach(row => {
+        const isLocal = row.participant_user_id === user.id || row._isLocal;
+        const uid = row.participant_user_id || '';
+        const tile = isLocal
+          ? document.getElementById('localVideoTile')
+          : dom.videoGrid.querySelector(`.video-tile[data-uid="${uid}"]`);
+        if (!tile) return;
 
-      // Attach remote streams
-      setTimeout(() => {
-        const videos = document.querySelectorAll('video[data-uid]');
-        videos.forEach(v => {
-          const uid = v.getAttribute('data-uid');
-          if (uid && state.remoteStreams[uid] && !v.srcObject) {
-            v.srcObject = state.remoteStreams[uid];
+        if (isLocal) {
+          // Attach local camera / screen share
+          const stream = state.screenStream || state.localStream;
+          if (stream && (state.media.camera || state.media.screen)) {
+            let vid = tile.querySelector('video');
+            if (!vid) {
+              vid = document.createElement('video');
+              vid.autoplay = true;
+              vid.muted = true;
+              vid.playsInline = true;
+              vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);transform:scaleX(-1);position:absolute;top:0;left:0;';
+              tile.style.position = 'relative';
+              tile.insertBefore(vid, tile.firstChild);
+            }
+            if (vid.srcObject !== stream) vid.srcObject = stream;
+            const avatar = tile.querySelector('.video-avatar');
+            if (avatar) avatar.style.display = 'none';
           }
-        });
-        const localV = document.getElementById('localVideoEl');
-        if (localV && state.localStream && !localV.srcObject) {
-            localV.srcObject = state.localStream;
+        } else if (state.remoteStreams[uid]) {
+          // Attach remote peer stream
+          let vid = tile.querySelector('video');
+          if (!vid) {
+            vid = document.createElement('video');
+            vid.autoplay = true;
+            vid.playsInline = true;
+            vid.muted = !state.media.speaker;
+            vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);position:absolute;top:0;left:0;';
+            tile.style.position = 'relative';
+            tile.insertBefore(vid, tile.firstChild);
+          }
+          if (vid.srcObject !== state.remoteStreams[uid]) vid.srcObject = state.remoteStreams[uid];
+          const avatar = tile.querySelector('.video-avatar');
+          if (avatar) avatar.style.display = 'none';
         }
-      }, 100);
+      });
     }
 
     async function leaveSession() {
       await updateAttendance('leave');
       
-      // Close WebRTC peers
-      Object.values(state.peers).forEach(p => p.destroy());
-      state.peers = {};
-      state.remoteStreams = {};
-      if (state.broadcastChannel) { db?.removeChannel(state.broadcastChannel); state.broadcastChannel = null; }
+      // Close WebRTC peers and broadcast channel
+      teardownWebRTC();
 
       stopLocalMedia();
       clearPersistedSession();
@@ -2376,84 +2410,276 @@
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  WEBRTC MESH SIGNALING SYSTEM
+    //  WEBRTC MESH SIGNALING SYSTEM (via Supabase Realtime)
     // ══════════════════════════════════════════════════════════════
 
     function setupWebRTC() {
-      if (!db || !state.sessionCode) return;
-      
-      state.broadcastChannel = db.channel(`webrtc-${state.sessionCode}`, { 
-        config: { broadcast: { ack: false } } 
+      if (!db || !state.sessionCode) {
+        console.warn('setupWebRTC: no db or sessionCode, skipping');
+        return;
+      }
+      // Prevent double-setup
+      if (state.broadcastChannel) {
+        console.log('setupWebRTC: already set up, skipping');
+        return;
+      }
+
+      console.log('[WebRTC] Setting up for session:', state.sessionCode, 'user:', user.id);
+
+      const channelName = `webrtc-${state.sessionCode}`;
+      state.broadcastChannel = db.channel(channelName, {
+        config: { broadcast: { self: false } }
       });
 
+      // ── Listen for signaling messages (offers, answers, ICE candidates) ──
       state.broadcastChannel.on('broadcast', { event: 'signal' }, payload => {
-        const data = payload.payload;
-        if (data.target !== user.id) return; // Not for us
+        const msg = payload.payload;
+        if (!msg || msg.target !== user.id) return;
 
-        let peer = state.peers[data.sender];
-        
-        // If we get an offer and we don't have a peer yet, we create one answering
-        if (!peer && data.signal.type === 'offer') {
-          peer = createPeer(data.sender, false);
+        console.log('[WebRTC] Signal from', msg.sender, '→', msg.signal?.type || 'ice');
+
+        let peer = state.peers[msg.sender];
+
+        if (!peer) {
+          // We received a signal from someone we don't have a peer for
+          // Create a non-initiator peer to answer
+          console.log('[WebRTC] Creating answering peer for', msg.sender);
+          peer = createPeer(msg.sender, false);
         }
-        
-        if (peer) {
-          peer.signal(data.signal);
+
+        if (peer && !peer.destroyed) {
+          try {
+            peer.signal(msg.signal);
+          } catch (e) {
+            console.warn('[WebRTC] signal error, recreating peer:', e.message);
+            destroyPeer(msg.sender);
+            peer = createPeer(msg.sender, false);
+            try { peer.signal(msg.signal); } catch (e2) { console.error('[WebRTC] signal retry failed:', e2); }
+          }
+        }
+      });
+
+      // ── Listen for peer announcements (new user joined, user left) ──
+      state.broadcastChannel.on('broadcast', { event: 'peer-joined' }, payload => {
+        const msg = payload.payload;
+        if (!msg || msg.userId === user.id) return;
+
+        console.log('[WebRTC] Peer joined announcement from:', msg.userId, msg.userName);
+
+        // If we don't already have a connection, initiate one
+        if (!state.peers[msg.userId]) {
+          console.log('[WebRTC] Initiating connection to new peer:', msg.userId);
+          createPeer(msg.userId, true);
+        }
+      });
+
+      state.broadcastChannel.on('broadcast', { event: 'peer-left' }, payload => {
+        const msg = payload.payload;
+        if (!msg || msg.userId === user.id) return;
+        console.log('[WebRTC] Peer left:', msg.userId);
+        destroyPeer(msg.userId);
+        updateVideoGrid();
+      });
+
+      // ── Listen for chat messages from other participants ──
+      state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
+        const msg = payload.payload;
+        if (!msg || msg.userId === user.id) return;
+        const node = document.createElement('div');
+        node.className = 'panel-card';
+        node.innerHTML = `<strong>${escapeHtml(msg.userName || 'Participant')}</strong> <small style="color:var(--text-muted)">${escapeHtml(msg.userRole || '')}</small><br><small>${escapeHtml(msg.time || '')}</small><p>${escapeHtml(msg.message || '')}</p>`;
+        dom.chatLog.querySelector('.empty-state')?.remove();
+        dom.chatLog.appendChild(node);
+        dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+      });
+
+      // ── Listen for hand-raise status from other participants ──
+      state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
+        const msg = payload.payload;
+        if (!msg || msg.userId === user.id) return;
+        // Update the name bar on their video tile
+        const tile = dom.videoGrid.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
+        if (tile) {
+          const nameEl = tile.querySelector('.tile-name');
+          if (nameEl) {
+            const baseName = msg.userName || 'Participant';
+            nameEl.textContent = msg.raised ? `✋ ${baseName}` : baseName;
+          }
         }
       });
 
       state.broadcastChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-           // Wait a second then initiate connections to everyone already present
-           setTimeout(() => {
-              if (!state.attendanceRows) return;
-              state.attendanceRows.forEach(row => {
-                 if (row.participant_user_id !== user.id && row.is_present) {
-                     if (!state.peers[row.participant_user_id]) {
-                          createPeer(row.participant_user_id, true);
-                     }
-                 }
-              });
-           }, 2000);
+          console.log('[WebRTC] Broadcast channel subscribed');
+
+          // Wait for local media to be ready before announcing
+          await waitForLocalStream(5000);
+
+          // Announce ourselves so existing peers can initiate connections to us
+          state.broadcastChannel.send({
+            type: 'broadcast',
+            event: 'peer-joined',
+            payload: { userId: user.id, userName: user.name, userRole: user.role }
+          });
+
+          // Also proactively connect to anyone already in the attendance list
+          setTimeout(() => {
+            if (!state.attendanceRows) return;
+            state.attendanceRows.forEach(row => {
+              if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
+                if (!state.peers[row.participant_user_id]) {
+                  console.log('[WebRTC] Initiating to existing participant:', row.participant_user_id);
+                  createPeer(row.participant_user_id, true);
+                }
+              }
+            });
+          }, 1500);
         }
       });
     }
 
+    // Wait up to `timeout` ms for localStream to be available
+    function waitForLocalStream(timeout) {
+      return new Promise(resolve => {
+        if (state.localStream) return resolve();
+        const start = Date.now();
+        const check = setInterval(() => {
+          if (state.localStream || Date.now() - start > timeout) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 200);
+      });
+    }
+
     function createPeer(targetUserId, initiator) {
-      if (!SimplePeer.WEBRTC_SUPPORT) {
-          console.warn('WebRTC not supported.');
-          return null;
+      // Don't create peer to self
+      if (targetUserId === user.id) return null;
+
+      // Clean up any existing peer first
+      if (state.peers[targetUserId]) {
+        destroyPeer(targetUserId);
       }
-      const stream = state.localStream; // Use main camera stream
+
+      if (typeof SimplePeer === 'undefined' || !SimplePeer.WEBRTC_SUPPORT) {
+        console.warn('[WebRTC] SimplePeer not available or WebRTC not supported');
+        return null;
+      }
+
+      const stream = state.localStream || null;
+      console.log('[WebRTC] createPeer to', targetUserId, 'initiator:', initiator, 'has stream:', !!stream);
+
       const peer = new SimplePeer({
         initiator: initiator,
         stream: stream,
-        trickle: true
-      });
-
-      peer.on('signal', data => {
-        if (state.broadcastChannel) {
-          state.broadcastChannel.send({
-            type: 'broadcast',
-            event: 'signal',
-            payload: { sender: user.id, target: targetUserId, signal: data }
-          });
+        trickle: true,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' }
+          ]
         }
       });
 
+      peer._targetUserId = targetUserId;
+
+      peer.on('signal', data => {
+        if (!state.broadcastChannel) return;
+        state.broadcastChannel.send({
+          type: 'broadcast',
+          event: 'signal',
+          payload: {
+            sender: user.id,
+            target: targetUserId,
+            signal: data
+          }
+        });
+      });
+
       peer.on('stream', remoteStream => {
+        console.log('[WebRTC] ✅ Received remote stream from', targetUserId);
         state.remoteStreams[targetUserId] = remoteStream;
         updateVideoGrid();
       });
 
+      peer.on('connect', () => {
+        console.log('[WebRTC] ✅ Peer connected to', targetUserId);
+      });
+
       peer.on('close', () => {
+        console.log('[WebRTC] Peer closed:', targetUserId);
         delete state.peers[targetUserId];
         delete state.remoteStreams[targetUserId];
         updateVideoGrid();
       });
 
+      peer.on('error', err => {
+        console.warn('[WebRTC] Peer error with', targetUserId, ':', err.message);
+        destroyPeer(targetUserId);
+        updateVideoGrid();
+      });
+
       state.peers[targetUserId] = peer;
       return peer;
+    }
+
+    function destroyPeer(targetUserId) {
+      const peer = state.peers[targetUserId];
+      if (peer) {
+        try { peer.destroy(); } catch (_) {}
+        delete state.peers[targetUserId];
+      }
+      delete state.remoteStreams[targetUserId];
+    }
+
+    function teardownWebRTC() {
+      // Announce departure
+      if (state.broadcastChannel) {
+        try {
+          state.broadcastChannel.send({
+            type: 'broadcast',
+            event: 'peer-left',
+            payload: { userId: user.id }
+          });
+        } catch (_) {}
+        db?.removeChannel(state.broadcastChannel);
+        state.broadcastChannel = null;
+      }
+      // Destroy all peers
+      Object.keys(state.peers).forEach(uid => destroyPeer(uid));
+      state.remoteStreams = {};
+    }
+
+    // When local stream changes (camera toggle, screen share), replace tracks on all peers
+    function replaceStreamOnAllPeers(newStream) {
+      if (!newStream) return;
+      Object.entries(state.peers).forEach(([uid, peer]) => {
+        if (peer && !peer.destroyed) {
+          try {
+            // Remove old tracks and add new ones
+            const videoTrack = newStream.getVideoTracks()[0];
+            const audioTrack = newStream.getAudioTracks()[0];
+            if (videoTrack) {
+              const senders = peer._pc?.getSenders?.() || [];
+              const videoSender = senders.find(s => s.track?.kind === 'video');
+              if (videoSender) {
+                videoSender.replaceTrack(videoTrack);
+              }
+            }
+            if (audioTrack) {
+              const senders = peer._pc?.getSenders?.() || [];
+              const audioSender = senders.find(s => s.track?.kind === 'audio');
+              if (audioSender) {
+                audioSender.replaceTrack(audioTrack);
+              }
+            }
+          } catch (e) {
+            console.warn('[WebRTC] replaceTrack failed for', uid, e.message);
+          }
+        }
+      });
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2535,6 +2761,17 @@
       // Mark locally
       const req = state.lobbyRequests.find(r => r.id === lobbyId);
       if (req) req.status = 'admitted';
+      logActivity('lobby_admitted');
+      // Also log who was admitted (using a detail-enriched entry)
+      if (db && state.sessionId) {
+        db.from('video_call_activity_log').insert([{
+          ts: new Date().toISOString(),
+          session_id: state.sessionId, session_code: state.sessionCode, session_name: state.sessionName,
+          user_id: user.id, user_name: user.name, user_role: user.role,
+          event_type: 'admitted_student',
+          detail: req ? `Admitted ${req.user_name || 'unknown'} (${req.user_email || ''})` : `Admitted user ${userId}`
+        }]).then(({ error: e }) => { if (e) console.warn('admit log error:', e.message); });
+      }
       renderLobby();
     }
 
@@ -2549,6 +2786,16 @@
 
       const req = state.lobbyRequests.find(r => r.id === lobbyId);
       if (req) req.status = 'denied';
+      logActivity('lobby_denied');
+      if (db && state.sessionId) {
+        db.from('video_call_activity_log').insert([{
+          ts: new Date().toISOString(),
+          session_id: state.sessionId, session_code: state.sessionCode, session_name: state.sessionName,
+          user_id: user.id, user_name: user.name, user_role: user.role,
+          event_type: 'denied_student',
+          detail: req ? `Denied ${req.user_name || 'unknown'} (${req.user_email || ''})` : `Denied lobby ${lobbyId}`
+        }]).then(({ error: e }) => { if (e) console.warn('deny log error:', e.message); });
+      }
       renderLobby();
     }
 
@@ -2676,6 +2923,7 @@
       // Show waiting state
       if (dom.prejoinWaiting)    dom.prejoinWaiting.classList.add('show');
       if (dom.prejoinRequestBtn) dom.prejoinRequestBtn.textContent = 'Request Sent';
+      logActivity('lobby_request');
 
       startLobbyPolling();
     }
@@ -2741,7 +2989,9 @@
       }
 
       updateCallStatus('ended');
+      logActivity('session_ended');
       await updateAttendance('leave');
+      teardownWebRTC();
       stopLocalMedia();
 
       if (db) {
@@ -2860,16 +3110,24 @@
       container.innerHTML = '<div class="history-empty">Loading history…</div>';
 
       const EVENT_META = {
-        joined:      { label: 'Joined the conference',   cat: 'join',   icon: '→' },
-        left:        { label: 'Left the conference',     cat: 'leave',  icon: '←' },
-        camera_on:   { label: 'Camera turned on',        cat: 'camera', icon: '▶' },
-        camera_off:  { label: 'Camera turned off',       cat: 'camera', icon: '■' },
-        mic_on:      { label: 'Microphone unmuted',      cat: 'mic',    icon: '♪' },
-        mic_off:     { label: 'Microphone muted',        cat: 'mic',    icon: '—' },
-        screen_on:   { label: 'Screen sharing started',  cat: 'screen', icon: '⊞' },
-        screen_off:  { label: 'Screen sharing stopped',  cat: 'screen', icon: '⊟' },
-        hand_raised: { label: 'Hand raised',             cat: 'hand',   icon: '+' },
-        hand_lowered:{ label: 'Hand lowered',            cat: 'hand',   icon: '·' }
+        joined:          { label: 'Joined the conference',   cat: 'join',   icon: '→' },
+        left:            { label: 'Left the conference',     cat: 'leave',  icon: '←' },
+        camera_on:       { label: 'Camera turned on',        cat: 'camera', icon: '▶' },
+        camera_off:      { label: 'Camera turned off',       cat: 'camera', icon: '■' },
+        mic_on:          { label: 'Microphone unmuted',      cat: 'mic',    icon: '♪' },
+        mic_off:         { label: 'Microphone muted',        cat: 'mic',    icon: '—' },
+        screen_on:       { label: 'Screen sharing started',  cat: 'screen', icon: '⊞' },
+        screen_off:      { label: 'Screen sharing stopped',  cat: 'screen', icon: '⊟' },
+        hand_raised:     { label: 'Hand raised',             cat: 'hand',   icon: '✋' },
+        hand_lowered:    { label: 'Hand lowered',            cat: 'hand',   icon: '·' },
+        chat_message:    { label: 'Sent a chat message',     cat: 'chat',   icon: '💬' },
+        lobby_request:   { label: 'Requested to join',       cat: 'lobby',  icon: '🚪' },
+        lobby_admitted:  { label: 'Admitted a student',      cat: 'lobby',  icon: '✅' },
+        lobby_denied:    { label: 'Denied a student',        cat: 'lobby',  icon: '❌' },
+        admitted_student:{ label: 'Admitted a student',      cat: 'lobby',  icon: '✅' },
+        denied_student:  { label: 'Denied a student',        cat: 'lobby',  icon: '❌' },
+        session_started: { label: 'Session started',         cat: 'session',icon: '🟢' },
+        session_ended:   { label: 'Session ended',           cat: 'session',icon: '🔴' }
       };
 
       let allLogs = [];
@@ -3004,6 +3262,39 @@
       dom.chatLog.appendChild(node);
       dom.chatInput.value = '';
       dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+
+      // Log chat to activity log
+      logActivity('chat_message');
+
+      // Persist chat to DB
+      if (db && state.sessionId) {
+        db.from('video_call_chat').insert([{
+          session_id:   state.sessionId,
+          session_code: state.sessionCode,
+          user_id:      user.id,
+          user_name:    user.name,
+          user_role:    user.role,
+          message:      message,
+          sent_at:      new Date().toISOString()
+        }]).then(({ error }) => {
+          if (error) console.warn('Chat persist error:', error.message);
+        });
+      }
+
+      // Broadcast to other participants so they see the message
+      if (state.broadcastChannel) {
+        state.broadcastChannel.send({
+          type: 'broadcast',
+          event: 'chat-message',
+          payload: {
+            userId:   user.id,
+            userName: user.name,
+            userRole: user.role,
+            message:  message,
+            time:     timestamp
+          }
+        });
+      }
     }
 
     // ── Real media helpers ────────────────────────────────────────
@@ -3014,7 +3305,7 @@
         state.localStream = stream;
         state.media.camera = true;
         state.media.mic = true;
-        attachLocalVideo();
+        updateVideoGrid();
         updateMediaButtons();
       } catch (err) {
         console.warn('Camera/mic access denied or unavailable:', err.name, err.message);
@@ -3025,6 +3316,7 @@
           state.media.camera = false;
           state.media.mic = true;
           showNotice('Camera not available — microphone only. Check camera permissions.');
+          updateVideoGrid();
           updateMediaButtons();
         } catch (audioErr) {
           console.warn('Microphone access also denied:', audioErr.message);
@@ -3040,26 +3332,27 @@
       const localTile = document.getElementById('localVideoTile');
       if (!localTile) return;
 
-      let video = localTile.querySelector('video#localVideo');
-      if (!video) {
-        video = document.createElement('video');
-        video.id = 'localVideo';
-        video.autoplay = true;
-        video.muted = true;       // always mute local playback (no echo)
-        video.playsInline = true;
-        // No inline styles — let the CSS rules on .video-tile video handle layout
-        localTile.insertBefore(video, localTile.firstChild);
-      }
-
       const stream = state.screenStream || state.localStream;
-      if (stream) {
-        video.srcObject = stream;
+      const hasCam = state.media.camera || state.media.screen;
+
+      let video = localTile.querySelector('video');
+      if (hasCam && stream) {
+        if (!video) {
+          video = document.createElement('video');
+          video.autoplay = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);transform:scaleX(-1);position:absolute;top:0;left:0;';
+          localTile.style.position = 'relative';
+          localTile.insertBefore(video, localTile.firstChild);
+        }
+        if (video.srcObject !== stream) video.srcObject = stream;
         video.style.display = 'block';
+      } else if (video) {
+        video.style.display = 'none';
       }
 
-      // Hide avatar when camera/screen is live
       const avatar = localTile.querySelector('.video-avatar');
-      const hasCam = state.media.camera || state.media.screen;
       if (avatar) avatar.style.display = hasCam ? 'none' : '';
     }
 
@@ -3122,14 +3415,14 @@
             state.screenStream = screenStream;
             state.media.screen = true;
             logActivity('screen_on');
-            // Show screen in local tile instead of camera
             attachLocalVideo();
+            replaceStreamOnAllPeers(screenStream);
             screenStream.getVideoTracks()[0].onended = () => {
-              // User stopped sharing via browser UI
               state.screenStream = null;
               state.media.screen = false;
               logActivity('screen_off');
-              attachLocalVideo(); // revert to camera
+              attachLocalVideo();
+              if (state.localStream) replaceStreamOnAllPeers(state.localStream);
               updateMediaButtons();
             };
           } catch (err) {
@@ -3143,15 +3436,25 @@
           }
           state.media.screen = false;
           logActivity('screen_off');
-          attachLocalVideo(); // revert to camera
+          attachLocalVideo();
+          if (state.localStream) replaceStreamOnAllPeers(state.localStream);
         }
       } else if (key === 'handRaised') {
         state.media.handRaised = !state.media.handRaised;
+        logActivity(state.media.handRaised ? 'hand_raised' : 'hand_lowered');
         const localTile = document.getElementById('localVideoTile');
         if (localTile) {
           const nameEl = localTile.querySelector('.tile-name');
           const baseName = user.name || 'You';
           if (nameEl) nameEl.textContent = state.media.handRaised ? `✋ ${baseName}` : baseName;
+        }
+        // Broadcast hand status to other participants
+        if (state.broadcastChannel) {
+          state.broadcastChannel.send({
+            type: 'broadcast',
+            event: 'hand-status',
+            payload: { userId: user.id, userName: user.name, raised: state.media.handRaised }
+          });
         }
       } else if (key === 'speaker') {
         state.media.speaker = !state.media.speaker;
