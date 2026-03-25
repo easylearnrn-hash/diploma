@@ -2402,6 +2402,16 @@
         rows = [localRow];
       }
 
+      // Preserve existing video elements to prevent stream reloading/flicker
+      const cachedVideos = new Map();
+      dom.videoGrid.querySelectorAll('.video-tile').forEach(tile => {
+        const isLocalTile = tile.id === 'localVideoTile';
+        const uid = tile.dataset.uid;
+        const key = isLocalTile ? 'local' : uid;
+        const vid = tile.querySelector('video');
+        if (key && vid) cachedVideos.set(key, vid);
+      });
+
       dom.videoGrid.innerHTML = rows.map((row) => {
         const isLocal = row.participant_user_id === user.id || row._isLocal;
         const uid = row.participant_user_id || '';
@@ -2427,10 +2437,11 @@
           </div>`;
       }).join('');
 
-      // Now attach actual video elements (can't use srcObject in innerHTML)
+      // Now attach actual video elements
       rows.forEach(row => {
         const isLocal = row.participant_user_id === user.id || row._isLocal;
         const uid = row.participant_user_id || '';
+        const cacheKey = isLocal ? 'local' : uid;
         const tile = isLocal
           ? document.getElementById('localVideoTile')
           : dom.videoGrid.querySelector(`.video-tile[data-uid="${uid}"]`);
@@ -2440,33 +2451,39 @@
           // Attach local camera / screen share
           const stream = state.screenStream || state.localStream;
           if (stream && (state.media.camera || state.media.screen)) {
-            let vid = tile.querySelector('video');
+            let vid = cachedVideos.get(cacheKey);
             if (!vid) {
               vid = document.createElement('video');
               vid.autoplay = true;
               vid.muted = true;
               vid.playsInline = true;
               vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);transform:scaleX(-1);position:absolute;top:0;left:0;';
-              tile.style.position = 'relative';
-              tile.insertBefore(vid, tile.firstChild);
             }
+            tile.style.position = 'relative';
+            tile.insertBefore(vid, tile.firstChild);
+            
             if (vid.srcObject !== stream) vid.srcObject = stream;
+            vid.play().catch(e => console.warn('Local video play block:', e));
+            
             const avatar = tile.querySelector('.video-avatar');
             if (avatar) avatar.style.display = 'none';
           }
         } else if (state.remoteStreams[uid]) {
           // Attach remote peer stream
-          let vid = tile.querySelector('video');
+          let vid = cachedVideos.get(cacheKey);
           if (!vid) {
             vid = document.createElement('video');
             vid.autoplay = true;
             vid.playsInline = true;
-            vid.muted = !state.media.speaker;
             vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);position:absolute;top:0;left:0;';
-            tile.style.position = 'relative';
-            tile.insertBefore(vid, tile.firstChild);
           }
+          vid.muted = !state.media.speaker;
+          tile.style.position = 'relative';
+          tile.insertBefore(vid, tile.firstChild);
+          
           if (vid.srcObject !== state.remoteStreams[uid]) vid.srcObject = state.remoteStreams[uid];
+          vid.play().catch(e => console.warn('Remote video play block:', e));
+          
           const avatar = tile.querySelector('.video-avatar');
           if (avatar) avatar.style.display = 'none';
         }
@@ -2563,10 +2580,16 @@
 
         console.log('[WebRTC] Peer joined announcement from:', msg.userId, msg.userName);
 
-        // If we don't already have a connection, initiate one
+        // Tie-breaker: to avoid glare (both sides initiating concurrently),
+        // only the lower ID initiates. 
         if (!state.peers[msg.userId]) {
-          console.log('[WebRTC] Initiating connection to new peer:', msg.userId);
-          createPeer(msg.userId, true);
+          if (user.id < msg.userId) {
+            console.log('[WebRTC] Initiating connection to new peer:', msg.userId);
+            createPeer(msg.userId, true);
+          } else {
+            console.log('[WebRTC] Waiting for new peer to initiate:', msg.userId);
+            // We don't initiate; we let them initiate and handle it via 'signal' event
+          }
         }
       });
 
@@ -2681,8 +2704,11 @@
             present.forEach(row => {
               if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
                 if (!state.peers[row.participant_user_id]) {
-                  console.log('[WebRTC] Initiating to existing participant:', row.participant_user_id);
-                  createPeer(row.participant_user_id, true);
+                  // Use same tie-breaker logic to avoid glare
+                  if (user.id < row.participant_user_id) {
+                    console.log('[WebRTC] Proactively initiating to participant:', row.participant_user_id);
+                    createPeer(row.participant_user_id, true);
+                  }
                 }
               }
             });
@@ -3041,17 +3067,11 @@
           .limit(1)
           .maybeSingle();
 
-        if (existing && existing.status === 'admitted') {
-          // Already admitted — go straight in
-          dom.prejoinOverlay?.classList.add('hidden');
-          await enterLiveCallAfterAdmission();
-          return;
-        }
-
         if (existing && existing.status === 'waiting') {
           // Re-entering after page refresh — resume polling
           state.lobbyRowId = existing.id;
         } else {
+          // Create a new request even if previously admitted/denied, so host gets notified again
           const { data: inserted, error } = await db
             .from('video_call_lobby')
             .insert([payload])
