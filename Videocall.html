@@ -732,6 +732,88 @@
       display: block;
     }
 
+    /* ── Fullscreen Layout (Chat as Footer) ── */
+    .conference-body:fullscreen {
+      display: flex !important;
+      flex-direction: column;
+      background: #020810;
+      height: 100vh;
+      width: 100vw;
+      gap: 0;
+      padding: 0;
+      margin: 0;
+    }
+    .conference-body:fullscreen .video-stage {
+      flex: 1 1 auto;
+      border-radius: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 10px;
+      min-height: 0;
+    }
+    .conference-body:fullscreen .side-panel {
+      flex: 0 0 35vh;
+      border-radius: 0;
+      padding: 10px;
+      min-height: 0;
+    }
+    .conference-body:fullscreen .panel-content {
+      flex: 1;
+      min-height: 0;
+    }
+    .conference-body:fullscreen .chat-log,
+    .conference-body:fullscreen .participants-list,
+    .conference-body:fullscreen .attendance-table {
+      max-height: none;
+      flex: 1;
+    }
+    .conference-body:fullscreen .panel-card {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Webkit Prefix */
+    .conference-body:-webkit-full-screen {
+      display: flex !important;
+      flex-direction: column;
+      background: #020810;
+      height: 100vh;
+      width: 100vw;
+      gap: 0;
+      padding: 0;
+      margin: 0;
+    }
+    .conference-body:-webkit-full-screen .video-stage {
+      flex: 1 1 auto;
+      border-radius: 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding: 10px;
+      min-height: 0;
+    }
+    .conference-body:-webkit-full-screen .side-panel {
+      flex: 0 0 35vh;
+      border-radius: 0;
+      padding: 10px;
+      min-height: 0;
+    }
+    .conference-body:-webkit-full-screen .panel-content {
+      flex: 1;
+      min-height: 0;
+    }
+    .conference-body:-webkit-full-screen .chat-log,
+    .conference-body:-webkit-full-screen .participants-list,
+    .conference-body:-webkit-full-screen .attendance-table {
+      max-height: none;
+      flex: 1;
+    }
+    .conference-body:-webkit-full-screen .panel-card {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+
     @media (max-width: 1100px) {
       .conference-body {
         grid-template-columns: 1fr;
@@ -1416,6 +1498,10 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
               Raise Hand
             </button>
+            <button class="control-btn" id="toggleFullscreenBtnControl">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+              Fullscreen
+            </button>
           </div>
           <div class="control-group hidden" id="panelControlGroup">
             <button class="control-btn panel-btn" id="chatPanelBtn">
@@ -1426,7 +1512,7 @@
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Participants
             </button>
-            <button class="control-btn panel-btn" id="attendancePanelBtn">
+            <button class="control-btn panel-btn" id="attendancePanelBtn" data-tab="attendance">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               Attendance
             </button>
@@ -1449,7 +1535,7 @@
         <div class="panel-tabs">
           <button class="tab-btn active" data-tab="chat">Chat</button>
           <button class="tab-btn" data-tab="participants">Participants</button>
-          <button class="tab-btn" data-tab="attendance">Attendance</button>
+          <button class="tab-btn" id="attendanceTabBtn" data-tab="attendance">Attendance</button>
           <button class="tab-btn" id="lobbyTabBtn" data-tab="lobby" style="display:none;">
             Lobby
             <span class="lobby-badge" id="lobbyBadge"></span>
@@ -1566,78 +1652,19 @@
       }
     };
 
+    // Global DOM references
     const dom = {
-      roomName: document.getElementById('roomName'),
-      sessionCode: document.getElementById('sessionCode'),
-      startSessionBtn: document.getElementById('startSessionBtn'),
-      joinSessionBtn: document.getElementById('joinSessionBtn'),
-      callStatusPill: document.getElementById('callStatusPill'),
-      callStatusText: document.getElementById('callStatusText'),
-      sessionDetails: document.getElementById('sessionDetails'),
-      copyInviteBtn: document.getElementById('copyInviteBtn'),
-      refreshAttendanceBtn: document.getElementById('refreshAttendanceBtn'),
-      inviteLinkBox: document.getElementById('inviteLinkBox'),
-      inviteUrlInput: document.getElementById('inviteUrlInput'),
-      sessionCodeDisplay: document.getElementById('sessionCodeDisplay'),
-      attendanceCount: document.getElementById('attendanceCount'),
-      presentCount: document.getElementById('presentCount'),
-      sessionTimer: document.getElementById('sessionTimer'),
-      roomBadge: document.getElementById('roomBadge'),
-      participantBadge: document.getElementById('participantBadge'),
-      connectionBadge: document.getElementById('connectionBadge'),
-      videoGrid: document.getElementById('videoGrid'),
-      participantsList: document.getElementById('participantsList'),
-      attendanceTable: document.getElementById('attendanceTable'),
-      callOverlay: document.getElementById('callOverlay'),
-      overlayTitle: document.getElementById('overlayTitle'),
-      overlayMessage: document.getElementById('overlayMessage'),
-      authNotice: document.getElementById('authNotice'),
-      leaveBtn: document.getElementById('leaveBtn'),
-      endCallBtn: document.getElementById('endCallBtn'),
-      inviteBtn: document.getElementById('inviteBtn'),
-      chatLog: document.getElementById('chatLog'),
-      chatInput: document.getElementById('chatInput'),
-      sendChatBtn: document.getElementById('sendChatBtn'),
-      fullscreenBtn: document.getElementById('fullscreenBtn'),
-      toggleCameraBtn: document.getElementById('toggleCameraBtn'),
-      toggleMicBtn: document.getElementById('toggleMicBtn'),
-      toggleSpeakerBtn: document.getElementById('toggleSpeakerBtn'),
-      shareScreenBtn: document.getElementById('shareScreenBtn'),
-      raiseHandBtn: document.getElementById('raiseHandBtn'),
-      exportAttendanceBtn: document.getElementById('exportAttendanceBtn'),
-      chatPanelBtn: document.getElementById('chatPanelBtn'),
-      participantsPanelBtn: document.getElementById('participantsPanelBtn'),
-      attendancePanelBtn: document.getElementById('attendancePanelBtn'),
-      historyBtn: document.getElementById('historyBtn'),
-      historyPanel: document.getElementById('historyPanel'),
-      historyContent: document.getElementById('historyContent'),
       signinOverlay: document.getElementById('signinOverlay'),
-      signinBtn: document.getElementById('signinBtn'),
-      signinEmail: document.getElementById('signinEmail'),
-      signinPassword: document.getElementById('signinPassword'),
       signinRole: document.getElementById('signinRole'),
+      adminEmailGroup: document.getElementById('adminEmailGroup'),
+      adminEmailInput: document.getElementById('adminEmail'),
+      studentNameInput: document.getElementById('studentName'),
+      studentIdInput: document.getElementById('studentId'),
+      signinBtn: document.getElementById('signinBtn'),
       signinError: document.getElementById('signinError'),
-      signinSubtitle: document.getElementById('signinSubtitle'),
-      // Lobby (host side)
-      lobbyTabBtn:      document.getElementById('lobbyTabBtn'),
-      lobbyBadge:       document.getElementById('lobbyBadge'),
-      lobbyPanel:       document.getElementById('lobbyPanel'),
-      lobbyRequestList: document.getElementById('lobbyRequestList'),
-      lobbyWaitingCount:document.getElementById('lobbyWaitingCount'),
-      admitAllBtn:      document.getElementById('admitAllBtn'),
-      lobbyToast:       document.getElementById('lobbyToast'),
-      toastName:        document.getElementById('toastName'),
-      toastSub:         document.getElementById('toastSub'),
-      toastViewBtn:     document.getElementById('toastViewBtn'),
-      // Pre-join (student side)
-      prejoinOverlay:     document.getElementById('prejoinOverlay'),
-      prejoinSessionName: document.getElementById('prejoinSessionName'),
-      prejoinIdentity:    document.getElementById('prejoinIdentity'),
-      prejoinUserName:    document.getElementById('prejoinUserName'),
-      prejoinUserRole:    document.getElementById('prejoinUserRole'),
-      prejoinRequestBtn:  document.getElementById('prejoinRequestBtn'),
-      prejoinWaiting:     document.getElementById('prejoinWaiting'),
-      prejoinDenied:      document.getElementById('prejoinDenied'),
+      fullscreenBtn: document.getElementById('fullscreenBtn'),
+      leaveBtn: document.getElementById('leaveBtn'),
+      toggleFullscreenBtnControl: document.getElementById('toggleFullscreenBtnControl'),
     };
 
     const db = initSupabase();
@@ -1647,7 +1674,7 @@
       cameraOn:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>`,
       cameraOff: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`,
       micOn:     `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
-      micOff:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
+      micOff:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>`,
       speakerOn: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`,
       speakerOff:`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>`,
       screen:    `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>`,
@@ -1705,6 +1732,12 @@
     dom.leaveBtn.addEventListener('click', leaveSession);
     dom.endCallBtn.addEventListener('click', endSession);
     dom.fullscreenBtn.addEventListener('click', toggleFullscreen);
+    if (dom.toggleFullscreenBtnControl) {
+      dom.toggleFullscreenBtnControl.addEventListener('click', toggleFullscreen);
+    }
+    dom.leaveBtn.addEventListener('click', () => {
+      leaveSession();
+    });
     dom.sendChatBtn.addEventListener('click', sendChatMessage);
 
     dom.toggleCameraBtn.addEventListener('click', () => toggleMedia('camera'));
@@ -1803,7 +1836,7 @@
       }
     }
 
-    // ── Activity log ──────────────────────────────────────────────
+    // ── Activity log ─────────────────────────────────────────────-
     function logActivity(event) {
       const entry = {
         ts:           new Date().toISOString(),
@@ -2662,10 +2695,8 @@
         const tile = dom.videoGrid.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
         if (tile) {
           const nameEl = tile.querySelector('.tile-name');
-          if (nameEl) {
-            const baseName = msg.userName || 'Participant';
-            nameEl.textContent = msg.raised ? `✋ ${baseName}` : baseName;
-          }
+          const baseName = msg.userName || 'Participant';
+          nameEl.textContent = msg.raised ? `✋ ${baseName}` : baseName;
         }
       });
 
@@ -2693,6 +2724,7 @@
         // Clear persisted session so refresh doesn't try to rejoin
         clearPersistedSession();
         stopTimer();
+        showGridEmptyState('ended');
 
         // Tear down state
         state.sessionId   = null;
@@ -2712,6 +2744,23 @@
         const hostName = msg?.endedByName || 'The host';
         showNotice(`${hostName} has ended the session. You have been disconnected.`);
         setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
+      });
+
+      // ── Listen for lobby admit/deny events (host actions) ───────
+      state.broadcastChannel.on('broadcast', { event: 'lobby_admitted' }, payload => {
+        const msg = payload.payload;
+        console.log('[WebRTC] Student admitted to lobby:', msg.userId, msg.userName);
+        // Remove from waiting list
+        state.lobbyRequests = state.lobbyRequests.filter(r => r.id === req.id);
+        renderLobby();
+        showLobbyToast(req);
+      });
+      state.broadcastChannel.on('broadcast', { event: 'lobby_denied' }, payload => {
+        const msg = payload.payload;
+        console.log('[WebRTC] Student denied from lobby:', msg.userId, msg.userName);
+        // Remove from waiting list
+        state.lobbyRequests = state.lobbyRequests.filter(r => r.id === req.id);
+        renderLobby();
       });
 
       state.broadcastChannel.subscribe(async (status) => {
@@ -3267,10 +3316,21 @@
     }
 
     function toggleFullscreen() {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen();
+      const confBody = document.querySelector('.conference-body');
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (confBody.requestFullscreen) {
+          confBody.requestFullscreen();
+        } else if (confBody.webkitRequestFullscreen) {
+          confBody.webkitRequestFullscreen();
+        } else {
+          document.documentElement.requestFullscreen();
+        }
       } else {
-        document.exitFullscreen();
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
       }
     }
 
@@ -3582,7 +3642,10 @@
           localTile.insertBefore(video, localTile.firstChild);
         }
         if (video.srcObject !== stream) video.srcObject = stream;
-        video.style.display = 'block';
+        video.play().catch(e => console.warn('Local video play block:', e));
+        
+        const avatar = localTile.querySelector('.video-avatar');
+        if (avatar) avatar.style.display = 'none';
       } else if (video) {
         video.style.display = 'none';
       }
@@ -3727,6 +3790,19 @@
         ICONS.hand,
         state.media.handRaised ? 'Lower Hand' : 'Raise Hand',
         state.media.handRaised ? 'active' : '');
+
+      setBtn(dom.toggleFullscreenBtnControl,
+        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>`,
+        'Fullscreen',
+        '');
+
+      // Special case: if in fullscreen mode, override the button to show "Exit Fullscreen"
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        setBtn(dom.toggleFullscreenBtnControl,
+          `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3m10 0h3a2 2 0 0 1 2 2v3m0 10v3a2 2 0 0 1-2 2h-3m-10 0H5a2 2 0 0 1-2-2v-3"/>`,
+          'Exit Fullscreen',
+          '');
+      }
     }
 
     function updatePanelBtns(activePanel) {
