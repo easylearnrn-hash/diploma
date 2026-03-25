@@ -11,6 +11,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="js/acnhs-logo-base64.js"></script>
   <style>
+    /* Global utility — used to hide admin-only elements from students */
+    .hidden { display: none !important; }
+
     :root {
       --navy-950: #02060f;
       --navy-900: #04111f;
@@ -1312,7 +1315,7 @@
       </div>
     </header>
 
-    <section class="session-grid" id="sessionGrid">
+    <section class="session-grid hidden" id="sessionGrid">
       <div class="session-card" id="sessionControlCard">
         <h3>Session Control</h3>
         <p>Host and manage live ACNHS conference sessions. Only Admins and Teachers can start a new room.</p>
@@ -1376,7 +1379,7 @@
               <span class="meta-pill" id="connectionBadge">Status: Ready</span>
             </div>
           </div>
-          <button class="btn" id="inviteBtn">Invite Participants</button>
+          <button class="btn hidden" id="inviteBtn">Invite Participants</button>
         </div>
 
         <div class="video-grid" id="videoGrid">
@@ -1405,7 +1408,7 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
               Speaker On
             </button>
-            <button class="control-btn" id="shareScreenBtn">
+            <button class="control-btn hidden" id="shareScreenBtn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
               Share Screen
             </button>
@@ -1414,7 +1417,7 @@
               Raise Hand
             </button>
           </div>
-          <div class="control-group" id="panelControlGroup">
+          <div class="control-group hidden" id="panelControlGroup">
             <button class="control-btn panel-btn" id="chatPanelBtn">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
               Chat
@@ -1442,7 +1445,7 @@
         </div>
       </div>
 
-      <aside class="side-panel" id="sidePanel">
+      <aside class="side-panel hidden" id="sidePanel">
         <div class="panel-tabs">
           <button class="tab-btn active" data-tab="chat">Chat</button>
           <button class="tab-btn" data-tab="participants">Participants</button>
@@ -1733,8 +1736,13 @@
     }
 
     function getCurrentUser() {
-      const isAdmin = ss('isAdmin') === 'true';
-      const role = isAdmin ? 'Admin' : (ss('userRole') || 'Student');
+      const isLoggedIn = ss('isLoggedIn') === 'true';
+      // Trust the explicitly stored userRole first; only use isAdmin as a fallback
+      const storedRole = ss('userRole');
+      const isAdminFlag = ss('isAdmin') === 'true';
+      const role = isLoggedIn
+        ? (storedRole || (isAdminFlag ? 'Admin' : 'Student'))
+        : 'Student';
       const id = ss('userId') || ss('teacherId') || ss('studentRecordId')
                || ss('viewerActiveStudentId') || ss('userEmail') || '';
       const name = ss('userName') || ss('teacherName') || ss('studentFullName') || 'ACNHS Participant';
