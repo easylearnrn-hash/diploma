@@ -2508,6 +2508,58 @@
         }
       });
 
+      // ── Listen for session-ended event (host ended the call) ──
+      state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
+        const msg = payload.payload;
+        console.log('[WebRTC] Session ended by host:', msg?.endedByName || msg?.endedBy);
+
+        // Don't process if we are the host who sent it
+        if (state.isHost) return;
+
+        // Stop local media tracks
+        stopLocalMedia();
+
+        // Tear down WebRTC connections and channel
+        teardownWebRTC();
+
+        // Stop lobby polling (if student was still in lobby)
+        stopLobbyPolling();
+        if (state.lobbySubscription) { db?.removeChannel(state.lobbySubscription); state.lobbySubscription = null; }
+
+        // Hide prejoin overlay (if student was waiting in lobby)
+        if (dom.prejoinOverlay) dom.prejoinOverlay.classList.add('hidden');
+
+        // Clear persisted session so refresh doesn't try to rejoin
+        clearPersistedSession();
+        stopTimer();
+
+        // Tear down state
+        state.sessionId   = null;
+        state.sessionCode = null;
+        state.sessionName = null;
+        state.lobbyRequests = [];
+
+        // Reset video grid to empty
+        dom.videoGrid.innerHTML = `
+          <div class="video-tile" data-empty="true">
+            <div class="tile-status"><span></span>Waiting</div>
+            <div class="video-avatar">AC</div>
+            <div class="tile-name-bar">
+              <div class="tile-name">Room empty</div>
+              <div class="tile-role">Awaiting participants</div>
+            </div>
+            <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
+          </div>`;
+
+        updateCallStatus('idle');
+        updateSessionDetails();
+
+        // Show disconnection notice to the participant
+        const hostName = msg?.endedByName || 'The host';
+        showNotice(`${hostName} has ended the session. You have been disconnected.`);
+        setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
+      });
+
       state.broadcastChannel.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           console.log('[WebRTC] Broadcast channel subscribed');
@@ -2934,6 +2986,38 @@
       if (!db || !state.sessionCode || !user.id) return;
 
       state.lobbyPollInterval = setInterval(async () => {
+        // Also check if the session itself has ended
+        if (state.sessionCode) {
+          const { data: sess } = await db
+            .from('video_call_sessions')
+            .select('status')
+            .eq('session_code', state.sessionCode)
+            .maybeSingle();
+          if (sess && sess.status === 'ended') {
+            stopLobbyPolling();
+            dom.prejoinOverlay?.classList.add('hidden');
+            clearPersistedSession();
+            state.sessionId = null;
+            state.sessionCode = null;
+            state.sessionName = null;
+            updateCallStatus('idle');
+            updateSessionDetails();
+            dom.videoGrid.innerHTML = `
+              <div class="video-tile" data-empty="true">
+                <div class="tile-status"><span></span>Waiting</div>
+                <div class="video-avatar">AC</div>
+                <div class="tile-name-bar">
+                  <div class="tile-name">Room empty</div>
+                  <div class="tile-role">Awaiting participants</div>
+                </div>
+                <div class="empty-state">Start a session or join with a code to begin your ACNHS conference.</div>
+              </div>`;
+            showNotice('The host has ended this session.');
+            setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
+            return;
+          }
+        }
+
         const { data } = await db
           .from('video_call_lobby')
           .select('status')
@@ -2991,6 +3075,20 @@
       updateCallStatus('ended');
       logActivity('session_ended');
       await updateAttendance('leave');
+
+      // ── Broadcast session-ended to ALL participants BEFORE tearing down ──
+      if (state.broadcastChannel) {
+        try {
+          state.broadcastChannel.send({
+            type: 'broadcast',
+            event: 'session-ended',
+            payload: { endedBy: user.id, endedByName: user.name }
+          });
+        } catch (_) {}
+        // Small delay so the broadcast has time to reach participants
+        await new Promise(r => setTimeout(r, 300));
+      }
+
       teardownWebRTC();
       stopLocalMedia();
 
