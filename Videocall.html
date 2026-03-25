@@ -1541,7 +1541,8 @@
       sessionStart: null,
       callStatus: 'idle',
       joinTimestamp: null,
-      attendanceRows: [],
+      attendanceRows: [],         // all rows — used for attendance history table
+      attendanceRowsDeduped: [],  // one row per user — used for video grid & counts
       currentAttendanceId: null,
       isHost: false,
       localStream: null,
@@ -2256,7 +2257,24 @@
         return;
       }
 
+      // Store ALL rows for the attendance history table
       state.attendanceRows = data || [];
+
+      // Build a deduplicated view: one row per user, preferring the currently-present
+      // row first, then the most recent one. Used for video grid & participant counts.
+      const deduped = new Map();
+      (data || []).forEach(row => {
+        const uid = row.participant_user_id;
+        if (!uid) return;
+        const existing = deduped.get(uid);
+        // Prefer is_present=true; among equals prefer the more recent joined_at
+        if (!existing || (row.is_present && !existing.is_present) ||
+            (row.is_present === existing.is_present && new Date(row.joined_at) > new Date(existing.joined_at))) {
+          deduped.set(uid, row);
+        }
+      });
+      state.attendanceRowsDeduped = Array.from(deduped.values());
+
       renderAttendance();
     }
 
@@ -2276,19 +2294,24 @@
     }
 
     function renderAttendance() {
-      const rows = state.attendanceRows;
-      if (!rows.length) {
+      // deduped = one row per user (for grid/counts), rows = all history (for table)
+      const deduped = state.attendanceRowsDeduped;
+      const rows    = state.attendanceRows;
+
+      if (!deduped.length) {
         dom.attendanceTable.innerHTML = '<div class="empty-state">Attendance will appear once participants join.</div>';
         dom.participantsList.innerHTML = '<div class="empty-state">Participants will appear here when they join.</div>';
         dom.videoGrid.querySelector('[data-empty]')?.classList.toggle('hidden', false);
         return;
       }
 
-      const present = rows.filter((row) => row.is_present).length;
-      dom.attendanceCount.textContent = rows.length;
+      // Counts based on unique users, not raw rows
+      const present = deduped.filter((row) => row.is_present).length;
+      dom.attendanceCount.textContent = deduped.length;
       dom.presentCount.textContent = present;
-      dom.participantBadge.textContent = `Participants: ${rows.length}`;
+      dom.participantBadge.textContent = `Participants: ${deduped.length}`;
 
+      // Full history table — shows every join/leave event
       const tableRows = rows.map((row) => {
         const duration = row.total_duration_seconds ? formatDuration(row.total_duration_seconds) : '--';
         return `
@@ -2316,7 +2339,8 @@
         </table>
       `;
 
-      dom.participantsList.innerHTML = rows.map((row) => {
+      // Participants list — one entry per unique user
+      dom.participantsList.innerHTML = deduped.map((row) => {
         const roleClass = (row.participant_role || 'student').toLowerCase();
         return `
           <div class="participant-item">
@@ -2360,16 +2384,11 @@
       };
 
       let rows;
-      if (state.attendanceRows.length) {
-        // Deduplicate by participant_user_id — keep the most recent (last) row per user
-        const deduped = new Map();
-        state.attendanceRows.forEach(r => {
-          if (r.participant_user_id) deduped.set(r.participant_user_id, r);
-        });
-        // Put local user first, then everyone else
-        const localFromDB = deduped.get(user.id);
-        deduped.delete(user.id);
-        const others = Array.from(deduped.values());
+      if (state.attendanceRowsDeduped.length) {
+        // Deduplicated: one row per user, local user first
+        const deduped = state.attendanceRowsDeduped;
+        const localFromDB = deduped.find(r => r.participant_user_id === user.id);
+        const others = deduped.filter(r => r.participant_user_id !== user.id);
         rows = [localFromDB || localRow, ...others];
       } else {
         rows = [localRow];
@@ -2463,6 +2482,8 @@
       state.sessionCode = null;
       state.sessionName = null;
       state.lobbyRequests = [];
+      state.attendanceRows = [];
+      state.attendanceRowsDeduped = [];
 
       // Reset video grid to empty
       dom.videoGrid.innerHTML = `
@@ -2479,9 +2500,6 @@
       updateCallStatus('idle');
       updateSessionDetails();
     }
-
-    // ══════════════════════════════════════════════════════════════
-    //  WEBRTC MESH SIGNALING SYSTEM (via Supabase Realtime)
     // ══════════════════════════════════════════════════════════════
 
     function setupWebRTC() {
@@ -2609,6 +2627,8 @@
         state.sessionCode = null;
         state.sessionName = null;
         state.lobbyRequests = [];
+        state.attendanceRows = [];
+        state.attendanceRowsDeduped = [];
 
         // Reset video grid to empty
         dom.videoGrid.innerHTML = `
@@ -2647,8 +2667,10 @@
 
           // Also proactively connect to anyone already in the attendance list
           setTimeout(() => {
-            if (!state.attendanceRows) return;
-            state.attendanceRows.forEach(row => {
+            const present = state.attendanceRowsDeduped.length
+              ? state.attendanceRowsDeduped
+              : state.attendanceRows;
+            present.forEach(row => {
               if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
                 if (!state.peers[row.participant_user_id]) {
                   console.log('[WebRTC] Initiating to existing participant:', row.participant_user_id);
@@ -3181,6 +3203,8 @@
       state.sessionCode = null;
       state.sessionName = null;
       state.lobbyRequests = [];
+      state.attendanceRows = [];
+      state.attendanceRowsDeduped = [];
 
       // Reset video grid to empty
       dom.videoGrid.innerHTML = `
