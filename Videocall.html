@@ -1532,37 +1532,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
-
-  <!-- ── Pre-join / Lobby overlay (students only) ── -->
-  <div class="prejoin-overlay hidden" id="prejoinOverlay">
-    <div class="prejoin-card">
-      <div class="prejoin-logo"><img data-acnhs-logo alt="ACNHS"></div>
-      <h2>Ready to Join?</h2>
-      <div class="prejoin-session-name" id="prejoinSessionName">ACNHS Live Session</div>
-      <div class="prejoin-identity" id="prejoinIdentity">
-        Signing in as <strong id="prejoinUserName">—</strong> · <span id="prejoinUserRole">Student</span>
-      </div>
-      <button class="prejoin-btn" id="prejoinRequestBtn">Request to Join</button>
-      <div class="prejoin-waiting" id="prejoinWaiting">
-        <p><span class="wait-dot"></span>Waiting for the host to admit you…<br>
-        <span style="font-size:0.78rem;color:var(--text-muted);margin-top:6px;display:block;">You will enter automatically once approved.</span></p>
-      </div>
-      <div class="prejoin-denied" id="prejoinDenied">
-        <p>Your request to join was <strong>denied</strong> by the host.<br>
-        <span style="font-size:0.78rem;display:block;margin-top:4px;">Please contact your instructor if you believe this is an error.</span></p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Lobby join-request toast (shown to host) ── -->
-  <div class="lobby-toast" id="lobbyToast">
-    <div class="lt-dot"></div>
-    <div class="lt-text">
-      <div class="lt-name" id="toastName">Student Name</div>
-      <div class="lt-sub" id="toastSub">wants to join the session</div>
-    </div>
-    <button class="lt-btn" id="toastViewBtn">View →</button>
-  </div>
+  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
   <script>
     const state = {
       sessionId: null,
@@ -1580,6 +1550,9 @@
       lobbyRequests: [],        // { id, user_id, user_name, user_role, user_email, requested_at }
       lobbySubscription: null,  // realtime channel
       lobbyPollInterval: null,  // fallback poll for student waiting status
+      peers: {}, // SimplePeer instances: map participant_user_id -> peer
+      remoteStreams: {}, // map participant_user_id -> MediaStream
+      broadcastChannel: null, // supabase realtime broadcast channel
       media: {
         camera: false,
         mic: false,
@@ -2074,12 +2047,8 @@
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
+      setupWebRTC();
       startTimer();
-
-      // Host: start listening for student join requests
-      subscribeLobby();
-      await fetchLobbyRequests();
-      if (dom.lobbyTabBtn) dom.lobbyTabBtn.style.display = '';
     }
 
     async function joinSession() {
@@ -2138,6 +2107,7 @@
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
+      setupWebRTC();
       startTimer();
     }
 
@@ -2321,14 +2291,25 @@
         const initials = (row.participant_name || 'AC').split(' ').map((part) => part[0]).slice(0, 2).join('').toUpperCase();
         const tileId = isLocal ? 'id="localVideoTile"' : '';
         const cameraOn = isLocal && state.media.camera;
-        const avatarStyle = cameraOn ? 'style="display:none"' : '';
+        let avatarStyle = cameraOn ? 'style="display:none"' : '';
         const displayName = escapeHtml(row.participant_name || 'Participant') + (isLocal ? ' (You)' : '');
         const displayRole = escapeHtml(row.participant_role || 'Student');
         const statusText = row.is_present === false ? 'Offline' : 'Live';
+        
+        let videoElement = '';
+        if (state.remoteStreams[row.participant_user_id]) {
+           avatarStyle = 'style="display:none"';
+           videoElement = `<video autoplay playsinline srcObject class="remote-video" data-uid="${row.participant_user_id}" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md);"></video>`;
+        } else if (isLocal && state.localStream && state.media.camera) {
+           avatarStyle = 'style="display:none"';
+           videoElement = `<video autoplay playsinline muted class="remote-video" id="localVideoEl" style="width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-md); transform: scaleX(-1);"></video>`;
+        }
+
         return `
           <div class="video-tile" ${tileId}>
             <div class="tile-status"><span></span>${statusText}</div>
             <div class="video-avatar" ${avatarStyle}>${escapeHtml(initials)}</div>
+            ${videoElement}
             <div class="tile-name-bar">
               <div class="tile-name">${displayName}</div>
               <div class="tile-role">${displayRole}</div>
@@ -2340,21 +2321,45 @@
       if (state.localStream || state.screenStream) {
         attachLocalVideo();
       }
+
+      // Attach remote streams
+      setTimeout(() => {
+        const videos = document.querySelectorAll('video[data-uid]');
+        videos.forEach(v => {
+          const uid = v.getAttribute('data-uid');
+          if (uid && state.remoteStreams[uid] && !v.srcObject) {
+            v.srcObject = state.remoteStreams[uid];
+          }
+        });
+        const localV = document.getElementById('localVideoEl');
+        if (localV && state.localStream && !localV.srcObject) {
+            localV.srcObject = state.localStream;
+        }
+      }, 100);
     }
 
     async function leaveSession() {
       await updateAttendance('leave');
+      
+      // Close WebRTC peers
+      Object.values(state.peers).forEach(p => p.destroy());
+      state.peers = {};
+      state.remoteStreams = {};
+      if (state.broadcastChannel) { db?.removeChannel(state.broadcastChannel); state.broadcastChannel = null; }
+
       stopLocalMedia();
       clearPersistedSession();
       stopTimer();
       stopLobbyPolling();
       if (state.lobbySubscription) { db?.removeChannel(state.lobbySubscription); state.lobbySubscription = null; }
 
+      // Tear down state
       state.sessionId   = null;
       state.sessionCode = null;
       state.sessionName = null;
       state.lobbyRequests = [];
 
+      // Reset video grid to empty
       dom.videoGrid.innerHTML = `
         <div class="video-tile" data-empty="true">
           <div class="tile-status"><span></span>Waiting</div>
@@ -2368,6 +2373,87 @@
 
       updateCallStatus('idle');
       updateSessionDetails();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  WEBRTC MESH SIGNALING SYSTEM
+    // ══════════════════════════════════════════════════════════════
+
+    function setupWebRTC() {
+      if (!db || !state.sessionCode) return;
+      
+      state.broadcastChannel = db.channel(`webrtc-${state.sessionCode}`, { 
+        config: { broadcast: { ack: false } } 
+      });
+
+      state.broadcastChannel.on('broadcast', { event: 'signal' }, payload => {
+        const data = payload.payload;
+        if (data.target !== user.id) return; // Not for us
+
+        let peer = state.peers[data.sender];
+        
+        // If we get an offer and we don't have a peer yet, we create one answering
+        if (!peer && data.signal.type === 'offer') {
+          peer = createPeer(data.sender, false);
+        }
+        
+        if (peer) {
+          peer.signal(data.signal);
+        }
+      });
+
+      state.broadcastChannel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+           // Wait a second then initiate connections to everyone already present
+           setTimeout(() => {
+              if (!state.attendanceRows) return;
+              state.attendanceRows.forEach(row => {
+                 if (row.participant_user_id !== user.id && row.is_present) {
+                     if (!state.peers[row.participant_user_id]) {
+                          createPeer(row.participant_user_id, true);
+                     }
+                 }
+              });
+           }, 2000);
+        }
+      });
+    }
+
+    function createPeer(targetUserId, initiator) {
+      if (!SimplePeer.WEBRTC_SUPPORT) {
+          console.warn('WebRTC not supported.');
+          return null;
+      }
+      const stream = state.localStream; // Use main camera stream
+      const peer = new SimplePeer({
+        initiator: initiator,
+        stream: stream,
+        trickle: true
+      });
+
+      peer.on('signal', data => {
+        if (state.broadcastChannel) {
+          state.broadcastChannel.send({
+            type: 'broadcast',
+            event: 'signal',
+            payload: { sender: user.id, target: targetUserId, signal: data }
+          });
+        }
+      });
+
+      peer.on('stream', remoteStream => {
+        state.remoteStreams[targetUserId] = remoteStream;
+        updateVideoGrid();
+      });
+
+      peer.on('close', () => {
+        delete state.peers[targetUserId];
+        delete state.remoteStreams[targetUserId];
+        updateVideoGrid();
+      });
+
+      state.peers[targetUserId] = peer;
+      return peer;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -2643,6 +2729,7 @@
       await updateAttendance('join');  // Attendance starts HERE — only after admission
       await fetchAttendance();
       subscribeAttendance();
+      setupWebRTC();
       startTimer();
     }
 
@@ -2863,7 +2950,7 @@
 
             for (const ev of pData.events) {
               const meta    = EVENT_META[ev.event] || { label: ev.event, cat: 'join', icon: '•' };
-              const timeStr = new Date(ev.ts).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              const timeStr = new Date(ev.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
               html += `<div class="history-event-item">
                 <div class="he-icon ${escapeHtml(meta.cat)}">${meta.icon}</div>
                 <div class="he-text">
