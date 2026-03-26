@@ -3303,7 +3303,7 @@ function regenerateUsernameSlug(username) {
 }
 
 const DOCUMENT_FIELD_NAMES = ['document_id', 'control_number', 'verification_hash', 'applicant_name_armenian'];
-const CREDENTIAL_FIELD_NAMES = ['username', 'password_hash', 'status'];
+const CREDENTIAL_FIELD_NAMES = ['username', 'password_hash', 'status', 'plain_password'];
 
 function detectMissingColumn(error) {
   if (!error || !error.message) return null;
@@ -3319,6 +3319,7 @@ function buildApplicationRecord(baseRecord, data, includeDocumentFields, include
     if (data.documentId) record.document_id = data.documentId;
     if (data.controlNumber) record.control_number = data.controlNumber;
     if (data.verificationHash) record.verification_hash = data.verificationHash;
+    if (data.fullNameArmenian) record.applicant_name_armenian = data.fullNameArmenian;
   }
 
   if (includeCredentialFields) {
@@ -3345,7 +3346,6 @@ async function saveApplicationToSupabase(data) {
     barcode: data.barcode,
     hash: data.verificationHash,
     applicant_name: data.applicantName,
-    applicant_name_armenian: data.fullNameArmenian || null,
     email: data.email,
     phone: data.phone,
     date_of_birth: data.dobIso || data.rawDob || null,
@@ -3383,6 +3383,14 @@ async function saveApplicationToSupabase(data) {
     if (isMissingColumnError(error)) {
       const missingColumn = detectMissingColumn(error);
       let adjusted = false;
+      
+      const exactMatch = error.message && error.message.match(/column "([^"]+)" of relation/i);
+      const actualMissing = exactMatch ? exactMatch[1] : missingColumn;
+      if (actualMissing && baseRecord.hasOwnProperty(actualMissing)) {
+        delete baseRecord[actualMissing];
+        console.warn(`Removed missing column ${actualMissing} from baseRecord and retrying.`);
+        adjusted = true;
+      }
 
       if (missingColumn && DOCUMENT_FIELD_NAMES.includes(missingColumn) && includeDocumentFields) {
         includeDocumentFields = false;
