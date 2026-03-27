@@ -136,6 +136,13 @@
         permission: 'edit_applications'
       },
       { 
+        href: 'notes.html', 
+        icon: '📚', 
+        text: 'All Notes', 
+        permission: null,
+        allowedEmails: ['hrachfilm@gmail.com', 'Hrachfilm@gmail.com']
+      },
+      { 
         href: '#', 
         icon: '⚙️', 
         text: 'Settings', 

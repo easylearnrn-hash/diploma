@@ -7,14 +7,18 @@
   // Check if user has a specific permission
   function hasPermission(permissionKey) {
     try {
+      // Main admin always has all permissions
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
+      const ADMIN_EMAILS = ['hrachfilm@gmail.com', 'Hrachfilm@gmail.com', 'HRACHFILM@GMAIL.COM'];
+      if (ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase())) {
+        return true;
+      }
+
       const permissionsStr = sessionStorage.getItem('userPermissions') || localStorage.getItem('userPermissions');
       const permissions = permissionsStr ? JSON.parse(permissionsStr) : null;
       
       if (!permissions) {
-        // If no permissions found, check if user is main admin
-        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-        const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
-        return ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
+        return false;
       }
       
       return permissions[permissionKey] === true;
