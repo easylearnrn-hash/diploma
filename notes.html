@@ -3012,6 +3012,10 @@
     if (documents.length > 0) {
       docsHtml = '<div class="notes-grid">' +
         documents.map((doc, i) => {
+          const isAdminUser = sessionStorage.getItem('isAdmin') === 'true' || localStorage.getItem('isAdmin') === 'true';
+          const singleExportBtn = isAdminUser ? 
+            `<div onclick="event.stopPropagation(); exportSingleNoteToPdf('${topicId}', '${doc.id}')" title="Export Note to PDF" style="position:absolute;top:12px;right:12px;color:rgba(201,168,76,0.6);background:rgba(0,0,0,0.4);border:1px solid rgba(201,168,76,0.2);padding:6px;border-radius:6px;z-index:10;transition:all 0.2s;" onmouseover="this.style.color='#fff';this.style.background='rgba(201,168,76,0.5)';this.style.borderColor='rgba(201,168,76,0.8)'" onmouseout="this.style.color='rgba(201,168,76,0.6)';this.style.background='rgba(0,0,0,0.4)';this.style.borderColor='rgba(201,168,76,0.2)'"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v7M4 5l3 3 3-3"/><path d="M2 10v2a1 1 0 001 1h8a1 1 0 001-1v-2"/></svg></div>` : '';
+          
           let cleanTitle = doc.title
             .replace(/\s*-\s*NCLEX Comprehensive Review$/i, '')
             .replace(/\s*-\s*NCLEX Review$/i, '')
@@ -3020,7 +3024,8 @@
           const escapedDocTitle = escapeHtml(cleanTitle);
           const docDate = new Date(doc.created).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
           return `
-            <div class="note-card" onclick="openDocumentWindow('${topicId}', '${doc.id}')" style="animation:fadeUpIn 0.4s ease both;animation-delay:${i * 0.05}s">
+            <div class="note-card" onclick="openDocumentWindow('${topicId}', '${doc.id}')" style="position:relative;animation:fadeUpIn 0.4s ease both;animation-delay:${i * 0.05}s">
+              ${singleExportBtn}
               <div class="thumb">
                 <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="ACNHS" data-acnhs-logo>
               </div>
@@ -3048,6 +3053,27 @@
       `;
     }
 
+    const isExportable = documents.length > 0 && documents.every(d => d.htmlFile);
+    const exportBtnHtml = isExportable ? `
+      <button onclick="exportAllToPdf('${topic.id}')" style="
+        display:inline-flex;align-items:center;gap:8px;
+        padding:9px 20px;
+        background:linear-gradient(135deg,rgba(201,168,76,0.14),rgba(201,168,76,0.07));
+        border:1px solid rgba(201,168,76,0.38);
+        border-radius:10px;
+        color:#d4b56a;
+        font-size:12.5px;font-weight:700;
+        cursor:pointer;
+        letter-spacing:0.03em;
+        transition:all 0.2s;
+        white-space:nowrap;
+      "
+      onmouseover="this.style.background='rgba(201,168,76,0.22)';this.style.borderColor='rgba(201,168,76,0.6)';this.style.color='#fff';this.style.transform='translateY(-1px)'"
+      onmouseout="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.14),rgba(201,168,76,0.07))';this.style.borderColor='rgba(201,168,76,0.38)';this.style.color='#d4b56a';this.style.transform=''">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 1v7M4 5l3 3 3-3"/><path d="M2 10v2a1 1 0 001 1h8a1 1 0 001-1v-2"/></svg>
+        Export All to PDF
+      </button>` : '';
+
     topicView.innerHTML = `
       <div class="topic-detail-header">
         <div>
@@ -3056,7 +3082,8 @@
           </div>
           <div class="topic-detail-title">${escapedTitle}</div>
         </div>
-        <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+        <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
+          ${exportBtnHtml}
           <span style="font-size:12px;color:var(--text-muted);font-weight:600;">${documents.length} document${documents.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
@@ -3113,6 +3140,1122 @@
     const breadcrumb = document.getElementById('breadcrumbCurrent');
     if (breadcrumb) breadcrumb.textContent = 'Academic Notes';
     currentTopicId = null;
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────────
+   * Export all notes in a topic to a multi-page PDF.
+   *
+   * Strategy: fetch each HTML file as text, strip the acnhs-guard-hide style
+   * and note-guard <script> tags, inline-resolve relative asset URLs, then
+   * inject the cleaned HTML into the print window as one <section> per note
+   * with a hard page-break between them.  A cover TOC page comes first.
+   *
+   * Why fetch+inject instead of iframes?
+   *   - iframes inside a print window do NOT render to PDF in any browser.
+   *   - The guard `body{display:none}` must be removed before injection.
+   *   - Relative CSS/font paths must be made absolute so they load correctly.
+   * ───────────────────────────────────────────────────────────────────────── */
+  
+
+  function exportSingleNoteToPdf(topicId, docId) {
+    if (sessionStorage.getItem('isAdmin') !== 'true' && localStorage.getItem('isAdmin') !== 'true') {
+        alert('Unauthorized. Only administrators can perform this action.');
+        return;
+    }
+    
+    const topic = topics.find(t => t.id === topicId);
+    if (!topic) return;
+
+    const doc = (topic.notes || []).find(d => d.id === docId);
+    if (!doc || !doc.htmlFile) {
+      alert('This document cannot be exported.');
+      return;
+    }
+
+    if (window.location.protocol === 'file:') {
+      alert('Your browser blocks exporting PDFs directly from file:// URLs.\nPlease start the local server (e.g., python3 start-server.py) and try again.');
+      return;
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    
+    printWin.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Preparing PDF — ${doc.title}</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #020a18; color: #f0ece3; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+  .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-left-color: #c9a84c; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+</style></head>
+<body>
+  <div class="spinner"></div>
+  <h2>Reformatting Document...</h2>
+  <p style="color:#8a9ec0;">Extracting text and compiling official PDF layout.</p>
+</body></html>`);
+    printWin.document.close();
+
+    const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
+    function fetchAndClean(htmlFile) {
+      const url = baseUrl + htmlFile;
+      const slash = htmlFile.lastIndexOf('/');
+      const fileDir = slash !== -1 ? htmlFile.substring(0, slash + 1) : '';
+      const absBase = baseUrl + fileDir;
+
+      return fetch(url, { cache: 'no-store' })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(raw => {
+          raw = raw.replace(/<script[\s\S]*?<\/script>/gi, '');
+          raw = raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+          raw = raw.replace(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi, '');
+
+          raw = raw.replace(/(src|href)=["'](?!https?:|data:|#|\/\/)([^"']+)["']/gi, (m, attr, val) => `${attr}="${absBase}${val}"`);
+
+          const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          let body = bodyMatch ? bodyMatch[1] : raw;
+          
+          body = body.replace(/<header[^>]*class="[^"]*site-header[^"]*"[^>]*>[\s\S]*?<\/header>/gi, '');
+          body = body.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '');
+          body = body.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '');
+          body = body.replace(/<div(?:[^>]*class="[^"]*(?:watermark|copy-block|context-block|nav-back|fab|sidebar|topbar)[^"]*")[^>]*>[\s\S]*?<\/div>/gi, '');
+          
+          const mainMatch = body.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+          if (mainMatch) body = mainMatch[1];
+          else {
+              const wrapMatch = body.match(/<div[^>]*class="[^"]*page-wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*$/i);
+              if (wrapMatch) body = wrapMatch[1];
+          }
+
+          // Remove all inline styles
+          body = body.replace(/ style="[^"]*"/gi, '');
+          // Remove SVG icons
+          body = body.replace(/<svg[\s\S]*?<\/svg>/gi, '');
+          // Remove images with placeholder/broken base64 data URLs
+          body = body.replace(/<img[^>]+src=["']data:image\/[^"']*PLACEHOLDER[^"']*["'][^>]*\/?>/gi, '');
+          // Remove any remaining data: URL images (placeholder diagrams, etc.)
+          body = body.replace(/<img[^>]+src=["']data:[^"']{0,200}["'][^>]*\/?>/gi, '');
+          // Collapse 3+ consecutive <br> into one
+          body = body.replace(/(<br\s*\/?>\s*){3,}/gi, '<br>');
+          // Collapse 3+ consecutive empty <p></p> into one
+          body = body.replace(/(<p[^>]*>\s*<\/p>\s*){3,}/gi, '');
+          // Strip empty divs/sections that only create whitespace
+          body = body.replace(/<(div|section|article)[^>]*>\s*<\/\1>/gi, '');
+          return body;
+        });
+    }
+
+    fetchAndClean(doc.htmlFile).then(bodyContent => {
+      const cleanTitle = doc.title
+        .replace(/\s*-\s*NCLEX.*/i, '')
+        .replace(/\s*\(Fundamentals\)$/i, '')
+        .trim();
+      const exportDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const logoB64 = (typeof ACNHS_LOGO_BASE64 !== 'undefined') ? ACNHS_LOGO_BASE64 : '';
+
+      const printHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${cleanTitle} — ACNHS Academic Document</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   ACNHS PREMIUM ACADEMIC DOCUMENT SYSTEM
+   Armenian College of Nursing & Health Sciences
+   © ${new Date().getFullYear()} — All Rights Reserved
+═══════════════════════════════════════════════════════ */
+
+/* ── Google Fonts ── */
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lato:wght@300;400;700;900&display=swap');
+
+:root {
+  --gold:        #b8963e;
+  --gold-light:  #d4af5c;
+  --gold-dark:   #8a6e28;
+  --navy:        #0f1f3d;
+  --navy-mid:    #1a2f52;
+  --ink:         #1c1c2e;
+  --ink-mid:     #2d2d44;
+  --ink-light:   #5a5a78;
+  --rule:        #c8b87a;
+  --paper:       #fdfcf8;
+  --paper-tint:  #f7f4ec;
+  --border-soft: #e0d8c4;
+}
+
+/* ── PAGE SETUP ── */
+@page {
+  size: letter;
+  margin: 1in 0.9in 0.9in 0.9in;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* ── SCREEN PREVIEW SHELL ── */
+body {
+  background: #ccc9be;
+  margin: 0;
+  padding: 0;
+  font-family: 'EB Garamond', Georgia, serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── FIXED PRINT BAR (screen only) ── */
+.print-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  background: var(--navy);
+  border-top: 3px solid;
+  border-image: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark)) 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 40px;
+  z-index: 9999;
+  box-shadow: 0 -3px 20px rgba(0,0,0,0.3);
+}
+.print-bar-label {
+  font-family: 'Lato', sans-serif;
+  font-size: 8.5pt;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(212,175,92,0.55);
+}
+.print-bar-label strong { color: var(--gold-light); font-weight: 700; }
+.print-bar-actions { display: flex; gap: 10px; }
+.btn-print {
+  font-family: 'Lato', sans-serif;
+  font-size: 9pt; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 26px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold-light));
+  color: var(--navy);
+}
+.btn-print:hover { opacity: 0.88; }
+.btn-close {
+  font-family: 'Lato', sans-serif;
+  font-size: 9pt; letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 20px;
+  border: 1px solid rgba(212,175,92,0.25); cursor: pointer;
+  background: transparent; color: rgba(212,175,92,0.6);
+}
+.btn-close:hover { color: var(--gold-light); border-color: rgba(212,175,92,0.5); }
+
+/* ── PAPER PAGE (screen preview) ── */
+.doc-page {
+  background: var(--paper);
+  max-width: 8.5in;
+  margin: 28px auto 80px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 12px 40px rgba(0,0,0,0.14);
+  padding: 0;
+}
+
+/* ── MASTHEAD ── */
+.doc-masthead {
+  background: var(--navy);
+  padding: 28px 52px 0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.doc-masthead-inner {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding-bottom: 22px;
+}
+.doc-masthead-rule {
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark));
+}
+.doc-seal {
+  width: 60px; height: 60px;
+  flex-shrink: 0; opacity: 0.92;
+}
+.doc-inst-name {
+  font-family: 'Lato', sans-serif;
+  font-size: 8.5pt; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold-light);
+  margin: 0 0 3px;
+}
+.doc-inst-sub {
+  font-family: 'Lato', sans-serif;
+  font-size: 7pt; letter-spacing: 0.12em; text-transform: uppercase;
+  color: rgba(212,175,92,0.4);
+  margin: 0;
+}
+.doc-inst { flex: 1; }
+.doc-meta {
+  text-align: right;
+  font-family: 'Lato', sans-serif;
+}
+.doc-meta-lbl {
+  font-size: 6.5pt; letter-spacing: 0.16em; text-transform: uppercase;
+  color: rgba(212,175,92,0.38);
+  display: block; margin-bottom: 2px;
+}
+.doc-meta-val {
+  font-size: 7.5pt; color: rgba(212,175,92,0.65);
+  display: block; margin-bottom: 6px;
+}
+
+/* ── TITLE SECTION ── */
+.doc-title-section {
+  padding: 32px 52px 20px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.doc-category-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Lato', sans-serif;
+  font-size: 7pt; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold-dark);
+  border: 1px solid rgba(184,150,62,0.4);
+  padding: 4px 12px;
+  margin-bottom: 14px;
+  background: rgba(184,150,62,0.05);
+}
+.doc-category-pill::before {
+  content: '';
+  width: 5px; height: 5px;
+  border: 1.5px solid var(--gold); border-radius: 50%;
+  display: inline-block;
+}
+.doc-main-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 26pt; font-weight: 600;
+  color: var(--navy); line-height: 1.15;
+  margin: 0 0 14px; letter-spacing: -0.01em;
+}
+.doc-title-rule {
+  width: 48px; height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border: none; margin: 0 0 14px;
+}
+.doc-legal-notice {
+  font-family: 'Lato', sans-serif;
+  font-size: 7pt; color: var(--ink-light);
+  letter-spacing: 0.03em; line-height: 1.5;
+  border-left: 2px solid var(--border-soft);
+  padding: 5px 0 5px 10px;
+}
+
+/* ── BODY ── */
+.doc-body {
+  padding: 28px 52px 44px;
+}
+
+/* Strip web UI from fetched HTML */
+.doc-body * {
+  color: var(--ink) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  border-radius: 0 !important;
+  position: static !important;
+  float: none !important;
+  min-height: 0 !important;
+  max-width: 100% !important;
+}
+.doc-body a[href^="hub.html"], .doc-body a[href^="notes.html"],
+.doc-body a[href^="Student-page"], .doc-body .nav-back,
+.doc-body .back-btn, .doc-body button, .doc-body .topbar,
+.doc-body .empty-state, .doc-body .watermark, .doc-body .fab,
+.doc-body [class*="nav-"], .doc-body [class*="btn-"],
+.doc-body [class*="copy-block"], .doc-body [class*="site-header"],
+.doc-body [class*="context-block"] { display: none !important; }
+
+/* Typography */
+.doc-body h1 {
+  font-family: 'EB Garamond', Georgia, serif !important;
+  font-size: 18pt !important; font-weight: 600 !important;
+  color: var(--navy) !important; line-height: 1.2 !important;
+  margin: 1.4em 0 0.4em !important;
+  padding-bottom: 6px !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h2 {
+  font-family: 'Lato', Arial, sans-serif !important;
+  font-size: 11pt !important; font-weight: 700 !important;
+  color: var(--navy-mid) !important; letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  margin: 1.2em 0 0.35em !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h3 {
+  font-family: 'EB Garamond', Georgia, serif !important;
+  font-size: 13pt !important; font-weight: 600 !important;
+  font-style: italic !important; color: var(--ink-mid) !important;
+  margin: 1.1em 0 0.3em !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h4 {
+  font-family: 'Lato', Arial, sans-serif !important;
+  font-size: 9pt !important; font-weight: 700 !important;
+  letter-spacing: 0.14em !important; text-transform: uppercase !important;
+  color: var(--gold-dark) !important;
+  margin: 1em 0 0.25em !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body p {
+  font-size: 10.5pt !important; line-height: 1.68 !important;
+  margin: 0 0 0.55em !important; color: var(--ink) !important;
+  text-align: justify !important; hyphens: auto !important;
+}
+.doc-body ul, .doc-body ol {
+  margin: 0.3em 0 0.8em !important; padding-left: 2em !important;
+}
+.doc-body li {
+  font-size: 10.5pt !important; line-height: 1.6 !important;
+  margin-bottom: 0.3em !important; color: var(--ink) !important;
+}
+.doc-body strong, .doc-body b { font-weight: 700 !important; }
+.doc-body em, .doc-body i { font-style: italic !important; }
+
+/* Tables */
+.doc-body table {
+  width: 100% !important; border-collapse: collapse !important;
+  margin: 1.2em 0 !important; font-size: 10pt !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+.doc-body thead tr {
+  background: var(--navy) !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+}
+.doc-body thead th {
+  font-family: 'Lato', sans-serif !important;
+  font-size: 8pt !important; font-weight: 700 !important;
+  letter-spacing: 0.08em !important; text-transform: uppercase !important;
+  color: var(--gold-light) !important; padding: 9px 12px !important;
+  text-align: left !important; border: none !important;
+}
+.doc-body tbody tr:nth-child(even) {
+  background: var(--paper-tint) !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+}
+.doc-body tbody td {
+  padding: 8px 12px !important; vertical-align: top !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  color: var(--ink) !important; font-size: 10pt !important; line-height: 1.5 !important;
+}
+
+/* Callouts */
+.doc-body .card, .doc-body .callout, .doc-body .info-box,
+.doc-body .alert-box, .doc-body .note-box, .doc-body blockquote {
+  border: none !important;
+  border-left: 3px solid var(--gold) !important;
+  padding: 10px 16px 10px 18px !important;
+  margin: 1em 0 !important;
+  background: rgba(184,150,62,0.04) !important;
+  font-style: italic !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+
+/* Images */
+.doc-body img {
+  max-width: 88% !important; height: auto !important;
+  margin: 1.2em auto !important; display: block !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+
+/* ── MASTHEAD / FOOTER ── */
+.doc-colophon {
+  background: var(--navy);
+  padding: 14px 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 3px solid;
+  border-image: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark)) 1;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.doc-colophon span {
+  font-family: 'Lato', sans-serif;
+  font-size: 7pt; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(212,175,92,0.4);
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: white !important; padding: 0 !important; margin: 0 !important; }
+  .doc-page { box-shadow: none !important; max-width: none !important; margin: 0 !important; }
+  .print-bar { display: none !important; }
+  /* On print, remove all extra padding — @page margins handle spacing */
+  .doc-masthead { padding: 0 0 0 !important; }
+  .doc-masthead-inner { padding-bottom: 16px !important; }
+  .doc-title-section { padding: 24px 0 16px !important; }
+  .doc-body { padding: 20px 0 0 !important; }
+  .doc-colophon { padding: 12px 0 !important; }
+  h1, h2, h3, h4 { page-break-after: avoid !important; break-after: avoid !important; }
+  p, li { orphans: 3; widows: 3; }
+  table, .doc-body .card, .doc-body blockquote {
+    page-break-inside: avoid !important; break-inside: avoid !important;
+  }
+  .doc-masthead, .doc-colophon {
+    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- PRINT BAR (screen only) -->
+<div class="print-bar">
+  <span class="print-bar-label">Ready to export: <strong>${cleanTitle}</strong></span>
+  <div class="print-bar-actions">
+    <button class="btn-print" onclick="window.print()">⬇ Save as PDF</button>
+    <button class="btn-close" onclick="window.close()">Close</button>
+  </div>
+</div>
+
+<div class="doc-page">
+
+  <!-- MASTHEAD -->
+  <div class="doc-masthead">
+    <div class="doc-masthead-inner">
+      ${logoB64 ? `<img class="doc-seal" src="data:image/png;base64,${logoB64}" alt="ACNHS">` : ''}
+      <div class="doc-inst">
+        <p class="doc-inst-name">Armenian College of Nursing &amp; Health Sciences</p>
+        <p class="doc-inst-sub">Yerevan, Armenia &nbsp;·&nbsp; Est. 2026</p>
+      </div>
+      <div class="doc-meta">
+        <span class="doc-meta-lbl">Issued</span>
+        <span class="doc-meta-val">${exportDate}</span>
+        <span class="doc-meta-lbl">Department</span>
+        <span class="doc-meta-val">${topic.title}</span>
+      </div>
+    </div>
+    <div class="doc-masthead-rule"></div>
+  </div>
+
+  <!-- TITLE -->
+  <div class="doc-title-section">
+    <div class="doc-category-pill">Academic Study Material</div>
+    <h1 class="doc-main-title">${cleanTitle}</h1>
+    <hr class="doc-title-rule">
+    <p class="doc-legal-notice">This document is the exclusive property of the Armenian College of Nursing &amp; Health Sciences. Unauthorized use, reproduction, or distribution of this material — in whole or in part — may result in legal action.</p>
+  </div>
+
+  <!-- BODY -->
+  <div class="doc-body">
+    ${bodyContent}
+  </div>
+
+  <!-- COLOPHON -->
+  <div class="doc-colophon">
+    <span>Armenian College of Nursing &amp; Health Sciences &nbsp;·&nbsp; ${topic.title}</span>
+    <span>© ${new Date().getFullYear()} — Confidential</span>
+  </div>
+
+</div>
+
+</body>
+</html>`;
+
+      printWin.document.open();
+      printWin.document.write(printHtml);
+      printWin.document.close();
+
+      printWin.onload = () => { setTimeout(() => { printWin.focus(); printWin.print(); }, 1400); };
+    }).catch(err => {
+      printWin.document.body.innerHTML = '<h2>Failed to generate document.</h2>';
+    });
+  }
+function exportAllToPdf(topicId) {
+    const topic = topics.find(t => t.id === topicId);
+    if (!topic) return;
+
+    const docs = (topic.notes || []).filter(d => d.htmlFile);
+    if (docs.length === 0) {
+      alert('No printable documents found in this topic.');
+      return;
+    }
+
+    if (window.location.protocol === 'file:') {
+      alert('Your browser blocks exporting PDFs directly from file:// URLs.\nPlease start the local server (e.g., python3 start-server.py) and try again.');
+      return;
+    }
+
+    const printWin = window.open('', '_blank');
+    if (!printWin) {
+      alert('Popup was blocked. Please allow popups for this site and try again.');
+      return;
+    }
+    
+    printWin.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Preparing PDF — ${topic.title}</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #020a18; color: #f0ece3; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+  .spinner { width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-left-color: #c9a84c; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
+</style></head>
+<body>
+  <div class="spinner"></div>
+  <h2>Reformatting ${docs.length} documents...</h2>
+  <p style="color:#8a9ec0;">Extracting text and compiling official PDF layout.</p>
+</body></html>`);
+    printWin.document.close();
+
+    const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
+    function fetchAndClean(htmlFile) {
+      const url = baseUrl + htmlFile;
+      const slash = htmlFile.lastIndexOf('/');
+      const fileDir = slash !== -1 ? htmlFile.substring(0, slash + 1) : '';
+      const absBase = baseUrl + fileDir;
+
+      return fetch(url, { cache: 'no-store' })
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+        .then(raw => {
+          // Ruthlessly strip all web styles and scripts
+          raw = raw.replace(/<script[\s\S]*?<\/script>/gi, '');
+          raw = raw.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+          raw = raw.replace(/<link[^>]+rel=["']stylesheet["'][^>]*>/gi, '');
+
+          // Resolve absolute URLs for images
+          raw = raw.replace(/(src|href)=["'](?!https?:|data:|#|\/\/)([^"']+)["']/gi, (m, attr, val) => `${attr}="${absBase}${val}"`);
+
+          const bodyMatch = raw.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+          let body = bodyMatch ? bodyMatch[1] : raw;
+          
+          // Strip web structure UI components
+          body = body.replace(/<header[^>]*class="[^"]*site-header[^"]*"[^>]*>[\s\S]*?<\/header>/gi, '');
+          body = body.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '');
+          body = body.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '');
+          body = body.replace(/<div(?:[^>]*class="[^"]*(?:watermark|copy-block|context-block|nav-back|fab|sidebar|topbar)[^"]*")[^>]*>[\s\S]*?<\/div>/gi, '');
+          
+          // Attempt to extract only the core content wrapper
+          const mainMatch = body.match(/<main[^>]*>([\s\S]*?)<\/main>/i);
+          if (mainMatch) body = mainMatch[1];
+          else {
+              const wrapMatch = body.match(/<div[^>]*class="[^"]*page-wrap[^"]*"[^>]*>([\s\S]*?)<\/div>\s*$/i);
+              if (wrapMatch) body = wrapMatch[1];
+          }
+
+          // Forcefully remove inline styles to prevent dark UI or padding overwrites
+          body = body.replace(/ style="[^"]*"/gi, '');
+          // Remove SVGs which are usually icons/buttons not meant for text documents
+          body = body.replace(/<svg[\s\S]*?<\/svg>/gi, '');
+          // Remove images with placeholder/broken base64 data URLs
+          body = body.replace(/<img[^>]+src=["']data:image\/[^"']*PLACEHOLDER[^"']*["'][^>]*\/?>/gi, '');
+          // Remove any remaining data: URL images (placeholder diagrams, etc.)
+          body = body.replace(/<img[^>]+src=["']data:[^"']{0,200}["'][^>]*\/?>/gi, '');
+          // Collapse 3+ consecutive <br> into one
+          body = body.replace(/(<br\s*\/?>\s*){3,}/gi, '<br>');
+          // Collapse 3+ consecutive empty <p></p> into one
+          body = body.replace(/(<p[^>]*>\s*<\/p>\s*){3,}/gi, '');
+          // Strip empty divs/sections that only create whitespace
+          body = body.replace(/<(div|section|article)[^>]*>\s*<\/\1>/gi, '');
+
+          return body;
+        });
+    }
+
+    const fetchPromises = docs.map(doc => fetchAndClean(doc.htmlFile).catch(() => `<p style="color:#888;font-style:italic;">⚠️ Could not load: ${doc.title}</p>`));
+
+    Promise.all(fetchPromises).then(bodies => {
+      const exportDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const logoB64 = (typeof ACNHS_LOGO_BASE64 !== 'undefined') ? ACNHS_LOGO_BASE64 : '';
+
+      /* ── TABLE OF CONTENTS (page numbers filled in after render) ── */
+      const tocRows = docs.map((d, i) => {
+        const t = d.title.replace(/\s*-\s*NCLEX.*/i, '').replace(/\s*\(Fundamentals\)$/i, '').trim();
+        return `
+        <tr class="toc-row">
+          <td class="toc-num">${String(i + 1).padStart(2, '0')}</td>
+          <td class="toc-title">${t}</td>
+          <td class="toc-dots"></td>
+          <td class="toc-page" id="toc-pg-${i}">—</td>
+        </tr>`;
+      }).join('');
+
+      /* ── DOCUMENT SECTIONS ── */
+      const noteSections = bodies.map((bodyContent, i) => {
+        const t = docs[i].title.replace(/\s*-\s*NCLEX.*/i, '').replace(/\s*\(Fundamentals\)$/i, '').trim();
+        return `
+<div class="doc-card" style="margin-top:0;" id="sec-card-${i}">
+  <div class="sec-header">
+    <div class="sec-header-inner">
+      ${logoB64 ? `<img class="sec-seal" src="data:image/png;base64,${logoB64}" alt="ACNHS">` : ''}
+      <div>
+        <span class="sec-dept">${topic.title}</span>
+        <span class="sec-index">Section ${String(i + 1).padStart(2, '0')} of ${String(docs.length).padStart(2, '0')}</span>
+      </div>
+    </div>
+    <div class="sec-header-rule"></div>
+  </div>
+  <div class="sec-title-block">
+    <div class="sec-pill">Study Material</div>
+    <h1 class="sec-main-title">${t}</h1>
+    <hr class="sec-rule">
+  </div>
+  <div class="doc-body">${bodyContent}</div>
+  <div class="doc-colophon">
+    <span>Armenian College of Nursing &amp; Health Sciences &nbsp;·&nbsp; ${topic.title}</span>
+    <span>© ${new Date().getFullYear()} — Confidential</span>
+  </div>
+</div>`;
+      }).join('\n');
+
+      const printHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>${topic.title} — ACNHS Academic Compendium</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Lato:wght@300;400;700;900&display=swap');
+
+:root {
+  --gold:        #b8963e;
+  --gold-light:  #d4af5c;
+  --gold-dark:   #8a6e28;
+  --navy:        #0f1f3d;
+  --navy-mid:    #1a2f52;
+  --ink:         #1c1c2e;
+  --ink-mid:     #2d2d44;
+  --ink-light:   #5a5a78;
+  --rule:        #c8b87a;
+  --paper:       #fdfcf8;
+  --paper-tint:  #f7f4ec;
+  --border-soft: #e0d8c4;
+}
+
+@page {
+  size: letter;
+  margin: 1in 0.9in 0.85in 0.9in;
+  @bottom-center {
+    content: counter(page);
+    font-family: 'Lato', sans-serif;
+    font-size: 8pt;
+    color: #8a7a5a;
+    letter-spacing: 0.12em;
+  }
+}
+@page :first {
+  @bottom-center { content: none; }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background: #ccc9be;
+  margin: 0;
+  padding: 0;
+  font-family: 'EB Garamond', Georgia, serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── PRINT BAR (screen only) ── */
+.print-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--navy);
+  border-top: 3px solid;
+  border-image: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark)) 1;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 40px; z-index: 9999;
+  box-shadow: 0 -3px 20px rgba(0,0,0,0.3);
+}
+.print-bar-label {
+  font-family: 'Lato', sans-serif;
+  font-size: 8.5pt; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(212,175,92,0.55);
+}
+.print-bar-label strong { color: var(--gold-light); font-weight: 700; }
+.print-bar-actions { display: flex; gap: 10px; }
+.btn-print {
+  font-family: 'Lato', sans-serif; font-size: 9pt; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 26px; border: none; cursor: pointer;
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold-light));
+  color: var(--navy);
+}
+.btn-print:hover { opacity: 0.88; }
+.btn-close {
+  font-family: 'Lato', sans-serif; font-size: 9pt;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 20px; border: 1px solid rgba(212,175,92,0.25);
+  cursor: pointer; background: transparent; color: rgba(212,175,92,0.6);
+}
+
+/* ── SHARED PAPER CARD ── */
+.doc-card {
+  background: var(--paper);
+  max-width: 8.5in;
+  margin: 28px auto 0;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12), 0 12px 40px rgba(0,0,0,0.14);
+}
+
+/* ── MASTHEAD ── */
+.doc-masthead {
+  background: var(--navy);
+  padding: 28px 52px 0;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.doc-masthead-inner {
+  display: flex; align-items: center; gap: 22px;
+  padding-bottom: 22px;
+}
+.doc-masthead-rule {
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark));
+}
+.doc-seal { width: 56px; height: 56px; flex-shrink: 0; opacity: 0.92; }
+.doc-inst { flex: 1; }
+.doc-inst-name {
+  font-family: 'Lato', sans-serif; font-size: 8.5pt; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--gold-light); margin: 0 0 3px;
+}
+.doc-inst-sub {
+  font-family: 'Lato', sans-serif; font-size: 7pt;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: rgba(212,175,92,0.4); margin: 0;
+}
+.doc-meta { text-align: right; font-family: 'Lato', sans-serif; }
+.doc-meta-lbl {
+  font-size: 6.5pt; letter-spacing: 0.16em; text-transform: uppercase;
+  color: rgba(212,175,92,0.38); display: block; margin-bottom: 2px;
+}
+.doc-meta-val {
+  font-size: 7.5pt; color: rgba(212,175,92,0.65);
+  display: block; margin-bottom: 6px;
+}
+
+/* ── COVER BODY ── */
+.cover-body {
+  padding: 44px 52px 36px;
+}
+.cover-label {
+  font-family: 'Lato', sans-serif; font-size: 7.5pt; font-weight: 700;
+  letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold-dark);
+  display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+}
+.cover-label::after { content: ''; flex: 1; height: 1px; background: var(--border-soft); }
+.cover-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 38pt; font-weight: 600; color: var(--navy);
+  line-height: 1.1; margin: 0 0 18px; letter-spacing: -0.02em;
+}
+.cover-rule {
+  width: 56px; height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border: none; margin: 0 0 20px;
+}
+.cover-legal {
+  font-family: 'Lato', sans-serif; font-size: 7pt; color: var(--ink-light);
+  letter-spacing: 0.03em; line-height: 1.5;
+  border-left: 2px solid var(--border-soft); padding: 5px 0 5px 10px;
+}
+
+/* ── TABLE OF CONTENTS ── */
+.toc-section { padding: 0 52px 36px; }
+.toc-heading {
+  font-family: 'Lato', sans-serif; font-size: 7.5pt; font-weight: 700;
+  letter-spacing: 0.24em; text-transform: uppercase; color: var(--gold-dark);
+  margin: 0 0 16px; padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.toc-table { width: 100%; border-collapse: collapse; }
+.toc-row td {
+  padding: 9px 0; border-bottom: 1px solid var(--border-soft);
+  vertical-align: middle;
+}
+.toc-num {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 16pt; font-weight: 400; color: var(--gold); width: 44px; line-height: 1;
+}
+.toc-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 12pt; color: var(--ink); padding-left: 10px !important;
+}
+.toc-dots {
+  background-image: radial-gradient(circle, var(--border-soft) 1.5px, transparent 1.5px);
+  background-size: 8px 1px;
+  background-repeat: repeat-x;
+  background-position: center;
+  min-width: 40px;
+}
+.toc-page {
+  font-family: 'Lato', sans-serif; font-size: 8pt; font-weight: 700;
+  color: var(--gold-dark); text-align: right; white-space: nowrap;
+  width: 32px; padding-left: 8px !important;
+}
+
+/* ── COLOPHON (footer band) ── */
+.doc-colophon {
+  background: var(--navy); padding: 13px 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-top: 3px solid;
+  border-image: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark)) 1;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.doc-colophon span {
+  font-family: 'Lato', sans-serif; font-size: 7pt;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(212,175,92,0.38);
+}
+
+/* ── SECTION HEADER (per-document) ── */
+.sec-header {
+  background: var(--navy); padding: 20px 52px 0;
+  page-break-before: always; break-before: page;
+  -webkit-print-color-adjust: exact; print-color-adjust: exact;
+}
+.sec-header-inner {
+  display: flex; align-items: center; gap: 16px; padding-bottom: 16px;
+}
+.sec-seal { width: 36px; height: 36px; opacity: 0.85; flex-shrink: 0; }
+.sec-dept {
+  font-family: 'Lato', sans-serif; font-size: 7.5pt; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold-light);
+  display: block;
+}
+.sec-index {
+  font-family: 'Lato', sans-serif; font-size: 6.5pt;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(212,175,92,0.35); display: block;
+}
+.sec-header-rule {
+  height: 3px;
+  background: linear-gradient(90deg, var(--gold-dark), var(--gold-light), var(--gold-dark));
+}
+
+/* ── SECTION TITLE ── */
+.sec-title-block {
+  padding: 24px 52px 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.sec-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Lato', sans-serif; font-size: 7pt; font-weight: 700;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-dark);
+  border: 1px solid rgba(184,150,62,0.35); padding: 3px 10px;
+  margin-bottom: 12px; background: rgba(184,150,62,0.05);
+}
+.sec-pill::before {
+  content: ''; width: 5px; height: 5px;
+  border: 1.5px solid var(--gold); border-radius: 50%; display: inline-block;
+}
+.sec-main-title {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 22pt; font-weight: 600; color: var(--navy);
+  line-height: 1.15; margin: 0 0 12px; letter-spacing: -0.01em;
+  border: none !important; padding: 0 !important;
+}
+.sec-rule {
+  width: 40px; height: 3px;
+  background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  border: none; margin: 0;
+}
+
+/* ── BODY ── */
+.doc-body { padding: 22px 52px 36px; }
+
+.doc-body * {
+  color: var(--ink) !important; background: transparent !important;
+  box-shadow: none !important; text-shadow: none !important;
+  border-radius: 0 !important; position: static !important;
+  float: none !important; min-height: 0 !important; max-width: 100% !important;
+}
+.doc-body a[href^="hub.html"], .doc-body a[href^="notes.html"],
+.doc-body a[href^="Student-page"], .doc-body .nav-back, .doc-body .back-btn,
+.doc-body button, .doc-body .topbar, .doc-body .empty-state,
+.doc-body .watermark, .doc-body .fab, .doc-body [class*="nav-"],
+.doc-body [class*="btn-"], .doc-body [class*="copy-block"],
+.doc-body [class*="site-header"], .doc-body [class*="context-block"] {
+  display: none !important;
+}
+
+/* Typography */
+.doc-body h1 {
+  font-family: 'EB Garamond', Georgia, serif !important;
+  font-size: 17pt !important; font-weight: 600 !important;
+  color: var(--navy) !important; line-height: 1.2 !important;
+  margin: 1.3em 0 0.35em !important; padding-bottom: 5px !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h2 {
+  font-family: 'Lato', sans-serif !important;
+  font-size: 10.5pt !important; font-weight: 700 !important;
+  color: var(--navy-mid) !important; letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  margin: 1.1em 0 0.3em !important; padding-bottom: 4px !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h3 {
+  font-family: 'EB Garamond', Georgia, serif !important;
+  font-size: 13pt !important; font-weight: 600 !important;
+  font-style: italic !important; color: var(--ink-mid) !important;
+  margin: 1em 0 0.3em !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body h4 {
+  font-family: 'Lato', sans-serif !important;
+  font-size: 8.5pt !important; font-weight: 700 !important;
+  letter-spacing: 0.14em !important; text-transform: uppercase !important;
+  color: var(--gold-dark) !important; margin: 0.9em 0 0.25em !important;
+  page-break-after: avoid !important; break-after: avoid !important;
+}
+.doc-body p {
+  font-size: 10.5pt !important; line-height: 1.68 !important;
+  margin: 0 0 0.5em !important; text-align: justify !important; hyphens: auto !important;
+}
+.doc-body ul, .doc-body ol { margin: 0.3em 0 0.8em !important; padding-left: 2em !important; }
+.doc-body li { font-size: 10.5pt !important; line-height: 1.6 !important; margin-bottom: 0.28em !important; }
+.doc-body strong, .doc-body b { font-weight: 700 !important; }
+.doc-body em, .doc-body i { font-style: italic !important; }
+
+/* Tables */
+.doc-body table {
+  width: 100% !important; border-collapse: collapse !important;
+  margin: 1em 0 !important; font-size: 10pt !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+.doc-body thead tr {
+  background: var(--navy) !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+}
+.doc-body thead th {
+  font-family: 'Lato', sans-serif !important; font-size: 7.5pt !important;
+  font-weight: 700 !important; letter-spacing: 0.08em !important;
+  text-transform: uppercase !important; color: var(--gold-light) !important;
+  padding: 8px 11px !important; text-align: left !important; border: none !important;
+}
+.doc-body tbody tr:nth-child(even) {
+  background: var(--paper-tint) !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+}
+.doc-body tbody td {
+  padding: 7px 11px !important; vertical-align: top !important;
+  border-bottom: 1px solid var(--border-soft) !important;
+  font-size: 10pt !important; line-height: 1.5 !important;
+}
+
+/* Callouts */
+.doc-body .card, .doc-body .callout, .doc-body .info-box,
+.doc-body .alert-box, .doc-body .note-box, .doc-body blockquote {
+  border: none !important; border-left: 3px solid var(--gold) !important;
+  padding: 9px 14px 9px 16px !important; margin: 0.9em 0 !important;
+  background: rgba(184,150,62,0.04) !important; font-style: italic !important;
+  -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+.doc-body img {
+  max-width: 88% !important; height: auto !important;
+  margin: 1em auto !important; display: block !important;
+  page-break-inside: avoid !important; break-inside: avoid !important;
+}
+
+/* ── PRINT ── */
+@media print {
+  body { background: white !important; padding: 0 !important; }
+  .doc-card { box-shadow: none !important; max-width: none !important; margin: 0 !important; }
+  .print-bar { display: none !important; }
+  .doc-masthead { padding: 0 0 0 !important; }
+  .doc-masthead-inner { padding-bottom: 14px !important; }
+  .cover-body { padding: 36px 0 28px !important; }
+  .toc-section { padding: 0 0 28px !important; }
+  .sec-header { padding: 18px 0 0 !important; }
+  .sec-title-block { padding: 20px 0 14px !important; }
+  .doc-body { padding: 18px 0 0 !important; }
+  .doc-colophon { padding: 11px 0 !important; }
+  h1, h2, h3, h4 { page-break-after: avoid !important; break-after: avoid !important; }
+  p, li { orphans: 3; widows: 3; }
+  table, .doc-body .card, .doc-body blockquote {
+    page-break-inside: avoid !important; break-inside: avoid !important;
+  }
+  .doc-masthead, .sec-header, .doc-colophon {
+    -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="print-bar">
+  <span class="print-bar-label">Ready to export: <strong>${topic.title}</strong> &nbsp;·&nbsp; ${docs.length} sections</span>
+  <div class="print-bar-actions">
+    <button class="btn-print" onclick="window.print()">⬇ Save as PDF</button>
+    <button class="btn-close" onclick="window.close()">Close</button>
+  </div>
+</div>
+
+<!-- ── COVER ── -->
+<div class="doc-card">
+  <div class="doc-masthead">
+    <div class="doc-masthead-inner">
+      ${logoB64 ? `<img class="doc-seal" src="data:image/png;base64,${logoB64}" alt="ACNHS">` : ''}
+      <div class="doc-inst">
+        <p class="doc-inst-name">Armenian College of Nursing &amp; Health Sciences</p>
+        <p class="doc-inst-sub">Yerevan, Armenia &nbsp;·&nbsp; Est. 2026</p>
+      </div>
+      <div class="doc-meta">
+        <span class="doc-meta-lbl">Issued</span>
+        <span class="doc-meta-val">${exportDate}</span>
+      </div>
+    </div>
+    <div class="doc-masthead-rule"></div>
+  </div>
+
+  <div class="cover-body">
+    <div class="cover-label">Academic Compendium</div>
+    <h1 class="cover-title">${topic.title}</h1>
+    <hr class="cover-rule">
+    <p class="cover-legal">This document is the exclusive property of the Armenian College of Nursing &amp; Health Sciences. Unauthorized use, reproduction, or distribution of this material — in whole or in part — may result in legal action.</p>
+  </div>
+
+  <div class="toc-section">
+    <p class="toc-heading">Table of Contents</p>
+    <table class="toc-table">${tocRows}</table>
+  </div>
+
+  <div class="doc-colophon">
+    <span>Armenian College of Nursing &amp; Health Sciences &nbsp;·&nbsp; ${topic.title}</span>
+    <span>© ${new Date().getFullYear()} — Confidential</span>
+  </div>
+</div>
+
+<!-- ── SECTIONS ── -->
+${noteSections}
+
+</body>
+</html>`;
+      printWin.document.open();
+      printWin.document.write(printHtml);
+      printWin.document.close();
+
+      printWin.onload = () => {
+        // ── Calculate real page numbers from rendered element positions ──
+        // Letter: 11in - 1in top margin - 0.85in bottom = 9.15in @ 96dpi = ~879px per printed page
+        const PAGE_H_PX = 879;
+
+        // Helper: get absolute offsetTop of an element within its document
+        function absTop(el) {
+          let t = 0;
+          while (el) { t += el.offsetTop || 0; el = el.offsetParent; }
+          return t;
+        }
+
+        for (let i = 0; i < docs.length; i++) {
+          const card = printWin.document.getElementById('sec-card-' + i);
+          const tocCell = printWin.document.getElementById('toc-pg-' + i);
+          if (card && tocCell) {
+            const pageNum = Math.floor(absTop(card) / PAGE_H_PX) + 1;
+            tocCell.textContent = pageNum;
+          }
+        }
+        setTimeout(() => { printWin.focus(); printWin.print(); }, 800);
+      };
+    });
   }
 
   function openAddModal() {
