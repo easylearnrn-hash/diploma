@@ -391,6 +391,51 @@
       margin: 6px 4px;
     }
 
+    /* ── Spam folder accent ── */
+    .folder-item[data-folder="spam"] .folder-item-icon { color: #f97316; }
+    .folder-item[data-folder="spam"].active .folder-item-icon { color: #fb923c; }
+    .folder-item[data-folder="spam"] .folder-item-count {
+      background: rgba(249,115,22,0.18);
+      color: #fb923c;
+    }
+
+    /* ── Mark-as-Spam button ── */
+    .btn-spam {
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 12px;
+      background: rgba(249,115,22,0.08);
+      color: #f97316;
+      border: 1px solid rgba(249,115,22,0.3);
+      border-radius: 6px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+    .btn-spam:hover {
+      background: rgba(249,115,22,0.18);
+      border-color: rgba(249,115,22,0.55);
+      color: #fb923c;
+    }
+
+    /* ── Unblock button (shown in spam folder) ── */
+    .btn-unblock {
+      display: flex; align-items: center; gap: 5px;
+      padding: 7px 12px;
+      background: rgba(34,197,94,0.08);
+      color: #22c55e;
+      border: 1px solid rgba(34,197,94,0.3);
+      border-radius: 6px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+    .btn-unblock:hover {
+      background: rgba(34,197,94,0.18);
+      border-color: rgba(34,197,94,0.55);
+    }
+
     /* ── Inbox Sidebar ── */
     .inbox-section {
       width: 380px;
@@ -1454,6 +1499,13 @@
             <span class="folder-item-name">All Mail</span>
             <span class="folder-item-count" id="folderCount-all"></span>
           </div>
+          <div class="folder-item" data-folder="spam" onclick="selectFolder('spam',this)">
+            <span class="folder-item-icon">
+              <svg width="15" height="15" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5"/><path d="M7 7l6 6M13 7l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <span class="folder-item-name">Spam</span>
+            <span class="folder-item-count" id="folderCount-spam"></span>
+          </div>
           <div class="folder-divider"></div>
           <div id="customFolderItems"></div>
         </div>
@@ -2236,6 +2288,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     let currentFilter = 'inbox';
     let activeDomainFilter = null; // null = all domains, otherwise e.g. 'acnhs.am'
     let selectedEmail = null;
+    let spamBlockedList = [];  // array of {id, sender_address} rows from email_spam_blocked
+    let spamSet = new Set();   // lowercase sender addresses that are blocked
 
     // ── Virtual-scroll / pagination state ──────────────────────────────────
     const PAGE_SIZE = 50;          // emails rendered per batch
@@ -2500,6 +2554,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       await Promise.all([
         loadEmailHistory(),
         loadFolders(),
+        loadSpamBlocked(),
         loadProgramsAndStatuses(),
         getCurrentUserInfo() // warm the cache so Send Email is instant
       ]);
@@ -3153,18 +3208,23 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       let filtered = emailHistory;
 
       // ── Folder / tab filter ──────────────────────────────────────────────
-      const SYSTEM = ['inbox', 'sent', 'failed', 'all'];
+      const SYSTEM = ['inbox', 'sent', 'failed', 'all', 'spam'];
       if (!SYSTEM.includes(currentFolder)) {
         // Custom folder: show only emails whose sender matches a rule for this folder
         const rules = folderRules
           .filter(r => r.folder_id === currentFolder)
           .map(r => r.sender_address.toLowerCase());
         filtered = filtered.filter(e => rules.includes((e.sender || '').toLowerCase()));
+      } else if (currentFolder === 'spam') {
+        // Spam: only emails from blocked senders
+        filtered = filtered.filter(e => spamSet.has((e.sender || '').toLowerCase()));
       } else if (currentFolder === 'inbox') {
-        // Inbox: received emails that are NOT claimed by any custom folder
+        // Inbox: received emails NOT in a custom folder AND NOT from a blocked sender
         filtered = filtered.filter(e => {
           if (e.status !== 'received') return false;
-          return !senderMap[(e.sender || '').toLowerCase()];
+          const snd = (e.sender || '').toLowerCase();
+          if (spamSet.has(snd)) return false;
+          return !senderMap[snd];
         });
       } else if (currentFolder === 'sent') {
         filtered = filtered.filter(e => e.status === 'sent');
@@ -4376,7 +4436,17 @@ We're here to support you every step of the way. Welcome to ACNHS!`
               <button class="btn-icon-forward" onclick="forwardEmail('${selectedEmail.id}')" title="Forward" style="background: rgba(201, 168, 76, 0.08); color: #c9a84c; padding: 8px 14px; border: 1px solid rgba(201, 168, 76, 0.3); border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; margin-right: 6px; transition: all 0.2s;">
                 Forward
               </button>
-              <button class="btn-delete" onclick="deleteEmail('${selectedEmail.id}')" title="Delete" style="display:flex;align-items:center;justify-content:center;padding:7px 10px;cursor:pointer;">
+              ${currentFolder === 'spam'
+                ? `<button class="btn-unblock" onclick="unblockSender('${selectedEmail.id}')" title="Unblock sender">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M5 8l2 2 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Not Spam
+                  </button>`
+                : `<button class="btn-spam" onclick="markAsSpam('${selectedEmail.id}')" title="Mark as spam &amp; block sender">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                    Mark as Spam
+                  </button>`
+              }
+              <button class="btn-delete" onclick="deleteEmail('${selectedEmail.id}')" title="Delete" style="display:flex;align-items:center;justify-content:center;padding:7px 10px;cursor:pointer;margin-left:4px;">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
               </button>
             </div>
@@ -4929,6 +4999,86 @@ ${email.body}`;
       }
     }
 
+    // ── Load blocked senders from email_spam_blocked ────────────────────────
+    async function loadSpamBlocked() {
+      try {
+        const { data, error } = await db
+          .from('email_spam_blocked')
+          .select('id, sender_address')
+          .order('blocked_at', { ascending: false });
+        if (error) throw error;
+        spamBlockedList = data || [];
+        spamSet = new Set(spamBlockedList.map(r => r.sender_address.toLowerCase()));
+        updateFolderCounts();
+      } catch (e) {
+        console.error('loadSpamBlocked error:', e);
+      }
+    }
+
+    // ── Mark an email's sender as spam (block + route to spam folder) ────────
+    window.markAsSpam = async function(emailId) {
+      const email = emailHistory.find(e => e.id === emailId);
+      if (!email || !email.sender) return;
+      const snd = email.sender.toLowerCase().trim();
+      if (spamSet.has(snd)) {
+        showNotification(`${snd} is already blocked`, 'info');
+        return;
+      }
+      try {
+        const { error } = await db
+          .from('email_spam_blocked')
+          .insert({ sender_address: snd });
+        if (error && error.code !== '23505') throw error; // 23505 = unique violation (already exists)
+        await loadSpamBlocked();
+        renderEmailList();
+        // Navigate to spam folder so user sees the email there
+        const spamEl = document.querySelector('.folder-item[data-folder="spam"]');
+        selectFolder('spam', spamEl);
+        // Clear detail pane
+        const ds = document.getElementById('detailSection');
+        if (ds) ds.innerHTML = `
+          <div class="detail-empty">
+            <div class="detail-empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="6" y="8" width="36" height="32" rx="3" stroke="rgba(201,168,76,0.35)" stroke-width="2"/><path d="M6 30h9l3 4h12l3-4h9" stroke="rgba(201,168,76,0.35)" stroke-width="2" stroke-linejoin="round"/><path d="M16 19h16M16 24h10" stroke="rgba(201,168,76,0.2)" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+            <h3>Moved to Spam</h3>
+            <p>${escapeHtml(snd)} has been blocked. All emails from this sender are in Spam.</p>
+          </div>`;
+        selectedEmail = null;
+        showNotification(`${snd} blocked — emails moved to Spam`, 'success');
+      } catch (e) {
+        console.error('markAsSpam error:', e);
+        showNotification('Error blocking sender: ' + e.message, 'error');
+      }
+    };
+
+    // ── Unblock a sender from spam ───────────────────────────────────────────
+    window.unblockSender = async function(emailId) {
+      const email = emailHistory.find(e => e.id === emailId);
+      if (!email || !email.sender) return;
+      const snd = email.sender.toLowerCase().trim();
+      const row = spamBlockedList.find(r => r.sender_address.toLowerCase() === snd);
+      if (!row) {
+        showNotification(`${snd} is not blocked`, 'info');
+        return;
+      }
+      try {
+        const { error } = await db
+          .from('email_spam_blocked')
+          .delete()
+          .eq('id', row.id);
+        if (error) throw error;
+        await loadSpamBlocked();
+        renderEmailList();
+        // Navigate back to inbox
+        const inboxEl = document.querySelector('.folder-item[data-folder="inbox"]');
+        selectFolder('inbox', inboxEl);
+        selectedEmail = null;
+        showNotification(`${snd} unblocked — emails restored to Inbox`, 'success');
+      } catch (e) {
+        console.error('unblockSender error:', e);
+        showNotification('Error unblocking sender: ' + e.message, 'error');
+      }
+    };
+
     // ── Collapse / expand the folder nav panel ──────────────────────────────
     let _folderNavCollapsed = true;
     window.toggleFolderNav = function() {
@@ -4987,22 +5137,24 @@ ${email.body}`;
     // ── Update counts on all folder items ───────────────────────────────────
     function updateFolderCounts() {
       const senderMap = getSenderFolderMap();
-      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
 
       // System folders
       const inboxEmails  = emailHistory.filter(e => {
         if (e.status !== 'received') return false;
-        // exclude emails that belong to a custom folder
-        const fid = senderMap[(e.sender||'').toLowerCase()];
-        return !fid;
+        // exclude emails that belong to a custom folder or are spam
+        const snd = (e.sender||'').toLowerCase();
+        if (spamSet.has(snd)) return false;
+        return !senderMap[snd];
       });
       const sentEmails   = emailHistory.filter(e => e.status === 'sent');
       const failedEmails = emailHistory.filter(e => e.status === 'failed');
+      const spamEmails   = emailHistory.filter(e => spamSet.has((e.sender||'').toLowerCase()));
 
       setCount('folderCount-inbox',  inboxEmails.length);
       setCount('folderCount-sent',   sentEmails.length);
       setCount('folderCount-failed', failedEmails.length);
       setCount('folderCount-all',    emailHistory.length);
+      setCount('folderCount-spam',   spamEmails.length);
 
       // Custom folders
       emailFolders.forEach(f => {
@@ -5031,6 +5183,7 @@ ${email.body}`;
         else if (folderId === 'sent')   labelEl.textContent = 'Sent';
         else if (folderId === 'failed') labelEl.textContent = 'Failed';
         else if (folderId === 'all')    labelEl.textContent = 'All Mail';
+        else if (folderId === 'spam')   labelEl.textContent = 'Spam';
         else {
           const f = emailFolders.find(x => x.id === folderId);
           if (f) labelEl.textContent = f.name;
