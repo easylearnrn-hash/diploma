@@ -4359,16 +4359,25 @@ Please include your Student ID in the payment reference or memo to ensure proper
               const formattedAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
               const paymentRecord = `\n\n--- PARTIAL PAYMENT RECORDED ---\nDate: ${new Date().toLocaleDateString()}\nAmount: $${formattedAmount}\nApplied To: ${appliedTo}`;
               const updatedNotes = (invoice?.notes || '') + paymentRecord;
+
+              console.log('💾 Saving payment to invoice ID:', invoiceId);
+              console.log('📝 Updated notes:', updatedNotes);
               
-              const { error: updateError } = await invoiceSupabase
+              const { data: updateData, error: updateError } = await invoiceSupabase
                 .from('invoices')
                 .update({ 
                   status: 'partial',
                   notes: updatedNotes
                 })
-                .eq('id', invoiceId);
+                .eq('id', invoiceId)
+                .select();
+
+              console.log('✅ Update result:', updateData, '❌ Error:', updateError);
 
               if (updateError) throw updateError;
+              if (!updateData || updateData.length === 0) {
+                throw new Error('Update returned no rows — invoice ID may not match or RLS is blocking the update.');
+              }
 
               // Reload list
               const searchTerm = document.getElementById('searchInvoices').value;
