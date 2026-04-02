@@ -1,6 +1,9 @@
 -- ============================================================
 -- Email Folders + Rules
--- Run this in Supabase SQL Editor
+-- PROJECT: eyhksbiceueoiamwnqpr
+-- 
+-- ▶ Run this in Supabase SQL Editor:
+--   https://supabase.com/dashboard/project/eyhksbiceueoiamwnqpr/sql/new
 -- ============================================================
 
 -- 1. Folders table: each row is a named folder (e.g. "Hub", "Billing")
