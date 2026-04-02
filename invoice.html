@@ -4345,52 +4345,60 @@ Please include your Student ID in the payment reference or memo to ensure proper
             }
             
             modal.remove();
-            
-            // Get current invoice to append payment history
-            const { data: invoice } = await invoiceSupabase
-              .from('invoices')
-              .select('notes')
-              .eq('id', invoiceId)
-              .single();
-            
-            const formattedAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            const paymentRecord = `\n\n--- PARTIAL PAYMENT RECORDED ---\nDate: ${new Date().toLocaleDateString()}\nAmount: $${formattedAmount}\nApplied To: ${appliedTo}`;
-            const updatedNotes = (invoice?.notes || '') + paymentRecord;
-            
-            const { error } = await invoiceSupabase
-              .from('invoices')
-              .update({ 
-                status: 'partial',
-                notes: updatedNotes
-              })
-              .eq('id', invoiceId);
 
-            if (error) throw error;
+            try {
+              // Get current invoice to append payment history
+              const { data: invoice, error: fetchError } = await invoiceSupabase
+                .from('invoices')
+                .select('notes')
+                .eq('id', invoiceId)
+                .single();
 
-            // Reload list
-            const searchTerm = document.getElementById('searchInvoices').value;
-            const statusFilter = document.getElementById('filterStatus').value;
-            await loadAllInvoices(searchTerm, statusFilter);
-            
-            // Show success notification
-            const notification = document.createElement('div');
-            notification.style.cssText = `
-              position: fixed;
-              top: 20px;
-              right: 20px;
-              background: rgba(20, 184, 166, 0.95);
-              color: white;
-              padding: 16px 20px;
-              border-radius: 8px;
-              box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-              z-index: 10001;
-              font-size: 14px;
-              font-weight: 600;
-            `;
-            const formattedNotificationAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            notification.innerHTML = `✓ Partial payment recorded<br><small style="font-size: 12px; opacity: 0.9;">$${formattedNotificationAmount} - ${appliedTo}</small>`;
-            document.body.appendChild(notification);
-            setTimeout(() => notification.remove(), 4000);
+              if (fetchError) throw fetchError;
+              
+              const formattedAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const paymentRecord = `\n\n--- PARTIAL PAYMENT RECORDED ---\nDate: ${new Date().toLocaleDateString()}\nAmount: $${formattedAmount}\nApplied To: ${appliedTo}`;
+              const updatedNotes = (invoice?.notes || '') + paymentRecord;
+              
+              const { error: updateError } = await invoiceSupabase
+                .from('invoices')
+                .update({ 
+                  status: 'partial',
+                  notes: updatedNotes
+                })
+                .eq('id', invoiceId);
+
+              if (updateError) throw updateError;
+
+              // Reload list
+              const searchTerm = document.getElementById('searchInvoices').value;
+              const statusFilter = document.getElementById('filterStatus').value;
+              await loadAllInvoices(searchTerm, statusFilter);
+              
+              // Show success notification
+              const notification = document.createElement('div');
+              notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: rgba(20, 184, 166, 0.95);
+                color: white;
+                padding: 16px 20px;
+                border-radius: 8px;
+                box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                z-index: 10001;
+                font-size: 14px;
+                font-weight: 600;
+              `;
+              const formattedNotificationAmount = parseFloat(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              notification.innerHTML = `✓ Partial payment recorded<br><small style="font-size: 12px; opacity: 0.9;">$${formattedNotificationAmount} - ${appliedTo}</small>`;
+              document.body.appendChild(notification);
+              setTimeout(() => notification.remove(), 4000);
+
+            } catch (err) {
+              console.error('❌ Payment save error:', err);
+              showNotification(`Failed to save payment: ${err.message || 'Unknown error'}`, 'error');
+            }
           };
           
           document.getElementById('confirmPartialPayment').onclick = recordPayment;
