@@ -215,6 +215,129 @@
       height: calc(100vh - 68px);
     }
 
+    /* ══════════════════════════════════════════
+       FOLDER NAV PANEL (left of inbox list)
+    ══════════════════════════════════════════ */
+    .folder-nav {
+      width: 190px;
+      min-width: 190px;
+      background: rgba(2, 6, 23, 0.65);
+      border-right: 1px solid rgba(201, 168, 76, 0.10);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .folder-nav-header {
+      padding: 14px 14px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .folder-nav-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(201,168,76,0.7);
+    }
+
+    .folder-add-btn {
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: 1px solid rgba(201,168,76,0.4);
+      background: transparent;
+      color: #c9a84c;
+      font-size: 16px;
+      line-height: 1;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.18s;
+    }
+    .folder-add-btn:hover {
+      background: rgba(201,168,76,0.15);
+      border-color: #c9a84c;
+    }
+
+    .folder-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .folder-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+      position: relative;
+      user-select: none;
+    }
+    .folder-item:hover { background: rgba(255,255,255,0.05); }
+    .folder-item.active { background: rgba(201,168,76,0.12); }
+
+    .folder-item-icon { font-size: 15px; flex-shrink: 0; }
+
+    .folder-item-name {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .folder-item.active .folder-item-name { color: #f8fafc; font-weight: 600; }
+
+    .folder-item-count {
+      font-size: 10px;
+      font-weight: 700;
+      color: rgba(201,168,76,0.8);
+      background: rgba(201,168,76,0.12);
+      border-radius: 10px;
+      padding: 1px 6px;
+      min-width: 20px;
+      text-align: center;
+    }
+
+    .folder-item-actions {
+      display: none;
+      gap: 3px;
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .folder-item:hover .folder-item-actions { display: flex; }
+
+    .folder-action-btn {
+      width: 20px; height: 20px;
+      border: none;
+      border-radius: 4px;
+      background: rgba(255,255,255,0.07);
+      color: #94a3b8;
+      font-size: 11px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s;
+    }
+    .folder-action-btn:hover { background: rgba(255,255,255,0.14); color: #f8fafc; }
+    .folder-action-btn.delete-btn:hover { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+    .folder-divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 6px 4px;
+    }
+
     /* ── Inbox Sidebar ── */
     .inbox-section {
       width: 380px;
@@ -1235,14 +1358,46 @@
 
     <!-- Main Container -->
     <div class="email-container">
+
+      <!-- ══ FOLDER NAV ══ -->
+      <div class="folder-nav" id="folderNav">
+        <div class="folder-nav-header">
+          <span class="folder-nav-title">Folders</span>
+          <button class="folder-add-btn" onclick="openFolderModal()" title="New folder">+</button>
+        </div>
+        <div class="folder-list" id="folderList">
+          <!-- Built-in system folders -->
+          <div class="folder-item active" data-folder="inbox" onclick="selectFolder('inbox',this)">
+            <span class="folder-item-icon">📥</span>
+            <span class="folder-item-name">Inbox</span>
+            <span class="folder-item-count" id="folderCount-inbox">0</span>
+          </div>
+          <div class="folder-item" data-folder="sent" onclick="selectFolder('sent',this)">
+            <span class="folder-item-icon">📤</span>
+            <span class="folder-item-name">Sent</span>
+            <span class="folder-item-count" id="folderCount-sent">0</span>
+          </div>
+          <div class="folder-item" data-folder="failed" onclick="selectFolder('failed',this)">
+            <span class="folder-item-icon">❌</span>
+            <span class="folder-item-name">Failed</span>
+            <span class="folder-item-count" id="folderCount-failed">0</span>
+          </div>
+          <div class="folder-item" data-folder="all" onclick="selectFolder('all',this)">
+            <span class="folder-item-icon">📋</span>
+            <span class="folder-item-name">All Mail</span>
+            <span class="folder-item-count" id="folderCount-all">0</span>
+          </div>
+          <div class="folder-divider"></div>
+          <!-- Custom folders rendered here by renderFolderNav() -->
+          <div id="customFolderItems"></div>
+        </div>
+      </div>
+
       <!-- Inbox List -->
       <div class="inbox-section">
         <div class="inbox-header">
-          <div class="inbox-tabs">
-            <button class="tab-btn active" data-tab="inbox">Inbox</button>
-            <button class="tab-btn" data-tab="sent">Sent</button>
-            <button class="tab-btn" data-tab="failed">Failed</button>
-            <button class="tab-btn" data-tab="all">All</button>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+            <span id="activeFolderLabel" style="font-size:14px; font-weight:700; color:#f8fafc;">📥 Inbox</span>
           </div>
           <div class="inbox-search">
             <input type="text" class="search-input" placeholder="🔍 Search emails..." id="searchInput">
@@ -2277,6 +2432,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // ── Fire all independent network requests in parallel ─────────────────
       await Promise.all([
         loadEmailHistory(),
+        loadFolders(),
         loadProgramsAndStatuses(),
         getCurrentUserInfo() // warm the cache so Send Email is instant
       ]);
@@ -2314,16 +2470,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     });
 
     function setupEventListeners() {
-      // Tab switching
-      document.querySelectorAll('.tab-btn').forEach(btn => {
-        btn.addEventListener('click', function() {
-          document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-          this.classList.add('active');
-          currentFilter = this.dataset.tab;
-          renderEmailList();
-        });
-      });
-
       // Search — debounced so we don't re-render on every keystroke
       document.getElementById('searchInput').addEventListener('input', () => {
         clearTimeout(_searchDebounceTimer);
@@ -2859,6 +3005,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         
         renderEmailList();
         updateBadge();
+        updateFolderCounts();
       } catch (error) {
         console.error('Error loading email history:', error);
         showNotification('Error loading emails', 'error');
@@ -2936,16 +3083,29 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
     // ── Build the filtered array (no DOM work) ─────────────────────────────
     function buildFilteredCache(searchTerm) {
+      const senderMap = getSenderFolderMap();
       let filtered = emailHistory;
 
-      // Tab filter
-      if (currentFilter === 'inbox') {
-        filtered = filtered.filter(e => e.status === 'received');
-      } else if (currentFilter === 'sent') {
+      // ── Folder / tab filter ──────────────────────────────────────────────
+      const SYSTEM = ['inbox', 'sent', 'failed', 'all'];
+      if (!SYSTEM.includes(currentFolder)) {
+        // Custom folder: show only emails whose sender matches a rule for this folder
+        const rules = folderRules
+          .filter(r => r.folder_id === currentFolder)
+          .map(r => r.sender_address.toLowerCase());
+        filtered = filtered.filter(e => rules.includes((e.sender || '').toLowerCase()));
+      } else if (currentFolder === 'inbox') {
+        // Inbox: received emails that are NOT claimed by any custom folder
+        filtered = filtered.filter(e => {
+          if (e.status !== 'received') return false;
+          return !senderMap[(e.sender || '').toLowerCase()];
+        });
+      } else if (currentFolder === 'sent') {
         filtered = filtered.filter(e => e.status === 'sent');
-      } else if (currentFilter === 'failed') {
+      } else if (currentFolder === 'failed') {
         filtered = filtered.filter(e => e.status === 'failed');
       }
+      // 'all' — no filter
 
       // Domain filter
       if (activeDomainFilter) {
@@ -4663,25 +4823,346 @@ ${email.body}`;
         checkbox.checked = false;
         checkbox.indeterminate = false;
       } else {
-        // Get currently filtered emails count
-        let filtered = [...emailHistory];
-        if (currentFilter === 'inbox') {
-          filtered = filtered.filter(e => e.status === 'received');
-        } else if (currentFilter === 'sent') {
-          filtered = filtered.filter(e => e.status === 'sent');
-        } else if (currentFilter === 'failed') {
-          filtered = filtered.filter(e => e.status === 'failed');
-        }
-        
-        if (count === filtered.length && filtered.length > 0) {
+        // Use filteredCache which is already computed by the last renderEmailList call
+        const total = filteredCache.length;
+        if (count === total && total > 0) {
           checkbox.checked = true;
           checkbox.indeterminate = false;
         } else {
           checkbox.checked = false;
-          checkbox.indeterminate = true;
+          checkbox.indeterminate = count > 0;
         }
       }
     }
+
+    // ══════════════════════════════════════════════════════════════
+    //  FOLDER SYSTEM
+    // ══════════════════════════════════════════════════════════════
+
+    let emailFolders   = [];   // [{id, name, icon, color, sort_order}]
+    let folderRules    = [];   // [{id, folder_id, sender_address}]
+    let currentFolder  = 'inbox'; // 'inbox'|'sent'|'failed'|'all'|<uuid>
+    let _editingFolderId = null;  // uuid while editing, null when creating
+    let _deletingFolderId = null;
+
+    // ── Supabase: load all folders + rules ──────────────────────────────────
+    async function loadFolders() {
+      try {
+        const [fRes, rRes] = await Promise.all([
+          db.from('email_folders').select('*').order('sort_order'),
+          db.from('email_folder_rules').select('*')
+        ]);
+        if (fRes.error) throw fRes.error;
+        if (rRes.error) throw rRes.error;
+        emailFolders = fRes.data || [];
+        folderRules  = rRes.data || [];
+        renderFolderNav();
+        updateFolderCounts();
+      } catch (e) {
+        console.error('loadFolders error:', e);
+      }
+    }
+
+    // ── Build sender → folder_id lookup (for filtering) ────────────────────
+    function getSenderFolderMap() {
+      const map = {};
+      folderRules.forEach(r => { map[r.sender_address.toLowerCase()] = r.folder_id; });
+      return map;
+    }
+
+    // ── Render custom folder items in the nav panel ─────────────────────────
+    function renderFolderNav() {
+      const container = document.getElementById('customFolderItems');
+      if (!container) return;
+      if (emailFolders.length === 0) {
+        container.innerHTML = '<div style="font-size:11px;color:#475569;padding:6px 10px 0;">No custom folders yet</div>';
+        return;
+      }
+      container.innerHTML = emailFolders.map(f => `
+        <div class="folder-item ${currentFolder === f.id ? 'active' : ''}"
+             data-folder="${f.id}"
+             onclick="selectFolder('${f.id}', this)">
+          <span class="folder-item-icon">${f.icon}</span>
+          <span class="folder-item-name" style="color:${currentFolder === f.id ? '#f8fafc' : f.color}">${escapeHtml(f.name)}</span>
+          <span class="folder-item-count" id="folderCount-${f.id}">0</span>
+          <span class="folder-item-actions">
+            <button class="folder-action-btn" onclick="event.stopPropagation();openFolderModal('${f.id}')" title="Edit">✏️</button>
+            <button class="folder-action-btn delete-btn" onclick="event.stopPropagation();openDeleteFolderModal('${f.id}')" title="Delete">🗑</button>
+          </span>
+        </div>`).join('');
+    }
+
+    // ── Update counts on all folder items ───────────────────────────────────
+    function updateFolderCounts() {
+      const senderMap = getSenderFolderMap();
+      const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+      // System folders
+      const inboxEmails  = emailHistory.filter(e => {
+        if (e.status !== 'received') return false;
+        // exclude emails that belong to a custom folder
+        const fid = senderMap[(e.sender||'').toLowerCase()];
+        return !fid;
+      });
+      const sentEmails   = emailHistory.filter(e => e.status === 'sent');
+      const failedEmails = emailHistory.filter(e => e.status === 'failed');
+
+      setCount('folderCount-inbox',  inboxEmails.length);
+      setCount('folderCount-sent',   sentEmails.length);
+      setCount('folderCount-failed', failedEmails.length);
+      setCount('folderCount-all',    emailHistory.length);
+
+      // Custom folders
+      emailFolders.forEach(f => {
+        const rules = folderRules.filter(r => r.folder_id === f.id).map(r => r.sender_address.toLowerCase());
+        const cnt = emailHistory.filter(e => rules.includes((e.sender||'').toLowerCase())).length;
+        setCount('folderCount-' + f.id, cnt);
+      });
+    }
+
+    function setCount(elId, n) {
+      const el = document.getElementById(elId);
+      if (el) el.textContent = n > 0 ? n : '';
+    }
+
+    // ── Select a folder from the nav ─────────────────────────────────────────
+    window.selectFolder = function(folderId, el) {
+      currentFolder = folderId;
+      currentFilter = folderId; // keep legacy compat for system folders
+      // Update active state on all folder items
+      document.querySelectorAll('.folder-item').forEach(i => i.classList.remove('active'));
+      if (el) el.classList.add('active');
+      // Update label
+      const labelEl = document.getElementById('activeFolderLabel');
+      if (labelEl) {
+        if (folderId === 'inbox')  labelEl.textContent = '📥 Inbox';
+        else if (folderId === 'sent')   labelEl.textContent = '📤 Sent';
+        else if (folderId === 'failed') labelEl.textContent = '❌ Failed';
+        else if (folderId === 'all')    labelEl.textContent = '📋 All Mail';
+        else {
+          const f = emailFolders.find(x => x.id === folderId);
+          if (f) labelEl.textContent = `${f.icon} ${f.name}`;
+        }
+      }
+      renderEmailList();
+    };
+
+    // ══════════════════════════════════════════════════════════════
+    //  FOLDER MODAL  (create / edit)
+    // ══════════════════════════════════════════════════════════════
+
+    window.openFolderModal = function(folderId) {
+      _editingFolderId = folderId || null;
+      const modal = document.getElementById('folderModal');
+      const title = document.getElementById('folderModalTitle');
+
+      if (_editingFolderId) {
+        const f = emailFolders.find(x => x.id === _editingFolderId);
+        if (!f) return;
+        title.textContent = 'Edit Folder';
+        document.getElementById('folderNameInput').value  = f.name;
+        document.getElementById('folderIconInput').value  = f.icon;
+        document.getElementById('folderColorInput').value = f.color;
+        // Populate existing rules
+        const rules = folderRules.filter(r => r.folder_id === _editingFolderId);
+        const container = document.getElementById('folderRuleInputs');
+        container.innerHTML = '';
+        if (rules.length === 0) addFolderRuleRow();
+        else rules.forEach(r => addFolderRuleRow(r.sender_address));
+      } else {
+        title.textContent = 'New Folder';
+        document.getElementById('folderNameInput').value  = '';
+        document.getElementById('folderIconInput').value  = '📁';
+        document.getElementById('folderColorInput').value = '#c9a84c';
+        document.getElementById('folderRuleInputs').innerHTML = '';
+        addFolderRuleRow();
+      }
+      modal.style.display = 'flex';
+    };
+
+    window.closeFolderModal = function() {
+      document.getElementById('folderModal').style.display = 'none';
+      _editingFolderId = null;
+    };
+
+    window.addFolderRuleRow = function(value) {
+      const container = document.getElementById('folderRuleInputs');
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; gap:6px; align-items:center;';
+      row.innerHTML = `
+        <input type="text" placeholder="sender@example.com" value="${escapeHtml(value||'')}"
+          style="flex:1; padding:8px 12px; background:rgba(255,255,255,0.05);
+                 border:1px solid rgba(255,255,255,0.1); border-radius:7px;
+                 color:#f8fafc; font-size:13px;"
+          class="folder-rule-input">
+        <button onclick="this.closest('div').remove()" style="width:28px;height:28px;flex-shrink:0;
+          background:rgba(239,68,68,0.15); border:none; border-radius:6px; color:#ef4444;
+          font-size:14px; cursor:pointer; line-height:1;">×</button>`;
+      container.appendChild(row);
+    };
+
+    window.saveFolderModal = async function() {
+      const name  = document.getElementById('folderNameInput').value.trim();
+      const icon  = document.getElementById('folderIconInput').value.trim() || '📁';
+      const color = document.getElementById('folderColorInput').value || '#c9a84c';
+
+      if (!name) { showNotification('Please enter a folder name', 'error'); return; }
+
+      const senders = [...document.querySelectorAll('.folder-rule-input')]
+        .map(i => i.value.trim().toLowerCase())
+        .filter(Boolean);
+
+      try {
+        let folderId = _editingFolderId;
+
+        if (_editingFolderId) {
+          // Update folder row
+          const { error } = await db.from('email_folders')
+            .update({ name, icon, color })
+            .eq('id', _editingFolderId);
+          if (error) throw error;
+          // Delete old rules then re-insert
+          await db.from('email_folder_rules').delete().eq('folder_id', _editingFolderId);
+        } else {
+          // Insert new folder
+          const { data, error } = await db.from('email_folders')
+            .insert({ name, icon, color, sort_order: emailFolders.length })
+            .select().single();
+          if (error) throw error;
+          folderId = data.id;
+        }
+
+        // Insert new rules
+        if (senders.length > 0) {
+          const rows = senders.map(s => ({ folder_id: folderId, sender_address: s }));
+          const { error: rErr } = await db.from('email_folder_rules').insert(rows);
+          if (rErr) throw rErr;
+        }
+
+        closeFolderModal();
+        await loadFolders();
+        renderEmailList();
+        showNotification(_editingFolderId ? 'Folder updated' : 'Folder created', 'success');
+      } catch (e) {
+        console.error('saveFolderModal error:', e);
+        showNotification('Error saving folder: ' + (e.message || e), 'error');
+      }
+    };
+
+    // ══════════════════════════════════════════════════════════════
+    //  DELETE FOLDER
+    // ══════════════════════════════════════════════════════════════
+
+    window.openDeleteFolderModal = function(folderId) {
+      _deletingFolderId = folderId;
+      const f = emailFolders.find(x => x.id === folderId);
+      if (!f) return;
+      document.getElementById('deleteFolderMsg').textContent =
+        `"${f.name}" and all its routing rules will be permanently deleted. Emails will move back to Inbox.`;
+      document.getElementById('deleteFolderModal').style.display = 'flex';
+    };
+
+    window.closeDeleteFolderModal = function() {
+      document.getElementById('deleteFolderModal').style.display = 'none';
+      _deletingFolderId = null;
+    };
+
+    window.confirmDeleteFolder = async function() {
+      if (!_deletingFolderId) return;
+      try {
+        // Rules are CASCADE-deleted by DB; just delete the folder
+        const { error } = await db.from('email_folders').delete().eq('id', _deletingFolderId);
+        if (error) throw error;
+        // If we were viewing this folder, reset to inbox
+        if (currentFolder === _deletingFolderId) {
+          selectFolder('inbox', document.querySelector('[data-folder="inbox"]'));
+        }
+        closeDeleteFolderModal();
+        await loadFolders();
+        renderEmailList();
+        showNotification('Folder deleted', 'success');
+      } catch (e) {
+        console.error('confirmDeleteFolder error:', e);
+        showNotification('Error deleting folder: ' + (e.message || e), 'error');
+      }
+    };
+
   </script>
+
+  <!-- ══════════════════════════════════════════════════════
+       FOLDER MODAL  (Create / Edit folder + sender rules)
+  ══════════════════════════════════════════════════════ -->
+  <div id="folderModal" style="display:none; position:fixed; inset:0; z-index:9999;
+       background:rgba(0,0,0,0.7); align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid rgba(201,168,76,0.25); border-radius:16px;
+                width:480px; max-width:95vw; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+        <h3 id="folderModalTitle" style="color:#f8fafc; font-size:17px; font-weight:700; margin:0;">New Folder</h3>
+        <button onclick="closeFolderModal()" style="background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;">×</button>
+      </div>
+
+      <!-- Folder Name + Icon + Color -->
+      <div style="display:flex; gap:10px; margin-bottom:16px;">
+        <div style="flex:0 0 auto;">
+          <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:600;">Icon</label>
+          <input id="folderIconInput" type="text" value="📁" maxlength="2"
+            style="width:54px; text-align:center; font-size:22px; padding:6px; background:rgba(255,255,255,0.05);
+                   border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#f8fafc;">
+        </div>
+        <div style="flex:1;">
+          <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:600;">Folder Name</label>
+          <input id="folderNameInput" type="text" placeholder="e.g. Hub, Billing, HR..."
+            style="width:100%; padding:10px 12px; background:rgba(255,255,255,0.05);
+                   border:1px solid rgba(255,255,255,0.1); border-radius:8px; color:#f8fafc; font-size:14px; box-sizing:border-box;">
+        </div>
+        <div style="flex:0 0 auto;">
+          <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:6px; font-weight:600;">Color</label>
+          <input id="folderColorInput" type="color" value="#c9a84c"
+            style="width:40px; height:40px; border:none; border-radius:8px; cursor:pointer; background:none; padding:2px;">
+        </div>
+      </div>
+
+      <!-- Sender rules -->
+      <div style="margin-bottom:16px;">
+        <label style="display:block; font-size:12px; color:#94a3b8; margin-bottom:8px; font-weight:600;">
+          Route emails FROM these senders into this folder
+        </label>
+        <div id="folderRuleInputs" style="display:flex; flex-direction:column; gap:6px;">
+          <!-- rows added dynamically -->
+        </div>
+        <button onclick="addFolderRuleRow()" style="margin-top:8px; padding:6px 14px; background:rgba(201,168,76,0.1);
+          color:#c9a84c; border:1px solid rgba(201,168,76,0.3); border-radius:7px; font-size:12px;
+          font-weight:600; cursor:pointer;">+ Add sender address</button>
+      </div>
+
+      <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:4px;">
+        <button onclick="closeFolderModal()" style="padding:9px 20px; background:rgba(255,255,255,0.06);
+          color:#94a3b8; border:1px solid rgba(255,255,255,0.1); border-radius:8px; font-weight:600;
+          font-size:13px; cursor:pointer;">Cancel</button>
+        <button onclick="saveFolderModal()" style="padding:9px 24px; background:linear-gradient(135deg,#c9a84c,#d4b56a);
+          color:#020617; border:none; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
+          Save Folder
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE FOLDER CONFIRM -->
+  <div id="deleteFolderModal" style="display:none; position:fixed; inset:0; z-index:10000;
+       background:rgba(0,0,0,0.75); align-items:center; justify-content:center;">
+    <div style="background:#0f172a; border:1px solid rgba(239,68,68,0.3); border-radius:14px;
+                width:380px; max-width:92vw; padding:28px; text-align:center;">
+      <div style="font-size:36px; margin-bottom:12px;">🗑️</div>
+      <h3 style="color:#f8fafc; margin:0 0 8px; font-size:16px;">Delete Folder?</h3>
+      <p id="deleteFolderMsg" style="color:#94a3b8; font-size:13px; margin:0 0 20px;"></p>
+      <div style="display:flex; gap:10px; justify-content:center;">
+        <button onclick="closeDeleteFolderModal()" style="padding:8px 20px; background:rgba(255,255,255,0.06);
+          color:#94a3b8; border:1px solid rgba(255,255,255,0.1); border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+        <button onclick="confirmDeleteFolder()" style="padding:8px 20px; background:#ef4444;
+          color:#fff; border:none; border-radius:8px; font-weight:700; cursor:pointer;">Delete</button>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>
