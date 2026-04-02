@@ -3926,9 +3926,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
       const sections = notes.split('--- PARTIAL PAYMENT RECORDED ---');
       const result = [];
       sections.forEach((sec, i) => {
-        if (i === 0 && !sec.includes('Date:')) return;
+        if (i === 0) return; // always skip intro block
         const amtMatch = sec.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
-        const appMatch = sec.match(/Applied To:\s*(.+?)(?=\n|$)/);
+        const appMatch = sec.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
         if (amtMatch && appMatch) {
           result.push({
             amount:    parseFloat(amtMatch[1].replace(/,/g, '')) || 0,
@@ -4453,11 +4453,14 @@ Please include your Student ID in the payment reference or memo to ensure proper
         if (invoice.notes) {
           const paymentRecords = invoice.notes.split('--- PARTIAL PAYMENT RECORDED ---');
           paymentRecords.forEach((record, index) => {
-            if (index === 0 && !record.includes('Date:')) return; // Skip initial notes
+            if (index === 0) return; // Always skip the intro section
             
             const dateMatch = record.match(/Date:\s*(.+?)(?=\n|$)/);
             const amountMatch = record.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
-            const appliedToMatch = record.match(/Applied To:\s*(.+?)(?=\n|$)/);
+            // Match "Applied To:" with optional surrounding asterisks
+            const appliedToMatch = record.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
+            
+            console.log(`📋 Payment record ${index}:`, { dateMatch, amountMatch, appliedToMatch, record });
             
             if (dateMatch && amountMatch && appliedToMatch) {
               payments.push({
@@ -6213,9 +6216,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
               if (inv.notes) {
                 const sections = inv.notes.split('--- PARTIAL PAYMENT RECORDED ---');
                 sections.forEach((sec, i) => {
-                  if (i === 0 && !sec.includes('Date:')) return;
+                  if (i === 0) return; // always skip intro block
                   const amtMatch = sec.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
-                  const appMatch = sec.match(/Applied To:\s*(.+?)(?=\n|$)/);
+                  const appMatch = sec.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
                   if (amtMatch && appMatch) {
                     partials.push({ amount: parseFloat(amtMatch[1].replace(/,/g, '')) || 0, appliedTo: appMatch[1].trim().toLowerCase() });
                   }
