@@ -3337,7 +3337,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }
         const allUserRules = allRules;
 
-        // Staff tab: ONLY the fixed 17 departmental addresses — never student x.lastname@acnhs.am
+        // Staff tab: fixed 17 departmental @acnhs.am addresses PLUS any custom
+        // emails added via "+ Add Staff Email" (e.g. @acnhs.us, @ana-us.com).
+        // Student x.lastname@acnhs.am addresses are excluded by checking against
+        // the student list — but at load time we filter by: not matching the
+        // x.lastname@acnhs.am pattern AND not already a departmental address.
         const DEPARTMENTAL_EMAILS = [
           'admissions@acnhs.am',
           'info@acnhs.am',
@@ -3357,9 +3361,19 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           'research@acnhs.am',
           'do-not-reply@acnhs.am'
         ];
+        const departmentalSet = new Set(DEPARTMENTAL_EMAILS);
 
-        // Build staff forwardingRulesData from DEPARTMENTAL_EMAILS only
-        forwardingRulesData = DEPARTMENTAL_EMAILS.map(acnhsEmail => {
+        // Extra custom staff emails from DB: non-departmental AND not the
+        // student pattern (single-letter.lastname@acnhs.am)
+        const studentPattern = /^[a-z]\.[a-z]+@acnhs\.am$/i;
+        const customStaffEmails = (allUserRules || [])
+          .map(r => r.acnhs_email)
+          .filter(e => !departmentalSet.has(e) && !studentPattern.test(e));
+
+        const allStaffEmails = [...DEPARTMENTAL_EMAILS, ...customStaffEmails];
+
+        // Build staff forwardingRulesData
+        forwardingRulesData = allStaffEmails.map(acnhsEmail => {
           const existingRule = (allUserRules || []).find(r => r.acnhs_email === acnhsEmail);
           return {
             acnhs_email: acnhsEmail,
