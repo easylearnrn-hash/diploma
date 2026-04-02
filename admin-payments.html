@@ -1290,6 +1290,49 @@
     .pm-dot-partial { background: #fbbf24; }
     .pm-dot-due     { background: #f87171; }
 
+    /* Month pill toggles in sidebar */
+    .pm-month-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      font-size: 11px;
+      color: #94a3b8;
+      cursor: pointer;
+      user-select: none;
+      transition: border-color .15s, background .15s, color .15s;
+    }
+    .pm-month-pill.active {
+      border-color: var(--gold-primary);
+      background: rgba(201,168,76,0.12);
+      color: var(--gold-primary);
+    }
+    .pm-month-pill:hover { border-color: rgba(201,168,76,0.5); color: #e2e8f0; }
+
+    /* Print document — amount columns */
+    .pmd-amount-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pmd-balance-zero { color: #166534; font-weight: 700; }
+    .pmd-balance-due  { color: #991b1b; font-weight: 700; }
+    .pmd-balance-part { color: #854d0e; font-weight: 700; }
+
+    /* Month breakdown sub-rows */
+    .pmd-breakdown-row td {
+      background: #f1f5f9 !important;
+      font-size: 11px;
+      color: #64748b;
+      padding: 5px 12px 5px 28px !important;
+      border-bottom: 1px solid #e9eef5 !important;
+    }
+    .pmd-breakdown-row td:first-child { padding-left: 28px !important; color: #94a3b8; font-style: italic; }
+    .pmd-breakdown-month-label { font-weight: 600; color: #475569; }
+    .pmd-breakdown-paid-cell  { color: #166534; }
+    .pmd-breakdown-due-cell   { color: #991b1b; }
+    .pmd-breakdown-part-cell  { color: #854d0e; }
+    .pmd-breakdown-na         { color: #cbd5e1; font-style: italic; font-size: 10.5px; }
+
     /* Student search + checklist */
     .pm-student-search {
       position: relative;
@@ -2033,6 +2076,30 @@
             </label>
           </div>
 
+          <!-- Payment breakdown -->
+          <div class="pm-section">
+            <div class="pm-section-label">Payment Breakdown</div>
+
+            <label class="pm-check-row" onclick="pmToggle('colAmounts')">
+              <div class="pm-cb-box" id="colAmounts">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Show Amounts (Total / Paid / Balance)</span>
+            </label>
+
+            <label class="pm-check-row" onclick="pmToggle('colMonthBreakdown')">
+              <div class="pm-cb-box" id="colMonthBreakdown">
+                <svg width="11" height="11" fill="none" stroke="#0a0e1a" stroke-width="3" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </div>
+              <span class="pm-check-label">Month-by-Month Breakdown</span>
+            </label>
+
+            <div class="pm-section-label" style="margin-top:10px;font-size:10px;">Filter by Month (leave all checked = show all)</div>
+            <div id="pmMonthCheckboxes" style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">
+              <!-- Populated by pmPopulateMonthCheckboxes() -->
+            </div>
+          </div>
+
           <!-- Student selector -->
           <div class="pm-section">
             <div class="pm-section-label">Students</div>
@@ -2288,6 +2355,7 @@
             overdueMonths,
             hasInvoice:         !!entry,
             invoiceIds:         entry ? entry.ids : [],
+            invoices:           entry ? entry.invoices : [],
           };
         });
 
@@ -2873,6 +2941,9 @@
       // Select all students by default
       pmState.selectedIds = new Set(allStudentStatuses.map(s => s.studentId));
 
+      // Populate month pills from actual invoice data
+      pmPopulateMonthCheckboxes();
+
       // Build checklist and preview
       pmRebuildList();
       updatePrintPreview();
@@ -3012,6 +3083,129 @@
       document.getElementById('pmSelCount').textContent = n + ' selected';
     }
 
+    // ── Compute per-student payment map: { monthKey → {label, total, paid, balance}, enrollment: {...}, grandTotal, grandPaid, grandBalance } ──
+    function computeStudentPaymentMap(invoices) {
+      const itemMap = {}; // descLow → { label, total, paid }
+
+      (invoices || []).forEach(inv => {
+        let items = [];
+        try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch(e) {}
+
+        const paidByKey = {};
+        if (inv.notes) {
+          const blocks = inv.notes.split('--- PARTIAL PAYMENT RECORDED ---');
+          blocks.forEach((block, i) => {
+            if (i === 0) return;
+            const amtMatch = block.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+            const appMatch = block.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
+            if (amtMatch && appMatch) {
+              const k = appMatch[1].trim().toLowerCase();
+              paidByKey[k] = (paidByKey[k] || 0) + (parseFloat(amtMatch[1].replace(/,/g,'')) || 0);
+            }
+          });
+        }
+
+        items.forEach(item => {
+          const desc = (item.description || '').trim();
+          if (!desc) return;
+          const descLow = desc.toLowerCase();
+          const qty   = parseFloat(item.qty || item.quantity || 1) || 1;
+          const price = parseFloat(String(item.price || 0).replace(/,/g,'')) || 0;
+          const disc  = parseFloat(String(item.discount || 0).replace(/,/g,'')) || 0;
+          const total = qty * price * (1 - disc / 100);
+
+          let paid = 0;
+          if (inv.status === 'paid') {
+            paid = total;
+          } else if (inv.status === 'partial') {
+            const matchKey = Object.keys(paidByKey).find(k =>
+              k === descLow || k.includes(descLow) || descLow.includes(k)
+            );
+            paid = matchKey ? Math.min(paidByKey[matchKey], total) : 0;
+          }
+
+          if (!itemMap[descLow]) itemMap[descLow] = { label: desc, total: 0, paid: 0 };
+          itemMap[descLow].total += total;
+          itemMap[descLow].paid  += paid;
+        });
+      });
+
+      // Categorise into months + enrollment
+      const result = { months: {}, enrollment: null, grandTotal: 0, grandPaid: 0 };
+
+      MONTHS.forEach(month => {
+        const mLow = month.toLowerCase();
+        const keys = Object.keys(itemMap).filter(k => k.includes(mLow) && !k.includes('enrollment') && !k.includes('down payment'));
+        if (!keys.length) return;
+        const total   = keys.reduce((s,k) => s + itemMap[k].total, 0);
+        const paid    = keys.reduce((s,k) => s + itemMap[k].paid,  0);
+        result.months[month] = { label: month, total, paid, balance: Math.max(0, total - paid) };
+        result.grandTotal += total;
+        result.grandPaid  += paid;
+      });
+
+      // Enrollment / down payment
+      const enrollKeys = Object.keys(itemMap).filter(k => k.includes('enrollment') || k.includes('down payment'));
+      if (enrollKeys.length) {
+        const total = enrollKeys.reduce((s,k) => s + itemMap[k].total, 0);
+        const paid  = enrollKeys.reduce((s,k) => s + itemMap[k].paid,  0);
+        result.enrollment = { label: 'Enrollment / Down Payment', total, paid, balance: Math.max(0, total - paid) };
+        result.grandTotal += total;
+        result.grandPaid  += paid;
+      }
+
+      result.grandBalance = Math.max(0, result.grandTotal - result.grandPaid);
+      return result;
+    }
+
+    // ── Populate month pill toggles from data ──────────────────────────────
+    function pmPopulateMonthCheckboxes() {
+      // Collect all months that appear in any student's invoices
+      const seenMonths = new Set();
+      allStudentStatuses.forEach(s => {
+        (s.invoices || []).forEach(inv => {
+          let items = [];
+          try { items = typeof inv.items === 'string' ? JSON.parse(inv.items) : (inv.items || []); } catch(e) {}
+          items.forEach(item => {
+            const desc = (item.description || '').toLowerCase();
+            MONTHS.forEach(m => { if (desc.includes(m.toLowerCase()) && !desc.includes('enrollment') && !desc.includes('down payment')) seenMonths.add(m); });
+          });
+        });
+      });
+
+      const container = document.getElementById('pmMonthCheckboxes');
+      if (!container) return;
+
+      if (!seenMonths.size) {
+        container.innerHTML = '<span style="font-size:11px;color:#64748b;">No month data in invoices</span>';
+        return;
+      }
+
+      // Render pills in calendar order; default = all active
+      container.innerHTML = MONTHS.filter(m => seenMonths.has(m)).map(m => `
+        <span class="pm-month-pill active" id="pmMonth-${m}" onclick="pmToggleMonth('${m}')">${m.slice(0,3)}</span>
+      `).join('');
+    }
+
+    function pmToggleMonth(month) {
+      const pill = document.getElementById('pmMonth-' + month);
+      if (!pill) return;
+      pill.classList.toggle('active');
+      updatePrintPreview();
+    }
+
+    function pmGetActiveMths() {
+      // Returns Set of active month names, or null if none rendered (= show all)
+      const container = document.getElementById('pmMonthCheckboxes');
+      if (!container || !container.children.length) return null;
+      const active = new Set();
+      container.querySelectorAll('.pm-month-pill.active').forEach(el => {
+        const m = el.id.replace('pmMonth-', '');
+        active.add(m);
+      });
+      return active;
+    }
+
     // ── Build the print document HTML string ───────────────────────────────
     function buildPrintDocument() {
       const title      = document.getElementById('pmTitle').value || 'Payment Status Report';
@@ -3022,6 +3216,9 @@
       const showGroup  = pmIsChecked('colGroup');
       const showStatus = pmIsChecked('colStatus');
       const showNo     = pmIsChecked('colNo');
+      const showAmounts    = pmIsChecked('colAmounts');
+      const showBreakdown  = pmIsChecked('colMonthBreakdown');
+      const activeMths     = pmGetActiveMths(); // Set<string> or null
 
       const students   = pmGetFilteredStudents();
 
@@ -3063,6 +3260,8 @@
         return program;
       };
 
+      const fmtMoney = (n) => n === 0 ? '$0.00' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
       // Build table headers
       const headers = [];
       if (showNo)     headers.push('<th style="width:36px;">#</th>');
@@ -3070,6 +3269,14 @@
       if (showId)     headers.push('<th>Student ID</th>');
       if (showGroup)  headers.push('<th>Group</th><th>Program</th>');
       if (showStatus) headers.push('<th>Status</th>');
+      if (showAmounts) {
+        headers.push('<th class="pmd-amount-col">Total</th>');
+        headers.push('<th class="pmd-amount-col">Paid</th>');
+        headers.push('<th class="pmd-amount-col">Balance</th>');
+      }
+
+      // Column count (for colspan in breakdown rows)
+      const colCount = headers.length;
 
       // Build table rows
       const rows = students.map((s, i) => {
@@ -3079,9 +3286,71 @@
         if (showNo)     cells.push(`<td style="color:#64748b;font-size:11px;">${i+1}</td>`);
         if (showName)   cells.push(`<td><strong>${escHtml(s.name)}</strong></td>`);
         if (showId)     cells.push(`<td style="font-family:monospace;font-size:11.5px;">${escHtml(s.studentId) || '—'}</td>`);
-  if (showGroup)  cells.push(`<td>${escHtml(s.group) || '—'}</td><td>${escHtml(abbreviateProgram(s.program))}</td>`);
+        if (showGroup)  cells.push(`<td>${escHtml(s.group) || '—'}</td><td>${escHtml(abbreviateProgram(s.program))}</td>`);
         if (showStatus) cells.push(`<td><span class="pmd-badge ${badgeCls}">${statusLabel}</span></td>`);
-        return `<tr>${cells.join('')}</tr>`;
+
+        let breakdownRows = '';
+        if (showAmounts || showBreakdown) {
+          const pm = computeStudentPaymentMap(s.invoices || []);
+
+          if (showAmounts) {
+            const balCls = pm.grandBalance <= 0 ? 'pmd-balance-zero' : (s.status === 'partial' ? 'pmd-balance-part' : 'pmd-balance-due');
+            cells.push(`<td class="pmd-amount-col">${fmtMoney(pm.grandTotal)}</td>`);
+            cells.push(`<td class="pmd-amount-col" style="color:#166534;">${fmtMoney(pm.grandPaid)}</td>`);
+            cells.push(`<td class="pmd-amount-col ${balCls}">${fmtMoney(pm.grandBalance)}</td>`);
+          }
+
+          if (showBreakdown) {
+            // Enrollment row first
+            if (pm.enrollment) {
+              const { total, paid, balance } = pm.enrollment;
+              const balCls = balance <= 0 ? 'pmd-breakdown-paid-cell' : 'pmd-breakdown-due-cell';
+              const enrollCells = [];
+              if (showNo)     enrollCells.push(`<td></td>`);
+              if (showName)   enrollCells.push(`<td colspan="1" style="padding-left:28px;font-size:11px;color:#475569;font-weight:600;">↳ Enrollment</td>`);
+              if (showId)     enrollCells.push(`<td></td>`);
+              if (showGroup)  enrollCells.push(`<td></td><td></td>`);
+              if (showStatus) enrollCells.push(`<td><span class="pmd-badge ${balance <= 0 ? 'pmd-badge-paid' : 'pmd-badge-due'}" style="font-size:9px;">${balance <= 0 ? 'PAID' : 'DUE'}</span></td>`);
+              if (showAmounts) {
+                enrollCells.push(`<td class="pmd-amount-col" style="font-size:11px;">${fmtMoney(total)}</td>`);
+                enrollCells.push(`<td class="pmd-amount-col" style="font-size:11px;color:#166534;">${fmtMoney(paid)}</td>`);
+                enrollCells.push(`<td class="pmd-amount-col ${balCls}" style="font-size:11px;">${fmtMoney(balance)}</td>`);
+              }
+              breakdownRows += `<tr class="pmd-breakdown-row">${enrollCells.join('')}</tr>`;
+            }
+
+            // Month rows — only show months that are active in the filter
+            MONTHS.forEach(month => {
+              if (activeMths && !activeMths.has(month)) return; // filtered out
+              const mData = pm.months[month];
+              if (!mData) return; // student has no item for this month — skip
+              const { total, paid, balance } = mData;
+              const mBalCls = balance <= 0 ? 'pmd-breakdown-paid-cell' : (paid > 0 ? 'pmd-breakdown-part-cell' : 'pmd-breakdown-due-cell');
+              const mBadgeCls = balance <= 0 ? 'pmd-badge-paid' : (paid > 0 ? 'pmd-badge-partial' : 'pmd-badge-due');
+              const mStatusLabel = balance <= 0 ? 'PAID' : (paid > 0 ? 'PARTIAL' : 'DUE');
+              const mCells = [];
+              if (showNo)     mCells.push(`<td></td>`);
+              if (showName)   mCells.push(`<td style="padding-left:28px;font-size:11px;color:#475569;font-weight:600;">↳ ${month}</td>`);
+              if (showId)     mCells.push(`<td></td>`);
+              if (showGroup)  mCells.push(`<td></td><td></td>`);
+              if (showStatus) mCells.push(`<td><span class="pmd-badge ${mBadgeCls}" style="font-size:9px;">${mStatusLabel}</span></td>`);
+              if (showAmounts) {
+                mCells.push(`<td class="pmd-amount-col" style="font-size:11px;">${fmtMoney(total)}</td>`);
+                mCells.push(`<td class="pmd-amount-col" style="font-size:11px;color:#166534;">${fmtMoney(paid)}</td>`);
+                mCells.push(`<td class="pmd-amount-col ${mBalCls}" style="font-size:11px;">${fmtMoney(balance)}</td>`);
+              }
+              breakdownRows += `<tr class="pmd-breakdown-row">${mCells.join('')}</tr>`;
+            });
+
+            // If activeMths filter left nothing for this student, show a placeholder
+            if (!breakdownRows && activeMths && activeMths.size > 0) {
+              const skipCells = Array(colCount).fill('').map((_, ci) => ci === 1 ? `<td style="padding-left:28px;font-size:11px;color:#cbd5e1;font-style:italic;">No data for selected month(s)</td>` : '<td></td>').join('');
+              breakdownRows = `<tr class="pmd-breakdown-row">${skipCells}</tr>`;
+            }
+          }
+        }
+
+        return `<tr>${cells.join('')}</tr>${breakdownRows}`;
       }).join('');
 
       const tableContent = students.length
@@ -3161,6 +3430,14 @@
           .pmd-footer { background: #f8fafc; border-top: 2px solid #e2e8f0; padding: 12px 36px; font-size: 11px; color: #94a3b8; text-align: center; }
           .pmd-logo-wrap img { width: 56px; height: 56px; object-fit: contain; }
           .pmd-empty { text-align: center; padding: 40px 0; color: #94a3b8; font-size: 13px; }
+          .pmd-amount-col { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+          .pmd-balance-zero { color: #166534; font-weight: 700; }
+          .pmd-balance-due  { color: #991b1b; font-weight: 700; }
+          .pmd-balance-part { color: #854d0e; font-weight: 700; }
+          .pmd-breakdown-row td { background: #f1f5f9 !important; font-size: 11px; color: #64748b; padding: 4px 12px 4px 28px !important; border-bottom: 1px solid #e9eef5 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pmd-breakdown-paid-cell { color: #166534; font-weight: 700; }
+          .pmd-breakdown-due-cell  { color: #991b1b; font-weight: 700; }
+          .pmd-breakdown-part-cell { color: #854d0e; font-weight: 700; }
         </style>
         <div id="pmDocument">${buildPrintDocument()}</div>
       `;
