@@ -2014,6 +2014,14 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     let currentFilter = 'inbox';
     let activeDomainFilter = null; // null = all domains, otherwise e.g. 'acnhs.am'
     let selectedEmail = null;
+
+    // ── Virtual-scroll / pagination state ──────────────────────────────────
+    const PAGE_SIZE = 50;          // emails rendered per batch
+    let filteredCache = [];        // current filtered result set (full)
+    let renderedCount = 0;         // how many are currently in DOM
+    let _sentinelObserver = null;  // IntersectionObserver for infinite scroll
+    let _searchDebounceTimer = null;
+    // ───────────────────────────────────────────────────────────────────────
     let selectedTemplate = 'custom';
     let selectedEmails = new Set(); // Track selected email IDs
     let emailToDelete = null;
@@ -2316,8 +2324,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         });
       });
 
-      // Search
-      document.getElementById('searchInput').addEventListener('input', renderEmailList);
+      // Search — debounced so we don't re-render on every keystroke
+      document.getElementById('searchInput').addEventListener('input', () => {
+        clearTimeout(_searchDebounceTimer);
+        _searchDebounceTimer = setTimeout(renderEmailList, 200);
+      });
 
       // Compose button
       document.getElementById('composeBtn').addEventListener('click', openComposeModal);
@@ -2923,13 +2934,11 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
     }
 
-    function renderEmailList() {
-      const container = document.getElementById('emailList');
-      const searchTerm = document.getElementById('searchInput').value.toLowerCase();
-      
+    // ── Build the filtered array (no DOM work) ─────────────────────────────
+    function buildFilteredCache(searchTerm) {
       let filtered = emailHistory;
-      
-      // Filter by tab
+
+      // Tab filter
       if (currentFilter === 'inbox') {
         filtered = filtered.filter(e => e.status === 'received');
       } else if (currentFilter === 'sent') {
@@ -2937,9 +2946,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       } else if (currentFilter === 'failed') {
         filtered = filtered.filter(e => e.status === 'failed');
       }
-      // 'all' shows everything, no filter needed
 
-      // Filter by domain (checks both sender and recipient)
+      // Domain filter
       if (activeDomainFilter) {
         const domain = activeDomainFilter.toLowerCase();
         filtered = filtered.filter(e =>
@@ -2947,33 +2955,46 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           (e.recipient || '').toLowerCase().endsWith('@' + domain)
         );
       }
-      
-      // Filter by search
+
+      // Text search (searches sender, recipient, subject)
       if (searchTerm) {
-        filtered = filtered.filter(e => 
-          e.recipient.toLowerCase().includes(searchTerm) ||
-          e.subject.toLowerCase().includes(searchTerm)
+        const q = searchTerm.toLowerCase();
+        filtered = filtered.filter(e =>
+          (e.sender   || '').toLowerCase().includes(q) ||
+          (e.recipient|| '').toLowerCase().includes(q) ||
+          (e.subject  || '').toLowerCase().includes(q)
         );
       }
 
-      if (filtered.length === 0) {
+      filteredCache = filtered;
+    }
+
+    // ── Render one batch (PAGE_SIZE) of emails into the list ───────────────
+    function renderPage(reset) {
+      const container = document.getElementById('emailList');
+      const _fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+      if (reset) {
+        renderedCount = 0;
+        container.innerHTML = '';
+        // Disconnect any existing observer
+        if (_sentinelObserver) { _sentinelObserver.disconnect(); _sentinelObserver = null; }
+      }
+
+      if (filteredCache.length === 0) {
         const domainMsg = activeDomainFilter ? ` for @${activeDomainFilter}` : '';
         container.innerHTML = `<div style="padding: 40px; text-align: center; color: #64748b;">No emails found${domainMsg}</div>`;
         return;
       }
 
-      // Cache date comparison once for the entire render pass
-      const _fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const batch = filteredCache.slice(renderedCount, renderedCount + PAGE_SIZE);
+      renderedCount += batch.length;
 
-      container.innerHTML = filtered.map(email => {
-        // body not loaded at list level (select optimization) — preview omitted
+      const html = batch.map(email => {
         const bodyPreview = email.body_preview || '';
-        
-        // ── Date math cached outside map by caller ──
         const isNew = email.status === 'received' && new Date(email.sent_at) > _fiveMinutesAgo && !viewedEmails.has(email.id);
         const isChecked = selectedEmails.has(email.id);
         const hasAttachments = Array.isArray(email.attachments) && email.attachments.length > 0;
-        
         return `<div class="email-item ${selectedEmail?.id === email.id ? 'active' : ''} ${isNew ? 'new-email' : ''}">
   <div class="email-item-row">
     <input type="checkbox" class="email-checkbox" ${isChecked ? 'checked' : ''} onclick="event.stopPropagation(); toggleEmailSelection('${email.id}')" />
@@ -2992,8 +3013,36 @@ We're here to support you every step of the way. Welcome to ACNHS!`
   </div>
 </div>`;
       }).join('');
-      
+
+      // Remove existing sentinel before appending new batch
+      const oldSentinel = document.getElementById('loadMoreSentinel');
+      if (oldSentinel) oldSentinel.remove();
+
+      container.insertAdjacentHTML('beforeend', html);
+
+      // If there are more emails, add a sentinel and observe it
+      if (renderedCount < filteredCache.length) {
+        container.insertAdjacentHTML('beforeend',
+          `<div id="loadMoreSentinel" style="height:1px;"></div>`
+        );
+        _sentinelObserver = new IntersectionObserver(entries => {
+          if (entries[0].isIntersecting) {
+            _sentinelObserver.disconnect();
+            _sentinelObserver = null;
+            renderPage(false); // append next batch
+          }
+        }, { root: container, rootMargin: '200px' });
+        _sentinelObserver.observe(document.getElementById('loadMoreSentinel'));
+      }
+
       updateSelectionUI();
+    }
+
+    // ── Main entry point — call this whenever filters/search change ─────────
+    function renderEmailList() {
+      const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase();
+      buildFilteredCache(searchTerm);
+      renderPage(true);
     }
 
     window.selectEmail = async function(emailId) {
@@ -4564,24 +4613,11 @@ ${email.body}`;
 
     window.toggleSelectAll = function() {
       const checkbox = document.getElementById('selectAllCheckbox');
-      const container = document.getElementById('emailList');
-      
-      // Get currently filtered emails
-      let filtered = [...emailHistory];
-      
-      if (currentFilter === 'inbox') {
-        filtered = filtered.filter(e => e.status === 'received');
-      } else if (currentFilter === 'sent') {
-        filtered = filtered.filter(e => e.status === 'sent');
-      } else if (currentFilter === 'failed') {
-        filtered = filtered.filter(e => e.status === 'failed');
-      }
       
       if (checkbox.checked) {
-        // Select all visible emails
-        filtered.forEach(email => selectedEmails.add(email.id));
+        // Select all currently filtered emails (full set, not just rendered)
+        filteredCache.forEach(email => selectedEmails.add(email.id));
       } else {
-        // Deselect all
         selectedEmails.clear();
       }
       
