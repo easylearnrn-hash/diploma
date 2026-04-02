@@ -11,7 +11,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/admin-sidebar.css">
   <script src="js/acnhs-logo-base64.js"></script>
   <script src="js/email-template.js"></script>
   <style>
@@ -53,6 +52,7 @@
     /* ── Admin content wrapper ── */
     .admin-content {
       padding: 0;
+      margin-left: 0;
     }
 
     /* ── Page Header ── */
@@ -1136,7 +1136,7 @@
   </style>
 </head>
 <body>
-  <!-- Sidebar will be injected by admin-sidebar.js -->
+  <!-- No sidebar — admin-only standalone page -->
   
   <div class="admin-content">
     <!-- Header -->
@@ -1519,8 +1519,18 @@
   <!-- Scripts -->
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
-  <script src="js/permission-check.js"></script>
-  <script src="js/admin-sidebar.js"></script>
+  <!-- Admin-only guard: redirect non-admins immediately -->
+  <script>
+    (function() {
+      const ADMIN_EMAILS = ['hrachfilm@gmail.com', 'Hrachfilm@gmail.com'];
+      const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
+      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+      const isAdminEmail = ADMIN_EMAILS.some(e => e.toLowerCase() === userEmail.toLowerCase());
+      if (!isAdmin && !isAdminEmail) {
+        window.location.replace('login.html');
+      }
+    })();
+  </script>
   
   <script>
     // Initialize Supabase client
@@ -2712,14 +2722,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     async function loadEmailHistory() {
       showLoading(true);
       try {
-        // Get user's allowed email addresses
-        const userAllowedEmails = getUserAllowedEmails();
-        
-        // Check if user is main admin
-        const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-        const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
-        const isMainAdmin = ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
-        
+        // Admin-only page: always fetch all emails, no permission filtering
         // ── OPTIMIZATION: select only columns needed for the list view ──────
         // body / html_body are large HTML strings — skip them here.
         // Full body is fetched on-demand in showEmailDetail() via selectEmail().
@@ -2727,26 +2730,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           .from('email_history')
           .select('id, sender, recipient, subject, status, sent_at, attachments')
           .order('sent_at', { ascending: false })
-          .limit(100);  // 100 is more than enough for a visible list; was 500
+          .limit(100);
 
         if (error) throw error;
 
-        // Pre-compute body_preview = empty string (body not loaded at list level)
-        // It will be populated when full email is fetched on click.
-        const rawEmails = (emails || []).map(e => ({ ...e, body_preview: '' }));
-
-        // Filter emails based on user permissions
-        if (!isMainAdmin) {
-          emailHistory = rawEmails.filter(email => {
-            const recipientMatch = userAllowedEmails.includes(email.recipient?.toLowerCase());
-            const senderMatch = userAllowedEmails.includes(email.sender?.toLowerCase());
-            return recipientMatch || senderMatch;
-          });
-          console.log(`📧 Filtered emails: ${emailHistory.length} of ${rawEmails.length}`);
-        } else {
-          emailHistory = rawEmails;
-          console.log(`📧 Main admin — showing ${emailHistory.length} emails`);
-        }
+        emailHistory = (emails || []).map(e => ({ ...e, body_preview: '' }));
+        console.log(`📧 Admin — showing ${emailHistory.length} emails`);
         
         renderEmailList();
         updateBadge();
@@ -2759,71 +2748,27 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     }
     
     // Get user's allowed email addresses based on permissions
+    // Admin-only page: always return all departmental emails
     function getUserAllowedEmails() {
-      const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail');
-      const userName = sessionStorage.getItem('userName') || localStorage.getItem('userName');
-      
-      // Check if user is main admin - they get ALL emails
-      const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
-      const isMainAdmin = ADMIN_EMAILS.some(email => email.toLowerCase() === userEmail?.toLowerCase());
-      
-      if (isMainAdmin) {
-        // Main admin has access to ALL departmental emails
-        return [
-          'admissions@acnhs.am',
-          'info@acnhs.am',
-          'documents@acnhs.am',
-          'international@acnhs.am',
-          'registrar@acnhs.am',
-          'finance@acnhs.am',
-          'ceo@acnhs.am',
-          'dean@acnhs.am',
-          'academic@acnhs.am',
-          'student-services@acnhs.am',
-          'legal@acnhs.am',
-          'hr@acnhs.am',
-          'it@acnhs.am',
-          'library@acnhs.am',
-          'alumni@acnhs.am',
-          'research@acnhs.am',
-          'do-not-reply@acnhs.am'
-        ];
-      }
-      
-      let allowedEmails = [];
-      
-      // Add personal email (firstname initial + lastname @acnhs.am)
-      if (userName) {
-        const nameParts = userName.trim().split(' ');
-        if (nameParts.length >= 2) {
-          const firstInitial = nameParts[0].charAt(0).toLowerCase();
-          const lastName = nameParts[nameParts.length - 1].toLowerCase();
-          const personalEmail = `${firstInitial}.${lastName}@acnhs.am`;
-          allowedEmails.push(personalEmail);
-        }
-      }
-      
-      // Get email permissions from userEmailPermissions (stored separately during login)
-      try {
-        const emailPermsStr = sessionStorage.getItem('userEmailPermissions') || localStorage.getItem('userEmailPermissions');
-        if (emailPermsStr) {
-          const emailPerms = JSON.parse(emailPermsStr);
-          if (Array.isArray(emailPerms)) {
-            emailPerms.forEach(email => {
-              // Email is already in full format from database (e.g., 'admissions@acnhs.am')
-              const lowerEmail = email.toLowerCase();
-              if (!allowedEmails.includes(lowerEmail)) {
-                allowedEmails.push(lowerEmail);
-              }
-            });
-          }
-        }
-      } catch (e) {
-        console.error('Error parsing email permissions:', e);
-      }
-      
-      console.log('📧 User allowed emails:', allowedEmails);
-      return allowedEmails;
+      return [
+        'admissions@acnhs.am',
+        'info@acnhs.am',
+        'documents@acnhs.am',
+        'international@acnhs.am',
+        'registrar@acnhs.am',
+        'finance@acnhs.am',
+        'ceo@acnhs.am',
+        'dean@acnhs.am',
+        'academic@acnhs.am',
+        'student-services@acnhs.am',
+        'legal@acnhs.am',
+        'hr@acnhs.am',
+        'it@acnhs.am',
+        'library@acnhs.am',
+        'alumni@acnhs.am',
+        'research@acnhs.am',
+        'do-not-reply@acnhs.am'
+      ];
     }
 
     function escapeHtml(text) {
