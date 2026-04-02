@@ -3800,17 +3800,10 @@ Please include your Student ID in the payment reference or memo to ensure proper
             const appReceiptsCount = invoice.student_id && studentAppMap.has(invoice.student_id)
               ? (appReceiptCountMap?.get(studentAppMap.get(invoice.student_id)) || 0) : 0;
             const mergedReceiptsCount = invoiceReceiptsCount + appReceiptsCount;
-            const lastSeenCount = parseInt(localStorage.getItem(`receipt_count_seen_${invoice.id}`) || '0', 10);
+            const lastSeenCount = parseInt(localStorage.getItem(`receipt_count_seen_${invoice.id}`) || '-1', 10);
             const hasReceipts = mergedReceiptsCount > 0;
-            const hasNewReceiptCount = mergedReceiptsCount > lastSeenCount;
-            const viewedAt   = invoice.receipts_viewed_at ? new Date(invoice.receipts_viewed_at) : null;
-            const latestReceiptUpload = hasReceipts
-              ? (invoice.payment_receipts || []).map(r => new Date(r.uploaded_at).getTime()).filter(t => !isNaN(t)).sort((a,b) => b-a)[0]
-              : null;
-            const uploadedAt = invoice.receipts_last_uploaded_at
-              ? new Date(invoice.receipts_last_uploaded_at)
-              : (latestReceiptUpload ? new Date(latestReceiptUpload) : null);
-            const isUnopened = hasReceipts && (!viewedAt || (uploadedAt && uploadedAt > viewedAt));
+            // Show badge only when count genuinely increased since last open (never on first load if never opened: -1 means unseen)
+            const hasNewReceiptCount = hasReceipts && (lastSeenCount === -1 ? false : mergedReceiptsCount > lastSeenCount);
             const safeStudentName = (invoice.student_name || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
             const safeStudentId   = (invoice.student_id   || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
@@ -3859,7 +3852,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
                     <button class="secondary" onclick="viewReceipts('${invoice.id}', null, '${safeStudentId}', '${safeStudentName}')">
                       📄 View Receipts (${mergedReceiptsCount})
                     </button>
-                    ${isUnopened || hasNewReceiptCount ? `<span class="new-receipt-badge" id="receipt-badge-${invoice.id}">🔴 New Receipt</span>` : ''}
+                    ${hasNewReceiptCount ? `<span class="new-receipt-badge" id="receipt-badge-${invoice.id}">🔴 New Receipt</span>` : ''}
                   </span>
                 ` : ''}
                 <button class="secondary" onclick="loadInvoiceFromDB('${invoice.id}')">Load</button>
@@ -5871,7 +5864,12 @@ Please include your Student ID in the payment reference or memo to ensure proper
       const badge = document.getElementById(`receipt-badge-${invoiceId}`);
       if (badge) badge.remove();
       const inv = window.currentInvoices?.find(iv => iv.id === invoiceId);
-      if (inv) inv.receipts_viewed_at = now;
+      if (inv) {
+        inv.receipts_viewed_at = now;
+        // Sync localStorage count so badge doesn't reappear on next render
+        const count = (Array.isArray(inv.payment_receipts) ? inv.payment_receipts.length : 0);
+        localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(count));
+      }
     }
 
     // ─── Open the receipts modal (instant, then refreshes in background) ──────
