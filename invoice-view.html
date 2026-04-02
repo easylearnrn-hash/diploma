@@ -465,6 +465,16 @@
     }
 
     /* Payment instructions layout */
+    .payment-section {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 20px;
+      align-items: stretch;
+      margin-top: 32px;
+      padding-top: 28px;
+      border-top: 2px solid rgba(201, 168, 76, 0.2);
+    }
+
     .payment-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.8fr);
@@ -487,7 +497,7 @@
       box-shadow: 0 8px 28px rgba(201, 168, 76, 0.15);
       display: flex;
       flex-direction: column;
-      justify-content: center;
+      justify-content: flex-start;
     }
 
     .payment-right-card .card-title {
@@ -511,13 +521,8 @@
       margin-top: 12px;
     }
 
-    .payment-right-card .card-label:first-of-type,
-    .payment-right-card .card-label:nth-of-type(1) {
-      margin-top: 0;
-    }
-
     .payment-right-card .card-value {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
       color: #0f172a;
       letter-spacing: 0.5px;
@@ -527,8 +532,8 @@
     .payment-right-card .phone {
       color: var(--gold-500);
       font-weight: 700;
-      font-size: 15px;
-      margin-top: 4px;
+      font-size: 14px;
+      margin-top: 10px;
     }
 
     .payment-right-card .address-line {
@@ -536,6 +541,32 @@
       color: #0f172a;
       line-height: 1.7;
       font-size: 13px;
+    }
+
+    .payment-notes-card {
+      background: linear-gradient(135deg, rgba(248,250,252,0.9) 0%, rgba(226,232,240,0.9) 100%);
+      border: 2px solid var(--gold-500);
+      border-radius: 14px;
+      padding: 22px 20px;
+      box-shadow: 0 8px 28px rgba(201, 168, 76, 0.15);
+    }
+
+    .payment-notes-card h4 {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--gold-500);
+      margin: 0 0 14px 0;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(201, 168, 76, 0.25);
+    }
+
+    .payment-notes-card p {
+      font-size: 12.5px;
+      color: #374151;
+      line-height: 1.75;
+      margin: 0;
     }
 
     .invoice-footer {
@@ -790,27 +821,25 @@
               </table>
             </div>
 
-            <div class="invoice-notes payment-grid" id="notesSection">
-              <div class="payment-left">
+            <div class="payment-section" id="notesSection">
+              <div class="payment-notes-card">
                 <h4>Payment Instructions</h4>
                 <p id="notes"></p>
               </div>
-              <div class="payment-cards-col">
-                <div class="payment-right-card">
-                  <div class="card-title">Contact</div>
-                  <div class="address-line">528 E San Jose Ave # 106</div>
-                  <div class="address-line">Burbank, CA 91501, USA</div>
-                  <div class="phone">+1 909 300 5155</div>
-                </div>
-                <div class="payment-right-card">
-                  <div class="card-title">Bank Transfer</div>
-                  <div class="card-label">Account Number</div>
-                  <div class="card-value">400118641937</div>
-                  <div class="card-label">Routing (ACH)</div>
-                  <div class="card-value">124303243</div>
-                  <div class="card-label">Routing (Wire)</div>
-                  <div class="card-value">124303243</div>
-                </div>
+              <div class="payment-right-card">
+                <div class="card-title">Contact</div>
+                <div class="address-line">528 E San Jose Ave # 106</div>
+                <div class="address-line">Burbank, CA 91501, USA</div>
+                <div class="phone">+1 909 300 5155</div>
+              </div>
+              <div class="payment-right-card">
+                <div class="card-title">Bank Transfer</div>
+                <div class="card-label">Account Number</div>
+                <div class="card-value">400118641937</div>
+                <div class="card-label">Routing Number (ACH)</div>
+                <div class="card-value">124303243</div>
+                <div class="card-label">Routing Number (Wire)</div>
+                <div class="card-value">124303243</div>
               </div>
             </div>
 
@@ -1142,30 +1171,37 @@
           </tr>
         `;
 
-        // Populate notes
+        // Populate notes — show only the intro text, strip bank info + payment history
         if (invoice.notes && invoice.notes.trim()) {
-          let formattedNotes = invoice.notes
-            .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
-            // Keep "Important:" message on one line
-            .replace(/Important:\s*\n\s*Please include/g, 'Important: Please include')
-            .replace(/\n/g, '<br>');
+          // Split off everything before the first partial payment record
+          let notesText = invoice.notes.split('--- PARTIAL PAYMENT RECORDED ---')[0].trim();
 
-          // Replace old bank info with new bank info
-          formattedNotes = formattedNotes
-            .replace(/Account Name:.*?<br>/g, '')
-            .replace(/Account Number:.*?<br>/g, 'Account Number: 400118641937<br>')
-            .replace(/Routing Information:.*?<br>/g, 'Routing Information:<br>')
-            .replace(/•\s*ACH\s*\/\s*Direct Deposit:.*?<br>/g, '• ACH / Direct Deposit: 124303243<br>')
-            .replace(/•\s*Domestic Wire:.*?<br>/g, '• Domestic Wire: 124303243<br>')
-            .replace(/•\s*International Wire \(SWIFT\):.*?<br>/g, '');
-          
-          // Format currency amounts in notes (e.g., Amount: $1000.00 -> Amount: $1,000.00)
-          formattedNotes = formattedNotes.replace(/Amount:\s*\$(\d+)\.(\d{2})/g, (match, dollars, cents) => {
-            const formattedDollars = parseInt(dollars).toLocaleString('en-US');
-            return `Amount: $${formattedDollars}.${cents}`;
-          });
-          
-          document.getElementById('notes').innerHTML = formattedNotes;
+          // Strip old bank info block entirely
+          notesText = notesText
+            .replace(/Account Name:.*$/m, '')
+            .replace(/Account Number:.*$/m, '')
+            .replace(/Routing Information:.*$/m, '')
+            .replace(/•\s*ACH\s*\/\s*Direct Deposit:.*$/m, '')
+            .replace(/•\s*Domestic Wire:.*$/m, '')
+            .replace(/•\s*International Wire \(SWIFT\):.*$/m, '')
+            .replace(/Important:[\s\S]*?memo to ensure proper allocation of funds\./m, '')
+            .trim();
+
+          if (notesText) {
+            let formattedNotes = notesText
+              .replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>')
+              .replace(/\n{2,}/g, '</p><p>')
+              .replace(/\n/g, '<br>');
+
+            // Format currency amounts
+            formattedNotes = formattedNotes.replace(/Amount:\s*\$(\d+)\.(\d{2})/g, (match, dollars, cents) => {
+              return `Amount: $${parseInt(dollars).toLocaleString('en-US')}.${cents}`;
+            });
+
+            document.getElementById('notes').innerHTML = `<p>${formattedNotes}</p>`;
+          } else {
+            document.getElementById('notesSection').style.display = 'none';
+          }
         } else {
           document.getElementById('notesSection').style.display = 'none';
         }
