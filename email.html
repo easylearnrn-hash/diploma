@@ -1528,9 +1528,15 @@
             <input type="checkbox" class="select-all-checkbox" id="selectAllCheckbox" onchange="toggleSelectAll()">
             <label class="select-all-label" for="selectAllCheckbox">Select All</label>
           </div>
-          <button class="btn-delete-elegant" id="deleteSelectedBtn" onclick="bulkDeleteEmails()" style="display: none;">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:4px;"><path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Delete (<span id="selectedCountInline">0</span>)
-          </button>
+          <div style="display:flex; gap:6px;">
+            <button class="btn-spam" id="spamSelectedBtn" onclick="bulkSpamEmails()" style="display:none; padding:6px 11px; font-size:12px;">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+              Spam (<span id="spamCountInline">0</span>)
+            </button>
+            <button class="btn-delete-elegant" id="deleteSelectedBtn" onclick="bulkDeleteEmails()" style="display: none;">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" style="vertical-align:-1px;margin-right:4px;"><path d="M3 4.5h10M6 4.5V3h4v1.5M5.5 4.5l.5 8h4l.5-8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Delete (<span id="selectedCountInline">0</span>)
+            </button>
+          </div>
         </div>
         
         <div class="inbox-list" id="emailList">
@@ -4939,18 +4945,68 @@ ${email.body}`;
       document.getElementById('deleteModal').classList.add('active');
     }
 
+    window.bulkSpamEmails = async function() {
+      if (selectedEmails.size === 0) {
+        showNotification('No emails selected', 'error');
+        return;
+      }
+      // Collect unique sender addresses from selected emails
+      const senders = new Set();
+      selectedEmails.forEach(id => {
+        const email = emailHistory.find(e => e.id === id);
+        if (email && email.sender) senders.add(email.sender.toLowerCase().trim());
+      });
+      // Filter to only senders not already blocked
+      const toBlock = [...senders].filter(s => !spamSet.has(s));
+      if (toBlock.length === 0) {
+        showNotification('All selected senders are already blocked', 'info');
+        return;
+      }
+      try {
+        const rows = toBlock.map(s => ({ sender_address: s }));
+        const { error } = await db
+          .from('email_spam_blocked')
+          .insert(rows);
+        if (error && error.code !== '23505') throw error;
+        await loadSpamBlocked();
+        selectedEmails.clear();
+        updateSelectionUI();
+        renderEmailList();
+        selectedEmail = null;
+        const ds = document.getElementById('detailSection');
+        if (ds) ds.innerHTML = `
+          <div class="detail-empty">
+            <div class="detail-empty-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="6" y="8" width="36" height="32" rx="3" stroke="rgba(201,168,76,0.35)" stroke-width="2"/><path d="M6 30h9l3 4h12l3-4h9" stroke="rgba(201,168,76,0.35)" stroke-width="2" stroke-linejoin="round"/><path d="M16 19h16M16 24h10" stroke="rgba(201,168,76,0.2)" stroke-width="1.8" stroke-linecap="round"/></svg></div>
+            <h3>No email selected</h3>
+            <p>Select an email from the list to view details</p>
+          </div>`;
+        showNotification(`${toBlock.length} sender(s) blocked — moved to Spam`, 'success');
+      } catch (e) {
+        console.error('bulkSpamEmails error:', e);
+        showNotification('Error blocking senders: ' + e.message, 'error');
+      }
+    };
+
     function updateSelectionUI() {
       const count = selectedEmails.size;
       
-      // Show/hide delete button and update count
+      // Show/hide delete + spam buttons and update counts
       const deleteBtn = document.getElementById('deleteSelectedBtn');
+      const spamBtn   = document.getElementById('spamSelectedBtn');
       const countSpan = document.getElementById('selectedCountInline');
+      const spamSpan  = document.getElementById('spamCountInline');
       
       if (count > 0) {
         deleteBtn.style.display = 'block';
         countSpan.textContent = count;
+        // Only show spam button when not already in spam folder
+        if (spamBtn) {
+          spamBtn.style.display = currentFolder === 'spam' ? 'none' : 'flex';
+          if (spamSpan) spamSpan.textContent = count;
+        }
       } else {
         deleteBtn.style.display = 'none';
+        if (spamBtn) spamBtn.style.display = 'none';
       }
       
       // Update select all checkbox state
