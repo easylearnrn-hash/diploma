@@ -105,6 +105,44 @@
     .header-actions {
       display: flex;
       gap: 10px;
+      align-items: center;
+    }
+
+    /* ── Domain filter buttons ── */
+    .domain-filters {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      padding-right: 14px;
+      border-right: 1px solid rgba(255,255,255,0.08);
+      margin-right: 4px;
+    }
+
+    .btn-domain {
+      padding: 7px 14px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.02em;
+      border: 1px solid rgba(201, 168, 76, 0.25);
+      background: rgba(201, 168, 76, 0.06);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .btn-domain:hover {
+      background: rgba(201, 168, 76, 0.12);
+      color: var(--gold-light);
+      border-color: rgba(201, 168, 76, 0.45);
+    }
+
+    .btn-domain.active {
+      background: linear-gradient(135deg, rgba(201, 168, 76, 0.22) 0%, rgba(201, 168, 76, 0.12) 100%);
+      color: var(--gold-primary);
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 10px rgba(201, 168, 76, 0.18);
     }
 
     /* ── Buttons ── */
@@ -1146,6 +1184,18 @@
         <span class="header-badge" id="totalEmailsBadge">0 Emails</span>
       </div>
       <div class="header-actions">
+        <!-- Domain filters -->
+        <div class="domain-filters">
+          <button class="btn-domain" id="domainBtn-acnhs-am" onclick="setDomainFilter('acnhs.am')">
+            @acnhs.am
+          </button>
+          <button class="btn-domain" id="domainBtn-acnhs-us" onclick="setDomainFilter('acnhs.us')">
+            @acnhs.us
+          </button>
+          <button class="btn-domain" id="domainBtn-ana-us" onclick="setDomainFilter('ana-us.com')">
+            @ana-us.com
+          </button>
+        </div>
         <button class="btn btn-secondary" id="forwardingSettingsBtn" title="Email Forwarding Settings">
           Forwarding
         </button>
@@ -1921,12 +1971,31 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     // State
     let emailHistory = [];
     let currentFilter = 'inbox';
+    let activeDomainFilter = null; // null = all domains, otherwise e.g. 'acnhs.am'
     let selectedEmail = null;
     let selectedTemplate = 'custom';
     let selectedEmails = new Set(); // Track selected email IDs
     let emailToDelete = null;
     let bulkDeleteMode = false;
     let viewedEmails = new Set(); // Track viewed email IDs to remove glow
+
+    // Domain filter toggle
+    function setDomainFilter(domain) {
+      // Toggle off if clicking the same active domain
+      if (activeDomainFilter === domain) {
+        activeDomainFilter = null;
+      } else {
+        activeDomainFilter = domain;
+      }
+      // Update button active states
+      document.querySelectorAll('.btn-domain').forEach(btn => btn.classList.remove('active'));
+      if (activeDomainFilter) {
+        const map = { 'acnhs.am': 'domainBtn-acnhs-am', 'acnhs.us': 'domainBtn-acnhs-us', 'ana-us.com': 'domainBtn-ana-us' };
+        const btnEl = document.getElementById(map[activeDomainFilter]);
+        if (btnEl) btnEl.classList.add('active');
+      }
+      renderEmailList();
+    }
 
     // Load viewed emails from localStorage
     function loadViewedEmails() {
@@ -2829,6 +2898,15 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         filtered = filtered.filter(e => e.status === 'failed');
       }
       // 'all' shows everything, no filter needed
+
+      // Filter by domain (checks both sender and recipient)
+      if (activeDomainFilter) {
+        const domain = activeDomainFilter.toLowerCase();
+        filtered = filtered.filter(e =>
+          (e.sender || '').toLowerCase().endsWith('@' + domain) ||
+          (e.recipient || '').toLowerCase().endsWith('@' + domain)
+        );
+      }
       
       // Filter by search
       if (searchTerm) {
@@ -2839,7 +2917,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div style="padding: 40px; text-align: center; color: #64748b;">No emails found</div>';
+        const domainMsg = activeDomainFilter ? ` for @${activeDomainFilter}` : '';
+        container.innerHTML = `<div style="padding: 40px; text-align: center; color: #64748b;">No emails found${domainMsg}</div>`;
         return;
       }
 
