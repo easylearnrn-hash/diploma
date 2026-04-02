@@ -3282,91 +3282,41 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           studentList.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-muted);">⏳ Loading student emails...</div>';
         }
 
-        console.log('🔍 Loading forwarding settings for:', userEmail);
+        console.log('🔍 Loading forwarding settings');
 
-        // Get user's ACNHS email addresses
-        const { data: userData, error: userError } = await db
-          .from('admin_users')
-          .select('email_permissions, email')
-          .eq('email', userEmail)
-          .maybeSingle();
+        // Admin-only page: always fetch ALL forwarding rules
+        const { data: allRules, error: rulesError } = await db
+          .from('email_forwarding_rules')
+          .select('*');
 
-        if (userError) {
-          console.error('Error fetching user data:', userError);
-          showNotification('Error loading user data', 'error');
-          return;
+        if (rulesError && !rulesError.message?.includes('does not exist')) {
+          console.error('Error fetching forwarding rules:', rulesError);
         }
+        const allUserRules = allRules;
 
-        // Get all ACNHS email addresses for this user
-        let acnhsEmails = userData?.email_permissions || [];
-        
-        // If no email_permissions, check if user's email is @acnhs.am
-        if (acnhsEmails.length === 0) {
-          if (userData?.email) {
-            acnhsEmails = [userData.email];
-          } else if (userEmail) {
-            acnhsEmails = [userEmail];
-          }
-        }
-        
-        // Also get the list of emails user can send from (from email system)
-        const allowedEmails = getUserAllowedEmails();
-        if (allowedEmails && allowedEmails.length > 0) {
-          acnhsEmails = [...new Set([...acnhsEmails, ...allowedEmails])];
-        }
-        
-        console.log('📧 All user emails:', acnhsEmails);
-        
-        const acnhsEmailsFiltered = acnhsEmails.filter(email => email && email.includes('@acnhs.am'));
+        // Staff tab: ONLY the fixed 17 departmental addresses — never student x.lastname@acnhs.am
+        const DEPARTMENTAL_EMAILS = [
+          'admissions@acnhs.am',
+          'info@acnhs.am',
+          'documents@acnhs.am',
+          'international@acnhs.am',
+          'registrar@acnhs.am',
+          'finance@acnhs.am',
+          'ceo@acnhs.am',
+          'dean@acnhs.am',
+          'academic@acnhs.am',
+          'student-services@acnhs.am',
+          'legal@acnhs.am',
+          'hr@acnhs.am',
+          'it@acnhs.am',
+          'library@acnhs.am',
+          'alumni@acnhs.am',
+          'research@acnhs.am',
+          'do-not-reply@acnhs.am'
+        ];
 
-        console.log('📧 Filtered ACNHS emails:', acnhsEmailsFiltered);
-
-        // Admin users (Hrachfilm@gmail.com or hrachfilm@gmail.com) can see ALL forwarding rules
-        const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
-        const isAdmin = ADMIN_EMAILS.includes(userEmail);
-
-        let allUserRules;
-        if (isAdmin) {
-          // Admin sees ALL forwarding rules from all users
-          console.log('🔐 Admin access: Loading ALL forwarding rules');
-          const { data: allRules, error: rulesError } = await db
-            .from('email_forwarding_rules')
-            .select('*');
-
-          if (rulesError && !rulesError.message?.includes('does not exist')) {
-            console.error('Error fetching forwarding rules:', rulesError);
-          }
-          allUserRules = allRules;
-        } else {
-          // Regular users only see their own rules
-          const { data: userRules, error: rulesError } = await db
-            .from('email_forwarding_rules')
-            .select('*')
-            .eq('created_by', userEmail);
-
-          if (rulesError && !rulesError.message?.includes('does not exist')) {
-            console.error('Error fetching forwarding rules:', rulesError);
-          }
-          allUserRules = userRules;
-        }
-
-        // Combine permission emails with emails created in forwarding rules
-        const allEmailsSet = new Set([
-          ...acnhsEmailsFiltered,
-          ...(allUserRules || []).map(rule => rule.acnhs_email)
-        ]);
-
-        const allEmails = Array.from(allEmailsSet).sort();
-
-        console.log('📧 All emails (permissions + created):', allEmails);
-
-        if (allEmails.length === 0) {
-          showNotification('No ACNHS email addresses found. You need at least one @acnhs.am email address to set up forwarding.', 'error');
-          return;
-        }
-
-        // Create rules data structure
-        forwardingRulesData = allEmails.map(acnhsEmail => {
+        // Build staff forwardingRulesData from DEPARTMENTAL_EMAILS only
+        forwardingRulesData = DEPARTMENTAL_EMAILS.map(acnhsEmail => {
           const existingRule = (allUserRules || []).find(r => r.acnhs_email === acnhsEmail);
           return {
             acnhs_email: acnhsEmail,
