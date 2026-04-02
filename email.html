@@ -145,6 +145,31 @@
       box-shadow: 0 0 10px rgba(201, 168, 76, 0.18);
     }
 
+    /* ── Forwarding modal domain pills ── */
+    .fwd-domain-pill {
+      padding: 5px 13px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.18s;
+      border: 1px solid rgba(201, 168, 76, 0.2);
+      background: rgba(201, 168, 76, 0.05);
+      color: #64748b;
+      letter-spacing: 0.01em;
+    }
+    .fwd-domain-pill:hover {
+      background: rgba(201, 168, 76, 0.12);
+      color: var(--gold-light);
+      border-color: rgba(201, 168, 76, 0.4);
+    }
+    .fwd-domain-pill.active {
+      background: rgba(201, 168, 76, 0.18);
+      color: var(--gold-primary);
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 8px rgba(201, 168, 76, 0.15);
+    }
+
     /* ── Buttons ── */
     .btn {
       padding: 11px 20px;
@@ -1474,7 +1499,7 @@
         </div>
 
         <!-- Search box -->
-        <div style="margin-bottom: 16px;">
+        <div style="margin-bottom: 12px;">
           <input 
             type="text" 
             id="forwardingSearchInput"
@@ -1483,9 +1508,19 @@
             style="width: 100%; padding: 12px 16px; background: rgba(2,6,23,0.6); border: 1px solid rgba(201,168,76,0.2); border-radius: 8px; color: #e8edf5; font-size: 14px; outline: none; transition: all 0.2s;"
             onfocus="this.style.borderColor='rgba(201,168,76,0.5)'; this.style.background='rgba(2,6,23,0.85)'"
             onblur="this.style.borderColor='rgba(201,168,76,0.2)'; this.style.background='rgba(2,6,23,0.6)'">
-          <div id="forwardingSearchCount" style="color: #8a9ec0; font-size: 13px; margin-top: 8px; display: none;">
-            <!-- Search result count will appear here -->
-          </div>
+        </div>
+
+        <!-- Domain filter pills -->
+        <div style="display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; align-items: center;">
+          <span style="font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px;">Filter:</span>
+          <button id="fwdDomainAll"    onclick="setForwardingDomainFilter(null)"          class="fwd-domain-pill active">All</button>
+          <button id="fwdDomainAm"     onclick="setForwardingDomainFilter('acnhs.am')"    class="fwd-domain-pill">@acnhs.am</button>
+          <button id="fwdDomainUs"     onclick="setForwardingDomainFilter('acnhs.us')"    class="fwd-domain-pill">@acnhs.us</button>
+          <button id="fwdDomainAnaUs"  onclick="setForwardingDomainFilter('ana-us.com')"  class="fwd-domain-pill">@ana-us.com</button>
+        </div>
+
+        <div id="forwardingSearchCount" style="color: #8a9ec0; font-size: 13px; margin-bottom: 10px; display: none;">
+          <!-- Search / domain result count will appear here -->
         </div>
         
         <!-- Staff forwarding rules list -->
@@ -3359,6 +3394,24 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     // Track current tab
     let currentForwardingTab = 'staff';
     let studentForwardingRulesData = [];
+    let activeForwardingDomain = null; // null = all, else e.g. 'acnhs.am'
+
+    // Domain filter for the forwarding modal
+    window.setForwardingDomainFilter = function(domain) {
+      activeForwardingDomain = domain;
+      // Update pill active states
+      const pillMap = {
+        null:        'fwdDomainAll',
+        'acnhs.am':  'fwdDomainAm',
+        'acnhs.us':  'fwdDomainUs',
+        'ana-us.com':'fwdDomainAnaUs'
+      };
+      document.querySelectorAll('.fwd-domain-pill').forEach(p => p.classList.remove('active'));
+      const activePill = document.getElementById(pillMap[domain] || 'fwdDomainAll');
+      if (activePill) activePill.classList.add('active');
+      // Re-apply combined search + domain filter
+      filterForwardingRules(document.getElementById('forwardingSearchInput').value);
+    };
 
     // Load student emails from students table (fallback to acnhs_students if legacy)
     async function loadStudentEmails() {
@@ -3521,8 +3574,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         searchInput.placeholder = 'Search student emails...';
       }
 
-      // Clear search
+      // Clear search and reset domain filter
       searchInput.value = '';
+      activeForwardingDomain = null;
+      document.querySelectorAll('.fwd-domain-pill').forEach(p => p.classList.remove('active'));
+      const allPill = document.getElementById('fwdDomainAll');
+      if (allPill) allPill.classList.add('active');
       filterForwardingRules('');
     };
 
@@ -3680,38 +3737,39 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       `).join('');
     }
 
-    // Filter forwarding rules by search query
+    // Filter forwarding rules by search query AND active domain pill
     window.filterForwardingRules = function(searchQuery) {
-      const query = searchQuery.toLowerCase().trim();
+      const query = (searchQuery || '').toLowerCase().trim();
+      const domain = activeForwardingDomain; // null = all
       const ruleItems = document.querySelectorAll('.forwarding-rule-item');
       const countEl = document.getElementById('forwardingSearchCount');
       
       let visibleCount = 0;
-      let totalCount = ruleItems.length;
+      const totalCount = ruleItems.length;
 
       ruleItems.forEach(item => {
         const email = item.getAttribute('data-email') || '';
-        const matches = email.includes(query);
-        
-        if (matches || query === '') {
-          item.style.display = 'block';
-          visibleCount++;
-        } else {
-          item.style.display = 'none';
-        }
+        const matchesSearch = query === '' || email.includes(query);
+        const matchesDomain = !domain || email.endsWith('@' + domain);
+        const visible = matchesSearch && matchesDomain;
+
+        item.style.display = visible ? 'block' : 'none';
+        if (visible) visibleCount++;
       });
 
-      // Show/update count
-      if (query === '') {
+      // Count label
+      const isFiltered = query !== '' || domain !== null;
+      if (!isFiltered) {
         countEl.style.display = 'none';
       } else {
         countEl.style.display = 'block';
+        const domainLabel = domain ? `@${domain}` : '';
+        const searchLabel = query ? `"${searchQuery}"` : '';
+        const filterDesc = [domainLabel, searchLabel].filter(Boolean).join(' + ');
         if (visibleCount === 0) {
-          countEl.innerHTML = `<span style="color: #ef4444;">❌ No emails found matching "${searchQuery}"</span>`;
-        } else if (visibleCount === totalCount) {
-          countEl.innerHTML = `<span style="color: #c9a84c;">✓ Showing all ${totalCount} emails</span>`;
+          countEl.innerHTML = `<span style="color: #ef4444;">❌ No emails found for ${filterDesc}</span>`;
         } else {
-          countEl.innerHTML = `<span style="color: #c9a84c;">✓ Found ${visibleCount} of ${totalCount} emails</span>`;
+          countEl.innerHTML = `<span style="color: #c9a84c;">✓ ${visibleCount} of ${totalCount} emails${filterDesc ? ' — ' + filterDesc : ''}</span>`;
         }
       }
     };
@@ -3730,7 +3788,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       forwardingRulesData = [];
       studentForwardingRulesData = [];
       currentForwardingTab = 'staff';
+      activeForwardingDomain = null;
       
+      // Reset domain pills to "All"
+      document.querySelectorAll('.fwd-domain-pill').forEach(p => p.classList.remove('active'));
+      const allPill = document.getElementById('fwdDomainAll');
+      if (allPill) allPill.classList.add('active');
+
       // Clear search
       const searchInput = document.getElementById('forwardingSearchInput');
       if (searchInput) {
