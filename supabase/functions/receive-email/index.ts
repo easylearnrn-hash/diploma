@@ -652,7 +652,11 @@ serve(async (req: Request) => {
     try {
       if (DISABLE_EMAIL_FORWARDING) {
         console.log('⛔ Auto-forwarding disabled via DISABLE_EMAIL_FORWARDING=true')
-      } else if (normalizedRecipient?.endsWith('@acnhs.am')) {
+      } else if (
+        normalizedRecipient?.endsWith('@acnhs.am') ||
+        normalizedRecipient?.endsWith('@acnhs.us') ||
+        normalizedRecipient?.endsWith('@ana-us.com')
+      ) {
         console.log('📧 Checking auto-forwarding rules for recipient:', normalizedRecipient)
 
         // ── LOOP-BREAK GUARD 1: never forward system-generated emails ──
@@ -698,7 +702,11 @@ serve(async (req: Request) => {
           console.log(`⤴️ Auto-forwarding enabled for ${normalizedRecipient} → ${forwardingRule.forward_to_email}`)
 
           const forwardToNormalized = normalizeEmailAddress(forwardingRule.forward_to_email)
-          const forwardToIsAcnhs = forwardToNormalized?.endsWith('@acnhs.am') ?? false
+          const forwardToIsAcnhs = (
+            forwardToNormalized?.endsWith('@acnhs.am') ||
+            forwardToNormalized?.endsWith('@acnhs.us') ||
+            forwardToNormalized?.endsWith('@ana-us.com')
+          ) ?? false
           const isSelfForward = forwardToNormalized === normalizedRecipient
           const isSenderForward = forwardToNormalized === normalizedSender
 
