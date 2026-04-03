@@ -981,6 +981,7 @@
     }
     .inv-reminder-config h3 { font-size: 15px; color: #e8dcc8; margin: 0 0 14px; }
     .inv-reminder-config label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8a7a55; margin-bottom: 6px; display: block; }
+  .inv-reminder-label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8a7a55; margin-bottom: 6px; display: block; }
     .inv-reminder-var-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
     .inv-reminder-var-btn {
       background: rgba(255,255,255,0.05);
@@ -1421,7 +1422,8 @@
 
     /* Hide main content until authenticated */
     body.locked .editor-sidebar,
-    body.locked .editor-preview {
+    body.locked .editor-preview,
+    body.locked .invoice-preview {
       opacity: 0;
       pointer-events: none;
     }
@@ -1492,7 +1494,7 @@
     <div class="editor-header">
       <h1>Invoice Generator</h1>
       <span class="badge">Admin</span>
-      <a id="allInvoicesHeaderLink" style="cursor: pointer; color: var(--gold-primary); font-size: 12px; font-weight: 700; margin-left: auto; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s; letter-spacing: 0.3px; text-transform: uppercase;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'">
+      <a id="allInvoicesHeaderLink" href="javascript:void(0)" tabindex="0" aria-label="Open all invoices" style="cursor: pointer; color: var(--gold-primary); font-size: 12px; font-weight: 700; margin-left: auto; text-decoration: none; display: flex; align-items: center; gap: 4px; transition: opacity 0.2s; letter-spacing: 0.3px; text-transform: uppercase;" onmouseover="this.style.opacity='0.7'" onmouseout="this.style.opacity='1'" onfocus="this.style.opacity='0.7'" onblur="this.style.opacity='1'">
         All Invoices
       </a>
     </div>
@@ -3804,8 +3806,8 @@ Please include your Student ID in the payment reference or memo to ensure proper
             const mergedReceiptsCount = invoiceReceiptsCount + appReceiptsCount;
             const lastSeenCount = parseInt(localStorage.getItem(`receipt_count_seen_${invoice.id}`) || '-1', 10);
             const hasReceipts = mergedReceiptsCount > 0;
-            // Show badge only when count genuinely increased since last open (never on first load if never opened: -1 means unseen)
-            const hasNewReceiptCount = hasReceipts && (lastSeenCount === -1 ? false : mergedReceiptsCount > lastSeenCount);
+            // Show red badge based on invoice-owned receipts only (prevents false positives from merged legacy/app receipts)
+            const hasNewReceiptCount = (invoiceReceiptsCount > 0) && (lastSeenCount === -1 ? false : invoiceReceiptsCount > lastSeenCount);
             const safeStudentName = (invoice.student_name || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
             const safeStudentId   = (invoice.student_id   || '').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
@@ -3867,11 +3869,12 @@ Please include your Student ID in the payment reference or memo to ensure proper
         };
 
         // Render immediately with whatever receipt counts we have (may be 0 if still loading)
-        renderCards(_cachedAppReceipts);
+        const initialReceiptMap = _cachedAppReceipts;
+        renderCards(initialReceiptMap);
 
         // When app receipt fetch completes, re-render if counts changed
         appReceiptPromise.then(map => {
-          if (map && map !== _cachedAppReceipts) renderCards(map);
+          if (map && map !== initialReceiptMap) renderCards(map);
         }).catch(() => {});
 
       } catch (error) {
@@ -4886,6 +4889,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
         return;
       }
 
+      // Ensure only one breakdown modal exists at a time
+      document.getElementById('monthlyBreakdownModal')?.remove();
+
       const invoices = window.currentInvoices;
       const months = ['January', 'February', 'March', 'April', 'May', 'June',
                       'July', 'August', 'September', 'October', 'November', 'December'];
@@ -4942,6 +4948,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
 
       // ── Build and show modal shell IMMEDIATELY ──────────────────────────────
       const modal = document.createElement('div');
+  modal.id = 'monthlyBreakdownModal';
       modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);display:flex;align-items:center;justify-content:center;z-index:10001;padding:20px;';
 
       const modalContent = document.createElement('div');
@@ -5291,11 +5298,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
           modal.remove();
           showNotification('✅ Expense added successfully', 'success');
           
-          // Close the breakdown modal first, then reopen it with updated data
-          const breakdownModal = document.querySelector('.modal-overlay');
-          if (breakdownModal) {
-            breakdownModal.remove();
-          }
+          // Close the active breakdown modal first, then reopen it with updated data
+          const breakdownModal = document.getElementById('monthlyBreakdownModal');
+          if (breakdownModal) breakdownModal.remove();
           
           // Wait a moment, then refresh the breakdown modal
           setTimeout(() => {
@@ -5426,7 +5431,8 @@ Please include your Student ID in the payment reference or memo to ensure proper
         showNotification('✅ Expense removed', 'success');
         
         // Refresh the breakdown modal
-        showMonthlyBreakdown();
+        document.getElementById('monthlyBreakdownModal')?.remove();
+        setTimeout(() => showMonthlyBreakdown(), 100);
       } catch (error) {
         console.error('Error removing expense:', error);
         showNotification('Failed to remove expense', 'error');
@@ -5465,22 +5471,19 @@ Please include your Student ID in the payment reference or memo to ensure proper
     window.sendInvoiceEmail = async function(invoiceId, studentName, invoiceUrl) {
       try {
         // ── 1. Resolve student email ──────────────────────────────────────────
-        const { data: studentData } = await invoiceSupabase
-          .from('students')
-          .select('email, student_id')
-          .eq('student_id', invoiceId)
-          .single();
-
-        // If not found by invoiceId directly, look up via the invoices table
-        const { data: invoiceRecord } = await invoiceSupabase
+        const { data: invoiceRecord, error: invoiceFetchError } = await invoiceSupabase
           .from('invoices')
-          .select('student_id')
+          .select('student_id, invoice_number')
           .eq('id', invoiceId)
           .single();
 
-        let studentEmail = studentData?.email;
-        
-        if (!studentEmail && invoiceRecord?.student_id) {
+        if (invoiceFetchError) {
+          throw invoiceFetchError;
+        }
+
+        let studentEmail = '';
+
+        if (invoiceRecord?.student_id) {
           const { data: studentByStudentId } = await invoiceSupabase
             .from('students')
             .select('email')
@@ -5503,9 +5506,10 @@ Please include your Student ID in the payment reference or memo to ensure proper
         const PORTAL_BASE = 'https://www.acnhs.am';
 
         // Canonical invoice viewer URL (absolute, publicly accessible)
+        const invoiceNumberForUrl = invoiceRecord?.invoice_number || invoiceId;
         const canonicalInvoiceUrl = invoiceUrl && invoiceUrl.startsWith('https://')
           ? invoiceUrl
-          : `${PORTAL_BASE}/invoice-view.html?id=${invoiceId}`;
+          : `${PORTAL_BASE}/invoice-view.html?id=${invoiceNumberForUrl}`;
 
         // Portal login URL — student logs in and lands on the Financial tab
         // where their invoice is embedded.  The `tab=financial` query param
@@ -5961,7 +5965,9 @@ Please include your Student ID in the payment reference or memo to ensure proper
       // Update button count + clear badge
       const receiptBtn = document.querySelector(`button.secondary[onclick*="viewReceipts('${invoiceId}'"]`);
       if (receiptBtn) receiptBtn.innerHTML = `📄 View Receipts (${receiptsArray.length})`;
-      localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(receiptsArray.length));
+  const invAfterOpen = window.currentInvoices?.find(iv => iv.id === invoiceId);
+  const invoiceOwnedCount = Array.isArray(invAfterOpen?.payment_receipts) ? invAfterOpen.payment_receipts.length : 0;
+  localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(invoiceOwnedCount));
       document.getElementById(`receipt-badge-${invoiceId}`)?.remove();
 
       // Render into modal body
@@ -6027,8 +6033,8 @@ Please include your Student ID in the payment reference or memo to ensure proper
         const newList = filterFn(prev);
         receiptCache.set(invoiceId, newList);
 
-        // Update localStorage seen count to new count so badge doesn't reappear
-        localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(newList.length));
+  // Update localStorage seen count using invoice-owned receipts baseline (same logic used by red badge)
+  localStorage.setItem(`receipt_count_seen_${invoiceId}`, String(updatedInvoiceReceipts.length));
 
         // Update button label
         const btn = document.querySelector(`button.secondary[onclick*="viewReceipts('${invoiceId}'"]`);
@@ -6078,24 +6084,24 @@ Please include your Student ID in the payment reference or memo to ensure proper
        Identical workflow to Admin → Payments.
        Logic lives here; invoked via invOpenReminderModal().
   ════════════════════════════════════════════════════════════ -->
-  <div class="inv-reminder-overlay" id="invReminderOverlay" role="dialog" aria-modal="true" aria-label="Payment Reminder Email">
+  <div class="inv-reminder-overlay" id="invReminderOverlay" aria-label="Payment Reminder Email">
     <div class="inv-reminder-modal">
-      <aside class="inv-reminder-config">
+  <aside class="inv-reminder-config" aria-label="Reminder options">
         <h3>Email Options</h3>
         <p style="font-size:11px;color:#8a7a55;margin:0 0 14px;">Select items — preview updates instantly.</p>
 
-        <label>Special Fees</label>
+        <div class="inv-reminder-label">Special Fees</div>
         <div class="inv-reminder-var-grid">
           <button class="inv-reminder-var-btn" data-val="Enrollment Fee" onclick="invToggleReminderTag(this)">Enrollment Fee</button>
         </div>
 
-        <label>Quick Select</label>
+        <div class="inv-reminder-label">Quick Select</div>
         <div class="inv-reminder-var-grid">
           <button class="inv-reminder-var-btn" data-val="This Month"  onclick="invToggleReminderTag(this)">This Month</button>
           <button class="inv-reminder-var-btn" data-val="Next Month"  onclick="invToggleReminderTag(this)">Next Month</button>
         </div>
 
-        <label>Specific Month(s)</label>
+        <div class="inv-reminder-label">Specific Month(s)</div>
         <div class="inv-reminder-var-grid">
           <button class="inv-reminder-var-btn" data-val="January"   onclick="invToggleReminderTag(this)">Jan</button>
           <button class="inv-reminder-var-btn" data-val="February"  onclick="invToggleReminderTag(this)">Feb</button>
@@ -6113,7 +6119,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
 
         <div id="invReminderTagsRow" style="display:none;flex-wrap:wrap;gap:6px;padding:10px 12px;background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.2);border-radius:10px;margin-bottom:16px;"></div>
 
-        <label>Additional Note (Optional)</label>
+  <div class="inv-reminder-label">Additional Note (Optional)</div>
         <textarea class="inv-reminder-textarea" id="invReminderCustomMsg" placeholder="Add any context or instructions..." oninput="invUpdateReminderPreview()"></textarea>
       </aside>
 
