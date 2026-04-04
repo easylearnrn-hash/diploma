@@ -3303,8 +3303,23 @@
     // Populate student information
     (function init(){
       if (!studentData) {
-        alert('Student data not found. Please open Hub from the Student Portal.');
-        window.close();
+        // hub.html was accessed directly (e.g. bookmark / GitHub Pages URL) without going
+        // through Student-page.html first, so sessionStorage/localStorage are empty.
+        // Show a friendly in-page error instead of an alert + window.close()
+        // (browsers block window.close() for pages not opened by a script).
+        document.body.style.cssText = 'margin:0;background:#0a1628;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;';
+        document.body.innerHTML = `
+          <div style="max-width:440px;width:90%;text-align:center;padding:48px 32px;background:#0f2044;border:1px solid rgba(201,168,76,0.25);border-radius:20px;box-shadow:0 24px 64px rgba(0,0,0,0.5);">
+            <div style="font-size:56px;margin-bottom:16px;">🔒</div>
+            <h1 style="color:#e2cc92;font-size:22px;font-weight:700;margin:0 0 10px;">Session Not Found</h1>
+            <p style="color:#9ba8ba;font-size:14px;line-height:1.6;margin:0 0 28px;">
+              Your student session has expired or the Hub was opened without going through the Student Portal.<br><br>
+              Please log in again and click <strong style="color:#c9a84c;">Open Hub</strong> from your portal.
+            </p>
+            <a href="login.html" style="display:inline-block;padding:12px 28px;background:#c9a84c;color:#0a1628;border-radius:10px;font-weight:700;font-size:14px;text-decoration:none;letter-spacing:0.03em;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">
+              ← Go to Student Login
+            </a>
+          </div>`;
         return;
       }
 
@@ -3723,7 +3738,13 @@
 
     // Go back to portal
     function goBackToPortal() {
-      window.close();
+      // window.close() is blocked by browsers when the page was not opened by a script
+      // (e.g. when accessed via GitHub Pages URL directly). Always redirect instead.
+      if (window.opener && !window.opener.closed) {
+        window.close();
+      } else {
+        window.location.href = 'Student-page.html';
+      }
     }
 
     // ==================== TEST PLATFORM ====================
