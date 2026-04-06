@@ -906,6 +906,7 @@
         // Wrap abbreviation
         const span = (doc || document).createElement('span');
         span.className = 'acnhs-abbr';
+        span.style.cssText = 'display:inline!important;outline:none!important;border-bottom:none!important;padding:0!important;margin:0!important;';
         span.textContent = matched;
         span.setAttribute('data-abbr', matched);
         span.setAttribute('tabindex', '0');
