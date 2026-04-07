@@ -234,7 +234,12 @@ async function fetchAttachmentBytesById(emailId: string, attachmentId: string) {
 
     const resultJson = await response.json();
     if (resultJson.content) {
-      const binaryString = atob(resultJson.content);
+      let base64str = String(resultJson.content);
+      if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
+      base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
+      base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
+
+      const binaryString = atob(base64str);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);

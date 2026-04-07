@@ -3239,7 +3239,15 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         if (textStr.trim().startsWith('{"object":"attachment"')) {
           console.log('Detected older JSON-wrapped email attachment, decoding...');
           const jsonObj = JSON.parse(textStr);
-          const binaryString = window.atob(jsonObj.content);
+          
+          let base64str = typeof jsonObj.content === 'string' ? jsonObj.content : String(jsonObj.content);
+          if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
+          // Convert base64url to standard base64 if necessary
+          base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
+          // Strip out any non-base64 characters (like newlines)
+          base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
+
+          const binaryString = window.atob(base64str);
           const bytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
