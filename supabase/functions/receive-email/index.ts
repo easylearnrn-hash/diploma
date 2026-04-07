@@ -233,6 +233,14 @@ async function fetchAttachmentBytesById(emailId: string, attachmentId: string) {
     }
 
     const resultJson = await response.json();
+    
+    // Resend's API now returns JSON with a `download_url` for larger
+    // or standalone attachments, or `content` for embedded base64
+    if (resultJson.download_url) {
+       console.log('Found download_url, fetching binary directly...');
+       return await fetchAttachmentBytesFromUrl(resultJson.download_url);
+    }
+    
     if (resultJson.content) {
       let base64str = String(resultJson.content);
       if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];

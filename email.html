@@ -3237,33 +3237,44 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // Read text to look for {"object":"attachment" signature
         const textStr = await clone.text();
         if (textStr.trim().startsWith('{"object":"attachment"')) {
-          console.log('Detected older JSON-wrapped email attachment, decoding...');
+          console.log('Detected older JSON-wrapped email attachment, checking data format...');
           const jsonObj = JSON.parse(textStr);
           
-          let base64str = typeof jsonObj.content === 'string' ? jsonObj.content : String(jsonObj.content);
-          if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
-          // Convert base64url to standard base64 if necessary
-          base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
-          // Strip out any non-base64 characters (like newlines)
-          base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
-
-          const binaryString = window.atob(base64str);
-          const bytes = new Uint8Array(binaryString.length);
-          for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
+          if (!jsonObj.content && jsonObj.download_url) {
+            console.log('Attachment has Resend download_url. Redirecting...');
+            window.open(jsonObj.download_url, '_blank', 'noopener,noreferrer');
+            return;
           }
-          const blob = new Blob([bytes], { type: jsonObj.content_type || 'application/octet-stream' });
-          const blobUrl = URL.createObjectURL(blob);
-          
-          const a = document.createElement('a');
-          a.style.display = 'none';
-          a.href = blobUrl;
-          a.download = jsonObj.filename || fileName || 'attachment';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-          return;
+
+          if (jsonObj.content) {
+            let base64str = typeof jsonObj.content === 'string' ? jsonObj.content : String(jsonObj.content);
+            if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
+            // Convert base64url to standard base64 if necessary
+            base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
+            // Strip out any non-base64 characters (like newlines)
+            base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
+
+            const binaryString = window.atob(base64str);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            const blob = new Blob([bytes], { type: jsonObj.content_type || 'application/octet-stream' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = blobUrl;
+            a.download = jsonObj.filename || fileName || 'attachment';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+            return;
+          } else {
+            showNotification('❌ Attachment content is missing from server payload.', 'error');
+            return;
+          }
         }
         
         // Not a JSON bugged file. Perform a regular forced download
