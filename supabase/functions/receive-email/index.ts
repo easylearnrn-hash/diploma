@@ -232,8 +232,16 @@ async function fetchAttachmentBytesById(emailId: string, attachmentId: string) {
       return null
     }
 
-    const buffer = await response.arrayBuffer()
-    return new Uint8Array(buffer)
+    const resultJson = await response.json();
+    if (resultJson.content) {
+      const binaryString = atob(resultJson.content);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      return bytes;
+    }
+    return null;
   } catch (error) {
     console.error('Error fetching attachment by ID:', error)
     return null

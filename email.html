@@ -3208,25 +3208,74 @@ We're here to support you every step of the way. Welcome to ACNHS!`
     // Opens an attachment — uses public_url/url if present, otherwise generates
     // a signed URL from Supabase Storage on demand (handles private buckets).
     window.openAttachment = async function(storagePath, publicUrl, fileName) {
-      if (publicUrl) {
-        window.open(publicUrl, '_blank', 'noopener,noreferrer');
+      let finalUrl = publicUrl;
+      
+      if (!finalUrl && storagePath) {
+        try {
+          const { data, error } = await db.storage
+            .from('email-attachments')
+            .createSignedUrl(storagePath, 3600); // 1-hour signed URL
+          if (!error && data?.signedUrl) {
+            finalUrl = data.signedUrl;
+          }
+        } catch (e) {
+          console.error('Error getting signed url:', e);
+        }
+      }
+
+      if (!finalUrl) {
+        showNotification('❌ Could not link to attachment.', 'error');
         return;
       }
-      if (!storagePath) return;
-      try {
-        const { data, error } = await db.storage
-          .from('email-attachments')
-          .createSignedUrl(storagePath, 3600, { download: fileName || true }); // 1-hour signed URL, force download
 
-        if (error || !data?.signedUrl) {
-          console.error('Could not generate signed URL:', error);
-          showNotification('❌ Could not open attachment. Please try again.', 'error');
+      try {
+        // Attempt to fetch the file to check if it's infected by the 
+        // older "Resend JSON Body" bug stored as raw bytes
+        const fetchRes = await fetch(finalUrl);
+        const clone = fetchRes.clone();
+        
+        // Read text to look for {"object":"attachment" signature
+        const textStr = await clone.text();
+        if (textStr.trim().startsWith('{"object":"attachment"')) {
+          console.log('Detected older JSON-wrapped email attachment, decoding...');
+          const jsonObj = JSON.parse(textStr);
+          const binaryString = window.atob(jsonObj.content);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: jsonObj.content_type || 'application/octet-stream' });
+          const blobUrl = URL.createObjectURL(blob);
+          
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = blobUrl;
+          a.download = jsonObj.filename || fileName || 'attachment';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
           return;
         }
-        window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+        
+        // Not a JSON bugged file. Perform a regular forced download
+        const urlParams = new URL(finalUrl);
+        if (!urlParams.searchParams.has('download')) {
+          urlParams.searchParams.set('download', fileName || 'true');
+        }
+        
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = urlParams.toString();
+        a.download = fileName || 'attachment';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        
       } catch (err) {
         console.error('openAttachment error:', err);
-        showNotification('❌ Could not open attachment.', 'error');
+        // Fallback open if fetch logic fails due to CORS or weird network issue
+        window.open(finalUrl, '_blank', 'noopener,noreferrer');
       }
     };
 
