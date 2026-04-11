@@ -211,49 +211,11 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
   .photo-spec-header{flex-direction:column;align-items:flex-start;}
   .photo-spec-figure{max-width:100%;}
 }
-@media print {
-  @page { margin: 0; size: auto; }
-  * { visibility: hidden !important; box-shadow: none !important; }
-  html, body {
-    width: 100% !important;
-    height: 100% !important;
-    overflow: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
-  }
-  #photo-print-overlay,
-  #photo-print-overlay * { visibility: visible !important; }
-  #photo-print-overlay {
-    display: flex !important;
-    position: fixed !important;
-    top: 0 !important; left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: white !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-  }
-  #photo-print-overlay img {
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    width: auto !important;
-    height: auto !important;
-    object-fit: contain !important;
-    display: block !important;
-  }
-  #photo-print-overlay p { display: none !important; }
-}
-#photo-print-overlay { display: none; }
+
 </style>
 </head>
 
 <body class="acnhs-watermarked">
-<div id="photo-print-overlay">
-  <img id="photo-print-img" src="" alt="ACNHS Official Photo Specifications">
-  <p>Armenian College of Nursing &amp; Health Sciences — Official Photo Specifications</p>
-</div>
 <div data-acnhs-header></div>
 
 <div class="page">
@@ -655,51 +617,34 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
 
 <script src="js/site-chrome.js"></script>
 <script>
-async function printPhotoSpec() {
+function printPhotoSpec() {
   const img = document.querySelector('#photoSpecFigure img');
   if (!img) return;
 
-  const overlay = document.getElementById('photo-print-overlay');
-  const printImg = document.getElementById('photo-print-img');
-  const source = img.currentSrc || img.src;
-  if (!source) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth || img.width;
+  canvas.height = img.naturalHeight || img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
 
-  overlay.style.display = 'flex';
+  const dataUrl = canvas.toDataURL('image/png');
 
-  const waitForLoad = new Promise((resolve, reject) => {
-    const done = () => {
-      printImg.onload = null;
-      printImg.onerror = null;
-      resolve();
-    };
-    printImg.onload = done;
-    printImg.onerror = () => reject(new Error('Failed to load print image'));
-  });
-
-  printImg.src = source;
-
-  try {
-    if (printImg.decode) {
-      await printImg.decode();
-    } else if (!printImg.complete) {
-      await waitForLoad;
-    }
-  } catch (_err) {
-    if (!printImg.complete) await waitForLoad;
-  }
-
-  const cleanup = () => {
-    overlay.style.display = 'none';
-    window.removeEventListener('afterprint', cleanup);
-  };
-  window.addEventListener('afterprint', cleanup, { once: true });
-
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      window.print();
-      setTimeout(cleanup, 1000);
-    });
-  });
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html>
+<html><head>
+  <title>ACNHS Photo Specifications</title>
+  <style>
+    @page { margin: 0; size: auto; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { background: #fff; width: 100%; height: 100%; }
+    img { display: block; width: 100vw; height: 100vh; object-fit: contain; }
+  </style>
+</head><body>
+  <img src="${dataUrl}">
+</body></html>`);
+  w.document.close();
+  w.focus();
+  w.onload = () => { w.print(); };
 }
 </script>
 </body>
