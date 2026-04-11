@@ -1120,7 +1120,10 @@ function buildStudentEmailLookupFilters(email = '') {
 function isStudentPortalEligibleStatus(status = '') {
   const normalized = (status || '').toString().trim().toLowerCase();
   if (!normalized) return false;
-  return ['enroll', 'student', 'active', 'confirmed', 'registered'].some(keyword => normalized.includes(keyword));
+  // Use whole-word matching to avoid false positives like "actively reviewing" → "active"
+  const words = normalized.split(/[\s\-_]+/);
+  return normalized.includes('enroll') ||
+    words.some(w => ['student', 'active', 'confirmed', 'registered'].includes(w));
 }
 
 function createStudentLoginError(message, code = 'STUDENT_LOGIN_ERROR') {
@@ -1186,45 +1189,34 @@ async function fetchApplicationByEmailOrPortalFields(supabase, email) {
   const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
   const normalizedEmail = email.toLowerCase().trim();
 
-  // Try simple email match first (most common case)
-  let { data, error } = await supabase
-    .from('applications')
-    .select(selectFields)
-    .eq('email', normalizedEmail)
-    .limit(1);
+  let data, error;
 
-  if (error) throw error;
-  if (data && data.length > 0) return data[0];
-
-  // If not found, try username match (for institutional emails)
-  ({ data, error } = await supabase
-    .from('applications')
-    .select(selectFields)
-    .eq('username', normalizedEmail)
-    .limit(1));
-
-  if (error) throw error;
-  if (data && data.length > 0) return data[0];
-
-  // If still not found, try institutional email in payload
-  ({ data, error } = await supabase
-    .from('applications')
-    .select(selectFields)
-    .eq('payload->>institutionalEmail', normalizedEmail)
-    .limit(1));
-
-  if (error) throw error;
-  if (data && data.length > 0) return data[0];
-
-  // If the login email is an institutional @acnhs.am email (e.g. m.mkhitaryan@acnhs.am),
-  // the stored username may be the same prefix with a numeric suffix (e.g. m.mkhitaryan.1234).
-  // Search by prefix so enrolled students can sign in with their campus email.
+  // For institutional emails (@acnhs.am etc.), do the prefix-username lookup FIRST
+  // before any slow JSONB queries that may timeout.
   if (isInstitutionalEmail(normalizedEmail)) {
+    // Exact email → username match
+    ({ data, error } = await supabase
+      .from('applications')
+      .select(selectFields)
+      .eq('username', normalizedEmail)
+      .limit(1));
+    if (!error && data && data.length > 0) return data[0];
+
+    // Exact email → email column match
+    ({ data, error } = await supabase
+      .from('applications')
+      .select(selectFields)
+      .eq('email', normalizedEmail)
+      .limit(1));
+    if (!error && data && data.length > 0) return data[0];
+
+    // Derive the username prefix: strip the @domain part
+    // e.g. m.mkhitaryan@acnhs.am → "m.mkhitaryan"
     const domainMatch = INSTITUTIONAL_EMAIL_DOMAINS.find(d => normalizedEmail.endsWith(d));
     if (domainMatch) {
       const usernamePrefix = normalizedEmail.slice(0, normalizedEmail.length - domainMatch.length);
       if (usernamePrefix) {
-        // Exact username match (e.g. username stored as "m.mkhitaryan" without suffix)
+        // Exact prefix match (username stored without numeric suffix)
         ({ data, error } = await supabase
           .from('applications')
           .select(selectFields)
@@ -1260,7 +1252,10 @@ async function fetchApplicationByEmailOrPortalFields(supabase, email) {
 function isEnrollmentLockedStatus(status = '') {
   const normalized = (status || '').toString().trim().toLowerCase();
   if (!normalized) return false;
-  return ['enroll', 'student', 'active', 'registered', 'confirmed'].some(fragment => normalized.includes(fragment));
+  // Use whole-word matching so "actively reviewing" is NOT treated as enrolled
+  const words = normalized.split(/[\s\-_]+/);
+  return normalized.includes('enroll') ||
+    words.some(w => ['student', 'active', 'registered', 'confirmed'].includes(w));
 }
 
 function deriveCampusEmailFromUsername(username = '') {
