@@ -385,8 +385,9 @@
     return html
       .replace(/&nbsp;/gi, ' ')                     // Normalize non-breaking spaces
       .replace(/\s*style="[^"]*"/gi, '')            // Strip chaotic inline CSS
+      .replace(/<div>/gi, '<p>')                    // Convert divs to paragraphs
+      .replace(/<\/div>/gi, '</p>')
       .replace(/<p>(\s)*<\/p>/gi, '')               // Remove completely empty paragraphs
-      .replace(/<div>(\s)*<\/div>/gi, '')           // Remove completely empty divs
       .replace(/<span>(\s)*<\/span>/gi, '')         // Remove completely empty spans
       .replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>')  // Transform double breaks into proper paragraphs
       .replace(/<p>\s*<br\s*\/?>/gi, '<p>')         // Trim breaks at start of paragraphs
