@@ -212,48 +212,12 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
   .photo-spec-figure{max-width:100%;}
 }
 @media print {
-  @page { margin: 0; size: auto; }
-  * { visibility: hidden !important; box-shadow: none !important; }
-  html, body {
-    width: 100% !important;
-    height: 100% !important;
-    overflow: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    background: white !important;
-  }
-  #photo-print-overlay,
-  #photo-print-overlay * { visibility: visible !important; }
-  #photo-print-overlay {
-    display: flex !important;
-    position: fixed !important;
-    top: 0 !important; left: 0 !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    background: white !important;
-    align-items: center !important;
-    justify-content: center !important;
-    flex-direction: column !important;
-  }
-  #photo-print-overlay img {
-    max-width: 100vw !important;
-    max-height: 100vh !important;
-    width: auto !important;
-    height: auto !important;
-    object-fit: contain !important;
-    display: block !important;
-  }
-  #photo-print-overlay p { display: none !important; }
+  body { visibility: hidden !important; }
 }
-#photo-print-overlay { display: none; }
 </style>
 </head>
 
 <body class="acnhs-watermarked">
-<div id="photo-print-overlay">
-  <img id="photo-print-img" src="" alt="ACNHS Official Photo Specifications">
-  <p>Armenian College of Nursing &amp; Health Sciences — Official Photo Specifications</p>
-</div>
 <div data-acnhs-header></div>
 
 <div class="page">
@@ -658,12 +622,62 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
 function printPhotoSpec() {
   const img = document.querySelector('#photoSpecFigure img');
   if (!img) return;
-  const overlay = document.getElementById('photo-print-overlay');
-  const printImg = document.getElementById('photo-print-img');
-  printImg.src = img.src;
-  overlay.style.display = 'flex';
-  window.print();
-  overlay.style.display = 'none';
+
+  const printFrame = document.createElement('iframe');
+  Object.assign(printFrame.style, {
+    position: 'fixed',
+    right: '0',
+    bottom: '0',
+    width: '0',
+    height: '0',
+    border: '0'
+  });
+  document.body.appendChild(printFrame);
+
+  const doc = printFrame.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html lang="en"><head>
+      <title>ACNHS — Official Photo Specifications</title>
+      <style>
+        @page { margin: 0; size: A4 portrait; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+          width: 100vw; height: 100vh;
+          overflow: hidden;
+          background: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .wrap {
+          width: 100vw; height: 100vh;
+          display: flex; align-items: center; justify-content: center;
+          padding: 12mm;
+        }
+        img {
+          display: block;
+          max-width: 100%;
+          max-height: 100%;
+          width: auto;
+          height: auto;
+          object-fit: contain;
+        }
+      </style>
+    </head><body>
+      <div class="wrap">
+        <img src="${img.src}" alt="${img.alt}">
+      </div>
+    </body></html>
+  `);
+  doc.close();
+
+  printFrame.contentWindow.focus();
+  setTimeout(() => {
+    printFrame.contentWindow.print();
+    setTimeout(() => { document.body.removeChild(printFrame); }, 1000);
+  }, 250);
 }
 </script>
 </body>
