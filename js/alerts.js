@@ -450,6 +450,8 @@
       + '<div class="acnhs-body">'+cleanHtml(personalise(a.message_html))+'</div>'
       + '<div class="acnhs-footer">'+linkH+yesno+'</div>'
       + '</div>';
+    wire(el, a); injectCSS(); return el;
+  }
 
   function buildBanner(a, pos) {
     var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
