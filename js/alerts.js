@@ -382,6 +382,18 @@
   /* Aggressive cleanup for rich-text artifacts to ensure perfect professional spacing */
   function cleanHtml(html) {
     if (!html) return '';
+    // If content has no block-level HTML tags, treat as plain text and wrap paragraphs
+    var hasBlockTags = /<(p|div|br|ul|ol|li|h[1-6])\b/i.test(html);
+    if (!hasBlockTags) {
+      // Plain text: split on newlines, wrap non-empty lines in <p>
+      return html
+        .replace(/&nbsp;/gi, ' ')
+        .split(/\n+/)
+        .map(function(s){ return s.trim(); })
+        .filter(Boolean)
+        .map(function(s){ return '<p>' + s + '</p>'; })
+        .join('');
+    }
     return html
       .replace(/&nbsp;/gi, ' ')                     // Normalize non-breaking spaces
       .replace(/\s*style="[^"]*"/gi, '')            // Strip chaotic inline CSS
