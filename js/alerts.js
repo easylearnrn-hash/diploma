@@ -24,6 +24,7 @@
   var db      = null;
   var student = null;
   var busy    = false;
+  var bootFired = false;  // guard: loadStudentThenRun must only call run() once
 
   // Tracks every_load alerts dismissed in the current page view only.
   // Resets on each real page refresh (JS re-runs), so alert re-shows on next load.
@@ -37,12 +38,18 @@
   }
 
   /* Try sessionStorage first; if not there yet, query Supabase directly */
+  function fireRun(label) {
+    if (bootFired) return;
+    bootFired = true;
+    console.log('Alerts: ' + label);
+    run();
+  }
+
   async function loadStudentThenRun(attempts) {
     student = readStudent();
     if (student) {
-      console.log('Alerts: student from storage — ' + (student.full_name || student.id) +
+      fireRun('student from storage — ' + (student.full_name || student.id) +
         ' | group=' + (student['group'] || student.group_name || student.enrollment_group || student.program || 'none'));
-      run();
       return;
     }
     // Not in storage yet — try to load directly from Supabase using stored IDs
@@ -61,9 +68,8 @@
             group:            res.data['group']    || null,
             program:          res.data.program     || null
           };
-          console.log('Alerts: student from DB — ' + (student.full_name || student.id) +
+          fireRun('student from DB — ' + (student.full_name || student.id) +
             ' | group=' + (student['group'] || student.group_name || student.program || 'none'));
-          run();
           return;
         }
       } catch(e) { console.warn('Alerts: DB student lookup failed', e); }
@@ -72,8 +78,7 @@
       // Still waiting for profile load — retry
       setTimeout(function() { loadStudentThenRun(attempts + 1); }, 500);
     } else {
-      console.log('Alerts: no student found after 10s — running as anon');
-      run();
+      fireRun('no student found after 10s — running as anon');
     }
   }
 
@@ -299,11 +304,11 @@
 
     if (student && student.id) {
       try {
-        await db.from('portal_alert_impressions').insert({
+        await db.from('portal_alert_impressions').upsert({
           alert_id: a.id, student_id: student.id,
           shown_date_local: localDate(),
           page_path: window.location.pathname.split('/').pop()
-        });
+        }, { onConflict: 'alert_id,student_id,shown_date_local', ignoreDuplicates: true });
       } catch(e) {}
     }
   }
