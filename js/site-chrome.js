@@ -269,6 +269,13 @@ function wireHeaderInteractions(root) {
     });
   });
 
+  // Apply Now — qualifier prompt
+  root.querySelectorAll('[data-action="apply-now"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      openQualifierPrompt();
+    });
+  });
+
   // Student login
   root.querySelectorAll('[data-action="student-login"]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -298,7 +305,10 @@ function wireHeaderInteractions(root) {
     el.addEventListener('click', closeMobileDrawer);
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeMobileDrawer();
+    if (e.key === 'Escape') {
+      closeMobileDrawer();
+      closeQualifierPrompt();
+    }
   });
 
   // Optional: hide login-required links when not logged in.
@@ -308,6 +318,166 @@ function wireHeaderInteractions(root) {
       el.style.display = 'none';
     });
   }
+}
+
+// ── Qualifier Prompt Modal ───────────────────────────────────
+function ensureQualifierPromptOverlay() {
+  if (document.getElementById('qualifierPromptOverlay')) return;
+
+  const css = `
+    #qualifierPromptOverlay {
+      position: fixed; inset: 0; z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(4, 17, 31, 0.82);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.25s;
+      padding: 20px;
+    }
+    #qualifierPromptOverlay.qp-open {
+      opacity: 1; pointer-events: all;
+    }
+    .qp-modal {
+      background: linear-gradient(160deg, #071b30 0%, #0c2444 100%);
+      border: 1px solid rgba(201,168,76,0.32);
+      border-top: 2px solid #c9a84c;
+      border-radius: 20px;
+      padding: 44px 44px 36px;
+      max-width: 480px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 24px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(201,168,76,0.06);
+      transform: translateY(14px) scale(0.98);
+      transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
+      position: relative;
+    }
+    #qualifierPromptOverlay.qp-open .qp-modal {
+      transform: translateY(0) scale(1);
+    }
+    .qp-icon {
+      width: 58px; height: 58px;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.1);
+      border: 1.5px solid rgba(201,168,76,0.4);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 22px;
+    }
+    .qp-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #f0ece3;
+      line-height: 1.3;
+      margin-bottom: 12px;
+    }
+    .qp-subtitle {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      color: #b8b0a0;
+      line-height: 1.7;
+      margin-bottom: 32px;
+    }
+    .qp-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .qp-btn-yes {
+      padding: 15px 20px;
+      background: linear-gradient(135deg, #c9a84c, #e2cc92);
+      color: #04111f;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: opacity 0.2s, box-shadow 0.2s, transform 0.15s;
+      box-shadow: 0 4px 18px rgba(201,168,76,0.28);
+    }
+    .qp-btn-yes:hover { opacity: 0.9; box-shadow: 0 6px 24px rgba(201,168,76,0.42); transform: translateY(-1px); }
+    .qp-btn-no {
+      padding: 15px 20px;
+      background: transparent;
+      color: #b8b0a0;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, color 0.2s;
+    }
+    .qp-btn-no:hover { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.05); color: #f0ece3; }
+    .qp-close {
+      position: absolute; top: 14px; right: 16px;
+      background: none; border: none;
+      color: rgba(240,236,227,0.35); font-size: 20px; line-height: 1;
+      cursor: pointer; padding: 4px 8px; border-radius: 6px;
+      transition: color 0.2s;
+    }
+    .qp-close:hover { color: rgba(240,236,227,0.7); }
+    @media (max-width: 480px) {
+      .qp-modal { padding: 32px 22px 26px; }
+      .qp-actions { grid-template-columns: 1fr; }
+    }
+  `;
+  const style = document.createElement('style');
+  style.textContent = css;
+  document.head.appendChild(style);
+
+  const html = `
+    <div id="qualifierPromptOverlay" role="dialog" aria-modal="true" aria-labelledby="qpTitle">
+      <div class="qp-modal">
+        <button class="qp-close" onclick="closeQualifierPrompt()" aria-label="Close">&#x2715;</button>
+        <div class="qp-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12l2 2 4-4"/><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2z"/>
+          </svg>
+        </div>
+        <div class="qp-title" id="qpTitle">Before You Apply</div>
+        <p class="qp-subtitle">Would you like to take a quick qualifier test to check your eligibility before submitting an application?</p>
+        <div class="qp-actions">
+          <button class="qp-btn-yes" onclick="closeQualifierPrompt(); window.location.href='Qualifier.html';">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            Yes, Take the Qualifier
+          </button>
+          <button class="qp-btn-no" onclick="closeQualifierPrompt(); window.open('admission-form.html','_blank','width=1200,height=900,scrollbars=yes,resizable=yes');">
+            No, Apply Directly
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', html);
+
+  // Close on backdrop click
+  document.getElementById('qualifierPromptOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeQualifierPrompt();
+  });
+}
+
+function openQualifierPrompt() {
+  ensureQualifierPromptOverlay();
+  requestAnimationFrame(() => {
+    document.getElementById('qualifierPromptOverlay').classList.add('qp-open');
+    document.body.style.overflow = 'hidden';
+  });
+}
+
+function closeQualifierPrompt() {
+  const overlay = document.getElementById('qualifierPromptOverlay');
+  if (overlay) overlay.classList.remove('qp-open');
+  document.body.style.overflow = '';
+}
+
+if (typeof window.openQualifierPrompt !== 'function') {
+  window.openQualifierPrompt = openQualifierPrompt;
+}
+if (typeof window.closeQualifierPrompt !== 'function') {
+  window.closeQualifierPrompt = closeQualifierPrompt;
 }
 
 function ensureCatalogPickerOverlay() {

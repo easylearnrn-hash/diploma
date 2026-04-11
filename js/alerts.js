@@ -25,6 +25,10 @@
   var student = null;
   var busy    = false;
 
+  // Tracks every_load alerts dismissed in the current page view only.
+  // Resets on each real page refresh (JS re-runs), so alert re-shows on next load.
+  var dismissedThisLoad = {};
+
   /* ── boot ── */
   function boot() {
     if (typeof initSupabase === 'function') { db = initSupabase(); }
@@ -150,7 +154,8 @@
     // Session dismissing blocks re-show (except every_load — cleared at click time)
     if (cap !== 'every_load' && sessionStorage.getItem(DISMISS_KEY + a.id) === '1') return 'dismissed this session';
 
-    if (cap === 'every_load') return null;
+    // every_load: show once per page load, but not again after user closes it this view
+    if (cap === 'every_load') return dismissedThisLoad[a.id] ? 'dismissed this page load' : null;
 
     var shown = getShownData(a.id);
     console.log('Alerts: cap=' + cap + ' shown=' + shown.count + ' today=' + shown.today + ' for "' + a.title + '"');
@@ -275,7 +280,10 @@
     sessionStorage.setItem(SHOWN_KEY + id, JSON.stringify(d));
   }
 
-  function markDismissed(id) { sessionStorage.setItem(DISMISS_KEY + id, '1'); }
+  function markDismissed(id) {
+    sessionStorage.setItem(DISMISS_KEY + id, '1');
+    dismissedThisLoad[id] = true;
+  }
 
   /* ── display ── */
   async function show(a) {
@@ -410,21 +418,33 @@
   /* ── builders ── */
   function buildModal(a) {
     var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
+    var severityLabel = { info:'Notice', success:'Update', warn:'Notice', critical:'Alert' };
+    var eyebrow = (severityLabel[a.severity] || 'Notice').toUpperCase();
+
     var linkH = a.link_url
-      ? '<div style="padding:0 32px 20px;text-align:center"><a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="display:inline-block;padding:10px 28px;border:1.5px solid '+c+';border-radius:8px;color:'+c+';font-size:14px;font-weight:600;text-decoration:none;letter-spacing:0.03em">'+esc(a.link_label||'Learn More')+' ↗</a></div>'
+      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" class="acnhs-link-btn" style="border-color:'+c+';color:'+c+'">'+esc(a.link_label||'Learn More')+' ↗</a>'
       : '';
     var yesno = (a.requires_response && a.response_type === 'yes_no')
-      ? '<div class="acnhs-actions"><button class="acnhs-btn-yes" style="background:'+c+';box-shadow:0 4px 12px '+c+'40;color:#04111f">'+esc(a.yes_label||'Yes')+'</button><button class="acnhs-btn-no">'+esc(a.no_label||'No')+'</button></div>'
-      : '';
+      ? '<button class="acnhs-btn-yes" style="background:'+c+';box-shadow:0 4px 12px '+c+'40;color:#04111f">'+esc(a.yes_label||'Yes')+'</button><button class="acnhs-btn-no">'+esc(a.no_label||'No')+'</button>'
+      : '<button class="acnhs-btn-dismiss" data-dismiss style="border-color:'+c+';color:'+c+'">I Understand</button>';
+
     var el = document.createElement('div');
     el.className = 'acnhs-overlay'; el.dataset.alertId = a.id;
-    el.innerHTML = '<div class="acnhs-box" style="border-top:4px solid '+c+'">'
-      + '<button class="acnhs-close" data-dismiss><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>'
-      + '<div class="acnhs-header"><span class="acnhs-icon" style="color:'+c+';background:'+c+'15;">'+ic+'</span><span class="acnhs-title" style="color:'+c+'">'+esc(personalise(a.title))+'</span></div>'
+    el.innerHTML =
+      '<div class="acnhs-box">'
+      + '<div class="acnhs-top-bar" style="background:'+c+'"></div>'
+      + '<button class="acnhs-close" data-dismiss aria-label="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+      + '<div class="acnhs-header">'
+        + '<div class="acnhs-icon-ring" style="border-color:'+c+'22;background:'+c+'12;"><span class="acnhs-icon" style="color:'+c+'">'+ic+'</span></div>'
+        + '<div>'
+          + '<div class="acnhs-eyebrow" style="color:'+c+'">◆&nbsp;&nbsp;'+eyebrow+'&nbsp;&nbsp;◆</div>'
+          + '<div class="acnhs-title">'+esc(personalise(a.title))+'</div>'
+        + '</div>'
+      + '</div>'
+      + '<div class="acnhs-divider"></div>'
       + '<div class="acnhs-body">'+cleanHtml(personalise(a.message_html))+'</div>'
-      + linkH + yesno + '</div>';
-    wire(el, a); injectCSS(); return el;
-  }
+      + '<div class="acnhs-footer">'+linkH+yesno+'</div>'
+      + '</div>';
 
   function buildBanner(a, pos) {
     var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
@@ -463,35 +483,53 @@
     if (_css) return; _css = true;
     var s = document.createElement('style'); s.id = 'acnhs-alert-css';
     s.textContent =
-      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);display:flex;align-items:center;justify-content:center;opacity:0;transition:all .4s ease;padding:24px;box-sizing:border-box}'
+      /* ── Overlay backdrop ── */
+      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;padding:24px;box-sizing:border-box}'
       +'.acnhs-overlay.acnhs-show{opacity:1}'
-      +'.acnhs-box{background:#0a1220;background:linear-gradient(145deg, #071b30, #04111f);color:#f0ece3;border:1px solid rgba(201,168,76,.15);border-top:none;border-radius:12px;max-width:560px;width:100%;box-shadow:0 30px 60px -12px rgba(0,0,0,.8), 0 0 0 1px rgba(255,255,255,.02);position:relative;overflow:hidden;transform:scale(0.96) translateY(12px);transition:all .45s cubic-bezier(0.16,1,0.3,1);font-family:"Inter",system-ui,-apple-system,sans-serif}'
-      +'.acnhs-overlay.acnhs-show .acnhs-box{transform:scale(1) translateY(0)}'
-      +'.acnhs-header{display:flex;align-items:center;gap:16px;padding:32px 36px 16px}'
-      +'.acnhs-icon{width:46px;height:46px;display:flex;align-items:center;justify-content:center;border-radius:10px;flex-shrink:0}'
-      +'.acnhs-title{font-family:"Playfair Display",Georgia,serif;font-size:22px;font-weight:600;line-height:1.3;letter-spacing:0.02em;margin:0}'
-      +'.acnhs-body{padding:0 36px 36px;font-size:15px;line-height:1.7;color:#b8b0a0}'
-      +'.acnhs-body *{line-height:1.7;margin:0}'
-      +'.acnhs-body p{margin-bottom:16px}'
-      +'.acnhs-body p:last-child{margin-bottom:0}'
-      +'.acnhs-body ul,.acnhs-body ol{margin-bottom:16px;padding-left:24px}'
-      +'.acnhs-body li{margin-bottom:8px}'
-      +'.acnhs-body strong,.acnhs-body b{color:#f0ece3;font-weight:600}'
-      +'.acnhs-body a{color:#c9a84c;text-decoration:none;font-weight:500;border-bottom:1px solid rgba(201,168,76,.4);transition:all .2s;padding-bottom:1px}'
-      +'.acnhs-body a:hover{color:#d4b56a;border-bottom-color:#d4b56a}'
-      +'.acnhs-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);width:32px;height:32px;border-radius:50%;color:#7a7267;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;padding:0}'
+      /* ── Modal box ── */
+      +'.acnhs-box{background:linear-gradient(160deg,#071b30 0%,#04111f 100%);color:#f0ece3;border:1px solid rgba(201,168,76,.22);border-radius:18px;max-width:540px;width:100%;box-shadow:0 40px 80px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.03);position:relative;overflow:hidden;transform:translateY(18px) scale(0.97);transition:transform .4s cubic-bezier(0.16,1,0.3,1),opacity .35s ease;font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-overlay.acnhs-show .acnhs-box{transform:translateY(0) scale(1)}'
+      /* ── Gold top accent bar ── */
+      +'.acnhs-top-bar{height:3px;background:#c9a84c;width:100%;position:absolute;top:0;left:0;right:0}'
+      /* ── Close button ── */
+      +'.acnhs-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);width:30px;height:30px;border-radius:50%;color:#7a7267;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s,border-color .2s;padding:0;z-index:1}'
       +'.acnhs-close:hover{background:rgba(201,168,76,.1);color:#c9a84c;border-color:rgba(201,168,76,.3)}'
-      +'.acnhs-actions{display:flex;gap:12px;padding:0 36px 36px}'
-      +'.acnhs-btn-yes,.acnhs-btn-no{flex:1;padding:12px 0;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;text-align:center;border:none;letter-spacing:0.03em;text-transform:uppercase}'
-      +'.acnhs-btn-yes:hover{filter:brightness(1.1);transform:translateY(-1px)}'
+      /* ── Header ── */
+      +'.acnhs-header{display:flex;align-items:center;gap:18px;padding:36px 32px 24px}'
+      +'.acnhs-icon-ring{width:54px;height:54px;border-radius:50%;border:1.5px solid;display:flex;align-items:center;justify-content:center;flex-shrink:0}'
+      +'.acnhs-icon{display:flex;align-items:center;justify-content:center}'
+      +'.acnhs-eyebrow{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px;opacity:.9}'
+      +'.acnhs-title{font-family:"Playfair Display",Georgia,serif;font-size:20px;font-weight:700;line-height:1.25;letter-spacing:-.01em;color:#f0ece3;margin:0}'
+      /* ── Divider ── */
+      +'.acnhs-divider{height:1px;background:rgba(255,255,255,.07);margin:0 32px}'
+      /* ── Body ── */
+      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0}'
+      +'.acnhs-body p{margin:0 0 14px}'
+      +'.acnhs-body p:last-child{margin-bottom:0}'
+      +'.acnhs-body ul,.acnhs-body ol{margin:0 0 14px;padding-left:22px}'
+      +'.acnhs-body li{margin-bottom:6px}'
+      +'.acnhs-body strong,.acnhs-body b{color:#e8e3d8;font-weight:600}'
+      +'.acnhs-body a{color:#c9a84c;text-decoration:none;font-weight:500;border-bottom:1px solid rgba(201,168,76,.35);transition:all .2s}'
+      +'.acnhs-body a:hover{color:#d4b56a;border-bottom-color:#d4b56a}'
+      /* ── Footer ── */
+      +'.acnhs-footer{padding:0 32px 32px;display:flex;gap:12px;justify-content:center}'
+      +'.acnhs-btn-dismiss{padding:13px 36px;border-radius:10px;font-size:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;border:1.5px solid;background:transparent;transition:background .2s,box-shadow .2s,transform .15s;font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-btn-dismiss:hover{background:rgba(201,168,76,.1);box-shadow:0 4px 18px rgba(201,168,76,.15);transform:translateY(-1px)}'
+      +'.acnhs-btn-dismiss:active{transform:translateY(0)}'
+      +'.acnhs-link-btn{display:inline-flex;align-items:center;gap:6px;padding:13px 28px;border-radius:10px;font-size:13px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;text-decoration:none;border:1.5px solid;background:transparent;transition:background .2s,opacity .2s;font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-link-btn:hover{background:rgba(201,168,76,.08);opacity:.9}'
+      +'.acnhs-btn-yes,.acnhs-btn-no{flex:1;padding:13px 0;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;text-align:center;border:none;letter-spacing:.6px;text-transform:uppercase;font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-btn-yes:hover{filter:brightness(1.08);transform:translateY(-1px)}'
       +'.acnhs-btn-no{background:rgba(255,255,255,.04);color:#b8b0a0;border:1px solid rgba(255,255,255,.08)}'
       +'.acnhs-btn-no:hover{background:rgba(255,255,255,.08);color:#f0ece3;border-color:rgba(255,255,255,.15)}'
-      +'.acnhs-banner{position:fixed;left:0;right:0;z-index:99999;background:linear-gradient(90deg, #071b30, #0a1728);color:#f0ece3;border-top:1px solid rgba(201,168,76,.15);border-bottom:1px solid rgba(201,168,76,.15);display:flex;align-items:center;gap:16px;padding:16px 28px;font-size:14.5px;font-family:"Inter",system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .4s,transform .4s}'
+      /* ── Banner ── */
+      +'.acnhs-banner{position:fixed;left:0;right:0;z-index:99999;background:linear-gradient(90deg,#071b30,#0a1728);color:#f0ece3;border-top:1px solid rgba(201,168,76,.15);border-bottom:1px solid rgba(201,168,76,.15);display:flex;align-items:center;gap:16px;padding:16px 28px;font-size:14.5px;font-family:"Inter",system-ui,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.5);opacity:0;transition:opacity .4s,transform .4s}'
       +'.acnhs-banner-top{top:0;transform:translateY(-100%);border-top:none}'
       +'.acnhs-banner-bottom{bottom:0;transform:translateY(100%);border-bottom:none}'
       +'.acnhs-banner.acnhs-show{opacity:1;transform:translateY(0)}'
       +'.acnhs-banner-text{flex:1;font-weight:500}'
-      +'.acnhs-toast{position:fixed;z-index:99999;background:linear-gradient(145deg, #071b30, #04111f);color:#f0ece3;border:1px solid rgba(201,168,76,.15);border-radius:12px;padding:18px 22px;max-width:360px;width:calc(100% - 40px);box-shadow:0 20px 40px rgba(0,0,0,.6);opacity:0;transform:translateX(20px);transition:all .4s cubic-bezier(0.16,1,0.3,1);font-family:"Inter",system-ui,sans-serif}'
+      /* ── Toast ── */
+      +'.acnhs-toast{position:fixed;z-index:99999;background:linear-gradient(145deg,#071b30,#04111f);color:#f0ece3;border:1px solid rgba(201,168,76,.18);border-radius:14px;padding:20px 22px;max-width:360px;width:calc(100% - 40px);box-shadow:0 20px 40px rgba(0,0,0,.6);opacity:0;transform:translateX(20px);transition:all .4s cubic-bezier(0.16,1,0.3,1);font-family:"Inter",system-ui,sans-serif}'
       +'.acnhs-toast.acnhs-show{opacity:1;transform:translateX(0)}';
     document.head.appendChild(s);
   }
