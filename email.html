@@ -3241,19 +3241,51 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           const jsonObj = JSON.parse(textStr);
           
           if (!jsonObj.content && jsonObj.download_url) {
-            console.log('Attachment has Resend download_url. Redirecting...');
-            fetch(jsonObj.download_url, { mode: 'no-cors' }).then(r => {
-              const a = document.createElement('a');
-              a.style.display = 'none';
-              a.href = jsonObj.download_url;
-              a.target = '_blank';
-              a.rel = 'noopener noreferrer';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            }).catch(e => {
-              showNotification('❌ The temporary Resend link has expired. The attachment cannot be recovered.', 'error');
-            });
+            console.log('Attachment has Resend download_url. Attempting to fetch a fresh download link via API...');
+            
+            // Extract Resend Email ID and Attachment ID from the old download URL
+            // Format: https://cdn.resend.app/receiving/<email_id>/attachments/<attachment_id>?...
+            const urlMatch = jsonObj.download_url.match(/receiving\/([^\/]+)\/attachments\/([^\/?]+)/);
+            if (urlMatch && urlMatch[1] && urlMatch[2]) {
+               const resendEmailId = urlMatch[1];
+               const resendAttachmentId = urlMatch[2];
+               
+               // Open a new tab immediately to bypass Safari popup blockers
+               const newTab = window.open('about:blank', '_blank');
+               
+               // Use our edge function to request a fresh temporary download URL from Resend using the secure API key
+               const { data: { session } } = await db.auth.getSession();
+               fetch(SUPABASE_CONFIG.url + '/functions/v1/get-resend-attachment', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || SUPABASE_CONFIG.anonKey}`
+                  },
+                  body: JSON.stringify({ emailId: resendEmailId, attachmentId: resendAttachmentId })
+               })
+               .then(res => res.json())
+               .then(freshData => {
+                  if (freshData && freshData.download_url) {
+                    console.log('Successfully grabbed fresh download url. Redirecting...');
+                    if (newTab) {
+                      newTab.location.href = freshData.download_url;
+                    } else {
+                      window.location.href = freshData.download_url;
+                    }
+                  } else {
+                    console.error('Could not obtain fresh download URL', freshData);
+                    if (newTab) newTab.close();
+                    showNotification('❌ Could not recover the expired attachment. File may have been permanently deleted from Resend.', 'error');
+                  }
+               })
+               .catch(err => {
+                  console.error('Error fetching fresh Resend url', err);
+                  if (newTab) newTab.close();
+                  showNotification('❌ Internal Error while recovering attachment.', 'error');
+               });
+            } else {
+               showNotification('❌ Attachment link has expired and is unrecoverable.', 'error');
+            }
             return;
           }
 
