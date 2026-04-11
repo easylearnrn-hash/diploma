@@ -58,8 +58,49 @@ const ACNHS_HEADER_HTML = `
     <div class="nav-actions">
       <button class="btn btn-ghost" type="button" data-action="student-login">Login</button>
     </div>
+
+    <!-- Mobile hamburger -->
+    <button class="mobile-menu-btn" type="button" aria-label="Open menu" data-action="toggle-mobile-menu">
+      <span></span><span></span><span></span>
+    </button>
   </div>
 </header>
+
+<!-- Mobile drawer -->
+<div class="mobile-drawer" id="mobileDrawer" aria-hidden="true">
+  <div class="mobile-drawer-header">
+    <span class="mobile-drawer-title">Menu</span>
+    <button class="mobile-drawer-close" type="button" aria-label="Close menu" data-action="close-mobile-menu">✕</button>
+  </div>
+  <nav class="mobile-nav">
+    <div class="mobile-nav-section">
+      <div class="mobile-nav-label">Academics</div>
+      <a href="academic-catalog.html" data-action="open-catalog-picker">Academic Catalog</a>
+      <a href="index.html#programs">Programs</a>
+      <a href="index.html#simulation">Simulation</a>
+    </div>
+    <div class="mobile-nav-section">
+      <a href="index.html#global-network" class="mobile-nav-highlight">Global Network</a>
+    </div>
+    <div class="mobile-nav-section">
+      <div class="mobile-nav-label">About</div>
+      <a href="about.html">About the College</a>
+      <a href="staff.html">Faculty &amp; Staff</a>
+      <a href="contact.html">Contact Us</a>
+    </div>
+    <div class="mobile-nav-section">
+      <div class="mobile-nav-label">Help</div>
+      <a href="help-handbook.html">Student Handbook</a>
+      <a href="help-grading.html">Grading</a>
+      <a href="help-clinical.html">Clinical</a>
+      <a href="help-support.html">Support</a>
+    </div>
+    <div class="mobile-nav-section">
+      <button class="btn btn-primary mobile-login-btn" type="button" data-action="student-login">Login to Portal</button>
+    </div>
+  </nav>
+</div>
+<div class="mobile-drawer-overlay" id="mobileDrawerOverlay" data-action="close-mobile-menu"></div>
 `;
 
 const ACNHS_FOOTER_HTML = `
@@ -233,6 +274,31 @@ function wireHeaderInteractions(root) {
     btn.addEventListener('click', () => {
       window.location.href = 'login.html';
     });
+  });
+
+  // Mobile drawer open/close
+  function openMobileDrawer() {
+    const drawer = document.getElementById('mobileDrawer');
+    const overlay = document.getElementById('mobileDrawerOverlay');
+    if (drawer) { drawer.classList.add('open'); drawer.setAttribute('aria-hidden', 'false'); }
+    if (overlay) overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeMobileDrawer() {
+    const drawer = document.getElementById('mobileDrawer');
+    const overlay = document.getElementById('mobileDrawerOverlay');
+    if (drawer) { drawer.classList.remove('open'); drawer.setAttribute('aria-hidden', 'true'); }
+    if (overlay) overlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  document.querySelectorAll('[data-action="toggle-mobile-menu"]').forEach(btn => {
+    btn.addEventListener('click', openMobileDrawer);
+  });
+  document.querySelectorAll('[data-action="close-mobile-menu"]').forEach(el => {
+    el.addEventListener('click', closeMobileDrawer);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMobileDrawer();
   });
 
   // Optional: hide login-required links when not logged in.
