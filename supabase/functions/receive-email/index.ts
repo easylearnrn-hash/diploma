@@ -414,11 +414,21 @@ async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; t
       return { error: errorMessage }
     }
     
-    const response = await fetch('https://api.resend.com/emails/receiving/' + emailId, {
+    // Try inbound endpoint first, fall back to outbound endpoint
+    let response = await fetch('https://api.resend.com/emails/receiving/' + emailId, {
       headers: {
         'Authorization': 'Bearer ' + RESEND_API_KEY
       }
     })
+
+    if (!response.ok && (response.status === 404 || response.status === 422)) {
+      console.log('Inbound endpoint returned', response.status, '— trying outbound endpoint')
+      response = await fetch('https://api.resend.com/emails/' + emailId, {
+        headers: {
+          'Authorization': 'Bearer ' + RESEND_API_KEY
+        }
+      })
+    }
 
     if (!response.ok) {
       const errorText = await response.text()
