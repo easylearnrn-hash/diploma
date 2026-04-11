@@ -382,29 +382,17 @@
   /* Aggressive cleanup for rich-text artifacts to ensure perfect professional spacing */
   function cleanHtml(html) {
     if (!html) return '';
-    // If content has no block-level HTML tags, treat as plain text and wrap paragraphs
-    var hasBlockTags = /<(p|div|br|ul|ol|li|h[1-6])\b/i.test(html);
-    if (!hasBlockTags) {
-      // Plain text: split on newlines, wrap non-empty lines in <p>
-      return html
-        .replace(/&nbsp;/gi, ' ')
-        .split(/\n+/)
-        .map(function(s){ return s.trim(); })
-        .filter(Boolean)
-        .map(function(s){ return '<p>' + s + '</p>'; })
-        .join('');
-    }
     return html
-      .replace(/&nbsp;/gi, ' ')                     // Normalize non-breaking spaces
-      .replace(/\s*style="[^"]*"/gi, '')            // Strip chaotic inline CSS
-      .replace(/<div>/gi, '<p>')                    // Convert divs to paragraphs
-      .replace(/<\/div>/gi, '</p>')
-      .replace(/<p>(\s)*<\/p>/gi, '')               // Remove completely empty paragraphs
-      .replace(/<span>(\s)*<\/span>/gi, '')         // Remove completely empty spans
-      .replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>')  // Transform double breaks into proper paragraphs
-      .replace(/<p>\s*<br\s*\/?>/gi, '<p>')         // Trim breaks at start of paragraphs
-      .replace(/<br\s*\/?>\s*<\/p>/gi, '</p>')      // Trim breaks at end of paragraphs
-      .replace(/(<\/p>)\s*(<p>)/gi, '$1$2')         // Close gaps between paragraphs
+      .replace(/&nbsp;/gi, ' ')                     // Normalize spaces
+      .replace(/\s*style="[^"]*"/gi, '')            // Strip inline CSS
+      .replace(/<div>/gi, '<br>')                   // Chrome's Enter creates divs, convert start to break
+      .replace(/<\/div>/gi, '')                     // Drop div closing
+      .replace(/\n/g, '<br>')                       // Convert any remaining raw newlines to breaks
+      .replace(/(<br\s*\/?>\s*){2,}/gi, '</p><p>')  // Double breaks become proper paragraphs
+      .replace(/<p>(\s)*<\/p>/gi, '')               // Remove empty paragraphs
+      .replace(/<span>(\s)*<\/span>/gi, '')         // Remove empty spans
+      .replace(/<p>\s*<br\s*\/?>/gi, '<p>')         // Strip breaks at start of paragraphs
+      .replace(/<br\s*\/?>\s*<\/p>/gi, '</p>')      // Strip breaks at end of paragraphs
       .trim();
   }
 
@@ -460,7 +448,7 @@
         + '</div>'
       + '</div>'
       + '<div class="acnhs-divider"></div>'
-      + '<div class="acnhs-body">'+cleanHtml(personalise(a.message_html))+'</div>'
+      + '<div class="acnhs-body"><p>'+cleanHtml(personalise(a.message_html))+'</p></div>'
       + '<div class="acnhs-footer">'+linkH+yesno+'</div>'
       + '</div>';
     wire(el, a); injectCSS(); return el;
