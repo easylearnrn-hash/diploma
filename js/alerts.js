@@ -181,7 +181,8 @@
 
   function matchesAudience(a) {
     var type = a.target_type || 'all';
-    if (type === 'all' || type === 'public') return true;
+    if (type === 'all') return true;
+    if (type === 'public') return !student; // public alerts only show to anonymous visitors (not logged-in students)
     if (!student) return false;
 
     if (type === 'individual') {
