@@ -617,17 +617,18 @@ body{font-family:'Inter',sans-serif;background:var(--navy-900);background-image:
 
 <script src="js/site-chrome.js"></script>
 <script>
-function printPhotoSpec() {
+async function printPhotoSpec() {
   const img = document.querySelector('#photoSpecFigure img');
   if (!img) return;
 
-  const canvas = document.createElement('canvas');
-  canvas.width = img.naturalWidth || img.width;
-  canvas.height = img.naturalHeight || img.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, 0, 0);
-
-  const dataUrl = canvas.toDataURL('image/png');
+  let src;
+  try {
+    const resp = await fetch(img.src);
+    const blob = await resp.blob();
+    src = URL.createObjectURL(blob);
+  } catch(e) {
+    src = img.src;
+  }
 
   const w = window.open('', '_blank');
   w.document.write(`<!DOCTYPE html>
@@ -640,11 +641,10 @@ function printPhotoSpec() {
     img { display: block; width: 100vw; height: 100vh; object-fit: contain; }
   </style>
 </head><body>
-  <img src="${dataUrl}">
+  <img src="${src}" onload="window.print();">
 </body></html>`);
   w.document.close();
   w.focus();
-  w.onload = () => { w.print(); };
 }
 </script>
 </body>
