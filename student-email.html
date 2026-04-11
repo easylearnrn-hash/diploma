@@ -39,7 +39,6 @@
         radial-gradient(ellipse at 15% 25%, rgba(201, 168, 76, 0.06) 0%, transparent 50%),
         radial-gradient(ellipse at 85% 75%, rgba(201, 168, 76, 0.04) 0%, transparent 50%),
         linear-gradient(160deg, #020a1a 0%, #0a1628 45%, #050d1e 100%);
-      background-attachment: fixed;
       min-height: 100vh;
       color: var(--text);
     }
@@ -169,11 +168,10 @@
 
     .sidebar {
       width: 320px;
-      background: rgba(15, 25, 50, 0.7);
+      background: rgba(15, 25, 50, 0.85);
       border-right: 1px solid rgba(201, 168, 76, 0.12);
       padding: 18px 16px;
       overflow-y: auto;
-      backdrop-filter: blur(6px);
     }
 
     .compose-btn {
@@ -187,7 +185,7 @@
       font-size: 13px;
       cursor: pointer;
       margin-bottom: 16px;
-      transition: all 0.2s;
+      transition: transform 0.2s, box-shadow 0.2s;
       letter-spacing: 0.01em;
       box-shadow: 0 4px 14px rgba(201, 168, 76, 0.35);
     }
@@ -207,7 +205,7 @@
       font-size: 12px;
       cursor: pointer;
       border-radius: 7px;
-      transition: all 0.2s;
+      transition: background 0.15s, color 0.15s;
       letter-spacing: 0.02em;
       display: flex;
       align-items: center;
@@ -230,11 +228,10 @@
 
     .main-content {
       flex: 1;
-      background: rgba(15, 23, 42, 0.65);
+      background: rgba(15, 23, 42, 0.85);
       border-left: 1px solid rgba(201, 168, 76, 0.12);
       padding: 26px;
       overflow-y: auto;
-      backdrop-filter: blur(6px);
     }
 
     .bulk-actions {
@@ -289,7 +286,7 @@
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: border-color 0.15s, background 0.15s, transform 0.15s, box-shadow 0.15s;
     }
 
     .bulk-btn:hover:not(:disabled) {
@@ -329,7 +326,7 @@
       border-radius: 12px;
       padding: 16px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
     }
 
     .email-item:hover {
@@ -344,7 +341,7 @@
       font-weight: 600;
       position: relative;
       box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.3);
-      animation: pulse-glow 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+      animation: pulse-glow 2.4s cubic-bezier(0.4, 0, 0.6, 1) 2;
     }
 
     .email-item.unread::before {
@@ -413,7 +410,7 @@
       padding: 6px 8px;
       border-radius: 6px;
       font-size: 16px;
-      transition: all 0.2s;
+      transition: background 0.15s, color 0.15s;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -447,11 +444,10 @@
       left: 0;
       width: 100%;
       height: 100%;
-      background: rgba(2, 6, 23, 0.85);
+      background: rgba(2, 6, 23, 0.9);
       z-index: 1000;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(6px);
     }
 
     .compose-modal.show {
@@ -1266,7 +1262,7 @@
             const isUnread = isInboxEmail && !hasBeenRead;
             
             return `
-            <div class="email-item ${isUnread ? 'unread' : ''}">
+            <div class="email-item ${isUnread ? 'unread' : ''}" data-id="${email.id}">`
               <div class="email-header">
                 <div class="email-header-left" onclick="showEmailDetail('${email.id}')">
                   <input type="checkbox" class="email-select" ${isSelected ? 'checked' : ''} onclick="event.stopPropagation(); toggleEmailSelection('${email.id}', this.checked)">
@@ -1377,18 +1373,17 @@
           email.body = email.body || '(Body unavailable)';
           document.getElementById('detailBody').innerHTML = escapeHtml(email.body);
           emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
-          renderEmailList();
           return;
         }
 
+        const hadBody = !!email.body;
         email.body = result.body || email.body;
         email.html_body = result.html_body || email.html_body;
-        if (email.body) {
-          emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
-        }
-
         document.getElementById('detailBody').innerHTML = email.html_body || escapeHtml(email.body || '');
-        renderEmailList();
+        if (email.body && !hadBody) {
+          emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
+          renderEmailList(); // only re-render if we gained a new preview
+        }
       } catch (error) {
         console.error('❌ Error fetching email body:', error);
       }
@@ -1419,13 +1414,8 @@
       // Persist to localStorage so it survives page refresh
       localStorage.setItem('readEmails', JSON.stringify([...readEmails]));
       
-      // Remove unread class from the email item in the DOM
-      const emailElements = document.querySelectorAll('.email-item');
-      emailElements.forEach(el => {
-        if (el.querySelector(`[onclick*="${emailId}"]`)) {
-          el.classList.remove('unread');
-        }
-      });
+      // Remove unread class directly via data attribute (no loop needed)
+      document.querySelector(`.email-item[data-id="${emailId}"]`)?.classList.remove('unread');
 
       // Store current email ID for delete functionality
       currentEmailId = emailId;
@@ -1527,10 +1517,12 @@
 
         if (error) throw error;
 
+        const deletedSet = new Set(ids);
+        allEmails = allEmails.filter(e => !deletedSet.has(e.id));
         selectedEmailIds.clear();
         updateBulkActions();
         showNotification('Selected emails deleted', 'success');
-        await loadEmails();
+        renderEmailList();
       } catch (error) {
         console.error('❌ Bulk delete error:', error);
         showNotification('Failed to delete selected emails', 'error');
@@ -1577,15 +1569,16 @@
 
         console.log('✅ Email deleted from database successfully');
         showNotification('Email deleted successfully', 'success');
-        
+
+        // Update local state — no DB round-trip needed
+        allEmails = allEmails.filter(e => e.id !== emailId);
+
         // If we were viewing this email, go back to list
         if (currentEmailId === emailId) {
           showEmailList();
         }
-        
-        console.log('🔄 Reloading emails...');
-        await loadEmails();
-        console.log('✅ Emails reloaded');
+
+        renderEmailList();
       } catch (error) {
         console.error('❌ Error deleting email:', error);
         showNotification('Failed to delete email: ' + (error.message || 'Unknown error'), 'error');
@@ -1775,9 +1768,7 @@
 
         // Update notification to confirm success
         showNotification('✅ Email sent successfully!', 'success');
-        
-        // Refresh emails to show in sent folder
-        setTimeout(loadEmails, 1000);
+        // Realtime subscription handles the new email appearing in Sent
       } catch (error) {
         console.error('Error sending email:', error);
         showNotification('❌ Failed to send email. Please try again.', 'error');
