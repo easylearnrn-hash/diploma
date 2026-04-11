@@ -425,7 +425,7 @@ body{
   <!-- Login Type Tabs -->
   <div class="login-tabs">
     <button type="button" class="login-tab active" onclick="switchLoginType('student')">
-      Student Login
+      Student Portal
     </button>
     <button type="button" class="login-tab" onclick="switchLoginType('application')">
       Application Status
@@ -435,8 +435,8 @@ body{
   <!-- Student Login Form -->
   <form id="loginForm" style="display:block;">
     <div class="form-group">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" placeholder="you@example.com" required>
+      <label for="email">Campus Email</label>
+      <input type="email" id="email" name="email" placeholder="m.lastname@acnhs.am" required>
     </div>
     
     <div class="form-group">
@@ -1215,6 +1215,44 @@ async function fetchApplicationByEmailOrPortalFields(supabase, email) {
 
   if (error) throw error;
   if (data && data.length > 0) return data[0];
+
+  // If the login email is an institutional @acnhs.am email (e.g. m.mkhitaryan@acnhs.am),
+  // the stored username may be the same prefix with a numeric suffix (e.g. m.mkhitaryan.1234).
+  // Search by prefix so enrolled students can sign in with their campus email.
+  if (isInstitutionalEmail(normalizedEmail)) {
+    const domainMatch = INSTITUTIONAL_EMAIL_DOMAINS.find(d => normalizedEmail.endsWith(d));
+    if (domainMatch) {
+      const usernamePrefix = normalizedEmail.slice(0, normalizedEmail.length - domainMatch.length);
+      if (usernamePrefix) {
+        // Exact username match (e.g. username stored as "m.mkhitaryan" without suffix)
+        ({ data, error } = await supabase
+          .from('applications')
+          .select(selectFields)
+          .eq('username', usernamePrefix)
+          .limit(1));
+        if (error) console.warn('Prefix-exact username lookup failed:', error.message);
+        if (!error && data && data.length > 0) return data[0];
+
+        // Prefix match (e.g. username stored as "m.mkhitaryan.1234")
+        ({ data, error } = await supabase
+          .from('applications')
+          .select(selectFields)
+          .ilike('username', `${usernamePrefix}.%`)
+          .limit(1));
+        if (error) console.warn('Prefix-ilike username lookup failed:', error.message);
+        if (!error && data && data.length > 0) return data[0];
+
+        // Also try payload username
+        ({ data, error } = await supabase
+          .from('applications')
+          .select(selectFields)
+          .ilike('payload->>username', `${usernamePrefix}%`)
+          .limit(1));
+        if (error) console.warn('Prefix-ilike payload username lookup failed:', error.message);
+        if (!error && data && data.length > 0) return data[0];
+      }
+    }
+  }
 
   return null;
 }
