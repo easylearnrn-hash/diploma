@@ -1978,7 +1978,7 @@ select option {
     <!-- SUBMIT SECTION -->
     <div class="submit-section">
       <p class="submit-section__title">Ready to Submit Your Application?</p>
-      <p class="submit-section__subtitle">Review your application carefully before final submission</p>
+      <p class="submit-section__subtitle">Review your application carefully, then pay the $105.00 filing fee to complete your submission</p>
       <button type="submit" class="submit-btn" id="submitBtn">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
         Review Required Before Submit
@@ -2338,7 +2338,7 @@ let hasSignedApplication = false;
 function updateSubmitButton() {
   if (hasPreviewedApplication && hasSignedApplication) {
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Submit Application';
+    submitBtn.textContent = 'Pay & Submit — $105.00 →';
     submitBtn.style.opacity = '1';
   } else {
     submitBtn.disabled = true;
@@ -2928,19 +2928,28 @@ async function handleAdmissionSubmit(e) {
   };
 
     form.dataset.submitted = 'true';
-    submitBtn.textContent = 'Application Submitted ✓';
-    updateSubmitStatus('Application saved! Generating credentials...', 'success');
-    setTimeout(clearSubmitStatus, 4000);
-    
-    // Show credentials modal only if credentials were saved
+    submitBtn.textContent = 'Redirecting to Payment...';
+    updateSubmitStatus('Application saved! Redirecting to payment...', 'success');
+
+    // Store credentials in sessionStorage so payment page can display them after payment
+    const credentialsPayload = {
+      username: assignedUsername,
+      password,
+      referenceNumber,
+      controlNumber: data.controlNumber,
+      applicantName: data.applicantName || `${data.firstName} ${data.lastName}`.trim(),
+      applicationId: savedData.id || ''
+    };
+    sessionStorage.setItem('acnhs_pending_credentials', JSON.stringify(credentialsPayload));
+
+    // Send welcome email before redirecting (non-blocking)
     if (assignedUsername) {
-      showCredentialsModal(assignedUsername, password, referenceNumber);
-      // Send welcome email with credentials
-      sendApplicationSubmittedEmail(data, assignedUsername, password, referenceNumber);
-    } else {
-      // Fallback: show success message without credentials
-      showModal('✅ Application Submitted Successfully!\n\nReference Number: ' + referenceNumber + '\n\nYour application has been received. You will be contacted via email regarding next steps.', 'success');
+      sendApplicationSubmittedEmail(data, assignedUsername, password, referenceNumber).catch(() => {});
     }
+
+    // Redirect to payment page
+    const paymentUrl = `payment.html?app_id=${encodeURIComponent(savedData.id || '')}&control=${encodeURIComponent(data.controlNumber || '')}&name=${encodeURIComponent(data.applicantName || `${data.firstName} ${data.lastName}`.trim())}`;
+    setTimeout(() => { window.location.href = paymentUrl; }, 800);
     
     console.log('Form data saved:', data);
   } catch (error) {

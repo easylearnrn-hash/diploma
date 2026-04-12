@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Application Fee Payment — ACNHS</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/acnhs-seal.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/acnhs-seal.png">
+<link rel="shortcut icon" href="assets/acnhs-seal.png">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/site-chrome.css">
+
+<!-- ── Stripe.js ── -->
+<script src="https://js.stripe.com/v3/"></script>
+
+<!-- ── Supabase CDN (must load before supabase-config.js) ── -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/supabase-config.js"></script>
+
+<style>
+:root {
+  --navy-900: #04111f;
+  --navy-800: #071b30;
+  --navy-700: #0c2444;
+  --gold-500: #c9a84c;
+  --gold-400: #d4b56a;
+  --gold-300: #e2cc92;
+  --gold-200: #f0e3bc;
+  --gold-glow: rgba(201,168,76,0.18);
+  --border-gold: rgba(201,168,76,0.28);
+  --text-primary: #f0ece3;
+  --text-secondary: #c8bfb2;
+  --text-muted: #8a8070;
+  --radius-sm: 6px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+  --shadow-card: 0 4px 24px rgba(0,0,0,0.22);
+  --shadow-gold: 0 4px 24px rgba(201,168,76,0.14);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+html { scroll-behavior: smooth; color-scheme: dark; }
+body {
+  font-family: 'Inter', sans-serif;
+  background: var(--navy-900);
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(201,168,76,0.06) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 80% at 10% 90%, rgba(12,36,68,0.8) 0%, transparent 70%);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* ── Page Layout ── */
+.payment-page {
+  min-height: calc(100vh - var(--header-h));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 60px 24px 80px;
+}
+
+.payment-wrapper {
+  width: 100%;
+  max-width: 960px;
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 32px;
+  align-items: start;
+}
+
+/* ── Left Column: Application Summary ── */
+.payment-summary {
+  background: rgba(7,27,48,0.85);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+.summary-header {
+  background: linear-gradient(135deg, var(--navy-700) 0%, var(--navy-800) 100%);
+  border-bottom: 2px solid var(--gold-500);
+  padding: 28px 32px;
+}
+
+.summary-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--gold-400);
+  background: var(--gold-glow);
+  border: 1px solid var(--border-gold);
+  padding: 5px 14px;
+  border-radius: 999px;
+  margin-bottom: 14px;
+}
+
+.summary-header h1 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--gold-200);
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+
+.summary-header p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.summary-body {
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(201,168,76,0.10);
+}
+.summary-row:last-child { border-bottom: none; padding-bottom: 0; }
+
+.summary-icon {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  background: var(--gold-glow);
+  border: 1px solid var(--border-gold);
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-400);
+}
+
+.summary-text .label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.summary-text .value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.summary-text .value.large {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--gold-400);
+}
+
+.security-badges {
+  margin-top: 24px;
+  padding: 18px 20px;
+  background: rgba(201,168,76,0.04);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+.security-badge {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+.security-badge svg { color: var(--gold-400); }
+
+/* ── Right Column: Payment Form ── */
+.payment-card {
+  background: rgba(7,27,48,0.90);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+  position: sticky;
+  top: calc(var(--header-h) + 24px);
+}
+
+.payment-card-header {
+  background: linear-gradient(135deg, var(--navy-700) 0%, var(--navy-800) 100%);
+  border-bottom: 2px solid var(--gold-500);
+  padding: 24px 28px;
+}
+
+.payment-card-header h2 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--gold-200);
+  margin-bottom: 4px;
+}
+
+.payment-card-header p {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.payment-card-body {
+  padding: 28px;
+}
+
+/* ── Stripe Elements ── */
+.stripe-field-group {
+  margin-bottom: 18px;
+}
+.stripe-field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.stripe-element-container {
+  background: rgba(4,17,31,0.6);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  transition: border-color 0.2s;
+}
+.stripe-element-container.focused {
+  border-color: var(--gold-500);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.10);
+}
+
+.card-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ── Amount line ── */
+.amount-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid rgba(201,168,76,0.12);
+  border-bottom: 1px solid rgba(201,168,76,0.12);
+  margin-bottom: 20px;
+}
+.amount-line .label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.amount-line .amount {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold-400);
+}
+
+/* ── Pay Button ── */
+.pay-btn {
+  width: 100%;
+  padding: 15px 24px;
+  background: linear-gradient(135deg, var(--gold-500), var(--gold-400));
+  color: var(--navy-900);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.22s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: relative;
+}
+.pay-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, var(--gold-400), var(--gold-300));
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(201,168,76,0.30);
+}
+.pay-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+.pay-btn .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(4,17,31,0.3);
+  border-top-color: var(--navy-900);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: none;
+}
+.pay-btn.loading .spinner { display: block; }
+.pay-btn.loading .pay-btn-text { opacity: 0.6; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Error / Success States ── */
+.payment-message {
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  margin-top: 14px;
+  display: none;
+}
+.payment-message.error {
+  display: block;
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.35);
+  color: #fca5a5;
+}
+.payment-message.success {
+  display: block;
+  background: rgba(45,212,191,0.10);
+  border: 1px solid rgba(45,212,191,0.35);
+  color: #5eead4;
+}
+
+/* ── Success Screen ── */
+.success-screen {
+  display: none;
+  text-align: center;
+  padding: 40px 28px;
+}
+.success-screen.visible { display: block; }
+.success-icon {
+  width: 72px;
+  height: 72px;
+  background: rgba(45,212,191,0.12);
+  border: 2px solid rgba(45,212,191,0.40);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 20px;
+  color: #2dd4bf;
+}
+.success-screen h3 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--gold-200);
+  margin-bottom: 10px;
+}
+.success-screen p {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  margin-bottom: 24px;
+}
+.success-ref {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gold-400);
+  background: var(--gold-glow);
+  border: 1px solid var(--border-gold);
+  padding: 8px 16px;
+  border-radius: 999px;
+  display: inline-block;
+  margin-bottom: 24px;
+  letter-spacing: 1px;
+}
+.btn-continue {
+  display: inline-block;
+  padding: 12px 28px;
+  background: linear-gradient(135deg, var(--gold-500), var(--gold-400));
+  color: var(--navy-900);
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.btn-continue:hover {
+  background: linear-gradient(135deg, var(--gold-400), var(--gold-300));
+  transform: translateY(-1px);
+}
+
+/* ── Loading skeleton ── */
+.skeleton {
+  background: linear-gradient(90deg, rgba(201,168,76,0.06) 25%, rgba(201,168,76,0.12) 50%, rgba(201,168,76,0.06) 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: shimmer 1.5s infinite;
+  display: inline-block;
+}
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ── Responsive ── */
+@media (max-width: 780px) {
+  .payment-wrapper {
+    grid-template-columns: 1fr;
+    max-width: 480px;
+  }
+  .payment-card {
+    position: static;
+  }
+}
+@media (max-width: 480px) {
+  .payment-page { padding: 32px 16px 60px; }
+  .summary-body, .payment-card-body { padding: 20px; }
+  .card-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ── Site Header (injected by site-chrome.js) ── -->
+<div data-acnhs-header></div>
+
+<!-- ── Payment Page ── -->
+<div class="payment-page">
+  <div class="payment-wrapper">
+
+    <!-- LEFT: Application Summary -->
+    <div class="payment-summary">
+      <div class="summary-header">
+        <div class="summary-eyebrow">
+          <span style="width:5px;height:5px;border-radius:50%;background:var(--gold-500);display:inline-block;"></span>
+          Secure Checkout
+        </div>
+        <h1>Application Filing Fee</h1>
+        <p>Complete your application by submitting the non-refundable filing fee below.</p>
+      </div>
+
+      <div class="summary-body">
+        <div class="summary-row">
+          <div class="summary-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7H8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Program</div>
+            <div class="value">B.S.N. — Bachelor of Science in Nursing</div>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="summary-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Applicant</div>
+            <div class="value" id="applicantName">
+              <span class="skeleton" style="width:160px;height:16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="summary-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M8 2v4M16 2v4M3 10h18"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Control Number</div>
+            <div class="value" id="controlNumber">
+              <span class="skeleton" style="width:100px;height:16px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="summary-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Application Fee</div>
+            <div class="value">$100.00</div>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="summary-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14l6-6"/><circle cx="9.5" cy="9.5" r="0.5" fill="currentColor"/><circle cx="14.5" cy="14.5" r="0.5" fill="currentColor"/><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Service Tax (5%)</div>
+            <div class="value">$5.00</div>
+          </div>
+        </div>
+
+        <div class="summary-row">
+          <div class="summary-icon" style="background:rgba(201,168,76,0.25);border-color:var(--gold-500);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          </div>
+          <div class="summary-text">
+            <div class="label">Total Due</div>
+            <div class="value large" id="feeDisplay">$105.00</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security badges -->
+      <div class="summary-body" style="padding-top:0;">
+        <div class="security-badges">
+          <div class="security-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            256-bit SSL
+          </div>
+          <div class="security-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            Powered by Stripe
+          </div>
+          <div class="security-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            PCI DSS Compliant
+          </div>
+          <div class="security-badge">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Non-refundable
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Payment Form -->
+    <div class="payment-card">
+      <div class="payment-card-header">
+        <h2>Card Information</h2>
+        <p>Your card details are encrypted and never stored on our servers.</p>
+      </div>
+
+      <!-- Form (hidden when success) -->
+      <div class="payment-card-body" id="paymentFormWrapper">
+        <div style="margin-bottom:16px;">
+          <div class="amount-line" style="border-bottom:none;padding-bottom:6px;">
+            <span class="label">Application Fee</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary);">$100.00</span>
+          </div>
+          <div class="amount-line" style="border-bottom:none;padding-top:0;padding-bottom:6px;">
+            <span class="label">Service Tax (5%)</span>
+            <span style="font-size:14px;font-weight:600;color:var(--text-secondary);">$5.00</span>
+          </div>
+          <div class="amount-line" style="padding-top:8px;">
+            <span class="label">Total Due</span>
+            <span class="amount" id="amountLine">$105.00</span>
+          </div>
+        </div>
+
+        <form id="paymentForm" novalidate>
+          <!-- Stripe Payment Element renders here (card number, expiry, CVC, ZIP in one unified UI) -->
+          <div class="stripe-field-group">
+            <label class="stripe-field-label">Card Details</label>
+            <div class="stripe-element-container" id="paymentElement">
+              <!-- Stripe injects the Payment Element here -->
+            </div>
+          </div>
+
+          <div id="paymentMessage" class="payment-message" role="alert"></div>
+
+          <button type="submit" id="payBtn" class="pay-btn">
+            <div class="spinner"></div>
+            <span class="pay-btn-text">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;vertical-align:middle;margin-right:6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              Pay $105.00 Securely (incl. 5% tax)
+            </span>
+          </button>
+        </form>
+
+        <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:14px;line-height:1.6;">
+          By submitting payment you agree to the ACNHS non-refundable filing fee policy.
+          Your application will be confirmed upon successful payment.
+        </p>
+      </div>
+
+      <!-- Success Screen (shown after payment) -->
+      <div class="success-screen" id="successScreen">
+        <div class="success-icon">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <h3>Payment Successful!</h3>
+        <p>Your application fee has been received. We will review your application and contact you within 5–7 business days.</p>
+        <div class="success-ref" id="successRef">Ref: —</div>
+        <br>
+        <a href="index.html" class="btn-continue">Return to Home</a>
+      </div>
+    </div>
+    <!-- /payment-card -->
+
+  </div>
+</div>
+
+<!-- ── Site Footer (injected by site-chrome.js) ── -->
+<div data-acnhs-footer></div>
+
+<script src="js/site-chrome.js"></script>
+
+<script>
+/* ============================================================
+   ACNHS Payment Page — Stripe Integration
+   ============================================================
+   SETUP: Replace STRIPE_PUBLISHABLE_KEY below with your key.
+   Get it from: https://dashboard.stripe.com/apikeys
+   ============================================================ */
+
+const STRIPE_PUBLISHABLE_KEY = 'pk_live_51HKvyeKHAwZsjk64kBQ6PrmVb409AuCXdDmCPQX3z5y3j4sRc9CZDomsG8TXrBDa6xapO2jtWlpOl8pTR92FlNYX00vCScBYzF';
+
+// Fee breakdown
+const FEE_BASE_CENTS   = 10000;  // $100.00
+const FEE_TAX_RATE     = 0.05;   // 5%
+const FEE_TAX_CENTS    = Math.round(FEE_BASE_CENTS * FEE_TAX_RATE); // $5.00
+const FEE_AMOUNT_CENTS = FEE_BASE_CENTS + FEE_TAX_CENTS;            // $105.00 total
+const FEE_CURRENCY     = 'usd';
+const FEE_DISPLAY      = `$${(FEE_AMOUNT_CENTS / 100).toFixed(2)}`;
+
+/* ── Read URL params ── */
+const params        = new URLSearchParams(window.location.search);
+const applicationId = params.get('app_id')   || '';
+const controlNumber = params.get('control')  || '';
+const applicantName = params.get('name')     || '';
+
+/* ── Populate summary fields ── */
+document.getElementById('applicantName').textContent = applicantName || 'Not provided';
+document.getElementById('controlNumber').textContent = controlNumber || 'N/A';
+document.getElementById('feeDisplay').textContent    = FEE_DISPLAY;
+document.getElementById('amountLine').textContent    = FEE_DISPLAY;
+document.querySelector('.pay-btn-text').innerHTML =
+  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;vertical-align:middle;margin-right:6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+  Pay ${FEE_DISPLAY} Securely (incl. 5% tax)`;
+
+/* ── Stripe ── */
+let stripe, elements, paymentElement;
+
+async function initStripe() {
+  // 1. Call Supabase Edge Function to create a PaymentIntent server-side
+  //    (Never call Stripe directly with the secret key from the browser!)
+  const supabase = initSupabase();
+
+  let clientSecret;
+  try {
+    const { data, error } = await supabase.functions.invoke('create-payment-intent', {
+      body: {
+        amount:         FEE_AMOUNT_CENTS,
+        currency:       FEE_CURRENCY,
+        application_id: applicationId,
+        control_number: controlNumber,
+        applicant_name: applicantName,
+        description:    `ACNHS Application Fee — ${controlNumber || applicationId}`
+      }
+    });
+
+    if (error || !data?.clientSecret) {
+      throw new Error(error?.message || 'Failed to initialise payment session.');
+    }
+    clientSecret = data.clientSecret;
+  } catch (err) {
+    showMessage(err.message, 'error');
+    return;
+  }
+
+  // 2. Initialise Stripe.js with the publishable key
+  stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+
+  // 3. Mount the Payment Element (handles card, Apple Pay, Google Pay automatically)
+  elements = stripe.elements({
+    clientSecret,
+    appearance: {
+      theme: 'night',
+      variables: {
+        colorPrimary:       '#c9a84c',
+        colorBackground:    '#04111f',
+        colorText:          '#f0ece3',
+        colorDanger:        '#ef4444',
+        fontFamily:         'Inter, sans-serif',
+        borderRadius:       '6px',
+        colorInputBackground: 'rgba(4,17,31,0.60)',
+        colorTextPlaceholder: '#8a8070',
+      },
+      rules: {
+        '.Input': {
+          border: '1px solid rgba(201,168,76,0.28)',
+          padding: '10px 12px',
+        },
+        '.Input:focus': {
+          border: '1px solid #c9a84c',
+          boxShadow: '0 0 0 3px rgba(201,168,76,0.10)',
+          outline: 'none',
+        },
+        '.Label': {
+          color: '#8a8070',
+          fontSize: '11px',
+          fontWeight: '700',
+          letterSpacing: '1.5px',
+          textTransform: 'uppercase',
+          marginBottom: '6px',
+        }
+      }
+    }
+  });
+
+  paymentElement = elements.create('payment');
+  paymentElement.mount('#paymentElement');
+
+  paymentElement.on('ready', () => {
+    document.getElementById('payBtn').disabled = false;
+  });
+}
+
+/* ── Form submit ── */
+document.getElementById('paymentForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!stripe || !elements) return;
+
+  setLoading(true);
+  clearMessage();
+
+  const { error, paymentIntent } = await stripe.confirmPayment({
+    elements,
+    confirmParams: {
+      // Stripe redirects here for 3-D Secure — keep on the same page with status
+      return_url: window.location.href,
+    },
+    redirect: 'if_required', // stay on page if no redirect needed
+  });
+
+  if (error) {
+    // Card errors are shown to the user; other errors are unexpected
+    if (error.type === 'card_error' || error.type === 'validation_error') {
+      showMessage(error.message, 'error');
+    } else {
+      showMessage('An unexpected error occurred. Please try again.', 'error');
+    }
+    setLoading(false);
+    return;
+  }
+
+  if (paymentIntent && paymentIntent.status === 'succeeded') {
+    await onPaymentSuccess(paymentIntent);
+  }
+});
+
+/* ── On successful payment ── */
+async function onPaymentSuccess(paymentIntent) {
+  // Mark application as fee-paid in Supabase
+  try {
+    const supabase = initSupabase();
+    if (applicationId) {
+      await supabase
+        .from('applications')
+        .update({
+          payment_status:     'paid',
+          stripe_payment_id:  paymentIntent.id,
+          fee_paid_at:        new Date().toISOString()
+        })
+        .eq('id', applicationId);
+    }
+  } catch (_) {
+    // Non-critical — payment succeeded even if DB update fails
+  }
+
+  // Read credentials stored by admission-form.html before redirect
+  let creds = null;
+  try {
+    const raw = sessionStorage.getItem('acnhs_pending_credentials');
+    if (raw) { creds = JSON.parse(raw); sessionStorage.removeItem('acnhs_pending_credentials'); }
+  } catch (_) {}
+
+  // Build success screen content
+  const refText = `Ref: ${paymentIntent.id.slice(-12).toUpperCase()}`;
+  document.getElementById('successRef').textContent = refText;
+
+  if (creds) {
+    document.getElementById('successScreen').innerHTML = `
+      <div class="success-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h3>Payment Successful!</h3>
+      <p>Your $${(FEE_AMOUNT_CENTS/100).toFixed(2)} application fee has been received. Save your credentials below — you will need them to track your application.</p>
+      <div class="success-ref">${refText}</div>
+
+      <div style="background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.35);border-radius:12px;padding:24px 20px;margin:20px 0;text-align:left;">
+        <div style="font-size:10px;font-weight:800;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold-400);margin-bottom:16px;">Your Application Credentials</div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Reference Number</div>
+          <div style="font-family:'Courier New',monospace;font-size:15px;font-weight:700;color:var(--gold-300);">${creds.referenceNumber}</div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Username</div>
+          <div style="font-family:'Courier New',monospace;font-size:15px;font-weight:700;color:var(--text-primary);">${creds.username}</div>
+        </div>
+        <div style="margin-bottom:16px;">
+          <div style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-muted);margin-bottom:4px;">Password</div>
+          <div style="font-family:'Courier New',monospace;font-size:15px;font-weight:700;color:var(--text-primary);">${creds.password}</div>
+        </div>
+        <button onclick="copyCredentials()" style="width:100%;padding:10px;background:rgba(201,168,76,0.15);border:1px solid var(--border-gold);border-radius:6px;color:var(--gold-400);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;" id="copyCredsBtn">
+          Copy All Credentials
+        </button>
+      </div>
+      <a href="Student-page.html" class="btn-continue">Track My Application</a>
+    `;
+
+    // Store creds globally for copy function
+    window._paymentCreds = creds;
+  }
+
+  document.getElementById('paymentFormWrapper').style.display = 'none';
+  document.getElementById('successScreen').classList.add('visible');
+}
+
+function copyCredentials() {
+  const c = window._paymentCreds;
+  if (!c) return;
+  const text = `ACNHS Application Credentials\n${'─'.repeat(30)}\nReference: ${c.referenceNumber}\nUsername:  ${c.username}\nPassword:  ${c.password}\n\nLogin at: acnhs.am/Student-page.html`;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyCredsBtn');
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Copy All Credentials'; }, 2000); }
+  });
+}
+
+/* ── Handle 3-D Secure redirect return ── */
+async function checkRedirectStatus() {
+  const clientSecret = new URLSearchParams(window.location.search).get('payment_intent_client_secret');
+  if (!clientSecret) return false;
+
+  stripe = Stripe(STRIPE_PUBLISHABLE_KEY);
+  const { paymentIntent, error } = await stripe.retrievePaymentIntent(clientSecret);
+
+  if (error) {
+    showMessage(error.message, 'error');
+    return true;
+  }
+
+  if (paymentIntent.status === 'succeeded') {
+    await onPaymentSuccess(paymentIntent);
+    return true;
+  }
+
+  return false;
+}
+
+/* ── Helpers ── */
+function setLoading(isLoading) {
+  const btn = document.getElementById('payBtn');
+  btn.disabled = isLoading;
+  btn.classList.toggle('loading', isLoading);
+}
+
+function showMessage(msg, type = 'error') {
+  const el = document.getElementById('paymentMessage');
+  el.textContent = msg;
+  el.className = `payment-message ${type}`;
+}
+
+function clearMessage() {
+  const el = document.getElementById('paymentMessage');
+  el.textContent = '';
+  el.className = 'payment-message';
+}
+
+/* ── Boot ── */
+(async () => {
+  // Disable pay button until Stripe is ready
+  document.getElementById('payBtn').disabled = true;
+
+  // If returning from 3-D Secure redirect, handle that first
+  const handled = await checkRedirectStatus();
+  if (!handled) {
+    initStripe();
+  }
+})();
+
+/* ── Check for 3-DS redirect result on page load ── */
+window.addEventListener('load', () => {
+  const pi = new URLSearchParams(window.location.search).get('payment_intent');
+  if (pi) {
+    // Already handled in boot, remove params from URL cleanly
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+  }
+});
+</script>
+
+</body>
+</html>
