@@ -8828,6 +8828,27 @@
     }
 
     // ===== EMAIL NOTIFICATION FOR STATUS CHANGES =====
+
+    // Ensure verification_hash exists; generate + persist if missing.
+    // Must be called (awaited) before buildStatusEmailHtml for ACTIVE STUDENT emails.
+    async function ensureVerificationHash(app) {
+      if (app.verification_hash) return; // already set
+      const array = new Uint8Array(3);
+      crypto.getRandomValues(array);
+      const newHash = 'SHA256-' + Array.from(array, b => b.toString(16).padStart(2, '0').toUpperCase()).join('');
+      const supabase = initSupabase();
+      if (supabase) {
+        const { error } = await supabase
+          .from('applications')
+          .update({ verification_hash: newHash })
+          .eq('id', app.id);
+        if (error) {
+          console.warn('⚠️ Could not persist verification_hash:', error.message);
+        }
+      }
+      app.verification_hash = newHash;
+    }
+
     // Build the full email HTML payload without sending it
     function buildStatusEmailHtml(application, newStatus, statusMessage) {
       if (!application || !application.email) {
@@ -9529,6 +9550,7 @@
         refreshApplicationDrawer(savedAppId);
 
         // ===== SHOW EMAIL PREVIEW → SEND ON CONFIRM =====
+        if (newStatus === 'ACTIVE STUDENT') await ensureVerificationHash(currentApp);
         const emailPayload = buildStatusEmailHtml(currentApp, newStatus, finalStatusMessage);
         if (emailPayload) {
           showEmailPreviewModal(emailPayload, () => dispatchStatusEmail(emailPayload));
@@ -9703,6 +9725,7 @@
         }
 
         // ===== SHOW EMAIL PREVIEW → SEND ON CONFIRM =====
+        if (newStatus === 'ACTIVE STUDENT') await ensureVerificationHash(currentApp);
         const emailPayload = buildStatusEmailHtml(currentApp, newStatus, finalStatusMessage);
         if (emailPayload) {
           showEmailPreviewModal(emailPayload, () => dispatchStatusEmail(emailPayload));
