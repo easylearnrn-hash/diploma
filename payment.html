@@ -540,6 +540,27 @@ body {
         </div>
         <div class="row-value" id="controlNumber"><span class="skeleton" style="width:76px;height:13px;">&nbsp;</span></div>
       </div>
+      <div class="summary-row">
+        <div class="row-label">
+          <div class="row-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14 15 8M12 3v1M21 12h-1M18.364 5.636l-.707.707M5.636 5.636l.707.707M3 12h1M12 20v1"/><circle cx="12" cy="12" r="4"/></svg></div>
+          Reference No.
+        </div>
+        <div class="row-value" id="referenceNumber"><span class="skeleton" style="width:90px;height:13px;">&nbsp;</span></div>
+      </div>
+      <div class="summary-row">
+        <div class="row-label">
+          <div class="row-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg></div>
+          Application ID
+        </div>
+        <div class="row-value" id="applicationIdDisplay"><span class="skeleton" style="width:60px;height:13px;">&nbsp;</span></div>
+      </div>
+      <div class="summary-row">
+        <div class="row-label">
+          <div class="row-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M6 20v-1a6 6 0 0 1 12 0v1"/><path d="M18 11l2 2 4-4"/></svg></div>
+          Username
+        </div>
+        <div class="row-value" id="usernameDisplay" style="font-family:'Courier New',monospace;font-size:11px;"><span class="skeleton" style="width:80px;height:13px;">&nbsp;</span></div>
+      </div>
       <div class="row-spacer"></div>
       <div class="summary-row total">
         <div class="row-label">
@@ -698,16 +719,28 @@ const FEE_AMOUNT_CENTS = FEE_BASE_CENTS + FEE_TAX_CENTS;            // $105.00 t
 const FEE_CURRENCY     = 'usd';
 const FEE_DISPLAY      = `$${(FEE_AMOUNT_CENTS / 100).toFixed(2)}`;
 
-/* ── Read URL params ── */
+/* ── Read URL params + sessionStorage for identifiers ── */
 const params        = new URLSearchParams(window.location.search);
 const applicationId = params.get('app_id')   || '';
 const controlNumber = params.get('control')  || '';
 const applicantName = params.get('name')     || '';
 
+// Pull extra identifiers from sessionStorage (written by admission-form.html)
+let _pendingCreds = null;
+try {
+  const raw = sessionStorage.getItem('acnhs_pending_credentials');
+  if (raw) _pendingCreds = JSON.parse(raw);
+} catch (_) {}
+const referenceNumber = _pendingCreds?.referenceNumber || '';
+const username        = _pendingCreds?.username        || '';
+
 /* ── Populate summary fields ── */
-document.getElementById('applicantName').textContent = applicantName || 'Not provided';
-document.getElementById('controlNumber').textContent = controlNumber || 'N/A';
-document.getElementById('feeDisplay').textContent    = `$${(FEE_BASE_CENTS/100).toFixed(2)}`;
+document.getElementById('applicantName').textContent     = applicantName  || (_pendingCreds?.applicantName) || 'Not provided';
+document.getElementById('controlNumber').textContent     = controlNumber  || (_pendingCreds?.controlNumber) || 'N/A';
+document.getElementById('referenceNumber').textContent   = referenceNumber || '—';
+document.getElementById('applicationIdDisplay').textContent = applicationId || (_pendingCreds?.applicationId) || '—';
+document.getElementById('usernameDisplay').textContent   = username        || '—';
+document.getElementById('feeDisplay').textContent        = `$${(FEE_BASE_CENTS/100).toFixed(2)}`;
 document.querySelector('.pay-btn-text').innerHTML =
   `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="display:inline;vertical-align:middle;margin-right:6px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
   Pay ${FEE_DISPLAY} Securely (incl. 5% tax)`;
@@ -848,11 +881,9 @@ async function onPaymentSuccess(paymentIntent) {
   }
 
   // Read credentials stored by admission-form.html before redirect
-  let creds = null;
-  try {
-    const raw = sessionStorage.getItem('acnhs_pending_credentials');
-    if (raw) { creds = JSON.parse(raw); sessionStorage.removeItem('acnhs_pending_credentials'); }
-  } catch (_) {}
+  // (also pre-read at page load into _pendingCreds; remove from storage now)
+  let creds = _pendingCreds;
+  try { sessionStorage.removeItem('acnhs_pending_credentials'); } catch (_) {}
 
   // Build success screen content
   const refText = `Ref: ${paymentIntent.id.slice(-12).toUpperCase()}`;
