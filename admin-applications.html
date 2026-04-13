@@ -2007,6 +2007,12 @@
       <button class="tab active" data-tab="applications">
         Applications <span class="tab-badge" id="applicationsCount">0</span>
       </button>
+      <button class="tab" data-tab="enrolled">
+        Enrolled <span class="tab-badge" id="enrolledCount">0</span>
+      </button>
+      <button class="tab" data-tab="withdrawn">
+        Withdrawn <span class="tab-badge" id="withdrawnCount">0</span>
+      </button>
       <button class="tab" data-tab="registrations">
         Waiting List <span class="tab-badge" id="registrationsCount">0</span>
       </button>
@@ -2060,6 +2066,66 @@
               </tr>
             </thead>
             <tbody id="applicationsBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENROLLED TAB -->
+    <div class="tab-content" id="tab-enrolled" style="display:none;">
+      <div class="panel">
+        <div class="filters">
+          <input id="searchEnrolled" type="search" placeholder="Search enrolled students...">
+          <select id="enrolledProgramFilter">
+            <option value="">All programs</option>
+          </select>
+          <button class="btn" id="refreshEnrolled">Refresh</button>
+        </div>
+        <div class="status-text" id="enrolledStatus">Loading...</div>
+        <div class="table-wrapper">
+          <table id="enrolledTable">
+            <thead>
+              <tr>
+                <th>Reference</th>
+                <th>Applicant</th>
+                <th>Program</th>
+                <th>Start Term</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="enrolledBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- WITHDRAWN TAB -->
+    <div class="tab-content" id="tab-withdrawn" style="display:none;">
+      <div class="panel">
+        <div class="filters">
+          <input id="searchWithdrawn" type="search" placeholder="Search withdrawn applications...">
+          <select id="withdrawnProgramFilter">
+            <option value="">All programs</option>
+          </select>
+          <button class="btn" id="refreshWithdrawn">Refresh</button>
+        </div>
+        <div class="status-text" id="withdrawnStatus">Loading...</div>
+        <div class="table-wrapper">
+          <table id="withdrawnTable">
+            <thead>
+              <tr>
+                <th>Reference</th>
+                <th>Applicant</th>
+                <th>Program</th>
+                <th>Start Term</th>
+                <th>Status</th>
+                <th>Submitted</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="withdrawnBody"></tbody>
           </table>
         </div>
       </div>
@@ -2907,7 +2973,10 @@
       'REJECTED': 92
     };
 
-    let applicationsData = [];
+    let applicationsData = [];   // ALL applications ever loaded
+    let activeAppsData    = [];   // Excludes ENROLLED + WITHDRAWN
+    let enrolledAppsData  = [];   // ENROLLED only
+    let withdrawnAppsData = [];   // WITHDRAWN only
     let registrationsData = [];
     let currentTab = 'applications';
     let currentApplicationId = null;
@@ -5637,6 +5706,8 @@
     // ===== PERFORMANCE: Track which tabs have been loaded =====
     const tabsLoaded = {
       applications: false,
+      enrolled: false,
+      withdrawn: false,
       registrations: false
     };
 
@@ -5669,6 +5740,86 @@
         loadRegistrations();
         tabsLoaded.registrations = true;
       }
+      if (tabName === 'enrolled' && !tabsLoaded.enrolled) {
+        renderFinalStatusTab('enrolled');
+        tabsLoaded.enrolled = true;
+      }
+      if (tabName === 'withdrawn' && !tabsLoaded.withdrawn) {
+        renderFinalStatusTab('withdrawn');
+        tabsLoaded.withdrawn = true;
+      }
+    }
+
+    function renderFinalStatusTab(tab) {
+      const isEnrolled = tab === 'enrolled';
+      const apps   = isEnrolled ? enrolledAppsData : withdrawnAppsData;
+      const tbody  = document.getElementById(isEnrolled ? 'enrolledBody'  : 'withdrawnBody');
+      const status = document.getElementById(isEnrolled ? 'enrolledStatus': 'withdrawnStatus');
+      const searchInput  = document.getElementById(isEnrolled ? 'searchEnrolled'  : 'searchWithdrawn');
+      const programSel   = document.getElementById(isEnrolled ? 'enrolledProgramFilter' : 'withdrawnProgramFilter');
+
+      // Populate program filter
+      const programs = [...new Set(apps.map(a => a.program).filter(Boolean))];
+      programSel.innerHTML = '<option value="">All programs</option>' +
+        programs.map(p => `<option value="${p}">${p}</option>`).join('');
+
+      // Hook up live search/filter
+      const doFilter = () => {
+        const search  = (searchInput.value || '').trim().toLowerCase();
+        const program = programSel.value || '';
+        const filtered = apps.filter(app => {
+          const idx = ensureApplicationIndex(app) || {};
+          const matchSearch  = !search  || (idx.searchBlob && idx.searchBlob.includes(search));
+          const matchProgram = !program || idx.originalProgram === program;
+          return matchSearch && matchProgram;
+        });
+        renderFinalStatusRows(tbody, filtered);
+        if (status) status.textContent = `${filtered.length} of ${apps.length} record(s)`;
+      };
+      searchInput.addEventListener('input', doFilter);
+      programSel.addEventListener('change', doFilter);
+
+      const refreshBtn = document.getElementById(isEnrolled ? 'refreshEnrolled' : 'refreshWithdrawn');
+      if (refreshBtn) refreshBtn.addEventListener('click', () => { tabsLoaded[tab] = false; renderFinalStatusTab(tab); });
+
+      renderFinalStatusRows(tbody, apps);
+      if (status) status.textContent = `✅ ${apps.length} record(s)`;
+    }
+
+    function renderFinalStatusRows(tbody, apps) {
+      if (!tbody) return;
+      if (!apps.length) {
+        tbody.innerHTML = `<tr><td colspan="7" class="empty"><div class="empty-icon">📋</div><p>No records found</p></td></tr>`;
+        return;
+      }
+      tbody.innerHTML = '';
+      const fragment = document.createDocumentFragment();
+      apps.forEach(app => {
+        const statusData = getApplicationStatusData(app);
+        const idx = ensureApplicationIndex(app) || {};
+        const initials  = (app.applicant_name || 'AP').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+        const refDisplay = app.reference_number ? app.reference_number.toString().slice(-8) : '—';
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><span class="ref-badge" onclick="handleReferenceClick('${app.id}')" style="cursor:pointer;" title="Click to view questionnaire">${refDisplay}</span></td>
+          <td>
+            <div class="applicant-cell">
+              <div class="applicant-avatar">${initials}</div>
+              <div>
+                <div class="applicant-name">${app.applicant_name || '—'}</div>
+                <div class="applicant-sub">${app.email || ''}</div>
+              </div>
+            </div>
+          </td>
+          <td>${idx.shortProgram || app.program || '—'}</td>
+          <td>${idx.cleanStartTerm || app.start_term || '—'}</td>
+          <td><span class="pill ${statusData.pillClass}">${statusData.label}</span></td>
+          <td style="color:var(--text-muted);font-size:13px;">${formatDate(app.submission_date)}</td>
+          <td><button class="btn-view" onclick="openApplicationDrawer('${app.id}')">Open →</button></td>
+        `;
+        fragment.appendChild(tr);
+      });
+      tbody.appendChild(fragment);
     }
 
     // APPLICATIONS
@@ -5715,6 +5866,14 @@
       }
       
   applicationsData = data || [];
+
+  // Split into active / enrolled / withdrawn
+  const FINAL_STATUSES_ENROLLED  = ['ENROLLED'];
+  const FINAL_STATUSES_WITHDRAWN = ['WITHDRAWN', 'DENIED'];
+  activeAppsData    = applicationsData.filter(a => !FINAL_STATUSES_ENROLLED.includes((a.status||'').toUpperCase()) && !FINAL_STATUSES_WITHDRAWN.includes((a.status||'').toUpperCase()));
+  enrolledAppsData  = applicationsData.filter(a => FINAL_STATUSES_ENROLLED.includes((a.status||'').toUpperCase()));
+  withdrawnAppsData = applicationsData.filter(a => FINAL_STATUSES_WITHDRAWN.includes((a.status||'').toUpperCase()));
+
   buildApplicationsIndex(applicationsData);
       
       // Debug: Log all applicant names to verify data is loaded
@@ -5737,16 +5896,18 @@
       }
       
       tabsLoaded.applications = true; // ✅ Mark as loaded
-      document.getElementById('applicationsCount').textContent = applicationsData.length;
+      document.getElementById('applicationsCount').textContent = activeAppsData.length;
+      document.getElementById('enrolledCount').textContent   = enrolledAppsData.length;
+      document.getElementById('withdrawnCount').textContent  = withdrawnAppsData.length;
       renderApplications();
       populateProgramFilter();
-      setStatus('applicationsStatus', `✅ ${applicationsData.length} application(s) loaded`);
+      setStatus('applicationsStatus', `✅ ${activeAppsData.length} active application(s) loaded`);
       console.log(`✅ Loaded ${applicationsData.length} applications`);
       scheduleInitialPayloadPrefetch();
       updateStatCards();
     }
 
-    function renderApplications(filtered = applicationsData) {
+    function renderApplications(filtered = activeAppsData) {
       const tbody = document.getElementById('applicationsBody');
       if (!tbody) return;
       const apps = Array.isArray(filtered) ? filtered : [];
@@ -5820,12 +5981,12 @@
     }
 
     function updateStatCards() {
-      const total = applicationsData.length;
-      const underReview = applicationsData.filter(a => {
+      const total = activeAppsData.length;
+      const underReview = activeAppsData.filter(a => {
         const s = (a.status || '').toUpperCase();
         return ['UNDER REVIEW','ACTIVELY REVIEWING','FINAL REVIEW','RFE PREPARING','RFE SENT','SUBMITTED'].some(k => s.includes(k));
       }).length;
-      const enrolled = applicationsData.filter(a => (a.status || '').toUpperCase() === 'ENROLLED').length;
+      const enrolled = enrolledAppsData.length;
       const waiting = registrationsData.length;
 
       const animateCount = (el, target) => {
@@ -5870,7 +6031,7 @@
       const search = (searchInput?.value || '').trim().toLowerCase();
       const program = programSelect?.value || '';
 
-      const filtered = applicationsData.filter(app => {
+      const filtered = activeAppsData.filter(app => {
         const indexEntry = ensureApplicationIndex(app) || {};
         const matchesSearch = !search || (indexEntry.searchBlob && indexEntry.searchBlob.includes(search));
         const matchesProgram = !program || indexEntry.originalProgram === program;
@@ -5879,7 +6040,7 @@
 
       return {
         filtered,
-        statusMessage: `${filtered.length} of ${applicationsData.length} application(s)`
+        statusMessage: `${filtered.length} of ${activeAppsData.length} application(s)`
       };
     }
 
@@ -11055,7 +11216,7 @@ The table needs to be created before registrations can be stored.`;
           btn.style.border = '';
           btn.textContent = 'QUEST';
           renderApplications();
-          setStatus('applicationsStatus', `✅ ${applicationsData.length} application(s) loaded`);
+          setStatus('applicationsStatus', `✅ ${activeAppsData.length} active application(s) loaded`);
         } else {
           // Turn on filter
           const originalText = btn.textContent;
@@ -11081,7 +11242,7 @@ The table needs to be created before registrations can be stored.`;
             
             // Filter and render
             questionnaireFilterActive = true;
-            const filtered = applicationsData.filter(app => 
+            const filtered = activeAppsData.filter(app => 
               applicationsWithQuestionnaires.has(app.id)
             );
             
