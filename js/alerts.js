@@ -304,6 +304,14 @@
     if      (pos === 'modal')                              el = buildModal(a);
     else if (pos === 'banner_top' || pos === 'banner_bottom') el = buildBanner(a, pos);
     else                                                   el = buildToast(a, pos);
+    // iOS Safari: lock body scroll so form doesn't scroll behind modal
+    if (pos === 'modal') {
+      el._bodyScrollY = window.scrollY || window.pageYOffset || 0;
+      document.body.style.position = 'fixed';
+      document.body.style.top      = '-' + el._bodyScrollY + 'px';
+      document.body.style.width    = '100%';
+      document.body.style.overflow = 'hidden';
+    }
     document.body.appendChild(el);
     requestAnimationFrame(function() { el.classList.add('acnhs-show'); });
 
@@ -321,6 +329,15 @@
   function dismiss(a, el) {
     markDismissed(a.id);
     el.classList.remove('acnhs-show');
+    // iOS Safari: restore body scroll
+    if (el.classList.contains('acnhs-overlay') || el._bodyScrollY != null) {
+      var sy = el._bodyScrollY || 0;
+      document.body.style.position = '';
+      document.body.style.top      = '';
+      document.body.style.width    = '';
+      document.body.style.overflow = '';
+      window.scrollTo(0, sy);
+    }
     setTimeout(function() {
       if (el.parentNode) el.parentNode.removeChild(el);
       busy = false; run();
@@ -497,10 +514,10 @@
     var s = document.createElement('style'); s.id = 'acnhs-alert-css';
     s.textContent =
       /* ── Overlay backdrop ── */
-      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;padding:24px;box-sizing:border-box}'
+      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;padding:16px;box-sizing:border-box;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}'
       +'.acnhs-overlay.acnhs-show{opacity:1}'
       /* ── Modal box ── */
-      +'.acnhs-box{background:linear-gradient(160deg,#071b30 0%,#04111f 100%);color:#f0ece3;border:1px solid rgba(201,168,76,.22);border-radius:18px;max-width:540px;width:100%;box-shadow:0 40px 80px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.03);position:relative;overflow:hidden;transform:translateY(18px) scale(0.97);transition:transform .4s cubic-bezier(0.16,1,0.3,1),opacity .35s ease;font-family:"Inter",system-ui,sans-serif}'
+      +'.acnhs-box{background:linear-gradient(160deg,#071b30 0%,#04111f 100%);color:#f0ece3;border:1px solid rgba(201,168,76,.22);border-radius:18px;max-width:540px;width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 40px 80px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.03);position:relative;overflow:hidden;transform:translateY(18px) scale(0.97);transition:transform .4s cubic-bezier(0.16,1,0.3,1),opacity .35s ease;font-family:"Inter",system-ui,sans-serif;margin:auto}'
       +'.acnhs-overlay.acnhs-show .acnhs-box{transform:translateY(0) scale(1)}'
       /* ── Gold top accent bar ── */
       +'.acnhs-top-bar{height:3px;background:#c9a84c;width:100%;position:absolute;top:0;left:0;right:0}'
@@ -516,7 +533,7 @@
       /* ── Divider ── */
       +'.acnhs-divider{height:1px;background:rgba(255,255,255,.07);margin:0 32px}'
       /* ── Body ── */
-      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0}'
+      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}'
       +'.acnhs-body p{margin:0 0 14px}'
       +'.acnhs-body p:last-child{margin-bottom:0}'
       +'.acnhs-body ul,.acnhs-body ol{margin:0 0 14px;padding-left:22px}'
