@@ -11462,10 +11462,33 @@ The table needs to be created before registrations can be stored.`;
               <option value="rejected"  ${reg.status==='rejected'  ? 'selected':''}>Rejected</option>
             </select>
           </td>
-          <td><button class="btn-view" onclick="openRegistrationDrawer('${reg.id}')">Open →</button></td>
+          <td style="white-space:nowrap;">
+            <button class="btn-view" onclick="openRegistrationDrawer('${reg.id}')">Open →</button>
+            <button class="btn-view" onclick="deleteRegistrationFromRow('${reg.id}')" style="margin-left:6px;background:rgba(239,68,68,0.1);color:#fca5a5;border-color:rgba(239,68,68,0.25);" title="Delete">🗑</button>
+          </td>
         </tr>
       `;
       }).join('');
+    }
+
+    async function deleteRegistrationFromRow(regId) {
+      const reg = registrationsData.find(r => r.id === regId);
+      if (!reg) return;
+      const confirmed = await showConfirm(
+        `DELETE FROM WAITING LIST?\n\nName: ${reg.full_name}\nEmail: ${reg.email}\n\nThis action CANNOT be undone!`,
+        'delete'
+      );
+      if (!confirmed) return;
+      const supabase = initSupabase();
+      const { error } = await supabase.from('registrations').delete().eq('id', regId);
+      if (error) {
+        showNotification('Error', 'Could not delete: ' + error.message, 'error');
+        return;
+      }
+      registrationsData = registrationsData.filter(r => r.id !== regId);
+      document.getElementById('registrationsCount').textContent = registrationsData.length;
+      renderRegistrations();
+      showNotification('Deleted', `${reg.full_name} removed from waiting list.`, 'success');
     }
 
     async function updateRegistrationStatus(regId, selectEl) {
