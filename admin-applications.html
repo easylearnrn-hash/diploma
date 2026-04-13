@@ -1888,12 +1888,7 @@
           <div id="modalSemesterRow" style="display:none;margin-bottom:12px;">
             <label style="display:block;color:#94a3b8;font-size:13px;margin-bottom:6px;font-weight:500;">Starting Semester <span style="color:#f87171;font-size:11px;">(required)</span></label>
             <select id="modalSemesterSelect" style="width:100%;padding:9px 10px;background:#1a2942;border:1px solid rgba(99,102,241,0.4);border-radius:8px;color:white;font-size:14px;cursor:pointer;">
-              <option value="Spring 2026">Spring 2026</option>
-              <option value="Fall 2026">Fall 2026</option>
-              <option value="Spring 2027">Spring 2027</option>
-              <option value="Fall 2027">Fall 2027</option>
-              <option value="Spring 2028">Spring 2028</option>
-              <option value="Fall 2028">Fall 2028</option>
+              <option value="">Select semester...</option>
             </select>
           </div>
 
@@ -2377,12 +2372,7 @@
           <div class="sm-form-block" id="drawerSemesterBlock" style="display:none;">
             <label class="sm-label" for="drawerSemesterSelect">Starting Semester <span style="color:#f87171;font-size:10px;text-transform:none;letter-spacing:0;font-weight:400;">(required for Active Student)</span></label>
             <select id="drawerSemesterSelect" class="sm-select">
-              <option value="Spring 2026">Spring 2026</option>
-              <option value="Fall 2026">Fall 2026</option>
-              <option value="Spring 2027">Spring 2027</option>
-              <option value="Fall 2027">Fall 2027</option>
-              <option value="Spring 2028">Spring 2028</option>
-              <option value="Fall 2028">Fall 2028</option>
+              <option value="">Select semester...</option>
             </select>
           </div>
 
@@ -4045,7 +4035,11 @@
 
       // Show / hide semester row in modal
       const semRow = document.getElementById('modalSemesterRow');
-      if (semRow) semRow.style.display = (status === 'ACTIVE STUDENT') ? '' : 'none';
+      if (semRow) {
+        const show = status === 'ACTIVE STUDENT';
+        semRow.style.display = show ? '' : 'none';
+        if (show) populateSemesterSelects();
+      }
     }
 
     function applyModalMessageTemplate() {
@@ -5715,6 +5709,49 @@
       withdrawn: false,
       registrations: false
     };
+
+    // ── Dynamic semester options ──────────────────────────────────────────
+    // Spring: intake Feb 1 → shown until Aug 31 (expires Sep 1)
+    // Fall:   intake Sep 1 → shown until Jan 31 of next year (expires Feb 1)
+    function getFutureSemesters() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const months = []; // will collect {label, expiry} for years now through now+3
+
+      for (let y = year; y <= year + 3; y++) {
+        // Spring of year y: show while now < Sep 1 of year y
+        const springExpiry = new Date(y, 8, 1); // Sep 1 (month index 8)
+        if (now < springExpiry) {
+          months.push({ value: `Spring ${y}`, expiry: springExpiry });
+        }
+        // Fall of year y: show while now < Feb 1 of year y+1
+        const fallExpiry = new Date(y + 1, 1, 1); // Feb 1 next year
+        if (now < fallExpiry) {
+          months.push({ value: `Fall ${y}`, expiry: fallExpiry });
+        }
+      }
+      return months;
+    }
+
+    function populateSemesterSelects(currentValue) {
+      const semesters = getFutureSemesters();
+      const ids = ['modalSemesterSelect', 'drawerSemesterSelect'];
+      ids.forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const existing = sel.value || currentValue || '';
+        sel.innerHTML = '<option value="">Select semester...</option>' +
+          semesters.map(s => `<option value="${s.value}"${s.value === existing ? ' selected' : ''}>${s.value}</option>`).join('');
+        // If a past semester is the saved value (e.g. Spring 2026 after Sep 1), still show it so the record stays accurate
+        if (existing && !semesters.find(s => s.value === existing)) {
+          const opt = document.createElement('option');
+          opt.value = existing;
+          opt.textContent = `${existing} (past)`;
+          opt.selected = true;
+          sel.insertBefore(opt, sel.options[1]);
+        }
+      });
+    }
 
     // TAB SWITCHING
     function setupTabs() {
@@ -8508,8 +8545,8 @@
       if (semesterBlock && semesterSelect) {
         const isActiveStudent = (app.status || '').toUpperCase() === 'ACTIVE STUDENT';
         semesterBlock.style.display = isActiveStudent ? '' : 'none';
-        if (isActiveStudent && app.active_student_semester) {
-          semesterSelect.value = app.active_student_semester;
+        if (isActiveStudent) {
+          populateSemesterSelects(app.active_student_semester || '');
         }
       }
 
