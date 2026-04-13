@@ -311,6 +311,16 @@
       document.body.style.top      = '-' + el._bodyScrollY + 'px';
       document.body.style.width    = '100%';
       document.body.style.overflow = 'hidden';
+      // Block touchmove on the overlay entirely, allow only within .acnhs-body
+      el._blockTouch = function(e) {
+        var node = e.target;
+        while (node && node !== el) {
+          if (node.classList && node.classList.contains('acnhs-body')) return;
+          node = node.parentNode;
+        }
+        e.preventDefault();
+      };
+      el.addEventListener('touchmove', el._blockTouch, { passive: false });
     }
     document.body.appendChild(el);
     requestAnimationFrame(function() { el.classList.add('acnhs-show'); });
@@ -329,6 +339,11 @@
   function dismiss(a, el) {
     markDismissed(a.id);
     el.classList.remove('acnhs-show');
+    // iOS Safari: remove touchmove block
+    if (el._blockTouch) {
+      el.removeEventListener('touchmove', el._blockTouch);
+      el._blockTouch = null;
+    }
     // iOS Safari: restore body scroll
     if (el.classList.contains('acnhs-overlay') || el._bodyScrollY != null) {
       var sy = el._bodyScrollY || 0;
@@ -511,18 +526,19 @@
   var _css = false;
   function injectCSS() {
     if (_css) return; _css = true;
+    var old = document.getElementById('acnhs-alert-css'); if (old) old.remove();
     var s = document.createElement('style'); s.id = 'acnhs-alert-css';
     s.textContent =
       /* ── Overlay backdrop ── */
-      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .35s ease;padding:16px;box-sizing:border-box;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}'
+      '.acnhs-overlay{position:fixed;inset:0;z-index:99999;background:rgba(4,17,31,.88);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:flex-start;justify-content:center;opacity:0;transition:opacity .35s ease;padding:env(safe-area-inset-top,16px) 16px 16px;box-sizing:border-box;overflow:hidden;touch-action:none;}'
       +'.acnhs-overlay.acnhs-show{opacity:1}'
       /* ── Modal box ── */
-      +'.acnhs-box{background:linear-gradient(160deg,#071b30 0%,#04111f 100%);color:#f0ece3;border:1px solid rgba(201,168,76,.22);border-radius:18px;max-width:540px;width:100%;max-height:calc(100vh - 32px);display:flex;flex-direction:column;box-shadow:0 40px 80px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.03);position:relative;overflow:hidden;transform:translateY(18px) scale(0.97);transition:transform .4s cubic-bezier(0.16,1,0.3,1),opacity .35s ease;font-family:"Inter",system-ui,sans-serif;margin:auto}'
+      +'.acnhs-box{background:linear-gradient(160deg,#071b30 0%,#04111f 100%);color:#f0ece3;border:1px solid rgba(201,168,76,.22);border-radius:18px;max-width:540px;width:100%;max-height:88vh;max-height:88dvh;display:flex;flex-direction:column;box-shadow:0 40px 80px -16px rgba(0,0,0,.85),0 0 0 1px rgba(255,255,255,.03);position:relative;overflow:hidden;transform:translateY(18px) scale(0.97);transition:transform .4s cubic-bezier(0.16,1,0.3,1),opacity .35s ease;font-family:"Inter",system-ui,sans-serif;margin-top:auto;margin-bottom:auto;flex-shrink:0;}'
       +'.acnhs-overlay.acnhs-show .acnhs-box{transform:translateY(0) scale(1)}'
       /* ── Gold top accent bar ── */
       +'.acnhs-top-bar{height:3px;background:#c9a84c;width:100%;position:absolute;top:0;left:0;right:0}'
       /* ── Close button ── */
-      +'.acnhs-close{position:absolute;top:18px;right:18px;background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);width:30px;height:30px;border-radius:50%;color:#7a7267;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s,border-color .2s;padding:0;z-index:1}'
+      +'.acnhs-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);min-width:40px;min-height:40px;width:40px;height:40px;border-radius:50%;color:#c9a84c;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s,border-color .2s;padding:0;z-index:10;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}'
       +'.acnhs-close:hover{background:rgba(201,168,76,.1);color:#c9a84c;border-color:rgba(201,168,76,.3)}'
       /* ── Header ── */
       +'.acnhs-header{display:flex;align-items:center;gap:18px;padding:36px 32px 24px}'
@@ -533,7 +549,7 @@
       /* ── Divider ── */
       +'.acnhs-divider{height:1px;background:rgba(255,255,255,.07);margin:0 32px}'
       /* ── Body ── */
-      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0;overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;min-height:0}'
+      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:1;min-height:0;touch-action:pan-y;}'
       +'.acnhs-body p{margin:0 0 14px}'
       +'.acnhs-body p:last-child{margin-bottom:0}'
       +'.acnhs-body ul,.acnhs-body ol{margin:0 0 14px;padding-left:22px}'
