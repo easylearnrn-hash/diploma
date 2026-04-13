@@ -5651,10 +5651,22 @@
       // - Fetch ALL applications (removed limit)
       // - Payload is fetched only when drawer is opened
       // - Use DISTINCT to avoid duplicates
-      const { data, error } = await supabase
+      const BASE_FIELDS = 'id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history, phone';
+      const EXTENDED_FIELDS = `${BASE_FIELDS}, active_student_response, active_student_semester`;
+
+      let { data, error } = await supabase
         .from('applications')
-        .select('id, reference_number, applicant_name, email, program, start_term, status, submission_date, barcode, status_history, phone, active_student_response, active_student_semester')
+        .select(EXTENDED_FIELDS)
         .order('submission_date', { ascending: false });
+
+      // If the migration hasn't been run yet, the new columns won't exist → retry without them
+      if (error && (error.code === '42703' || error.message?.includes('active_student'))) {
+        console.warn('⚠️ active_student columns not found — run ADD-ACTIVE-STUDENT-RESPONSE.sql in Supabase. Retrying without them.');
+        ({ data, error } = await supabase
+          .from('applications')
+          .select(BASE_FIELDS)
+          .order('submission_date', { ascending: false }));
+      }
       
       console.timeEnd('⏱️ Applications query');
       
