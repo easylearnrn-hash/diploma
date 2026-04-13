@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waiting List Confirmation — ACNHS</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: linear-gradient(135deg, #04111f 0%, #071b30 60%, #0c2444 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 18px;
+      max-width: 560px;
+      width: 100%;
+      overflow: hidden;
+      box-shadow: 0 8px 48px rgba(4,17,31,0.4), 0 2px 8px rgba(201,168,76,0.12);
+    }
+    .card-header {
+      background: linear-gradient(135deg, #04111f 0%, #071b30 60%, #0c2444 100%);
+      padding: 28px 36px 24px;
+      border-bottom: 3px solid #c9a84c;
+    }
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+    .seal {
+      width: 54px;
+      height: 54px;
+      border-radius: 50%;
+      background: rgba(201,168,76,0.12);
+      border: 1.5px solid rgba(201,168,76,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 26px;
+      flex-shrink: 0;
+    }
+    .school-name { font-size: 15px; color: #e2cc92; font-weight: 700; line-height: 1.25; }
+    .school-sub  { font-size: 13px; color: #d4b56a; font-weight: 600; margin-top: 2px; }
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent 0%, rgba(201,168,76,0.15) 15%, #c9a84c 50%, rgba(201,168,76,0.15) 85%, transparent 100%);
+      margin: 16px 0;
+    }
+    .card-title    { font-size: 22px; color: #f0e3bc; font-weight: 700; }
+    .card-subtitle { font-size: 11px; color: rgba(200,191,178,0.55); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 6px; font-family: Arial, sans-serif; }
+    .card-body  { padding: 32px 36px 36px; }
+    .greeting   { font-size: 18px; color: #04111f; font-weight: 700; margin-bottom: 14px; }
+    .status-badge {
+      display: inline-block;
+      background: rgba(201,168,76,0.12);
+      color: #8a6d28;
+      border: 1px solid rgba(201,168,76,0.35);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+    }
+    .intro-text {
+      font-family: Arial, sans-serif;
+      font-size: 15px;
+      color: #2c2a25;
+      line-height: 1.75;
+      margin-bottom: 24px;
+    }
+    .question-box {
+      background: rgba(201,168,76,0.07);
+      border-left: 4px solid #c9a84c;
+      border-radius: 0 10px 10px 0;
+      padding: 20px 22px;
+      margin-bottom: 16px;
+    }
+    .question-label {
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: #8a7a55;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .question-text {
+      font-size: 17px;
+      font-weight: 700;
+      color: #04111f;
+      line-height: 1.4;
+    }
+    .btn-row {
+      display: flex;
+      gap: 14px;
+      margin: 22px 0 20px;
+    }
+    .btn-yes, .btn-no {
+      flex: 1;
+      padding: 16px;
+      border: none;
+      border-radius: 10px;
+      font-family: Arial, sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      letter-spacing: 0.3px;
+      transition: all 0.2s;
+    }
+    .btn-yes {
+      background: linear-gradient(135deg, #16a34a, #22c55e);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(34,197,94,0.28);
+    }
+    .btn-yes:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(34,197,94,0.38); }
+    .btn-no {
+      background: linear-gradient(135deg, #dc2626, #ef4444);
+      color: #ffffff;
+      box-shadow: 0 4px 14px rgba(239,68,68,0.28);
+    }
+    .btn-no:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(239,68,68,0.38); }
+    .btn-yes:disabled, .btn-no:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .warning-box {
+      background: rgba(234,179,8,0.07);
+      border: 1px solid rgba(234,179,8,0.25);
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-top: 4px;
+    }
+    .warning-text {
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      color: #78642a;
+      line-height: 1.65;
+    }
+    .warning-text strong { color: #5c4b1e; }
+    .response-confirmed {
+      display: none;
+      text-align: center;
+      padding: 32px 20px;
+    }
+    .response-confirmed .icon  { font-size: 56px; margin-bottom: 16px; }
+    .response-confirmed .title { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+    .response-confirmed .subtitle {
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      color: #5a4e3a;
+      line-height: 1.7;
+    }
+    .response-confirmed.yes .title { color: #16a34a; }
+    .response-confirmed.no  .title { color: #dc2626; }
+    #loadingState, #errorState { padding: 48px 36px; text-align: center; }
+    #loadingState .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(201,168,76,0.2);
+      border-top-color: #c9a84c;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loadingState p { font-family: Arial, sans-serif; font-size: 14px; color: #8a7a55; }
+    #errorState .icon { font-size: 48px; margin-bottom: 12px; }
+    #errorState p { font-family: Arial, sans-serif; font-size: 14px; color: #dc2626; line-height: 1.6; }
+    .card-footer {
+      background: #04111f;
+      padding: 16px 36px;
+      font-family: Arial, sans-serif;
+      font-size: 11px;
+      color: rgba(200,191,178,0.40);
+      line-height: 1.6;
+    }
+    @media (max-width: 520px) {
+      .card-body, .card-header { padding-left: 20px; padding-right: 20px; }
+      .btn-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <!-- HEADER -->
+  <div class="card-header">
+    <div class="header-row">
+      <div class="seal">🏫</div>
+      <div>
+        <div class="school-name">Armenian College of Nursing</div>
+        <div class="school-sub">&amp; Health Sciences</div>
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="card-title">Waiting List Confirmation</div>
+    <div class="card-subtitle">Enrollment Interest Response Required</div>
+  </div>
+
+  <!-- BODY -->
+  <div class="card-body">
+
+    <!-- Loading -->
+    <div id="loadingState">
+      <div class="spinner"></div>
+      <p>Verifying your registration&hellip;</p>
+    </div>
+
+    <!-- Error -->
+    <div id="errorState" style="display:none;">
+      <div class="icon">⚠️</div>
+      <p id="errorMsg">This link is invalid or has expired. Please contact admissions at <strong>admissions@acnhs.am</strong>.</p>
+    </div>
+
+    <!-- Main content (shown after verification) -->
+    <div id="mainContent" style="display:none;">
+      <div class="greeting" id="greetingName">Dear Student,</div>
+      <div class="status-badge">Waiting List</div>
+
+      <p class="intro-text">
+        You are registered on our waiting list. We are reaching out to check whether you are still interested in applying to the Armenian College of Nursing &amp; Health Sciences. Please respond below.
+      </p>
+
+      <!-- Question -->
+      <div id="questionSection">
+        <div class="question-box">
+          <div class="question-label">Required Response</div>
+          <div class="question-text">Are you still interested in applying to ACNHS?</div>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-yes" id="btnYes" onclick="submitResponse('YES')">✓ Yes, I&rsquo;m Still Interested</button>
+          <button class="btn-no"  id="btnNo"  onclick="submitResponse('NO')">✕ No, Remove Me</button>
+        </div>
+
+        <div class="warning-box">
+          <p class="warning-text">
+            <strong>Please note:</strong> Clicking "Yes" indicates genuine interest in enrollment. Remaining on the list without intent to enroll may prevent other qualified applicants from securing a place. If you respond "No", your registration will be closed.
+          </p>
+        </div>
+      </div>
+
+      <!-- Already-responded states -->
+      <div class="response-confirmed yes" id="confirmedYes">
+        <div class="icon">✅</div>
+        <div class="title">Interest Confirmed!</div>
+        <p class="subtitle">
+          Thank you for confirming your interest. The admissions office has been notified and will be in touch with next steps regarding your application.<br><br>
+          Questions? Contact <strong>admissions@acnhs.am</strong>.
+        </p>
+      </div>
+
+      <div class="response-confirmed no" id="confirmedNo">
+        <div class="icon">❌</div>
+        <div class="title">Registration Closed</div>
+        <p class="subtitle">
+          You have indicated that you are no longer interested. Your waiting list registration has been closed.<br><br>
+          If this was a mistake, please contact <strong>admissions@acnhs.am</strong> immediately.
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="card-footer">
+    &copy; <span id="footerYear"></span> Armenian College of Nursing &amp; Health Sciences &mdash; Yerevan, Republic of Armenia<br>
+    Questions? Contact <a href="mailto:admissions@acnhs.am" style="color:rgba(201,168,76,0.7);">admissions@acnhs.am</a>
+  </div>
+</div>
+
+<script>
+  document.getElementById('footerYear').textContent = new Date().getFullYear();
+
+  const SUPABASE_URL      = 'https://eyhksbiceueoiamwnqpr.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8';
+
+  const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  const params     = new URLSearchParams(window.location.search);
+  const regId      = params.get('id');
+  const token      = params.get('token');
+  const autoAnswer = (params.get('answer') || '').toUpperCase();
+
+  let registrationRecord = null;
+
+  function showError(msg) {
+    document.getElementById('loadingState').style.display = 'none';
+    const el = document.getElementById('errorState');
+    el.style.display = 'block';
+    if (msg) document.getElementById('errorMsg').innerHTML = msg;
+  }
+
+  function showMain(reg) {
+    document.getElementById('loadingState').style.display = 'none';
+    document.getElementById('mainContent').style.display  = 'block';
+
+    const name = reg.full_name || 'Student';
+    document.getElementById('greetingName').textContent = `Dear ${name},`;
+
+    if (reg.wl_response === 'YES') {
+      document.getElementById('questionSection').style.display = 'none';
+      document.getElementById('confirmedYes').style.display    = 'block';
+    } else if (reg.wl_response === 'NO') {
+      document.getElementById('questionSection').style.display = 'none';
+      document.getElementById('confirmedNo').style.display     = 'block';
+    }
+  }
+
+  async function init() {
+    if (!regId || !token) {
+      showError('This link is incomplete or has expired. Please ask the admissions office to resend your interest check email, or contact <strong><a href="mailto:admissions@acnhs.am" style="color:#c9a84c;">admissions@acnhs.am</a></strong>.');
+      return;
+    }
+
+    const { data, error } = await db
+      .from('registrations')
+      .select('id, full_name, status, wl_response, wl_response_token')
+      .eq('id', regId)
+      .eq('wl_response_token', token)
+      .maybeSingle();
+
+    if (error || !data) {
+      showError('This link could not be verified. It may be invalid or expired. Please contact <strong>admissions@acnhs.am</strong> if you believe this is an error.');
+      return;
+    }
+
+    registrationRecord = data;
+
+    if (!data.wl_response && (autoAnswer === 'YES' || autoAnswer === 'NO')) {
+      showMain(data);
+      await submitResponse(autoAnswer);
+      return;
+    }
+
+    showMain(data);
+  }
+
+  async function submitResponse(choice) {
+    if (!registrationRecord) return;
+
+    const btnYes = document.getElementById('btnYes');
+    const btnNo  = document.getElementById('btnNo');
+    btnYes.disabled = true;
+    btnNo.disabled  = true;
+
+    const newStatus = choice === 'YES' ? 'contacted' : 'rejected';
+
+    const { error } = await db
+      .from('registrations')
+      .update({ wl_response: choice, status: newStatus })
+      .eq('id', regId)
+      .eq('wl_response_token', token)
+      .is('wl_response', null);
+
+    if (error) {
+      btnYes.disabled = false;
+      btnNo.disabled  = false;
+      alert('An error occurred while saving your response. Please try again or contact admissions@acnhs.am.');
+      return;
+    }
+
+    document.getElementById('questionSection').style.display = 'none';
+    if (choice === 'YES') {
+      document.getElementById('confirmedYes').style.display = 'block';
+    } else {
+      document.getElementById('confirmedNo').style.display  = 'block';
+    }
+  }
+
+  init();
+</script>
+</body>
+</html>
