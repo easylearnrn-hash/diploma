@@ -626,6 +626,128 @@ body {
 .status-docs        { background:rgba(168,85,247,0.10); border:1px solid rgba(168,85,247,0.24); color:#c084fc; }
 
 /* ============================================================ */
+/* LOCKED IDENTITY FIELD (session-verified) */
+/* ============================================================ */
+.field-locked {
+  background: rgba(201,168,76,0.05) !important;
+  border-color: rgba(201,168,76,0.28) !important;
+  color: var(--text-primary) !important;
+  cursor: default !important;
+  pointer-events: none;
+}
+.form-identity-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 15px;
+  border-radius: var(--radius-sm);
+  background: rgba(201,168,76,0.05);
+  border: 1px solid rgba(201,168,76,0.20);
+  margin-bottom: 22px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  line-height: 1.6;
+}
+.form-identity-notice svg { width: 13px; height: 13px; color: var(--gold-400); flex-shrink: 0; margin-top: 2px; }
+
+/* ============================================================ */
+/* TRACKER CARDS */
+/* ============================================================ */
+.tracker-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 28px 28px;
+}
+.tracker-card {
+  background: linear-gradient(160deg, rgba(8,20,42,0.94) 0%, rgba(4,12,26,0.94) 100%);
+  border: 1px solid rgba(201,168,76,0.14);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: border-color .2s, box-shadow .2s;
+}
+.tracker-card:hover {
+  border-color: rgba(201,168,76,0.26);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.28);
+}
+.tracker-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px 14px;
+  border-bottom: 1px solid rgba(201,168,76,0.07);
+}
+.tracker-card-title-wrap { flex: 1; min-width: 0; }
+.tracker-card-form-name {
+  display: block;
+  font-family: 'Playfair Display', serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+  line-height: 1.25;
+  margin-bottom: 6px;
+}
+.tracker-card-category-tag {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--gold-500);
+  background: rgba(201,168,76,0.07);
+  border: 1px solid rgba(201,168,76,0.18);
+  border-radius: 4px;
+  padding: 2px 7px;
+}
+.tracker-card-body {
+  padding: 16px 22px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px 24px;
+}
+.tracker-card-meta { display: flex; flex-direction: column; gap: 4px; }
+.tracker-card-meta-label {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.tracker-card-meta-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  word-break: break-word;
+  line-height: 1.4;
+}
+.tracker-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 22px;
+  background: rgba(3,9,20,0.45);
+  border-top: 1px solid rgba(201,168,76,0.05);
+  flex-wrap: wrap;
+}
+.tracker-card-ref {
+  font-family: 'SF Mono', 'Consolas', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+.tracker-card-processing {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+  font-style: italic;
+}
+
+/* ============================================================ */
 /* MODAL OVERLAY */
 /* ============================================================ */
 .modal-overlay {
@@ -1588,8 +1710,8 @@ body {
   <section class="tracker-section fade-up" aria-labelledby="tracker-title" role="region">
     <div class="tracker-header">
       <div class="tracker-header-left">
-        <h2 id="tracker-title">Active Submissions &amp; Status Tracker</h2>
-        <p>Real-time status of all forms submitted during the current academic session.</p>
+        <h2 id="tracker-title">My Submitted Requests</h2>
+        <p>A record of all official forms and petitions submitted by you during this session. Each entry reflects its individual review status and assigned reference number.</p>
       </div>
       <div class="tracker-count-badge" id="trackerCountBadge" aria-live="polite">
         <span id="trackerCount">0</span> Submissions
@@ -1637,6 +1759,12 @@ body {
       </div>
 
       <form id="serviceForm" novalidate autocomplete="off">
+
+        <!-- SESSION IDENTITY NOTICE -->
+        <div class="form-identity-notice" id="formIdentityNotice" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+          <span>Your identity information has been pre-populated from your authenticated institutional session and cannot be modified here. If any field is incorrect, contact the Registrar&rsquo;s Office.</span>
+        </div>
 
         <!-- SECTION 1: STUDENT IDENTITY -->
         <div class="form-row-grid2">
@@ -1746,26 +1874,36 @@ body {
 })();
 
 /* ============================================================
-   STUDENT CONTEXT — pull from session / Supabase
+   STUDENT DATA — unified loader from session / localStorage
+   ============================================================ */
+function loadStudentData() {
+  let p = {};
+  try {
+    const raw = sessionStorage.getItem('studentData') || localStorage.getItem('studentData');
+    if (raw) p = JSON.parse(raw) || {};
+  } catch(e) {}
+  p.full_name  = p.full_name  || sessionStorage.getItem('studentName')  || localStorage.getItem('studentName')  || '';
+  p.student_id = p.student_id || sessionStorage.getItem('userId')        || sessionStorage.getItem('studentId')  || localStorage.getItem('userId') || localStorage.getItem('studentId') || '';
+  p.email      = p.email      || sessionStorage.getItem('studentInstitutionalEmail') || sessionStorage.getItem('userEmail') || localStorage.getItem('studentInstitutionalEmail') || localStorage.getItem('userEmail') || '';
+  p.group      = p.group      || sessionStorage.getItem('studentGroup')  || localStorage.getItem('studentGroup')  || '';
+  p.program    = p.program    || '';
+  return p;
+}
+
+/* ============================================================
+   STUDENT CONTEXT BAR — populate from authenticated session
    ============================================================ */
 (function(){
   try {
-    const name = sessionStorage.getItem('studentName') || localStorage.getItem('studentName');
-    const sid  = sessionStorage.getItem('studentId')   || localStorage.getItem('studentId');
-    if(name){
-      document.getElementById('scbName').textContent = name;
-      const initials = name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    const p = loadStudentData();
+    if (p.full_name) {
+      document.getElementById('scbName').textContent = p.full_name;
+      const initials = p.full_name.split(' ').filter(Boolean).map(w=>w[0]).join('').slice(0,2).toUpperCase();
       document.getElementById('scbAvatar').textContent = initials;
     } else {
       document.getElementById('scbName').textContent = 'Authenticated Student';
     }
-    if(sid){
-      document.getElementById('scbId').textContent = 'Student ID: ' + sid;
-      document.getElementById('fieldStudentId').value = sid;
-    }
-    // Also try to fill e-mail
-    const email = sessionStorage.getItem('studentEmail') || localStorage.getItem('studentEmail');
-    if(email) document.getElementById('fieldEmail').value = email;
+    document.getElementById('scbId').textContent = p.student_id ? 'Student ID: ' + p.student_id : 'Student ID: Verified';
   } catch(e){}
 })();
 
@@ -1902,9 +2040,17 @@ const FORM_DEFS = {
 };
 
 /* ============================================================
-   SUBMISSIONS STORE (session-scoped)
+   SUBMISSIONS STORE — scoped to authenticated student
    ============================================================ */
-let submissions = JSON.parse(sessionStorage.getItem('sf_submissions') || '[]');
+const _sid = (function(){
+  try {
+    const raw = sessionStorage.getItem('studentData') || localStorage.getItem('studentData');
+    const p = raw ? (JSON.parse(raw) || {}) : {};
+    return p.student_id || sessionStorage.getItem('userId') || localStorage.getItem('userId') || 'anon';
+  } catch(e) { return 'anon'; }
+})();
+const SUBMISSIONS_KEY = 'sf_submissions_' + _sid;
+let submissions = JSON.parse(sessionStorage.getItem(SUBMISSIONS_KEY) || '[]');
 let currentFormKey = null;
 const uploadedFilesData = [];
 
@@ -1926,25 +2072,69 @@ function openForm(key) {
   document.getElementById('submitBtn').disabled = false;
   document.getElementById('submitBtn').textContent = def.ctaLabel;
 
-  // Populate
+  // Populate modal header
   document.getElementById('modalTitle').textContent = def.title;
   document.getElementById('modalDesc').textContent  = def.desc;
   document.getElementById('fieldCategory').value    = def.category;
 
-  // Re-apply stored student data
-  try {
-    const name  = sessionStorage.getItem('studentName') || localStorage.getItem('studentName') || '';
-    const sid   = sessionStorage.getItem('studentId')   || localStorage.getItem('studentId') || '';
-    const email = sessionStorage.getItem('studentEmail')|| localStorage.getItem('studentEmail') || '';
-    if(name)  document.getElementById('fieldFullName').value  = name;
-    if(sid)   document.getElementById('fieldStudentId').value = sid;
-    if(email) document.getElementById('fieldEmail').value     = email;
-  } catch(e){}
+  // Pre-populate and lock verified identity fields from authenticated session
+  const p = loadStudentData();
+  [
+    { id: 'fieldFullName',  val: p.full_name  },
+    { id: 'fieldStudentId', val: p.student_id },
+    { id: 'fieldEmail',     val: p.email      },
+  ].forEach(({ id, val }) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (val) {
+      el.value = val;
+      el.setAttribute('readonly', '');
+      el.classList.add('field-locked');
+    } else {
+      el.removeAttribute('readonly');
+      el.classList.remove('field-locked');
+    }
+  });
+
+  // Program / Cohort — match stored group/program to select option and visually lock
+  const programEl = document.getElementById('fieldProgram');
+  const prog = p.program || p.group || '';
+  if (programEl) {
+    programEl.style.pointerEvents = '';
+    programEl.style.opacity = '';
+    programEl.style.cursor = '';
+    programEl.style.borderColor = '';
+    programEl.style.background = '';
+    if (prog) {
+      let matched = false;
+      Array.from(programEl.options).forEach(opt => {
+        if (opt.value && (
+          opt.value.toLowerCase() === prog.toLowerCase() ||
+          opt.value.toLowerCase().includes(prog.toLowerCase()) ||
+          prog.toLowerCase().includes(opt.value.toLowerCase())
+        )) {
+          programEl.value = opt.value;
+          matched = true;
+        }
+      });
+      if (matched && programEl.value) {
+        programEl.style.pointerEvents = 'none';
+        programEl.style.opacity = '0.8';
+        programEl.style.cursor = 'default';
+        programEl.style.borderColor = 'rgba(201,168,76,0.28)';
+        programEl.style.background = 'rgba(201,168,76,0.05)';
+      }
+    }
+  }
+
+  // Show session identity notice if we have pre-populated data
+  const notice = document.getElementById('formIdentityNotice');
+  if (notice) notice.style.display = (p.full_name || p.student_id || p.email) ? '' : 'none';
 
   document.getElementById('formModal').classList.add('open');
   document.body.style.overflow = 'hidden';
 
-  // Focus management
+  // Focus first user-editable field
   setTimeout(() => {
     const first = document.getElementById('fieldSubject');
     if(first) first.focus();
@@ -2072,13 +2262,14 @@ function submitForm() {
     title:     def.title,
     category:  def.category,
     subject:   document.getElementById('fieldSubject').value.trim(),
+    studentId: _sid,
     status:    'submitted',
     date:      new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }),
     timestamp: Date.now()
   };
 
   submissions.unshift(submission);
-  try { sessionStorage.setItem('sf_submissions', JSON.stringify(submissions)); } catch(e){}
+  try { sessionStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions)); } catch(e){}
 
   // UI transition to success
   const submitBtn = document.getElementById('submitBtn');
@@ -2123,39 +2314,49 @@ function renderTracker() {
 
   if(submissions.length === 0) {
     body.innerHTML = `
-      <div class="tracker-empty" role="status">
+      <div class="tracker-empty" role="status" aria-live="polite">
         <div class="tracker-empty-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
-        <p>No submissions on record for the current session.<br>Forms submitted above will appear here with live status updates.</p>
+        <p>No submissions on record for this session.<br>Forms you submit above will appear here with their individual review status and reference number.</p>
       </div>`;
     return;
   }
 
-  const rows = submissions.map(s => {
+  const cards = submissions.map(s => {
     const st = STATUS_MAP[s.status] || STATUS_MAP['submitted'];
-    return `<tr>
-      <td class="form-title-cell">${escHtml(s.title)}</td>
-      <td>${escHtml(s.subject || '—')}</td>
-      <td>${escHtml(s.date)}</td>
-      <td><span class="status-pill ${st.cls}">${st.label}</span></td>
-      <td style="font-family:monospace;font-size:12px;color:var(--text-muted);letter-spacing:0.3px;">${escHtml(s.ref)}</td>
-    </tr>`;
+    const subject = s.subject
+      ? escHtml(s.subject)
+      : '<em style="color:var(--text-muted);font-style:italic">Not specified</em>';
+    return `
+      <div class="tracker-card" role="article" aria-label="Submission: ${escHtml(s.title)}">
+        <div class="tracker-card-header">
+          <div class="tracker-card-title-wrap">
+            <span class="tracker-card-form-name">${escHtml(s.title)}</span>
+            <span class="tracker-card-category-tag">${escHtml(s.category)}</span>
+          </div>
+          <span class="status-pill ${st.cls}" aria-label="Status: ${st.label}">${st.label}</span>
+        </div>
+        <div class="tracker-card-body">
+          <div class="tracker-card-meta">
+            <span class="tracker-card-meta-label">Subject</span>
+            <span class="tracker-card-meta-value">${subject}</span>
+          </div>
+          <div class="tracker-card-meta">
+            <span class="tracker-card-meta-label">Date Submitted</span>
+            <span class="tracker-card-meta-value">${escHtml(s.date)}</span>
+          </div>
+          <div class="tracker-card-meta">
+            <span class="tracker-card-meta-label">Processing Period</span>
+            <span class="tracker-card-meta-value">3–10 Business Days</span>
+          </div>
+        </div>
+        <div class="tracker-card-footer">
+          <span class="tracker-card-ref">${escHtml(s.ref)}</span>
+          <span class="tracker-card-processing">Acknowledgment dispatched to institutional email</span>
+        </div>
+      </div>`;
   }).join('');
 
-  body.innerHTML = `
-    <div style="overflow-x:auto;">
-      <table class="tracker-table" role="table" aria-label="Submissions tracker">
-        <thead>
-          <tr>
-            <th scope="col">Form / Petition</th>
-            <th scope="col">Subject</th>
-            <th scope="col">Date Submitted</th>
-            <th scope="col">Status</th>
-            <th scope="col">Reference No.</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>
-    </div>`;
+  body.innerHTML = `<div class="tracker-cards" role="list" aria-label="Your submitted requests">${cards}</div>`;
 }
 
 // Init tracker on load
