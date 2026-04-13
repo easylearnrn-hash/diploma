@@ -68,6 +68,12 @@
         permission: 'view_applications'
       },
       { 
+        href: 'admin-forms.html', 
+        icon: '📝', 
+        text: 'Student Services', 
+        permission: 'view_applications'
+      },
+      { 
         href: 'email-system.html', 
         icon: '💬', 
         text: 'Email System', 

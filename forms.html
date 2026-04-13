@@ -2217,7 +2217,7 @@ function escHtml(str) {
 /* ============================================================
    FORM VALIDATION & SUBMISSION
    ============================================================ */
-function submitForm() {
+async function submitForm() {
   const form = document.getElementById('serviceForm');
 
   // Required fields check
@@ -2253,15 +2253,21 @@ function submitForm() {
     return;
   }
 
-  const def = FORM_DEFS[currentFormKey];
-  const refNum = 'REF-' + Date.now().toString(36).toUpperCase().slice(-8);
+  const def       = FORM_DEFS[currentFormKey];
+  const refNum    = 'REF-' + Date.now().toString(36).toUpperCase().slice(-8);
+  const fullName  = document.getElementById('fieldFullName').value.trim();
+  const studentId = document.getElementById('fieldStudentId').value.trim();
+  const program   = document.getElementById('fieldProgram').value;
+  const subject   = document.getElementById('fieldSubject').value.trim();
+  const effDate   = document.getElementById('fieldEffectiveDate').value || null;
+  const fileNames = uploadedFilesData.map(f => f.file.name);
 
   const submission = {
     ref:       refNum,
     key:       currentFormKey,
     title:     def.title,
     category:  def.category,
-    subject:   document.getElementById('fieldSubject').value.trim(),
+    subject,
     studentId: _sid,
     status:    'submitted',
     date:      new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }),
@@ -2271,10 +2277,36 @@ function submitForm() {
   submissions.unshift(submission);
   try { sessionStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions)); } catch(e){}
 
-  // UI transition to success
+  // UI transition to processing
   const submitBtn = document.getElementById('submitBtn');
-  submitBtn.textContent = 'Processing…';
+  submitBtn.textContent = 'Submitting…';
   submitBtn.disabled = true;
+
+  // Persist full record to Supabase
+  try {
+    const sbClient = initSupabase();
+    if (sbClient) {
+      await sbClient.from('student_form_submissions').insert([{
+        reference_number:    refNum,
+        form_key:            currentFormKey,
+        form_title:          def.title,
+        form_category:       def.category,
+        student_id:          studentId,
+        full_name:           fullName,
+        institutional_email: email,
+        program:             program,
+        subject:             subject,
+        statement:           statement,
+        effective_date:      effDate,
+        attachments:         fileNames,
+        status:              'submitted',
+        priority:            'normal',
+        action_history:      [{ action: 'Submitted', by: email, at: new Date().toISOString() }]
+      }]);
+    }
+  } catch(supaErr) {
+    console.warn('Supabase persist failed — submission stored locally only:', supaErr);
+  }
 
   setTimeout(() => {
     document.getElementById('modalFormBody').style.display = 'none';

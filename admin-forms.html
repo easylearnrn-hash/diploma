@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Services Administration Portal | ACNHS</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon.svg">
+  <link rel="apple-touch-icon" sizes="180x180" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/admin-sidebar.css">
+  <script src="js/acnhs-logo-base64.js"></script>
+  <script src="js/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
+  <style>
+    :root {
+      --navy-deep:    #020617;
+      --navy-primary: #0f172a;
+      --navy-light:   #1e293b;
+      --navy-border:  #334155;
+      --gold-primary: #c9a84c;
+      --gold-light:   #d4b56a;
+      --gold-dim:     rgba(201,168,76,0.35);
+      --gold-glow:    rgba(201,168,76,0.12);
+      --primary:      #c9a84c;
+      --bg-dark:      #020617;
+      --bg-card:      #0c1a32;
+      --bg-hover:     #16284a;
+      --text:         #e8edf5;
+      --text-muted:   #8a9ec0;
+      --border:       rgba(255,255,255,0.07);
+      --shadow:       rgba(0,0,0,0.5);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(ellipse at 15% 25%, rgba(201,168,76,0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 85% 80%, rgba(15,23,42,0.9) 0%, transparent 60%),
+        linear-gradient(160deg, #020a1a 0%, #0a1628 45%, #050d1e 100%);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .main-content {
+      padding: 36px 44px 80px;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    header {
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      animation: fadeUpIn 0.4s ease both;
+    }
+    header::after {
+      content: ''; position: absolute; bottom: -1px; left: 0;
+      width: 72px; height: 2px;
+      background: linear-gradient(90deg, var(--gold-primary), transparent);
+    }
+    .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .header-breadcrumb {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 11px; color: var(--text-muted); margin-bottom: 8px;
+      letter-spacing: 0.05em; text-transform: uppercase; font-weight: 600;
+    }
+    .header-breadcrumb a { color: inherit; text-decoration: none; transition: color 0.15s; }
+    .header-breadcrumb a:hover { color: var(--gold-primary); }
+    .header-breadcrumb .sep { color: var(--navy-border); }
+    .header-breadcrumb .current { color: var(--gold-primary); }
+    h1 {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 30px; font-weight: 700;
+      color: var(--text); letter-spacing: -0.3px; line-height: 1.15;
+    }
+    .subtitle { color: var(--text-muted); font-size: 14px; margin-top: 6px; max-width: 600px; }
+    .header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; margin-top: 4px; }
+
+    .btn-icon {
+      display: flex; align-items: center; gap: 7px;
+      background: var(--bg-card); border: 1px solid var(--navy-border);
+      color: var(--text); padding: 8px 16px; border-radius: 8px;
+      font-size: 13px; font-weight: 600; cursor: pointer;
+      font-family: inherit; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-icon svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .btn-icon:hover { border-color: var(--gold-primary); color: var(--gold-primary); }
+
+    .last-updated {
+      font-size: 11px; color: var(--text-muted);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .last-updated svg { width: 12px; height: 12px; }
+
+    /* ── STATS GRID ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 12px; margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px 12px; text-align: center;
+      transition: border-color 0.2s, transform 0.2s, background 0.2s;
+      cursor: pointer;
+    }
+    .stat-card:hover { border-color: var(--gold-dim); transform: translateY(-1px); }
+    .stat-card.stat-active { border-color: var(--gold-primary); background: rgba(201,168,76,0.08); }
+    .stat-value {
+      font-size: 28px; font-weight: 800; line-height: 1;
+      font-family: 'Playfair Display', Georgia, serif; margin-bottom: 4px;
+    }
+    .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .sv-total     { color: var(--gold-primary); }
+    .sv-submitted { color: #60a5fa; }
+    .sv-review    { color: #a78bfa; }
+    .sv-approved  { color: #4ade80; }
+    .sv-denied    { color: #f87171; }
+    .sv-docs      { color: #fb923c; }
+    .sv-closed    { color: #94a3b8; }
+
+    /* ── TOOLBAR ── */
+    .toolbar {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .search-wrap { position: relative; flex: 1; min-width: 260px; }
+    .search-wrap svg {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 15px; height: 15px; color: var(--text-muted); pointer-events: none;
+    }
+    .search-input {
+      width: 100%; background: var(--bg-card); border: 1px solid var(--navy-border);
+      color: var(--text); padding: 9px 12px 9px 38px;
+      border-radius: 8px; font-size: 13px; font-family: inherit;
+      transition: border-color 0.2s;
+    }
+    .search-input:focus { outline: none; border-color: var(--gold-primary); }
+    .search-input::placeholder { color: var(--text-muted); }
+    .filter-sel {
+      background: var(--bg-card); border: 1px solid var(--navy-border);
+      color: var(--text); padding: 9px 30px 9px 12px;
+      border-radius: 8px; font-size: 13px; font-family: inherit;
+      cursor: pointer; transition: border-color 0.2s; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a9ec0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center; white-space: nowrap;
+    }
+    .filter-sel:focus { outline: none; border-color: var(--gold-primary); }
+    .btn-clear {
+      background: transparent; border: 1px solid var(--navy-border);
+      color: var(--text-muted); padding: 9px 14px; border-radius: 8px;
+      font-size: 13px; font-family: inherit; cursor: pointer;
+      white-space: nowrap; transition: all 0.2s;
+    }
+    .btn-clear:hover { border-color: var(--gold-dim); color: var(--text); }
+
+    /* ── TAB NAV ── */
+    .tab-nav {
+      display: flex; gap: 2px; margin-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto; scrollbar-width: none; padding-bottom: 0;
+    }
+    .tab-nav::-webkit-scrollbar { display: none; }
+    .tab-btn {
+      padding: 9px 16px; border-radius: 8px 8px 0 0;
+      border: none; background: transparent;
+      color: var(--text-muted); font-size: 12px; font-weight: 500;
+      cursor: pointer; white-space: nowrap; transition: all 0.2s;
+      position: relative; font-family: inherit;
+    }
+    .tab-btn:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+    .tab-btn.tab-active { color: var(--gold-primary); font-weight: 700; background: rgba(201,168,76,0.08); }
+    .tab-btn.tab-active::after {
+      content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 2px; background: var(--gold-primary); border-radius: 2px 2px 0 0;
+    }
+    .tab-count {
+      background: var(--navy-light); color: var(--text-muted);
+      font-size: 10px; padding: 1px 7px; border-radius: 999px;
+      margin-left: 5px; font-weight: 700;
+    }
+    .tab-btn.tab-active .tab-count { background: rgba(201,168,76,0.2); color: var(--gold-primary); }
+
+    /* ── LOADING / EMPTY ── */
+    .loading-state, .empty-state {
+      text-align: center; padding: 64px 20px; color: var(--text-muted);
+    }
+    .spinner {
+      width: 30px; height: 30px; border: 3px solid var(--border);
+      border-top-color: var(--gold-primary); border-radius: 50%;
+      animation: spin 0.7s linear infinite; margin: 0 auto 18px;
+    }
+    .empty-icon { width: 48px; height: 48px; margin: 0 auto 16px; display: block; stroke: var(--text-muted); opacity: 0.5; }
+    .empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+    .empty-state p { font-size: 13px; max-width: 380px; margin: 0 auto; line-height: 1.6; }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      border-radius: 12px; border: 1px solid var(--border); overflow: hidden;
+    }
+    .submissions-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .submissions-table thead th {
+      padding: 11px 14px; text-align: left;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text-muted);
+      background: rgba(255,255,255,0.025); border-bottom: 1px solid var(--border);
+      white-space: nowrap; user-select: none;
+    }
+    .submissions-table thead th.sort-col { cursor: pointer; }
+    .submissions-table thead th.sort-col:hover { color: var(--text); }
+    .submissions-table tbody tr {
+      border-bottom: 1px solid var(--border); cursor: pointer;
+      transition: background 0.15s;
+    }
+    .submissions-table tbody tr:last-child { border-bottom: none; }
+    .submissions-table tbody tr:hover { background: rgba(255,255,255,0.025); }
+    .submissions-table tbody tr.row-active { background: rgba(201,168,76,0.07) !important; }
+    .submissions-table td { padding: 12px 14px; vertical-align: middle; }
+    .td-pri { width: 5px; padding: 0 0 0 6px !important; }
+    .pri-bar { width: 4px; height: 36px; border-radius: 2px; display: block; }
+    .pri-bar.low    { background: #475569; }
+    .pri-bar.normal { background: #3b82f6; }
+    .pri-bar.high   { background: #f97316; }
+    .pri-bar.urgent { background: #ef4444; }
+    .cell-student .name { font-weight: 600; color: var(--text); }
+    .cell-student .sid { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: monospace; letter-spacing: 0.3px; }
+    .cell-form .ftitle { font-weight: 500; color: var(--text); }
+    .cell-form .fcat { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .cell-subject { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); }
+    .cell-ref { font-family: monospace; font-size: 11px; color: var(--text-muted); letter-spacing: 0.4px; }
+    .cell-date { white-space: nowrap; color: var(--text-muted); font-size: 12px; }
+
+    /* Status pills */
+    .sp {
+      display: inline-flex; align-items: center;
+      padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 700;
+      white-space: nowrap; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .sp-submitted { background: rgba(59,130,246,0.15);  color: #60a5fa; border: 1px solid rgba(59,130,246,0.3);  }
+    .sp-review    { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.3); }
+    .sp-approved  { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.3);   }
+    .sp-denied    { background: rgba(239,68,68,0.15);  color: #f87171; border: 1px solid rgba(239,68,68,0.3);   }
+    .sp-docs      { background: rgba(249,115,22,0.15); color: #fb923c; border: 1px solid rgba(249,115,22,0.3);  }
+    .sp-closed    { background: rgba(100,116,139,0.15);color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+
+    .btn-review {
+      padding: 5px 12px; border-radius: 6px;
+      border: 1px solid var(--navy-border); background: var(--bg-card);
+      color: var(--text); font-size: 11px; font-weight: 600; font-family: inherit;
+      cursor: pointer; transition: all 0.15s; white-space: nowrap;
+    }
+    .btn-review:hover { border-color: var(--gold-primary); color: var(--gold-primary); }
+
+    /* Pagination */
+    .pagination {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 20px; border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--text-muted);
+    }
+    .page-btns { display: flex; gap: 5px; }
+    .page-btn {
+      padding: 5px 11px; border-radius: 6px;
+      border: 1px solid var(--navy-border); background: transparent;
+      color: var(--text); font-size: 12px; font-family: inherit; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .page-btn:hover:not(:disabled) { border-color: var(--gold-primary); color: var(--gold-primary); }
+    .page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .page-btn.page-active { border-color: var(--gold-primary); color: var(--gold-primary); background: var(--gold-glow); font-weight: 700; }
+
+    /* ── DETAIL DRAWER ── */
+    .drawer-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.52);
+      opacity: 0; pointer-events: none; z-index: 1000; transition: opacity 0.3s;
+    }
+    .drawer-overlay.dov-show { opacity: 1; pointer-events: auto; }
+
+    .detail-drawer {
+      position: fixed; top: 0; right: 0;
+      width: 560px; max-width: 100vw; height: 100vh;
+      background: linear-gradient(170deg, #0a1628 0%, #060f20 100%);
+      border-left: 1px solid var(--border); z-index: 1001;
+      display: flex; flex-direction: column; overflow: hidden;
+      transform: translateX(100%); transition: transform 0.34s cubic-bezier(0.4,0,0.2,1);
+    }
+    .detail-drawer.drawer-open { transform: translateX(0); }
+
+    .drawer-hd {
+      padding: 20px 24px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .drawer-hd-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+    .drawer-ref-badge {
+      font-family: monospace; font-size: 12px; color: var(--gold-primary);
+      background: rgba(201,168,76,0.1); border: 1px solid var(--gold-dim);
+      padding: 4px 12px; border-radius: 6px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .drawer-close-btn {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--text-muted); width: 30px; height: 30px;
+      border-radius: 6px; cursor: pointer; font-size: 16px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.15s;
+    }
+    .drawer-close-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+    .drawer-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 17px; font-weight: 700; color: var(--text);
+      margin-top: 10px; line-height: 1.3;
+    }
+    .drawer-badges { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+    .pri-pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .pp-low    { color: #64748b; }
+    .pp-normal { color: #60a5fa; }
+    .pp-high   { color: #fb923c; }
+    .pp-urgent { color: #f87171; }
+
+    /* Drawer inner tabs */
+    .drawer-tabs {
+      display: flex; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .dtab {
+      padding: 9px 18px; border: none; background: transparent;
+      color: var(--text-muted); font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: inherit; position: relative; transition: color 0.15s;
+    }
+    .dtab:hover { color: var(--text); }
+    .dtab.dtab-active { color: var(--gold-primary); }
+    .dtab.dtab-active::after {
+      content: ''; position: absolute; bottom: -1px; left: 0; right: 0;
+      height: 2px; background: var(--gold-primary);
+    }
+
+    /* Drawer scrollable body */
+    .drawer-body {
+      flex: 1; overflow-y: auto; padding: 20px 24px;
+      scrollbar-width: thin; scrollbar-color: var(--navy-border) transparent;
+    }
+    .drawer-body::-webkit-scrollbar { width: 5px; }
+    .drawer-body::-webkit-scrollbar-track { background: transparent; }
+    .drawer-body::-webkit-scrollbar-thumb { background: var(--navy-border); border-radius: 3px; }
+
+    .dsec { margin-bottom: 22px; }
+    .dsec-title {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      color: var(--gold-primary); letter-spacing: 0.12em; margin-bottom: 12px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .dsec-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .info-item { }
+    .info-item.full { grid-column: 1 / -1; }
+    .info-lbl { font-size: 10px; color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; }
+    .info-val { font-size: 13px; color: var(--text); font-weight: 500; word-break: break-word; }
+    .info-val a { color: var(--gold-primary); text-decoration: none; }
+    .info-val a:hover { text-decoration: underline; }
+
+    .statement-box {
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px; font-size: 13px;
+      color: var(--text); line-height: 1.75; white-space: pre-wrap; word-break: break-word;
+    }
+    .no-statement { font-size: 13px; color: var(--text-muted); font-style: italic; padding: 12px 0; }
+
+    .att-list { display: flex; flex-direction: column; gap: 6px; }
+    .att-item {
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+      border-radius: 7px; padding: 7px 12px; font-size: 12px; color: var(--text-muted);
+    }
+    .att-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+    /* Action history */
+    .timeline { position: relative; padding-left: 22px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 7px; top: 6px; bottom: 4px;
+      width: 1px; background: var(--border);
+    }
+    .tl-item { position: relative; margin-bottom: 18px; }
+    .tl-item:last-child { margin-bottom: 0; }
+    .tl-item::before {
+      content: ''; position: absolute; left: -22px; top: 4px;
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--gold-primary); border: 2px solid #060f20;
+    }
+    .tl-action { font-size: 13px; font-weight: 600; color: var(--text); }
+    .tl-by { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .tl-note { font-size: 12px; color: var(--text-muted); margin-top: 5px; font-style: italic; padding: 6px 10px; background: rgba(255,255,255,0.02); border-radius: 5px; border-left: 2px solid var(--gold-dim); }
+
+    /* Admin action panel */
+    .action-panel {
+      flex-shrink: 0; border-top: 1px solid var(--border);
+      padding: 16px 24px; background: rgba(0,0,0,0.25);
+    }
+    .action-panel-label {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      color: var(--text-muted); letter-spacing: 0.1em; margin-bottom: 10px;
+    }
+    .ap-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .action-sel {
+      background: var(--bg-card); border: 1px solid var(--navy-border);
+      color: var(--text); padding: 8px 30px 8px 10px;
+      border-radius: 8px; font-size: 13px; font-family: inherit;
+      cursor: pointer; flex: 1; min-width: 130px; appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%238a9ec0' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 10px center;
+    }
+    .action-sel:focus { outline: none; border-color: var(--gold-primary); }
+    .action-notes-ta {
+      width: 100%; background: var(--bg-card); border: 1px solid var(--navy-border);
+      color: var(--text); padding: 8px 12px; border-radius: 8px;
+      font-size: 12px; font-family: inherit; resize: vertical; min-height: 58px;
+      margin-bottom: 10px; transition: border-color 0.2s;
+    }
+    .action-notes-ta:focus { outline: none; border-color: var(--gold-primary); }
+    .action-notes-ta::placeholder { color: var(--text-muted); }
+    .action-btns { display: flex; gap: 7px; flex-wrap: wrap; }
+    .abtn {
+      padding: 7px 13px; border-radius: 7px; font-size: 11px;
+      font-weight: 700; cursor: pointer; font-family: inherit;
+      letter-spacing: 0.03em; transition: all 0.2s; white-space: nowrap; border-width: 1px; border-style: solid;
+    }
+    .abtn-save    { background: var(--gold-glow); border-color: var(--gold-dim); color: var(--gold-primary); }
+    .abtn-save:hover { background: rgba(201,168,76,0.2); }
+    .abtn-review  { background: rgba(167,139,250,0.12); border-color: rgba(167,139,250,0.35); color: #a78bfa; }
+    .abtn-review:hover { background: rgba(167,139,250,0.22); }
+    .abtn-approve { background: rgba(34,197,94,0.12);  border-color: rgba(34,197,94,0.35);  color: #4ade80; }
+    .abtn-approve:hover { background: rgba(34,197,94,0.22); }
+    .abtn-deny    { background: rgba(239,68,68,0.12);  border-color: rgba(239,68,68,0.35);  color: #f87171; }
+    .abtn-deny:hover { background: rgba(239,68,68,0.22); }
+    .abtn-docs    { background: rgba(249,115,22,0.12); border-color: rgba(249,115,22,0.35); color: #fb923c; }
+    .abtn-docs:hover { background: rgba(249,115,22,0.22); }
+    .abtn-close   { background: rgba(100,116,139,0.12);border-color: rgba(100,116,139,0.35);color: #94a3b8; }
+    .abtn-close:hover { background: rgba(100,116,139,0.22); }
+
+    /* Toast notification */
+    .toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 20px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      transform: translateY(80px); opacity: 0;
+      transition: transform 0.3s, opacity 0.3s;
+      pointer-events: none;
+    }
+    .toast.toast-show { transform: translateY(0); opacity: 1; }
+    .toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .toast-success .toast-dot { background: #4ade80; }
+    .toast-error .toast-dot { background: #f87171; }
+
+    @keyframes fadeUpIn {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @media (max-width: 1100px) {
+      .stats-grid { grid-template-columns: repeat(4, 1fr); }
+    }
+    @media (max-width: 900px) {
+      .main-content { padding: 24px 20px 80px; }
+      h1 { font-size: 24px; }
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .detail-drawer { width: 100vw; }
+      .info-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar injected by admin-sidebar.js -->
+
+  <div class="main-content">
+
+    <!-- Header -->
+    <header>
+      <div class="header-top">
+        <div>
+          <div class="header-breadcrumb">
+            <a href="admin-home.html">Administration</a>
+            <span class="sep">›</span>
+            <span class="current">Student Services</span>
+          </div>
+          <h1>Student Services Administration Portal</h1>
+          <p class="subtitle">Review, manage, and resolve official student service submissions and academic petitions.</p>
+        </div>
+        <div class="header-actions">
+          <span class="last-updated" id="lastUpdated">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span id="lastUpdatedText">Loading…</span>
+          </span>
+          <button class="btn-icon" onclick="loadSubmissions()" id="refreshBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            Refresh
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card stat-active" id="scTotal" onclick="setTab('all')">
+        <div class="stat-value sv-total" id="svTotal">—</div>
+        <div class="stat-label">Total</div>
+      </div>
+      <div class="stat-card" id="scSubmitted" onclick="setTab('submitted')">
+        <div class="stat-value sv-submitted" id="svSubmitted">—</div>
+        <div class="stat-label">Pending Review</div>
+      </div>
+      <div class="stat-card" id="scReview" onclick="setTab('review')">
+        <div class="stat-value sv-review" id="svReview">—</div>
+        <div class="stat-label">Under Review</div>
+      </div>
+      <div class="stat-card" id="scApproved" onclick="setTab('approved')">
+        <div class="stat-value sv-approved" id="svApproved">—</div>
+        <div class="stat-label">Approved</div>
+      </div>
+      <div class="stat-card" id="scDenied" onclick="setTab('denied')">
+        <div class="stat-value sv-denied" id="svDenied">—</div>
+        <div class="stat-label">Denied</div>
+      </div>
+      <div class="stat-card" id="scDocs" onclick="setTab('docs')">
+        <div class="stat-value sv-docs" id="svDocs">—</div>
+        <div class="stat-label">Docs Required</div>
+      </div>
+      <div class="stat-card" id="scClosed" onclick="setTab('closed')">
+        <div class="stat-value sv-closed" id="svClosed">—</div>
+        <div class="stat-label">Closed</div>
+      </div>
+    </div>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <div class="search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input class="search-input" type="search" id="searchInput" placeholder="Search by name, student ID, email, subject, or reference number…" oninput="applyFilters()">
+      </div>
+      <select class="filter-sel" id="fCategory" onchange="applyFilters()">
+        <option value="">All Categories</option>
+        <option value="Financial Services">Financial Services</option>
+        <option value="Academic Petitions">Academic Petitions</option>
+        <option value="Attendance &amp; Absence">Attendance &amp; Absence</option>
+        <option value="Enrollment Status">Enrollment Status</option>
+        <option value="Records &amp; Documents">Records &amp; Documents</option>
+        <option value="Clinical &amp; Practicum">Clinical &amp; Practicum</option>
+        <option value="Graduation &amp; Degree Completion">Graduation &amp; Degree</option>
+        <option value="Technical Support">Technical Support</option>
+        <option value="General Inquiry">General Inquiry</option>
+      </select>
+      <select class="filter-sel" id="fProgram" onchange="applyFilters()">
+        <option value="">All Programs</option>
+        <option>ADN — Group A</option>
+        <option>ADN — Group B</option>
+        <option>ADN — Group C</option>
+        <option>ADN — Group D</option>
+        <option>ADN — Group E</option>
+        <option>BSN — Track 1</option>
+        <option>BSN — Track 2</option>
+      </select>
+      <select class="filter-sel" id="fPriority" onchange="applyFilters()">
+        <option value="">All Priorities</option>
+        <option value="urgent">Urgent</option>
+        <option value="high">High</option>
+        <option value="normal">Normal</option>
+        <option value="low">Low</option>
+      </select>
+      <select class="filter-sel" id="fSort" onchange="applyFilters()">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+        <option value="name">Name A–Z</option>
+        <option value="priority">By Priority</option>
+      </select>
+      <button class="btn-clear" onclick="clearFilters()">Clear Filters</button>
+    </div>
+
+    <!-- Tab Nav -->
+    <div class="tab-nav">
+      <button class="tab-btn tab-active" data-tab="all" onclick="setTab('all')">
+        All Submissions <span class="tab-count" id="tc-all">0</span>
+      </button>
+      <button class="tab-btn" data-tab="submitted" onclick="setTab('submitted')">
+        Pending Review <span class="tab-count" id="tc-submitted">0</span>
+      </button>
+      <button class="tab-btn" data-tab="review" onclick="setTab('review')">
+        Under Review <span class="tab-count" id="tc-review">0</span>
+      </button>
+      <button class="tab-btn" data-tab="approved" onclick="setTab('approved')">
+        Approved <span class="tab-count" id="tc-approved">0</span>
+      </button>
+      <button class="tab-btn" data-tab="denied" onclick="setTab('denied')">
+        Denied <span class="tab-count" id="tc-denied">0</span>
+      </button>
+      <button class="tab-btn" data-tab="docs" onclick="setTab('docs')">
+        Documentation Required <span class="tab-count" id="tc-docs">0</span>
+      </button>
+      <button class="tab-btn" data-tab="closed" onclick="setTab('closed')">
+        Closed / Resolved <span class="tab-count" id="tc-closed">0</span>
+      </button>
+    </div>
+
+    <!-- Submissions Container -->
+    <div id="submissionsContainer">
+      <div class="loading-state">
+        <div class="spinner"></div>
+        <p>Retrieving submissions from the database…</p>
+      </div>
+    </div>
+
+  </div><!-- /.main-content -->
+
+
+  <!-- Drawer Overlay -->
+  <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+
+  <!-- Detail Drawer -->
+  <div class="detail-drawer" id="detailDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitleEl">
+
+    <div class="drawer-hd">
+      <div class="drawer-hd-top">
+        <div class="drawer-ref-badge" id="drawerRefBadge">—</div>
+        <button class="drawer-close-btn" onclick="closeDrawer()" aria-label="Close review panel">✕</button>
+      </div>
+      <div class="drawer-title" id="drawerTitleEl"></div>
+      <div class="drawer-badges" id="drawerBadges"></div>
+    </div>
+
+    <div class="drawer-tabs">
+      <button class="dtab dtab-active" data-dtab="details"   onclick="switchDTab('details')">Submission Details</button>
+      <button class="dtab"             data-dtab="statement" onclick="switchDTab('statement')">Full Statement</button>
+      <button class="dtab"             data-dtab="history"   onclick="switchDTab('history')">Action History</button>
+    </div>
+
+    <div class="drawer-body" id="drawerBody"></div>
+
+    <div class="action-panel">
+      <div class="action-panel-label">Administrative Management</div>
+      <div class="ap-row">
+        <select class="action-sel" id="actionStatus">
+          <option value="">— Update Status —</option>
+          <option value="submitted">Pending Review</option>
+          <option value="review">Under Review</option>
+          <option value="approved">Approved</option>
+          <option value="denied">Denied</option>
+          <option value="docs">Documentation Required</option>
+          <option value="closed">Closed / Resolved</option>
+        </select>
+        <select class="action-sel" id="actionPriority" style="flex:0 0 150px">
+          <option value="">— Priority —</option>
+          <option value="low">Low Priority</option>
+          <option value="normal">Normal</option>
+          <option value="high">High Priority</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </div>
+      <textarea class="action-notes-ta" id="actionNotes" placeholder="Add internal administrative notes (not visible to student)…"></textarea>
+      <div class="action-btns">
+        <button class="abtn abtn-save"    onclick="saveAdminAction()">Update Record</button>
+        <button class="abtn abtn-review"  onclick="quickAction('review')">Mark Under Review</button>
+        <button class="abtn abtn-approve" onclick="quickAction('approved')">Approve Petition</button>
+        <button class="abtn abtn-deny"    onclick="quickAction('denied')">Deny Petition</button>
+        <button class="abtn abtn-docs"    onclick="quickAction('docs')">Request Documentation</button>
+        <button class="abtn abtn-close"   onclick="quickAction('closed')">Close Case</button>
+      </div>
+    </div>
+
+  </div><!-- /#detailDrawer -->
+
+  <!-- Toast -->
+  <div class="toast" id="toast" role="alert" aria-live="assertive">
+    <div class="toast-dot"></div>
+    <span id="toastMsg"></span>
+  </div>
+
+  <script src="js/admin-sidebar.js"></script>
+  <script>
+  /* ============================================================
+     AUTH CHECK
+     ============================================================ */
+  (function(){
+    const isAdmin  = sessionStorage.getItem('isAdmin') === 'true';
+    const userEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || '';
+    if (!isAdmin && !userEmail) window.location.href = 'login.html';
+  })();
+
+  /* ============================================================
+     CONSTANTS
+     ============================================================ */
+  const STATUS_DEFS = {
+    submitted: { label: 'Pending Review',          cls: 'sp-submitted' },
+    review:    { label: 'Under Review',            cls: 'sp-review'    },
+    approved:  { label: 'Approved',                cls: 'sp-approved'  },
+    denied:    { label: 'Denied',                  cls: 'sp-denied'    },
+    docs:      { label: 'Documentation Required',  cls: 'sp-docs'      },
+    closed:    { label: 'Closed / Resolved',       cls: 'sp-closed'    }
+  };
+  const PRIORITY_DEFS = {
+    low:    { label: 'Low',    cls: 'pp-low'    },
+    normal: { label: 'Normal', cls: 'pp-normal' },
+    high:   { label: 'High',   cls: 'pp-high'   },
+    urgent: { label: 'Urgent', cls: 'pp-urgent' }
+  };
+  const PRIORITY_ORDER = { urgent: 0, high: 1, normal: 2, low: 3 };
+  const STAT_CARD_IDS = {
+    all: 'scTotal', submitted: 'scSubmitted', review: 'scReview',
+    approved: 'scApproved', denied: 'scDenied', docs: 'scDocs', closed: 'scClosed'
+  };
+
+  let allSubmissions    = [];
+  let filteredSubs      = [];
+  let activeTab         = 'all';
+  let activeRecord      = null;
+  let currentPage       = 1;
+  const PAGE_SIZE       = 25;
+  const adminEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || 'Administrator';
+
+  /* ============================================================
+     SUPABASE LOAD
+     ============================================================ */
+  const sb = initSupabase();
+
+  async function loadSubmissions() {
+    const container = document.getElementById('submissionsContainer');
+    container.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Retrieving submissions from the database…</p></div>';
+    document.getElementById('refreshBtn').style.opacity = '0.5';
+
+    try {
+      const { data, error } = await sb
+        .from('student_form_submissions')
+        .select('*')
+        .order('submitted_at', { ascending: false });
+
+      if (error) throw error;
+      allSubmissions = data || [];
+      updateStats();
+      applyFilters();
+
+      const now = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('lastUpdatedText').textContent = 'Last refreshed ' + now;
+
+    } catch (err) {
+      console.error('Failed to load submissions:', err);
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <h3>Unable to Retrieve Data</h3>
+          <p>Could not connect to the database. Please verify your network connection and refresh the page. If the problem persists, ensure the <code>student_form_submissions</code> table exists in Supabase.</p>
+        </div>`;
+    } finally {
+      document.getElementById('refreshBtn').style.opacity = '';
+    }
+  }
+
+  /* ============================================================
+     STATS & TAB COUNTS
+     ============================================================ */
+  function updateStats() {
+    const counts = { submitted: 0, review: 0, approved: 0, denied: 0, docs: 0, closed: 0 };
+    allSubmissions.forEach(s => { if (counts[s.status] !== undefined) counts[s.status]++; });
+
+    document.getElementById('svTotal').textContent     = allSubmissions.length;
+    document.getElementById('svSubmitted').textContent = counts.submitted;
+    document.getElementById('svReview').textContent    = counts.review;
+    document.getElementById('svApproved').textContent  = counts.approved;
+    document.getElementById('svDenied').textContent    = counts.denied;
+    document.getElementById('svDocs').textContent      = counts.docs;
+    document.getElementById('svClosed').textContent    = counts.closed;
+
+    document.getElementById('tc-all').textContent       = allSubmissions.length;
+    document.getElementById('tc-submitted').textContent = counts.submitted;
+    document.getElementById('tc-review').textContent    = counts.review;
+    document.getElementById('tc-approved').textContent  = counts.approved;
+    document.getElementById('tc-denied').textContent    = counts.denied;
+    document.getElementById('tc-docs').textContent      = counts.docs;
+    document.getElementById('tc-closed').textContent    = counts.closed;
+  }
+
+  /* ============================================================
+     FILTERS & SORT
+     ============================================================ */
+  function setTab(tab) {
+    activeTab = tab;
+    currentPage = 1;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('tab-active', b.dataset.tab === tab));
+    document.querySelectorAll('.stat-card').forEach(c => c.classList.remove('stat-active'));
+    const cardId = STAT_CARD_IDS[tab];
+    if (cardId) document.getElementById(cardId).classList.add('stat-active');
+    applyFilters();
+  }
+
+  function applyFilters() {
+    const search   = document.getElementById('searchInput').value.trim().toLowerCase();
+    const category = document.getElementById('fCategory').value;
+    const program  = document.getElementById('fProgram').value;
+    const priority = document.getElementById('fPriority').value;
+    const sort     = document.getElementById('fSort').value;
+
+    filteredSubs = allSubmissions.filter(s => {
+      if (activeTab !== 'all' && s.status !== activeTab) return false;
+      if (category && s.form_category !== category) return false;
+      if (program  && s.program !== program) return false;
+      if (priority && s.priority !== priority) return false;
+      if (search) {
+        const hay = [
+          s.full_name, s.student_id, s.institutional_email,
+          s.subject, s.reference_number, s.form_title, s.form_category
+        ].join(' ').toLowerCase();
+        if (!hay.includes(search)) return false;
+      }
+      return true;
+    });
+
+    if      (sort === 'oldest')   filteredSubs.sort((a,b) => new Date(a.submitted_at) - new Date(b.submitted_at));
+    else if (sort === 'name')     filteredSubs.sort((a,b) => (a.full_name||'').localeCompare(b.full_name||''));
+    else if (sort === 'priority') filteredSubs.sort((a,b) => (PRIORITY_ORDER[a.priority]||2) - (PRIORITY_ORDER[b.priority]||2));
+    else                          filteredSubs.sort((a,b) => new Date(b.submitted_at) - new Date(a.submitted_at));
+
+    currentPage = 1;
+    renderTable();
+  }
+
+  function clearFilters() {
+    document.getElementById('searchInput').value = '';
+    document.getElementById('fCategory').value = '';
+    document.getElementById('fProgram').value = '';
+    document.getElementById('fPriority').value = '';
+    document.getElementById('fSort').value = 'newest';
+    applyFilters();
+  }
+
+  /* ============================================================
+     TABLE RENDER
+     ============================================================ */
+  function renderTable() {
+    const container = document.getElementById('submissionsContainer');
+
+    if (filteredSubs.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg class="empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="2"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>
+          <h3>No Records Found</h3>
+          <p>No submissions match your current filters. Adjust your search criteria or select a different status tab. Student submissions from the portal will appear here automatically.</p>
+        </div>`;
+      return;
+    }
+
+    const start      = (currentPage - 1) * PAGE_SIZE;
+    const pageItems  = filteredSubs.slice(start, start + PAGE_SIZE);
+    const totalPages = Math.ceil(filteredSubs.length / PAGE_SIZE);
+
+    const rows = pageItems.map(s => {
+      const st   = STATUS_DEFS[s.status]   || STATUS_DEFS['submitted'];
+      const pri  = s.priority || 'normal';
+      const date = s.submitted_at
+        ? new Date(s.submitted_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
+      const isActive = activeRecord && activeRecord.id === s.id;
+      return `<tr onclick="openDrawer('${escVal(s.id)}')" data-id="${escVal(s.id)}" class="${isActive ? 'row-active' : ''}">
+        <td class="td-pri"><span class="pri-bar ${pri}"></span></td>
+        <td class="cell-ref">${escHtml(s.reference_number)}</td>
+        <td class="cell-student">
+          <div class="name">${escHtml(s.full_name || '—')}</div>
+          <div class="sid">${escHtml(s.student_id || '—')}</div>
+        </td>
+        <td class="cell-form">
+          <div class="ftitle">${escHtml(s.form_title)}</div>
+          <div class="fcat">${escHtml(s.form_category)}</div>
+        </td>
+        <td class="cell-subject" title="${escHtml(s.subject)}">${escHtml(s.subject)}</td>
+        <td class="cell-date">${date}</td>
+        <td><span class="sp ${st.cls}">${st.label}</span></td>
+        <td><button class="btn-review" onclick="event.stopPropagation();openDrawer('${escVal(s.id)}')">Review Submission</button></td>
+      </tr>`;
+    }).join('');
+
+    let pagHtml = '';
+    if (filteredSubs.length > PAGE_SIZE) {
+      const pageBtns = [];
+      for (let i = 1; i <= totalPages; i++) {
+        pageBtns.push(`<button class="page-btn${i === currentPage ? ' page-active' : ''}" onclick="gotoPage(${i})">${i}</button>`);
+      }
+      pagHtml = `<div class="pagination">
+        <span>Showing ${start + 1}–${Math.min(start + PAGE_SIZE, filteredSubs.length)} of ${filteredSubs.length} submissions</span>
+        <div class="page-btns">
+          <button class="page-btn" onclick="gotoPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>‹ Previous</button>
+          ${pageBtns.join('')}
+          <button class="page-btn" onclick="gotoPage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next ›</button>
+        </div>
+      </div>`;
+    } else {
+      pagHtml = `<div class="pagination"><span>${filteredSubs.length} submission${filteredSubs.length === 1 ? '' : 's'}</span></div>`;
+    }
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table class="submissions-table" role="table">
+          <thead>
+            <tr>
+              <th style="width:6px"></th>
+              <th>Reference No.</th>
+              <th>Student</th>
+              <th>Form / Petition Type</th>
+              <th>Subject</th>
+              <th>Date Submitted</th>
+              <th>Status</th>
+              <th style="width:130px">Action</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${pagHtml}
+      </div>`;
+  }
+
+  function gotoPage(p) {
+    const total = Math.ceil(filteredSubs.length / PAGE_SIZE);
+    if (p < 1 || p > total) return;
+    currentPage = p;
+    renderTable();
+  }
+
+  /* ============================================================
+     DETAIL DRAWER
+     ============================================================ */
+  function openDrawer(id) {
+    const s = allSubmissions.find(x => x.id === id);
+    if (!s) return;
+    activeRecord = s;
+
+    // Highlight table row
+    document.querySelectorAll('.submissions-table tbody tr').forEach(tr =>
+      tr.classList.toggle('row-active', tr.dataset.id === id)
+    );
+
+    // Header
+    document.getElementById('drawerRefBadge').textContent = s.reference_number;
+    document.getElementById('drawerTitleEl').textContent  = s.form_title;
+    const st  = STATUS_DEFS[s.status]   || STATUS_DEFS['submitted'];
+    const pr  = PRIORITY_DEFS[s.priority] || PRIORITY_DEFS['normal'];
+    document.getElementById('drawerBadges').innerHTML =
+      `<span class="sp ${st.cls}">${st.label}</span>
+       <span class="pri-pill ${pr.cls}">● ${pr.label} Priority</span>`;
+
+    // Pre-fill action controls
+    document.getElementById('actionStatus').value   = s.status || '';
+    document.getElementById('actionPriority').value = s.priority || 'normal';
+    document.getElementById('actionNotes').value    = s.admin_notes || '';
+
+    switchDTab('details');
+
+    document.getElementById('detailDrawer').classList.add('drawer-open');
+    document.getElementById('drawerOverlay').classList.add('dov-show');
+  }
+
+  function closeDrawer() {
+    document.getElementById('detailDrawer').classList.remove('drawer-open');
+    document.getElementById('drawerOverlay').classList.remove('dov-show');
+    activeRecord = null;
+    document.querySelectorAll('.submissions-table tbody tr').forEach(tr => tr.classList.remove('row-active'));
+  }
+
+  function switchDTab(tab) {
+    document.querySelectorAll('.dtab').forEach(b => b.classList.toggle('dtab-active', b.dataset.dtab === tab));
+    const s    = activeRecord;
+    const body = document.getElementById('drawerBody');
+    if (!s) return;
+
+    if (tab === 'details') {
+      const atts = Array.isArray(s.attachments) ? s.attachments : [];
+      const attHtml = atts.length > 0
+        ? `<div class="att-list">${atts.map(f => `
+            <div class="att-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${escHtml(f)}
+            </div>`).join('')}</div>`
+        : '<p style="font-size:13px;color:var(--text-muted);">No supporting documentation submitted with this request.</p>';
+
+      const submittedFmt = s.submitted_at
+        ? new Date(s.submitted_at).toLocaleString('en-GB', { day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+        : '—';
+      const effFmt = s.effective_date
+        ? new Date(s.effective_date + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+        : 'Not specified';
+
+      body.innerHTML = `
+        <div class="dsec">
+          <div class="dsec-title">Student Information</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-lbl">Full Legal Name</div>
+              <div class="info-val">${escHtml(s.full_name || '—')}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-lbl">Student Identification No.</div>
+              <div class="info-val" style="font-family:monospace">${escHtml(s.student_id || '—')}</div>
+            </div>
+            <div class="info-item full">
+              <div class="info-lbl">Institutional Email Address</div>
+              <div class="info-val"><a href="mailto:${escHtml(s.institutional_email || '')}">${escHtml(s.institutional_email || '—')}</a></div>
+            </div>
+            <div class="info-item full">
+              <div class="info-lbl">Program / Cohort</div>
+              <div class="info-val">${escHtml(s.program || '—')}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dsec">
+          <div class="dsec-title">Submission Information</div>
+          <div class="info-grid">
+            <div class="info-item">
+              <div class="info-lbl">Form Category</div>
+              <div class="info-val">${escHtml(s.form_category)}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-lbl">Date &amp; Time Submitted</div>
+              <div class="info-val">${submittedFmt}</div>
+            </div>
+            <div class="info-item full">
+              <div class="info-lbl">Subject</div>
+              <div class="info-val">${escHtml(s.subject)}</div>
+            </div>
+            <div class="info-item full">
+              <div class="info-lbl">Requested Effective Date</div>
+              <div class="info-val">${effFmt}</div>
+            </div>
+          </div>
+        </div>
+
+        ${s.admin_notes ? `
+        <div class="dsec">
+          <div class="dsec-title">Administrative Notes on Record</div>
+          <div class="statement-box" style="font-size:12px;border-color:rgba(201,168,76,0.2)">${escHtml(s.admin_notes)}</div>
+        </div>` : ''}
+
+        <div class="dsec">
+          <div class="dsec-title">Supporting Documentation</div>
+          ${attHtml}
+        </div>`;
+
+    } else if (tab === 'statement') {
+      body.innerHTML = `
+        <div class="dsec">
+          <div class="dsec-title">Detailed Statement</div>
+          ${s.statement
+            ? `<div class="statement-box">${escHtml(s.statement)}</div>`
+            : '<p class="no-statement">No statement was provided with this submission.</p>'}
+        </div>`;
+
+    } else if (tab === 'history') {
+      const history = Array.isArray(s.action_history) ? s.action_history : [];
+      const histHtml = history.length > 0
+        ? `<div class="timeline">${history.map(h => {
+            const tsLabel = h.at
+              ? new Date(h.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '';
+            return `<div class="tl-item">
+              <div class="tl-action">${escHtml(h.action || '')}</div>
+              <div class="tl-by">By ${escHtml(h.by || 'System')}${tsLabel ? ' · ' + tsLabel : ''}</div>
+              ${h.note ? `<div class="tl-note">${escHtml(h.note)}</div>` : ''}
+            </div>`;
+          }).join('')}</div>`
+        : '<p style="font-size:13px;color:var(--text-muted)">No administrative actions have been recorded for this submission yet.</p>';
+
+      body.innerHTML = `
+        <div class="dsec">
+          <div class="dsec-title">Administrative Action History</div>
+          ${histHtml}
+        </div>`;
+    }
+  }
+
+  /* ============================================================
+     ADMIN ACTIONS
+     ============================================================ */
+  async function saveAdminAction() {
+    if (!activeRecord) return;
+    const newStatus   = document.getElementById('actionStatus').value   || activeRecord.status;
+    const newPriority = document.getElementById('actionPriority').value || activeRecord.priority || 'normal';
+    const notes       = document.getElementById('actionNotes').value.trim();
+    await performUpdate(newStatus, newPriority, notes);
+  }
+
+  async function quickAction(newStatus) {
+    if (!activeRecord) return;
+    const pri   = document.getElementById('actionPriority').value || activeRecord.priority || 'normal';
+    const notes = document.getElementById('actionNotes').value.trim();
+    document.getElementById('actionStatus').value = newStatus;
+    await performUpdate(newStatus, pri, notes);
+  }
+
+  async function performUpdate(newStatus, newPriority, notes) {
+    const s           = activeRecord;
+    const statusLabel = STATUS_DEFS[newStatus]?.label || newStatus;
+    const histEntry   = {
+      action: `Status updated to "${statusLabel}"`,
+      by:     adminEmail,
+      at:     new Date().toISOString(),
+      note:   notes || null
+    };
+    const updHistory = [...(Array.isArray(s.action_history) ? s.action_history : []), histEntry];
+
+    try {
+      const { error } = await sb
+        .from('student_form_submissions')
+        .update({
+          status:         newStatus,
+          priority:       newPriority,
+          admin_notes:    notes || s.admin_notes || null,
+          reviewed_by:    adminEmail,
+          reviewed_at:    new Date().toISOString(),
+          action_history: updHistory,
+          updated_at:     new Date().toISOString()
+        })
+        .eq('id', s.id);
+
+      if (error) throw error;
+
+      // Update local record
+      s.status         = newStatus;
+      s.priority       = newPriority;
+      s.admin_notes    = notes || s.admin_notes || null;
+      s.reviewed_by    = adminEmail;
+      s.reviewed_at    = new Date().toISOString();
+      s.action_history = updHistory;
+      s.updated_at     = new Date().toISOString();
+
+      // Refresh drawer header to reflect new status
+      const st = STATUS_DEFS[newStatus] || STATUS_DEFS['submitted'];
+      const pr = PRIORITY_DEFS[newPriority] || PRIORITY_DEFS['normal'];
+      document.getElementById('drawerBadges').innerHTML =
+        `<span class="sp ${st.cls}">${st.label}</span>
+         <span class="pri-pill ${pr.cls}">● ${pr.label} Priority</span>`;
+
+      // Refresh history tab if it's open
+      const activeTab = document.querySelector('.dtab.dtab-active');
+      if (activeTab && activeTab.dataset.dtab === 'history') switchDTab('history');
+      else if (activeTab && activeTab.dataset.dtab === 'details') switchDTab('details');
+
+      updateStats();
+      renderTable();
+      showToast('Record updated successfully.', 'success');
+
+    } catch (err) {
+      console.error('Update failed:', err);
+      showToast('Failed to save changes. Check your connection and try again.', 'error');
+    }
+  }
+
+  /* ============================================================
+     TOAST
+     ============================================================ */
+  let toastTimer;
+  function showToast(msg, type = 'success') {
+    const toast = document.getElementById('toast');
+    document.getElementById('toastMsg').textContent = msg;
+    toast.className = `toast toast-${type} toast-show`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('toast-show'), 3200);
+  }
+
+  /* ============================================================
+     UTILITIES
+     ============================================================ */
+  function escHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function escVal(str) { return String(str).replace(/'/g, "\\'"); }
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  loadSubmissions();
+  // Auto-refresh every 90 seconds
+  setInterval(loadSubmissions, 90000);
+  </script>
+</body>
+</html>
