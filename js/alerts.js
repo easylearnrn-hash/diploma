@@ -74,11 +74,16 @@
         }
       } catch(e) { console.warn('Alerts: DB student lookup failed', e); }
     }
-    if (attempts < 20) {
-      // Still waiting for profile load — retry
-      setTimeout(function() { loadStudentThenRun(attempts + 1); }, 500);
+    // If there's no recordId in storage at all, no student is logged in — fire immediately as anon
+    if (!recordId) {
+      fireRun('no student session — running as anon immediately');
+      return;
+    }
+    if (attempts < 10) {
+      // Student record ID exists but profile not loaded yet — retry briefly
+      setTimeout(function() { loadStudentThenRun(attempts + 1); }, 300);
     } else {
-      fireRun('no student found after 10s — running as anon');
+      fireRun('no student found after 3s — running as anon');
     }
   }
 
