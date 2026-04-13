@@ -6023,6 +6023,28 @@
       if (duplicates.length) showDuplicatesModal(duplicates);
     }
 
+    async function deleteWlFromDuplicates(regId, rowEl) {
+      const reg = registrationsData.find(r => r.id === regId);
+      if (!reg) return;
+      const confirmed = await showConfirm(
+        `DELETE FROM WAITING LIST?\n\nName: ${reg.full_name}\nEmail: ${reg.email}\n\nThis action CANNOT be undone!`,
+        'delete'
+      );
+      if (!confirmed) return;
+      const supabase = initSupabase();
+      const { error } = await supabase.from('registrations').delete().eq('id', regId);
+      if (error) {
+        showNotification('Error', 'Could not delete: ' + error.message, 'error');
+        return;
+      }
+      // Remove from local data and re-check count badge
+      registrationsData = registrationsData.filter(r => r.id !== regId);
+      document.getElementById('registrationsCount').textContent = registrationsData.length;
+      // Remove the table row from the modal
+      rowEl.remove();
+      showNotification('Deleted', `${reg.full_name} removed from waiting list.`, 'success');
+    }
+
     function showDuplicatesModal(duplicates) {
       // Don't show the same modal twice in a session
       if (window._duplicatesModalShown) return;
@@ -6033,12 +6055,13 @@
       overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.72);z-index:10020;display:flex;align-items:center;justify-content:center;padding:20px;';
 
       const rows = duplicates.map(d => `
-        <tr style="border-bottom:1px solid rgba(255,255,255,0.07);">
+        <tr data-reg-id="${d.reg.id}" style="border-bottom:1px solid rgba(255,255,255,0.07);">
           <td style="padding:10px 12px;color:#f0e3bc;font-weight:600;">${d.reg.full_name || '—'}</td>
           <td style="padding:10px 12px;color:#94a3b8;font-size:13px;">${d.reasons}</td>
-          <td style="padding:10px 12px;">
-            <button onclick="switchTab('registrations');document.getElementById('duplicatesModalOverlay').remove();" style="background:rgba(201,168,76,0.12);color:#c9a84c;border:1px solid rgba(201,168,76,0.25);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;margin-right:6px;">Waiting List</button>
-            <button onclick="openApplicationDrawer('${d.app.id}');document.getElementById('duplicatesModalOverlay').remove();" style="background:rgba(59,130,246,0.12);color:#93c5fd;border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:5px 12px;cursor:pointer;font-size:12px;font-weight:600;">Application</button>
+          <td style="padding:10px 12px;white-space:nowrap;">
+            <button onclick="switchTab('registrations');document.getElementById('duplicatesModalOverlay').remove();" style="background:rgba(201,168,76,0.12);color:#c9a84c;border:1px solid rgba(201,168,76,0.25);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;margin-right:4px;">Waiting List</button>
+            <button onclick="openApplicationDrawer('${d.app.id}');document.getElementById('duplicatesModalOverlay').remove();" style="background:rgba(59,130,246,0.12);color:#93c5fd;border:1px solid rgba(59,130,246,0.25);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;margin-right:4px;">Application</button>
+            <button onclick="deleteWlFromDuplicates('${d.reg.id}', this.closest('tr'))" style="background:rgba(239,68,68,0.12);color:#fca5a5;border:1px solid rgba(239,68,68,0.25);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:600;">🗑 Delete WL</button>
           </td>
         </tr>
       `).join('');
