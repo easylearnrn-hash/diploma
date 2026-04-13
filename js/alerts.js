@@ -551,18 +551,17 @@
       /* ── Gold top accent bar ── */
       +'.acnhs-top-bar{height:3px;background:#c9a84c;width:100%;position:absolute;top:0;left:0;right:0}'
       /* ── Close button ── */
-      +'.acnhs-close{position:absolute;top:14px;right:14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);min-width:44px;min-height:44px;width:44px;height:44px;border-radius:50%;color:#c9a84c;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s;padding:0;z-index:10;-webkit-tap-highlight-color:rgba(0,0,0,0);touch-action:manipulation;}'
-      +'.acnhs-close:hover{background:rgba(201,168,76,.1);color:#c9a84c;border-color:rgba(201,168,76,.3)}'
+      +'.acnhs-close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);min-width:44px;min-height:44px;width:44px;height:44px;border-radius:50%;color:#c9a84c;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s;padding:0;z-index:10;-webkit-tap-highlight-color:rgba(0,0,0,0);touch-action:manipulation;}'
       /* ── Header ── */
-      +'.acnhs-header{display:flex;align-items:center;gap:18px;padding:36px 32px 24px}'
-      +'.acnhs-icon-ring{width:54px;height:54px;border-radius:50%;border:1.5px solid;display:flex;align-items:center;justify-content:center;flex-shrink:0}'
-      +'.acnhs-icon{display:flex;align-items:center;justify-content:center}'
-      +'.acnhs-eyebrow{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:6px;opacity:.9}'
-      +'.acnhs-title{font-family:"Playfair Display",Georgia,serif;font-size:20px;font-weight:700;line-height:1.25;letter-spacing:-.01em;color:#f0ece3;margin:0}'
+      +'.acnhs-header{display:flex;align-items:center;gap:14px;padding:22px 68px 18px 22px;}'
+      +'.acnhs-icon-ring{width:44px;height:44px;min-width:44px;border-radius:50%;border:1.5px solid;display:flex;align-items:center;justify-content:center;flex-shrink:0;}'
+      +'.acnhs-icon{display:flex;align-items:center;justify-content:center;}'
+      +'.acnhs-eyebrow{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;opacity:.85;}'
+      +'.acnhs-title{font-family:"Playfair Display",Georgia,serif;font-size:18px;font-weight:700;line-height:1.3;color:#f0ece3;margin:0;word-break:break-word;}'
       /* ── Divider ── */
-      +'.acnhs-divider{height:1px;background:rgba(255,255,255,.07);margin:0 32px}'
+      +'.acnhs-divider{height:1px;background:rgba(255,255,255,.07);margin:0 20px;}'
       /* ── Body ── */
-      +'.acnhs-body{padding:22px 32px 24px;font-size:14.5px;line-height:1.75;color:#b8b0a0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:1;min-height:0;touch-action:pan-y;}'
+      +'.acnhs-body{padding:16px 22px;font-size:14px;line-height:1.75;color:#b8b0a0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;flex:1;min-height:0;touch-action:pan-y;}'
       +'.acnhs-body p{margin:0 0 14px}'
       +'.acnhs-body p:last-child{margin-bottom:0}'
       +'.acnhs-body ul,.acnhs-body ol{margin:0 0 14px;padding-left:22px}'
@@ -571,7 +570,7 @@
       +'.acnhs-body a{color:#c9a84c;text-decoration:none;font-weight:500;border-bottom:1px solid rgba(201,168,76,.35);transition:all .2s}'
       +'.acnhs-body a:hover{color:#d4b56a;border-bottom-color:#d4b56a}'
       /* ── Footer ── */
-      +'.acnhs-footer{padding:0 32px 32px;display:flex;gap:12px;justify-content:center}'
+      +'.acnhs-footer{padding:14px 22px 20px;display:flex;gap:12px;justify-content:center;flex-shrink:0;border-top:1px solid rgba(255,255,255,.07);background:linear-gradient(0deg,#04111f 80%,transparent);}'
       +'.acnhs-btn-dismiss{padding:13px 36px;border-radius:10px;font-size:13px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;cursor:pointer;border:1.5px solid;background:transparent;transition:background .2s,box-shadow .2s,transform .15s;font-family:"Inter",system-ui,sans-serif;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,0);}'
       +'.acnhs-btn-dismiss:hover{background:rgba(201,168,76,.1);box-shadow:0 4px 18px rgba(201,168,76,.15);transform:translateY(-1px)}'
       +'.acnhs-btn-dismiss:active{transform:translateY(0)}'
