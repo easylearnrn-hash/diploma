@@ -11310,11 +11310,38 @@ The table needs to be created before registrations can be stored.`;
           <td>${reg.education_level || '—'}</td>
           <td>${formatStartDate(reg.preferred_start_date)}</td>
           <td>${formatDate(reg.registration_date)}</td>
-          <td><span class="pill ${reg.status}">${reg.status || 'pending'}</span></td>
+          <td>
+            <select class="inline-edit-select pill ${reg.status || 'pending'}" onchange="updateRegistrationStatus('${reg.id}', this)" title="Change status">
+              <option value="pending"   ${(reg.status||'pending')==='pending'   ? 'selected':''}>Pending</option>
+              <option value="contacted" ${reg.status==='contacted' ? 'selected':''}>Contacted</option>
+              <option value="approved"  ${reg.status==='approved'  ? 'selected':''}>Approved</option>
+              <option value="rejected"  ${reg.status==='rejected'  ? 'selected':''}>Rejected</option>
+            </select>
+          </td>
           <td><button class="btn-view" onclick="openRegistrationDrawer('${reg.id}')">Open →</button></td>
         </tr>
       `;
       }).join('');
+    }
+
+    async function updateRegistrationStatus(regId, selectEl) {
+      const newStatus = selectEl.value;
+      const supabase = initSupabase();
+      if (!supabase) return;
+      // Update the pill class so colour changes immediately
+      selectEl.className = `inline-edit-select pill ${newStatus}`;
+      const { error } = await supabase
+        .from('registrations')
+        .update({ status: newStatus })
+        .eq('id', regId);
+      if (error) {
+        console.error('Failed to update registration status:', error);
+        showNotification('Error', 'Could not update status: ' + error.message, 'error');
+        return;
+      }
+      // Update local data
+      const reg = registrationsData.find(r => r.id === regId);
+      if (reg) reg.status = newStatus;
     }
 
     function filterRegistrations() {
