@@ -2933,15 +2933,118 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
     function resolveAttachmentUrl(attachment) {
       if (attachment?.public_url) return attachment.public_url;
-      if (!attachment?.storage_path || !db?.storage) return null;
-      try {
-        const { data } = db.storage.from('email-attachments').getPublicUrl(attachment.storage_path);
-        return data?.publicUrl || null;
-      } catch (error) {
-        console.warn('Unable to resolve attachment URL', error);
-        return null;
-      }
+      if (attachment?.url) return attachment.url;
+      return null; // signed URL generated on-click via openAttachment()
     }
+
+    // Opens an attachment — uses public_url/url if present, otherwise generates
+    // a signed URL from Supabase Storage on demand (handles private buckets).
+    window.openAttachment = async function(storagePath, publicUrl, fileName) {
+      let finalUrl = publicUrl;
+      
+      if (!finalUrl && storagePath) {
+        try {
+          const { data, error } = await db.storage
+            .from('email-attachments')
+            .createSignedUrl(storagePath, 3600); // 1-hour signed URL
+          if (!error && data?.signedUrl) {
+            finalUrl = data.signedUrl;
+          }
+        } catch (e) {
+          console.error('Error getting signed url:', e);
+        }
+      }
+
+      if (!finalUrl) {
+        showNotification('❌ Could not link to attachment.', 'error');
+        return;
+      }
+
+      try {
+        const fetchRes = await fetch(finalUrl);
+        const clone = fetchRes.clone();
+        const textStr = await clone.text();
+        if (textStr.trim().startsWith('{"object":"attachment"')) {
+          console.log('Detected older JSON-wrapped email attachment, checking data format...');
+          const jsonObj = JSON.parse(textStr);
+          
+          if (!jsonObj.content && jsonObj.download_url) {
+            console.log('Attachment has Resend download_url. Attempting to fetch a fresh download link via API...');
+            const urlMatch = jsonObj.download_url.match(/receiving\/([^\/]+)\/attachments\/([^\/?]+)/);
+            if (urlMatch && urlMatch[1] && urlMatch[2]) {
+               const resendEmailId = urlMatch[1];
+               const resendAttachmentId = urlMatch[2];
+               const newTab = window.open('about:blank', '_blank');
+               const { data: { session } } = await db.auth.getSession();
+               fetch(SUPABASE_CONFIG.url + '/functions/v1/get-resend-attachment', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session?.access_token || SUPABASE_CONFIG.anonKey}`
+                  },
+                  body: JSON.stringify({ emailId: resendEmailId, attachmentId: resendAttachmentId })
+               })
+               .then(res => res.json())
+               .then(freshData => {
+                  if (freshData && freshData.download_url) {
+                    if (newTab) { newTab.location.href = freshData.download_url; }
+                    else { window.location.href = freshData.download_url; }
+                  } else {
+                    if (newTab) newTab.close();
+                    showNotification('❌ Could not recover the expired attachment.', 'error');
+                  }
+               })
+               .catch(err => {
+                  if (newTab) newTab.close();
+                  showNotification('❌ Internal Error while recovering attachment.', 'error');
+               });
+            } else {
+               showNotification('❌ Attachment link has expired and is unrecoverable.', 'error');
+            }
+            return;
+          }
+
+          if (jsonObj.content) {
+            let base64str = typeof jsonObj.content === 'string' ? jsonObj.content : String(jsonObj.content);
+            if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
+            base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
+            base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
+            const binaryString = window.atob(base64str);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) { bytes[i] = binaryString.charCodeAt(i); }
+            const blob = new Blob([bytes], { type: jsonObj.content_type || 'application/octet-stream' });
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = blobUrl;
+            a.download = jsonObj.filename || fileName || 'attachment';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+            return;
+          } else {
+            showNotification('❌ Attachment content is missing from server payload.', 'error');
+            return;
+          }
+        }
+        
+        const urlParams = new URL(finalUrl);
+        if (!urlParams.searchParams.has('download')) {
+          urlParams.searchParams.set('download', fileName || 'true');
+        }
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = urlParams.toString();
+        a.download = fileName || 'attachment';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } catch (err) {
+        console.error('openAttachment error:', err);
+        window.open(finalUrl, '_blank', 'noopener,noreferrer');
+      }
+    };
 
     function renderEmailList() {
       const container = document.getElementById('emailList');
@@ -3055,8 +3158,12 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           if (!error && full) {
             selectedEmail.body = full.body || '';
             selectedEmail.html_body = full.html_body || '';
-            selectedEmail.attachments = full.attachments || selectedEmail.attachments;
+            // Keep existing attachments from list query if detail fetch returns null
+            if (full.attachments !== null && full.attachments !== undefined) {
+              selectedEmail.attachments = full.attachments;
+            }
             selectedEmail._bodyLoaded = true;
+            console.log('📎 Lazy-load attachments:', selectedEmail.attachments);
             // Also update the object inside emailHistory so repeat clicks don't re-fetch
             const idx = emailHistory.findIndex(e => e.id === emailId);
             if (idx !== -1) emailHistory[idx] = selectedEmail;
@@ -4064,18 +4171,21 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const attachmentCards = attachmentsData.map((attachment, index) => {
           const contentTypeLower = (attachment.content_type || '').toLowerCase();
           const icon = contentTypeLower.startsWith('image/')
-            ? '🖼️'
+            ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="1.5"/><circle cx="8.5" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.4"/><path d="M21 15l-5-5L5 21" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
             : contentTypeLower.includes('pdf')
-              ? '📄'
-              : '📎';
+              ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><line x1="9" y1="13" x2="15" y2="13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><line x1="9" y1="17" x2="15" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>'
+              : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
           const fileName = escapeHtml(attachment.filename || `Attachment ${index + 1}`);
           const sizeLabel = formatAttachmentSize(attachment.size) || 'Unknown size';
           const contentType = attachment.content_type ? attachment.content_type.toUpperCase() : 'FILE';
           const resolvedUrl = resolveAttachmentUrl(attachment);
-          const safeDownloadUrl = resolvedUrl ? encodeURI(resolvedUrl) : null;
-          const downloadMarkup = safeDownloadUrl
-            ? `<a class="detail-attachment-download" href="${safeDownloadUrl}" target="_blank" rel="noopener noreferrer" download>Download</a>`
-            : '<span class="detail-attachment-download disabled" title="Attachment stored without public link">No link</span>';
+          const storagePath = attachment.storage_path || '';
+          // Always render a button that calls openAttachment() — it handles
+          // public_url, plain url, and signed-URL fallback for private buckets.
+          const hasSource = !!(resolvedUrl || storagePath);
+          const downloadMarkup = hasSource
+            ? `<button class="detail-attachment-download" data-storage-path="${escapeHtml(storagePath)}" data-public-url="${escapeHtml(resolvedUrl || '')}" data-file-name="${escapeHtml(attachment.filename || '')}" onclick="openAttachment(this.dataset.storagePath, this.dataset.publicUrl, this.dataset.fileName)">Open / Download</button>`
+            : '<span class="detail-attachment-download disabled">No link</span>';
           return `
             <div class="detail-attachment-card">
               <div class="detail-attachment-icon">${icon}</div>
@@ -4089,7 +4199,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }).join('');
         attachmentsHtml = `
           <div class="detail-attachments">
-            <h3>📎 Attachments (${selectedEmail.attachments.length})</h3>
+            <h3><svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="vertical-align:-2px;margin-right:5px;opacity:0.7"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>Attachments (${attachmentsData.length})</h3>
             <div class="detail-attachment-cards">
               ${attachmentCards}
             </div>
