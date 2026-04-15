@@ -685,7 +685,13 @@ body {
   transition: background 0.15s;
 }
 .tracker-docs-upload-btn:hover { background: rgba(249,115,22,0.22); }
-.tracker-docs-upload-btn.uploading { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+.tracker-docs-upload-btn.uploading { opacity: 0.75; cursor: not-allowed; pointer-events: none; }
+@keyframes docUploadSpin { to { transform: rotate(360deg); } }
+.tracker-docs-upload-spinner {
+  display: inline-block; width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid rgba(251,146,60,0.3); border-top-color: #fb923c;
+  animation: docUploadSpin 0.7s linear infinite; flex-shrink: 0;
+}
 .tracker-docs-upload-hint { font-size: 11px; color: #475569; }
 
 /* ============================================================ */
@@ -2468,12 +2474,26 @@ function renderTracker() {
    TRACKER DOCUMENT UPLOAD
    ============================================================ */
 async function uploadTrackerDocuments(input, ref) {
+  if (window.location.protocol === 'file:') {
+    alert('File uploads require the local server.\nPlease open forms.html via http://localhost:8000 instead of directly from Finder.');
+    input.value = '';
+    return;
+  }
+
   const files = Array.from(input.files);
   if (!files.length) return;
 
   const btn = document.getElementById('upload-btn-' + ref);
   const listEl = document.getElementById('uploaded-files-' + ref);
-  if (btn) { btn.classList.add('uploading'); btn.childNodes[0] && (btn.querySelector('svg') || btn).style && null; }
+  // Save original inner content (excluding hidden file input) and show spinner
+  let savedInner = null;
+  if (btn) {
+    btn.classList.add('uploading');
+    const fileInput = btn.querySelector('input[type="file"]');
+    savedInner = btn.innerHTML;
+    btn.innerHTML = '<span class="tracker-docs-upload-spinner"></span> Uploading…';
+    if (fileInput) btn.appendChild(fileInput);
+  }
 
   const sub = submissions.find(s => s.ref === ref);
   if (!sub) return;
@@ -2530,7 +2550,10 @@ async function uploadTrackerDocuments(input, ref) {
     }
   }
 
-  if (btn) btn.classList.remove('uploading');
+  if (btn) {
+    btn.classList.remove('uploading');
+    if (savedInner !== null) btn.innerHTML = savedInner;
+  }
   input.value = '';
 
   if (errors.length) alert('Some files could not be uploaded:\n' + errors.join('\n'));

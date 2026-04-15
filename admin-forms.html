@@ -727,6 +727,7 @@
     <div class="drawer-tabs">
       <button class="dtab dtab-active" data-dtab="details"   onclick="switchDTab('details')">Submission Details</button>
       <button class="dtab"             data-dtab="statement" onclick="switchDTab('statement')">Full Statement</button>
+      <button class="dtab"             data-dtab="documents" onclick="switchDTab('documents')">Documents</button>
       <button class="dtab"             data-dtab="history"   onclick="switchDTab('history')">Action History</button>
     </div>
 
@@ -1175,6 +1176,50 @@
           ${s.statement
             ? `<div class="statement-box">${escHtml(s.statement)}</div>`
             : '<p class="no-statement">No statement was provided with this submission.</p>'}
+        </div>`;
+
+    } else if (tab === 'documents') {
+      const atts = Array.isArray(s.attachments) ? s.attachments : [];
+      const attHtml = atts.length > 0
+        ? `<div class="att-list">${atts.map(f => {
+            const isUrl = typeof f === 'string' && f.startsWith('http');
+            const fname = isUrl
+              ? decodeURIComponent(f.split('/').pop().split('?')[0])
+              : escHtml(f);
+            return `<div class="att-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              ${isUrl
+                ? `<a href="${escHtml(f)}" target="_blank" rel="noopener" style="color:#7eb8f7;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(fname)}</a>`
+                : escHtml(fname)}
+            </div>`;
+          }).join('')}</div>`
+        : '<p style="font-size:13px;color:var(--text-muted)">No files uploaded by this student yet.</p>';
+
+      const docRequests = (Array.isArray(s.action_history) ? s.action_history : [])
+        .filter(h => Array.isArray(h.documents) && h.documents.length > 0);
+      const reqHtml = docRequests.length > 0
+        ? docRequests.map(h => {
+            const tsLabel = h.at
+              ? new Date(h.at).toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+              : '';
+            return `<div style="margin-bottom:14px">
+              <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Requested by ${escHtml(h.by || 'Admin')}${tsLabel ? ' · ' + tsLabel : ''}</div>
+              <div class="att-list">${h.documents.map(d => `<div class="att-item">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                ${escHtml(d)}
+              </div>`).join('')}</div>
+            </div>`;
+          }).join('')
+        : '<p style="font-size:13px;color:var(--text-muted)">No documentation has been requested for this submission.</p>';
+
+      body.innerHTML = `
+        <div class="dsec">
+          <div class="dsec-title">Requested Documents</div>
+          ${reqHtml}
+        </div>
+        <div class="dsec">
+          <div class="dsec-title">Student-Uploaded Files</div>
+          ${attHtml}
         </div>`;
 
     } else if (tab === 'history') {
