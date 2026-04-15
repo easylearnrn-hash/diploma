@@ -6432,7 +6432,18 @@
             });
         }
         
-        // Realtime subscription handles all updates — no polling interval needed
+        // Also subscribe to video_call_sessions so ending a native session hides the banner instantly
+        if (db) {
+          db.channel('video-call-sessions-hub')
+            .on('postgres_changes',
+              { event: '*', schema: 'public', table: 'video_call_sessions' },
+              () => { checkHubActiveClassLink(); }
+            )
+            .subscribe();
+        }
+
+        // Poll every 60s to enforce time-based expiration (expires_at) without relying on DB events
+        setInterval(checkHubActiveClassLink, 60_000);
       } catch (error) {
         console.error('🔗 Hub: Error initializing class link checker:', error);
       }
