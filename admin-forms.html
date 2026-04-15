@@ -442,6 +442,14 @@
     .abtn-docs:hover { background: rgba(249,115,22,0.22); }
     .abtn-close   { background: rgba(100,116,139,0.12);border-color: rgba(100,116,139,0.35);color: #94a3b8; }
     .abtn-close:hover { background: rgba(100,116,139,0.22); }
+    .abtn-delete  { background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.4); color: #f87171; margin-left: auto; }
+    .abtn-delete:hover { background: rgba(239,68,68,0.18); }
+    .att-item-del {
+      margin-left: auto; flex-shrink: 0; background: transparent;
+      border: none; color: #64748b; cursor: pointer; padding: 2px 5px;
+      border-radius: 4px; line-height: 1; font-size: 14px; transition: color 0.15s;
+    }
+    .att-item-del:hover { color: #f87171; }
 
     /* Toast notification */
     .toast {
@@ -761,6 +769,7 @@
         <button class="abtn abtn-deny"    onclick="quickAction('denied')">Deny Petition</button>
         <button class="abtn abtn-docs"    onclick="openDocReqModal()">Request Documentation</button>
         <button class="abtn abtn-close"   onclick="quickAction('closed')">Close Case</button>
+        <button class="abtn abtn-delete"  onclick="deleteSubmission()">Delete Submission</button>
       </div>
     </div>
 
@@ -1191,6 +1200,7 @@
               ${isUrl
                 ? `<a href="${escHtml(f)}" target="_blank" rel="noopener" style="color:#7eb8f7;text-decoration:none" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${escHtml(fname)}</a>`
                 : escHtml(fname)}
+              ${isUrl ? `<button class="att-item-del" title="Delete file" onclick="deleteUploadedFile('${escHtml(f)}', '${escHtml(s.id)}')">✕</button>` : ''}
             </div>`;
           }).join('')}</div>`
         : '<p style="font-size:13px;color:var(--text-muted)">No files uploaded by this student yet.</p>';
@@ -1242,6 +1252,193 @@
           <div class="dsec-title">Administrative Action History</div>
           ${histHtml}
         </div>`;
+    }
+  }
+
+  /* ============================================================
+     DELETE SUBMISSION
+     ============================================================ */
+  async function deleteSubmission() {
+    if (!activeRecord) return;
+    const s = activeRecord;
+    if (!confirm(`Permanently delete this submission?\n\n"${s.form_title}" (${s.reference_number})\n\nThis cannot be undone.`)) return;
+
+    try {
+      // Delete uploaded files from storage
+      const atts = Array.isArray(s.attachments) ? s.attachments.filter(a => typeof a === 'string' && a.startsWith('http')) : [];
+      if (atts.length > 0) {
+        const paths = atts.map(url => {
+          try { return decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch { return null; }
+        }).filter(Boolean);
+        if (paths.length) {
+          await sb.storage.from('student-documents').remove(paths);
+        }
+      }
+      // Delete DB record
+      const { error } = await sb.from('student_form_submissions').delete().eq('id', s.id);
+      if (error) throw error;
+
+      allSubmissions = allSubmissions.filter(x => x.id !== s.id);
+      closeDrawer();
+      updateStats();
+      applyFilters();
+      showToast('Submission permanently deleted.', 'success');
+    } catch (err) {
+      console.error('Delete failed:', err);
+      showToast('Delete failed: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
+  /* ============================================================
+     DELETE INDIVIDUAL UPLOADED FILE
+     ============================================================ */
+  async function deleteUploadedFile(url, recordId) {
+    if (!confirm('Remove this file? It will be permanently deleted from storage.')) return;
+    const s = allSubmissions.find(x => x.id === recordId);
+    if (!s) return;
+
+    // Extract storage path from public URL
+    let storagePath = null;
+    try { storagePath = decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch {}
+
+    try {
+      if (storagePath) {
+        const { error: stErr } = await sb.storage.from('student-documents').remove([storagePath]);
+        if (stErr) console.warn('Storage remove error:', stErr);
+      }
+      const newAtts = (Array.isArray(s.attachments) ? s.attachments : []).filter(a => a !== url);
+      const { error } = await sb.from('student_form_submissions').update({ attachments: newAtts }).eq('id', s.id);
+      if (error) throw error;
+
+      s.attachments = newAtts;
+      if (activeRecord && activeRecord.id === s.id) activeRecord.attachments = newAtts;
+      switchDTab('documents');
+      showToast('File removed.', 'success');
+    } catch (err) {
+      console.error('File delete failed:', err);
+      showToast('Could not delete file: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
+  /* ============================================================
+     DELETE SUBMISSION
+     ============================================================ */
+  async function deleteSubmission() {
+    if (!activeRecord) return;
+    const s = activeRecord;
+    if (!confirm(`Permanently delete this submission?\n\n"${s.form_title}" (${s.reference_number})\n\nThis cannot be undone.`)) return;
+
+    try {
+      // Delete uploaded files from storage
+      const atts = Array.isArray(s.attachments) ? s.attachments.filter(a => typeof a === 'string' && a.startsWith('http')) : [];
+      if (atts.length > 0) {
+        const paths = atts.map(url => {
+          try { return decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch(e) { return null; }
+        }).filter(Boolean);
+        if (paths.length) await sb.storage.from('student-documents').remove(paths);
+      }
+      // Delete DB record
+      const { error } = await sb.from('student_form_submissions').delete().eq('id', s.id);
+      if (error) throw error;
+
+      allSubmissions = allSubmissions.filter(x => x.id !== s.id);
+      closeDrawer();
+      updateStats();
+      applyFilters();
+      showToast('Submission permanently deleted.', 'success');
+    } catch (err) {
+      console.error('Delete failed:', err);
+      showToast('Delete failed: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
+  /* ============================================================
+     DELETE INDIVIDUAL UPLOADED FILE
+     ============================================================ */
+  async function deleteUploadedFile(url, recordId) {
+    if (!confirm('Remove this file? It will be permanently deleted from storage.')) return;
+    const s = allSubmissions.find(x => x.id === recordId);
+    if (!s) return;
+
+    let storagePath = null;
+    try { storagePath = decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch(e) {}
+
+    try {
+      if (storagePath) {
+        const { error: stErr } = await sb.storage.from('student-documents').remove([storagePath]);
+        if (stErr) console.warn('Storage remove error:', stErr);
+      }
+      const newAtts = (Array.isArray(s.attachments) ? s.attachments : []).filter(a => a !== url);
+      const { error } = await sb.from('student_form_submissions').update({ attachments: newAtts }).eq('id', s.id);
+      if (error) throw error;
+
+      s.attachments = newAtts;
+      if (activeRecord && activeRecord.id === s.id) activeRecord.attachments = newAtts;
+      switchDTab('documents');
+      showToast('File removed.', 'success');
+    } catch (err) {
+      console.error('File delete failed:', err);
+      showToast('Could not delete file: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
+  /* ============================================================
+     DELETE SUBMISSION
+     ============================================================ */
+  async function deleteSubmission() {
+    if (!activeRecord) return;
+    const s = activeRecord;
+    if (!confirm(`Permanently delete this submission?\n\n"${s.form_title}" (${s.reference_number})\n\nThis cannot be undone.`)) return;
+
+    try {
+      const atts = Array.isArray(s.attachments) ? s.attachments.filter(a => typeof a === 'string' && a.startsWith('http')) : [];
+      if (atts.length > 0) {
+        const paths = atts.map(url => {
+          try { return decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch(e) { return null; }
+        }).filter(Boolean);
+        if (paths.length) await sb.storage.from('student-documents').remove(paths);
+      }
+      const { error } = await sb.from('student_form_submissions').delete().eq('id', s.id);
+      if (error) throw error;
+
+      allSubmissions = allSubmissions.filter(x => x.id !== s.id);
+      closeDrawer();
+      updateStats();
+      applyFilters();
+      showToast('Submission permanently deleted.', 'success');
+    } catch (err) {
+      console.error('Delete failed:', err);
+      showToast('Delete failed: ' + (err.message || 'Unknown error'), 'error');
+    }
+  }
+
+  /* ============================================================
+     DELETE INDIVIDUAL UPLOADED FILE
+     ============================================================ */
+  async function deleteUploadedFile(url, recordId) {
+    if (!confirm('Remove this file? It will be permanently deleted from storage.')) return;
+    const s = allSubmissions.find(x => x.id === recordId);
+    if (!s) return;
+
+    let storagePath = null;
+    try { storagePath = decodeURIComponent(new URL(url).pathname.split('/student-documents/')[1]); } catch(e) {}
+
+    try {
+      if (storagePath) {
+        const { error: stErr } = await sb.storage.from('student-documents').remove([storagePath]);
+        if (stErr) console.warn('Storage remove error:', stErr);
+      }
+      const newAtts = (Array.isArray(s.attachments) ? s.attachments : []).filter(a => a !== url);
+      const { error } = await sb.from('student_form_submissions').update({ attachments: newAtts }).eq('id', s.id);
+      if (error) throw error;
+
+      s.attachments = newAtts;
+      if (activeRecord && activeRecord.id === s.id) activeRecord.attachments = newAtts;
+      switchDTab('documents');
+      showToast('File removed.', 'success');
+    } catch (err) {
+      console.error('File delete failed:', err);
+      showToast('Could not delete file: ' + (err.message || 'Unknown error'), 'error');
     }
   }
 
