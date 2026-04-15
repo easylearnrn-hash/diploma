@@ -938,6 +938,35 @@
       transform: scale(1.05);
     }
 
+    .modal-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .modal-print-btn {
+      background: var(--bg-hover);
+      border: 1px solid var(--border-medium);
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      cursor: pointer;
+      color: var(--text-tertiary);
+      transition: all var(--transition-base);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .modal-print-btn svg { width: 18px; height: 18px; }
+    .modal-print-btn:hover {
+      background: rgba(59,130,246,0.15);
+      border-color: var(--primary);
+      color: var(--primary);
+      transform: scale(1.05);
+    }
+
     .modal-body {
       flex: 1;
       overflow-y: auto;
@@ -1875,7 +1904,16 @@
             <p id="modalStudentId">---</p>
           </div>
         </div>
-        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-header-actions">
+          <button class="modal-print-btn" onclick="printStudentProfile()" title="Print Student Profile" aria-label="Print student profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 6 2 18 2 18 9"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+          </button>
+          <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
       </div>
 
       <div class="modal-body">
@@ -1937,7 +1975,8 @@
     // Use the inline Supabase client
     let vidSupabase = vidSupabaseClient;
     let currentStudent = null;
-    let originalNotesValue = ''; // Track original notes to detect deletion attempts
+    let currentQuestionnaireData = null;
+    let originalNotesValue = '' // Track original notes to detect deletion attempts
     let notesAutoSaveTimer = null; // Debounce timer for auto-save
     let hasUnsavedNotes = false; // Track if notes have been modified
     let allStudents = [];
@@ -3023,6 +3062,7 @@
       });
 
       // Load notes and questionnaire asynchronously without blocking UI
+      currentQuestionnaireData = null;
       loadNotes(studentId);
       loadQuestionnaire(currentStudent);
     }
@@ -3210,6 +3250,7 @@
           html += '</div>';
         }
         
+        currentQuestionnaireData = data.questionnaire_data;
         content.innerHTML = html || `<div class="questionnaire-empty">
           <div class="questionnaire-empty-icon">📋</div>
           <p>No questionnaire data available</p>
@@ -3492,6 +3533,378 @@
     // Close Modal - Instant close
     async function closeModal() {
       await autoSaveAndClose();
+    }
+
+    /* ============================================================
+       PRINT STUDENT PROFILE
+       Opens a self-contained, print-ready document in a new window.
+       ============================================================ */
+    function printStudentProfile() {
+      if (!currentStudent) return;
+
+      const s = currentStudent;
+      const q = currentQuestionnaireData;
+      const notes = (document.getElementById('notesTextarea')?.value || '').trim();
+      const printDate = new Date().toLocaleString('en-GB', {
+        day: '2-digit', month: 'long', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+
+      // ── helpers ──────────────────────────────────────────────
+      function ph(v) {
+        if (!v || v === 'N/A') return '<span style="color:#94a3b8;font-style:italic">Not on record</span>';
+        return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      }
+      function fmtDate(d) {
+        if (!d || d === 'N/A') return 'N/A';
+        try {
+          const dt = new Date(d);
+          if (isNaN(dt)) return d;
+          const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+          return `${String(dt.getDate()).padStart(2,'0')} ${m[dt.getMonth()]} ${dt.getFullYear()}`;
+        } catch(e) { return d; }
+      }
+      function fmtPhone(p) {
+        if (!p || p === 'N/A') return 'N/A';
+        const d = p.replace(/\D/g,'');
+        if (d.length === 12) return `+${d.slice(0,2)} ${d.slice(2,5)} ${d.slice(5,8)} ${d.slice(8,10)} ${d.slice(10)}`;
+        if (d.length === 11) return `+${d[0]} ${d.slice(1,4)} ${d.slice(4,7)} ${d.slice(7,9)} ${d.slice(9)}`;
+        if (d.length === 10) return `+1 ${d.slice(0,3)} ${d.slice(3,6)} ${d.slice(6,8)} ${d.slice(8)}`;
+        return p;
+      }
+      function row(label, value) {
+        return `<tr><td class="lbl">${label}</td><td class="val">${value}</td></tr>`;
+      }
+      function section(title, icon, content) {
+        return `<section>
+          <div class="sec-header"><span class="sec-icon">${icon}</span>${title}</div>
+          <div class="sec-body">${content}</div>
+        </section>`;
+      }
+
+      // ── Student Information section ───────────────────────────
+      const initials = (s.full_name || 'N/A').split(' ').map(n=>n[0]).join('').toUpperCase().slice(0,2);
+      let infoHtml = `<table class="data-table">
+        ${row('Full Legal Name',          ph(s.full_name))}
+        ${row('Student Identification No.', ph(s.student_id))}
+        ${row('Email Address',            ph(s.email))}
+        ${row('Phone Number',             ph(fmtPhone(s.phone)))}
+        ${row('Date of Birth',            ph(fmtDate(s.date_of_birth)))}
+        ${row('Program / Cohort',         ph(s.program))}
+        ${row('Start Term',               ph(s.start_term))}
+        ${row('Enrollment Status',        ph(s.status))}
+      </table>`;
+
+      // ── Questionnaire section ─────────────────────────────────
+      let qHtml = '';
+      if (q) {
+        let qParts = [];
+
+        // Personal info
+        if (q.personal_info) {
+          const pi = q.personal_info;
+          let piTable = '<table class="data-table">';
+          if (pi.full_name)          piTable += row('Full Legal Name (Questionnaire)', ph(pi.full_name));
+          if (pi.date_of_birth)      piTable += row('Date of Birth', ph(fmtDate(pi.date_of_birth)));
+          if (pi.country_of_birth)   piTable += row('Country of Birth', ph(pi.country_of_birth));
+          if (pi.nationality)        piTable += row('Nationality', ph(pi.nationality));
+          piTable += '</table>';
+          qParts.push(`<div class="q-sub"><div class="q-sub-title">Personal Information</div>${piTable}</div>`);
+        }
+
+        // Timeline summary
+        const tsHtml = generateTimelineSummary(q);
+        if (tsHtml) {
+          qParts.push(`<div class="timeline-box">${tsHtml}</div>`);
+        }
+
+        // Residency & Travel
+        if (q.residency_travel) {
+          const rt = q.residency_travel;
+          let rtTable = '<table class="data-table">';
+          if (rt.permanent_departure_date) {
+            rtTable += row('<span style="color:#ef4444;font-weight:700">⚠ Permanent Departure from Armenia</span>',
+              `<span style="color:#ef4444;font-weight:700">${fmtDate(rt.permanent_departure_date)}</span>`);
+          }
+          if (rt.travel_history && rt.travel_history.length > 0) {
+            const trips = rt.travel_history.map((t,i) =>
+              `<div class="trip-item"><strong>Trip ${i+1}:</strong> ${fmtDate(t.arrival)} → ${fmtDate(t.departure)} &nbsp;|&nbsp; <strong>${t.duration||'?'} days</strong> &nbsp;|&nbsp; ${t.purpose||'Purpose not specified'}</div>`
+            ).join('');
+            rtTable += `<tr><td class="lbl">Travel History (Past 5 Years)</td><td class="val">${trips}</td></tr>`;
+          } else {
+            rtTable += row('Travel History', 'No international trips reported');
+          }
+          rtTable += '</table>';
+          qParts.push(`<div class="q-sub"><div class="q-sub-title">Residency &amp; Travel History</div>${rtTable}</div>`);
+        }
+
+        // Education History
+        if (q.education_history) {
+          const ed = q.education_history;
+          let edTable = '<table class="data-table">';
+          if (ed.hs_grad_date)        edTable += row('High School Graduation', ph(fmtDate(ed.hs_grad_date)));
+          if (ed.armenian_edu === 'yes') {
+            if (ed.armenian_institution) edTable += row('Institution', ph(ed.armenian_institution));
+            if (ed.armenian_program)     edTable += row('Program', ph(ed.armenian_program));
+            if (ed.application_date)     edTable += row('Entry Date', ph(fmtDate(ed.application_date)));
+            if (ed.graduation_date)      edTable += row('Graduation Date', ph(fmtDate(ed.graduation_date)));
+          }
+          edTable += '</table>';
+          qParts.push(`<div class="q-sub"><div class="q-sub-title">Education History</div>${edTable}</div>`);
+        }
+        if (q.educationHistory && q.educationHistory.length > 0) {
+          let edTable = '<table class="data-table">';
+          q.educationHistory.forEach((ed,i) => {
+            edTable += `<tr><td class="lbl">${ed.institution||'Inst. '+(i+1)}</td>
+              <td class="val"><strong>Degree:</strong> ${ph(ed.degree)} &nbsp;|&nbsp;
+              <strong>Dates:</strong> ${ph(ed.startDate)} — ${ph(ed.endDate)} &nbsp;|&nbsp;
+              <strong>Country:</strong> ${ph(ed.country)}</td></tr>`;
+          });
+          edTable += '</table>';
+          qParts.push(`<div class="q-sub"><div class="q-sub-title">Education History</div>${edTable}</div>`);
+        }
+
+        // Emergency Contact
+        if (q.emergency_contact) {
+          const ec = q.emergency_contact;
+          let ecTable = '<table class="data-table">';
+          ecTable += row('Name', ph(ec.name));
+          ecTable += row('Relationship', ph(ec.relationship));
+          ecTable += row('Phone', ph(fmtPhone(ec.phone)));
+          ecTable += row('Email', ph(ec.email));
+          if (ec.address) ecTable += row('Address', ph(ec.address));
+          ecTable += '</table>';
+          qParts.push(`<div class="q-sub"><div class="q-sub-title">Emergency Contact</div>${ecTable}</div>`);
+        }
+
+        qHtml = qParts.join('');
+      }
+
+      // ── Notes section ─────────────────────────────────────────
+      let notesHtml = notes
+        ? `<div class="notes-box">${ph(notes).replace(/\n/g,'<br>')}</div>`
+        : '<p style="color:#94a3b8;font-style:italic;font-size:13px;">No administrative notes on record for this student.</p>';
+
+      // ── Assemble document ─────────────────────────────────────
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Student Profile — ${s.full_name || s.student_id}</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, Arial, sans-serif;
+    font-size: 12px; line-height: 1.6;
+    color: #0f172a; background: #ffffff;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ── Page header ──────────────────────────────── */
+  .page-header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding-bottom: 16px;
+    border-bottom: 3px solid #0f172a;
+    margin-bottom: 20px;
+  }
+  .inst-block { display: flex; align-items: center; gap: 14px; }
+  .inst-seal {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: linear-gradient(135deg, #1e3a5f, #0f172a);
+    color: #c9a84c; font-size: 13px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: 0.5px; text-align: center; line-height: 1.2;
+    flex-shrink: 0;
+  }
+  .inst-text h1 { font-size: 15px; font-weight: 800; color: #0f172a; letter-spacing: -0.2px; }
+  .inst-text p  { font-size: 10px; color: #475569; margin-top: 2px; line-height: 1.4; }
+  .doc-meta { text-align: right; }
+  .doc-meta .doc-type {
+    font-size: 11px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #0f172a;
+    background: #f1f5f9; padding: 4px 12px; border-radius: 4px;
+    display: inline-block; margin-bottom: 5px;
+  }
+  .doc-meta .doc-info { font-size: 10px; color: #64748b; line-height: 1.5; }
+  .doc-meta .confidential {
+    font-size: 9px; font-weight: 900; text-transform: uppercase;
+    letter-spacing: 0.12em; color: #dc2626;
+    border: 1.5px solid #dc2626; padding: 2px 9px; border-radius: 3px;
+    display: inline-block; margin-top: 4px;
+  }
+
+  /* ── Student banner ───────────────────────────── */
+  .student-banner {
+    display: flex; align-items: center; gap: 18px;
+    background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%);
+    border-radius: 10px; padding: 18px 22px;
+    margin-bottom: 20px; color: white;
+  }
+  .student-avatar {
+    width: 56px; height: 56px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    color: white; font-size: 22px; font-weight: 900;
+    display: flex; align-items: center; justify-content: center;
+    letter-spacing: -0.5px;
+  }
+  .student-banner-name { font-size: 19px; font-weight: 800; color: #f8fafc; margin-bottom: 3px; }
+  .student-banner-id   { font-size: 11px; color: #c9a84c; font-family: 'Courier New', monospace; font-weight: 700; margin-bottom: 2px; }
+  .student-banner-prog { font-size: 11px; color: #94a3b8; }
+  .status-chip {
+    margin-left: auto; flex-shrink: 0;
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.08em; padding: 5px 13px; border-radius: 999px;
+    background: rgba(16,185,129,0.2); color: #34d399; border: 1px solid rgba(52,211,153,0.4);
+  }
+
+  /* ── Sections ─────────────────────────────────── */
+  section {
+    margin-bottom: 22px;
+    border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;
+    break-inside: avoid;
+  }
+  .sec-header {
+    display: flex; align-items: center; gap: 8px;
+    background: #0f172a; color: #f8fafc;
+    padding: 9px 14px; font-size: 11px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .sec-icon { font-size: 13px; }
+  .sec-body { padding: 0; }
+
+  /* ── Data table ───────────────────────────────── */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table tr:not(:last-child) td { border-bottom: 1px solid #f1f5f9; }
+  .data-table .lbl {
+    width: 38%; padding: 9px 12px;
+    font-weight: 600; color: #475569; font-size: 11px;
+    vertical-align: top; background: #f8fafc;
+    border-right: 1px solid #e2e8f0;
+  }
+  .data-table .val {
+    padding: 9px 12px; color: #0f172a; font-size: 12px;
+    vertical-align: top;
+  }
+
+  /* ── Questionnaire sub-section ────────────────── */
+  .q-sub { padding: 14px 16px; border-bottom: 1px solid #e2e8f0; }
+  .q-sub:last-child { border-bottom: none; }
+  .q-sub-title {
+    font-size: 10px; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.1em; color: #3b82f6; margin-bottom: 8px;
+    padding-bottom: 6px; border-bottom: 1px dashed #e2e8f0;
+  }
+  .trip-item {
+    padding: 5px 0; border-bottom: 1px solid #f1f5f9; font-size: 11px;
+  }
+  .trip-item:last-child { border-bottom: none; }
+
+  /* ── Timeline box ─────────────────────────────── */
+  .timeline-box {
+    margin: 12px 16px; padding: 14px 16px;
+    background: #f0f9ff; border-left: 4px solid #3b82f6;
+    border-radius: 6px; font-size: 12px;
+    line-height: 1.75; color: #0f172a;
+    break-inside: avoid;
+  }
+  .timeline-box p { margin-bottom: 10px; }
+  .timeline-box p:last-child { margin-bottom: 0; }
+
+  /* ── Notes box ────────────────────────────────── */
+  .notes-box {
+    background: #fffbeb; border-left: 4px solid #f59e0b;
+    padding: 12px 14px; font-size: 12px; line-height: 1.75;
+    color: #0f172a; white-space: pre-wrap; word-break: break-word;
+  }
+  .notes-warning {
+    padding: 6px 14px; background: #fef2f2; font-size: 10px;
+    font-weight: 700; color: #dc2626; text-transform: uppercase;
+    letter-spacing: 0.06em; border-bottom: 1px solid #fecaca;
+  }
+
+  /* ── Page footer ──────────────────────────────── */
+  .page-footer {
+    margin-top: 28px; padding-top: 14px;
+    border-top: 2px solid #0f172a;
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #64748b;
+  }
+  .page-footer strong { color: #0f172a; }
+
+  @media print {
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Page Header -->
+<div class="page-header">
+  <div class="inst-block">
+    <div class="inst-seal">ACNHS</div>
+    <div class="inst-text">
+      <h1>Armenian College of Nursing &amp; Health Sciences</h1>
+      <p>Office of Student Intelligence &amp; Records<br>Yerevan, Republic of Armenia</p>
+    </div>
+  </div>
+  <div class="doc-meta">
+    <div class="doc-type">Student Profile Report</div>
+    <div class="doc-info">Generated: ${printDate}<br>Prepared by: ${AUTHORIZED_EMAIL}</div>
+    <div class="confidential">Confidential — Internal Use Only</div>
+  </div>
+</div>
+
+<!-- Student Banner -->
+<div class="student-banner">
+  <div class="student-avatar">${initials}</div>
+  <div>
+    <div class="student-banner-name">${ph(s.full_name) || 'Student Name Not on Record'}</div>
+    <div class="student-banner-id">${ph(s.student_id) || '—'}</div>
+    <div class="student-banner-prog">${ph(s.program) || '—'} &nbsp;|&nbsp; Start: ${ph(s.start_term) || '—'}</div>
+  </div>
+  <div class="status-chip">${ph(s.status) || 'Status Unknown'}</div>
+</div>
+
+<!-- Student Information -->
+${section('Student Information', '👤', `<div class="sec-body">${infoHtml}</div>`)}
+
+${q ? section('Enrollment Questionnaire', '📋', qHtml) : ''}
+
+<!-- Administrative Notes -->
+<section>
+  <div class="sec-header"><span class="sec-icon">📝</span>Private Administrative Notes</div>
+  <div class="notes-warning">Confidential — Visible to authorized administrative staff only</div>
+  <div class="sec-body">${notesHtml}</div>
+</section>
+
+<!-- Footer -->
+<div class="page-footer">
+  <div><strong>ACNHS Student Intelligence Dashboard</strong> — Strictly Confidential</div>
+  <div>Document generated: ${printDate} &nbsp;|&nbsp; Student Services Administration</div>
+</div>
+
+<script>
+  // Strip --danger CSS var inline styles that won't resolve in new window
+  document.querySelectorAll('[style*="var(--danger"]').forEach(el => {
+    el.style.cssText = el.style.cssText.replace(/color:\s*var\(--danger\)/g, 'color:#ef4444');
+  });
+  window.onload = function() { window.print(); };
+<\/script>
+</body>
+</html>`;
+
+      const win = window.open('', '_blank', 'width=900,height=1100');
+      if (!win) {
+        alert('Please allow pop-ups for this page to open the print window.');
+        return;
+      }
+      win.document.open();
+      win.document.write(html);
+      win.document.close();
     }
 
     // Export Data (placeholder)
