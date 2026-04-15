@@ -91,3 +91,47 @@ BEGIN
             WITH CHECK (true);
     END IF;
 END $$;
+
+-- ============================================================
+-- Supabase Storage: student-documents bucket
+-- Run this AFTER the table above to enable document uploads
+-- ============================================================
+
+-- Create the bucket (public = files accessible via public URL)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'student-documents',
+    'student-documents',
+    true,
+    10485760,  -- 10 MB limit
+    ARRAY['application/pdf','application/msword',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'image/jpeg','image/png','image/gif','image/webp']
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- RLS policies for storage.objects
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename  = 'objects'
+          AND policyname = 'Allow anon upload to student-documents'
+    ) THEN
+        CREATE POLICY "Allow anon upload to student-documents"
+            ON storage.objects FOR INSERT TO anon
+            WITH CHECK (bucket_id = 'student-documents');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies
+        WHERE schemaname = 'storage'
+          AND tablename  = 'objects'
+          AND policyname = 'Allow anon read from student-documents'
+    ) THEN
+        CREATE POLICY "Allow anon read from student-documents"
+            ON storage.objects FOR SELECT TO anon
+            USING (bucket_id = 'student-documents');
+    END IF;
+END $$;

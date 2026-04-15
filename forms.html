@@ -654,6 +654,39 @@ body {
 .tracker-docs-note {
   font-size: 11px; color: #94a3b8; line-height: 1.6; margin: 0;
 }
+.tracker-docs-upload-section {
+  margin-top: 12px; padding-top: 12px;
+  border-top: 1px solid rgba(249,115,22,0.15);
+}
+.tracker-docs-upload-heading {
+  font-size: 11px; font-weight: 700; color: #fb923c;
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+}
+.tracker-docs-uploaded-files {
+  display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px;
+}
+.tracker-docs-uploaded-item {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: #e2e8f0;
+}
+.tracker-docs-uploaded-item svg { flex-shrink: 0; color: #4ade80; }
+.tracker-docs-uploaded-item a {
+  color: #7eb8f7; text-decoration: none; word-break: break-all;
+}
+.tracker-docs-uploaded-item a:hover { text-decoration: underline; }
+.tracker-docs-upload-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.tracker-docs-upload-btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: rgba(249,115,22,0.12); border: 1px solid rgba(249,115,22,0.35);
+  color: #fb923c; border-radius: 6px; padding: 7px 16px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background 0.15s;
+}
+.tracker-docs-upload-btn:hover { background: rgba(249,115,22,0.22); }
+.tracker-docs-upload-btn.uploading { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+.tracker-docs-upload-hint { font-size: 11px; color: #475569; }
 
 /* ============================================================ */
 /* LOCKED IDENTITY FIELD (session-verified) */
@@ -2374,7 +2407,27 @@ function renderTracker() {
           Documents Required from You
         </div>
         <ul class="tracker-docs-list">${requestedDocs.map(d => `<li>${escHtml(d)}</li>`).join('')}</ul>
-        <p class="tracker-docs-note">Please submit the above documents to the Office of Student Services at <strong>student-services@acnhs.am</strong> or in person, quoting your reference number.</p>
+        <p class="tracker-docs-note">Please upload your documents below, or submit them in person to the Office of Student Services quoting your reference number.</p>
+        <div class="tracker-docs-upload-section">
+          <div class="tracker-docs-upload-heading">Your Uploaded Documents</div>
+          <div class="tracker-docs-uploaded-files" id="uploaded-files-${escHtml(s.ref)}">
+            ${(s.attachments || []).filter(a => typeof a === 'string' && a.startsWith('http')).map(url => {
+              const fname = decodeURIComponent(url.split('/').pop().split('?')[0]);
+              return `<div class="tracker-docs-uploaded-item">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <a href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(fname)}</a>
+              </div>`;
+            }).join('') || '<span style="font-size:12px;color:#475569">No documents uploaded yet.</span>'}
+          </div>
+          <div class="tracker-docs-upload-row">
+            <label class="tracker-docs-upload-btn" id="upload-btn-${escHtml(s.ref)}">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+              Upload Documents
+              <input type="file" style="display:none" multiple accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.gif" onchange="uploadTrackerDocuments(this,'${escHtml(s.ref)}')">
+            </label>
+            <span class="tracker-docs-upload-hint">PDF, DOC, JPG, PNG · Max 10 MB each</span>
+          </div>
+        </div>
       </div>` : '';
 
     return `
@@ -2411,6 +2464,79 @@ function renderTracker() {
   body.innerHTML = `<div class="tracker-cards" role="list" aria-label="Your submitted requests">${cards}</div>`;
 }
 
+/* ============================================================
+   TRACKER DOCUMENT UPLOAD
+   ============================================================ */
+async function uploadTrackerDocuments(input, ref) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+
+  const btn = document.getElementById('upload-btn-' + ref);
+  const listEl = document.getElementById('uploaded-files-' + ref);
+  if (btn) { btn.classList.add('uploading'); btn.childNodes[0] && (btn.querySelector('svg') || btn).style && null; }
+
+  const sub = submissions.find(s => s.ref === ref);
+  if (!sub) return;
+
+  const sbClient = initSupabase();
+  if (!sbClient) {
+    alert('Upload unavailable — could not connect to storage.');
+    if (btn) btn.classList.remove('uploading');
+    return;
+  }
+
+  const MAX = 10 * 1024 * 1024;
+  const uploadedUrls = [];
+  const errors = [];
+
+  for (const file of files) {
+    if (file.size > MAX) { errors.push(file.name + ' exceeds 10 MB'); continue; }
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${ref}/${Date.now()}_${safeName}`;
+    try {
+      const { error: upErr } = await sbClient.storage
+        .from('student-documents')
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: urlData } = sbClient.storage
+        .from('student-documents')
+        .getPublicUrl(path);
+      uploadedUrls.push(urlData.publicUrl);
+    } catch(e) {
+      errors.push(file.name + ': ' + (e.message || 'upload failed'));
+    }
+  }
+
+  if (uploadedUrls.length > 0 && sub.dbId) {
+    const newAtts = [...(sub.attachments || []), ...uploadedUrls];
+    try {
+      await sbClient
+        .from('student_form_submissions')
+        .update({ attachments: newAtts, updated_at: new Date().toISOString() })
+        .eq('id', sub.dbId);
+      sub.attachments = newAtts;
+    } catch(e) {
+      console.warn('Failed to update attachments record:', e);
+    }
+    // Re-render uploaded list
+    if (listEl) {
+      listEl.innerHTML = newAtts.filter(a => typeof a === 'string' && a.startsWith('http')).map(url => {
+        const fname = decodeURIComponent(url.split('/').pop().split('?')[0]);
+        return `<div class="tracker-docs-uploaded-item">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+          <a href="${escHtml(url)}" target="_blank" rel="noopener">${escHtml(fname)}</a>
+        </div>`;
+      }).join('') || '<span style="font-size:12px;color:#475569">No documents uploaded yet.</span>';
+    }
+  }
+
+  if (btn) btn.classList.remove('uploading');
+  input.value = '';
+
+  if (errors.length) alert('Some files could not be uploaded:\n' + errors.join('\n'));
+  else if (uploadedUrls.length) alert(uploadedUrls.length + ' file(s) uploaded successfully.');
+}
+
 // Init tracker — fetch live statuses from Supabase, fall back to sessionStorage
 async function initTracker() {
   try {
@@ -2419,7 +2545,7 @@ async function initTracker() {
       const p = loadStudentData();
       let query = sbClient
         .from('student_form_submissions')
-        .select('reference_number, form_key, form_title, form_category, subject, institutional_email, status, submitted_at, action_history')
+        .select('id, reference_number, form_key, form_title, form_category, subject, institutional_email, status, submitted_at, action_history, attachments')
         .order('submitted_at', { ascending: false });
 
       // Match by student_id OR email so we catch all their records
@@ -2445,7 +2571,9 @@ async function initTracker() {
             ? new Date(r.submitted_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
             : '—',
           timestamp:      r.submitted_at ? new Date(r.submitted_at).getTime() : 0,
-          action_history: Array.isArray(r.action_history) ? r.action_history : []
+          action_history: Array.isArray(r.action_history) ? r.action_history : [],
+          attachments:    Array.isArray(r.attachments) ? r.attachments : [],
+          dbId:           r.id
         }));
         try { sessionStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions)); } catch(e){}
       }
