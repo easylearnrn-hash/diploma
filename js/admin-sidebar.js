@@ -181,6 +181,7 @@
         <a href="${item.href}" class="nav-item ${currentPage === item.href ? 'active' : ''}" data-tooltip="${item.text}" ${item.id ? `id="${item.id}"` : ''}>
           <span class="icon">${item.icon}</span>
           <span class="text">${item.text}</span>
+          ${item.href === 'admin-forms.html' ? '<span class="nav-badge" id="formsNavBadge" style="display:none">0</span>' : ''}
         </a>
       `).join('');
 
@@ -401,12 +402,15 @@
 
     // Setup event listeners
     setupSidebarEvents();
-    
+
     // Restore collapsed state from localStorage
     const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
     if (isCollapsed) {
       sidebar.classList.add('collapsed');
     }
+
+    // Initialize submission badge
+    initFormsBadge();
   }
 
   // Setup event listeners
@@ -837,8 +841,76 @@
           from { transform: translateX(0); opacity: 1; }
           to { transform: translateX(400px); opacity: 0; }
         }
+        .nav-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 18px;
+          height: 18px;
+          padding: 0 5px;
+          border-radius: 9px;
+          background: #ef4444;
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          margin-left: auto;
+          flex-shrink: 0;
+          box-shadow: 0 2px 6px rgba(239,68,68,0.45);
+        }
       `;
       document.head.appendChild(style);
+    }
+  }
+
+  /* ============================================================
+     FORMS BADGE — unread submission count
+     ============================================================ */
+  function initFormsBadge() {
+    const currentPage = window.location.pathname.split('/').pop();
+
+    if (currentPage === 'admin-forms.html') {
+      // Mark seen and hide badge
+      localStorage.setItem('formsLastSeen', new Date().toISOString());
+      const badge = document.getElementById('formsNavBadge');
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+
+    // Fetch count on other pages, then poll every 60 s
+    fetchFormsBadgeCount();
+    setInterval(fetchFormsBadgeCount, 60000);
+  }
+
+  async function fetchFormsBadgeCount() {
+    try {
+      if (typeof initSupabase !== 'function') return;
+      const sbClient = initSupabase();
+      if (!sbClient) return;
+
+      const lastSeen = localStorage.getItem('formsLastSeen');
+      let query = sbClient
+        .from('student_form_submissions')
+        .select('id', { count: 'exact', head: true });
+
+      if (lastSeen) {
+        query = query.gt('submitted_at', lastSeen);
+      }
+
+      const { count, error } = await query;
+      if (error) return;
+
+      const badge = document.getElementById('formsNavBadge');
+      if (!badge) return;
+
+      if (count && count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.style.display = 'inline-flex';
+      } else {
+        badge.style.display = 'none';
+      }
+    } catch(e) {
+      console.warn('Forms badge fetch failed:', e);
     }
   }
 
