@@ -2321,6 +2321,25 @@ async function submitForm() {
   try {
     const sbClient = initSupabase();
     if (sbClient) {
+      // Upload any attached files to storage first and collect public URLs
+      const attachmentUrls = [];
+      for (const { file } of uploadedFilesData) {
+        try {
+          const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+          const path = `${refNum}/${Date.now()}_${safeName}`;
+          const { error: upErr } = await sbClient.storage
+            .from('student-documents')
+            .upload(path, file, { upsert: true });
+          if (upErr) throw upErr;
+          const { data: urlData } = sbClient.storage
+            .from('student-documents')
+            .getPublicUrl(path);
+          attachmentUrls.push(urlData.publicUrl);
+        } catch (fileErr) {
+          console.warn('File upload failed during submission:', file.name, fileErr);
+        }
+      }
+
       await sbClient.from('student_form_submissions').insert([{
         reference_number:    refNum,
         form_key:            currentFormKey,
@@ -2333,7 +2352,7 @@ async function submitForm() {
         subject:             subject,
         statement:           statement,
         effective_date:      effDate,
-        attachments:         fileNames,
+        attachments:         attachmentUrls,
         status:              'submitted',
         priority:            'normal',
         action_history:      [{ action: 'Submitted', by: email, at: new Date().toISOString() }]
