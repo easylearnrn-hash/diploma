@@ -3800,6 +3800,25 @@
       window.open('student-dashboard.html', '_blank');
     }
 
+    // ==================== NOTE OPENER (bridges auth to localStorage) ====================
+    function openHubNote(url) {
+      // Bridge student identity into localStorage so the new tab (empty sessionStorage) can read it
+      const sd = studentData || {};
+      const bridgeMap = {
+        'isLoggedIn':      'true',
+        'userRole':        'student',
+        'userName':        sd.fullName  || sd.name      || '',
+        'userEmail':       sd.email     || '',
+        'studentRecordId': sd.id        || sd.studentDbId || currentStudentId || '',
+        'studentId':       sd.studentId || sd.student_id  || '',
+      };
+      Object.entries(bridgeMap).forEach(([k, v]) => {
+        if (v) localStorage.setItem(k, v);
+      });
+      try { localStorage.setItem('hubStudentData', JSON.stringify(sd)); } catch(_) {}
+      window.open(url, '_blank');
+    }
+
     // ==================== PROGRESS OVERVIEW (LIVE REFRESH) ====================
 
     // Reads module completion % for a single note from the shared DB cache
@@ -6014,7 +6033,7 @@
         notesList.innerHTML = visibleNotes.map(note => {
           return `
             <div class="note-item" data-title="${escapeAttr(cleanNoteTitle(note.title))}"
-              onclick="window.open('${note.htmlFile}', '_blank')">
+              onclick="openHubNote('${escapeAttr(note.htmlFile)}')">  
               <div class="note-item-header">
                 <div class="note-title">${escapeHtml(cleanNoteTitle(note.title))}</div>
                 <div class="note-actions-small">
@@ -6234,7 +6253,7 @@
         const initials = note.title.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
         const pct = readModuleProgress(note.id);
         moduleCards.push(`
-          <div class="mod-card" onclick="window.open('${escapeAttr(note.htmlFile)}', '_blank')">
+          <div class="mod-card" onclick="openHubNote('${escapeAttr(note.htmlFile)}')">
             <div class="mod-card-accent" style="background:${cfg.accent}"></div>
             <div class="mod-card-body">
               <div class="mod-card-icon" style="background:linear-gradient(145deg,${cfg.c1},${cfg.c2});box-shadow:0 8px 24px ${cfg.c1}40">
