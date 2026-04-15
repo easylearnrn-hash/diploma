@@ -624,6 +624,7 @@ body {
 .status-approved    { background:rgba(34,197,94,0.10);  border:1px solid rgba(34,197,94,0.24);  color:#4ade80; }
 .status-denied      { background:rgba(239,68,68,0.10);  border:1px solid rgba(239,68,68,0.24);  color:#f87171; }
 .status-docs        { background:rgba(168,85,247,0.10); border:1px solid rgba(168,85,247,0.24); color:#c084fc; }
+.status-closed      { background:rgba(100,116,139,0.10); border:1px solid rgba(100,116,139,0.24); color:#94a3b8; }
 
 /* ============================================================ */
 /* LOCKED IDENTITY FIELD (session-verified) */
@@ -1785,17 +1786,7 @@ body {
           </div>
           <div>
             <label class="form-label" for="fieldProgram">Program / Cohort <span class="required" aria-hidden="true">*</span></label>
-            <select class="form-select" id="fieldProgram" name="program" required>
-              <option value="" disabled selected>Select your program</option>
-              <option value="ADN — Group A">ADN — Group A</option>
-              <option value="ADN — Group B">ADN — Group B</option>
-              <option value="ADN — Group C">ADN — Group C</option>
-              <option value="ADN — Group D">ADN — Group D</option>
-              <option value="ADN — Group E">ADN — Group E</option>
-              <option value="BSN — Track 1">BSN — Track 1</option>
-              <option value="BSN — Track 2">BSN — Track 2</option>
-              <option value="Other / Not Listed">Other / Not Listed</option>
-            </select>
+            <input class="form-input field-locked" type="text" id="fieldProgram" name="program" readonly tabindex="-1" aria-readonly="true" placeholder="Loading…">
           </div>
         </div>
 
@@ -2096,35 +2087,11 @@ function openForm(key) {
     }
   });
 
-  // Program / Cohort — match stored group/program to select option and visually lock
+  // Program / Cohort — fill from student session (read-only)
   const programEl = document.getElementById('fieldProgram');
   const prog = p.program || p.group || '';
-  if (programEl) {
-    programEl.style.pointerEvents = '';
-    programEl.style.opacity = '';
-    programEl.style.cursor = '';
-    programEl.style.borderColor = '';
-    programEl.style.background = '';
-    if (prog) {
-      let matched = false;
-      Array.from(programEl.options).forEach(opt => {
-        if (opt.value && (
-          opt.value.toLowerCase() === prog.toLowerCase() ||
-          opt.value.toLowerCase().includes(prog.toLowerCase()) ||
-          prog.toLowerCase().includes(opt.value.toLowerCase())
-        )) {
-          programEl.value = opt.value;
-          matched = true;
-        }
-      });
-      if (matched && programEl.value) {
-        programEl.style.pointerEvents = 'none';
-        programEl.style.opacity = '0.8';
-        programEl.style.cursor = 'default';
-        programEl.style.borderColor = 'rgba(201,168,76,0.28)';
-        programEl.style.background = 'rgba(201,168,76,0.05)';
-      }
-    }
+  if (programEl && prog) {
+    programEl.value = prog;
   }
 
   // Show session identity notice if we have pre-populated data
@@ -2322,6 +2289,8 @@ async function submitForm() {
     footer.style.display = '';
 
     renderTracker();
+    // Re-fetch live data after a brief delay so the new row is indexed
+    setTimeout(() => initTracker(), 1500);
   }, 700);
 }
 
@@ -2333,7 +2302,8 @@ const STATUS_MAP = {
   review:    { label: 'Under Review',                   cls: 'status-review'    },
   approved:  { label: 'Approved',                       cls: 'status-approved'  },
   denied:    { label: 'Denied',                         cls: 'status-denied'    },
-  docs:      { label: 'Additional Documentation Required', cls: 'status-docs'  }
+  docs:      { label: 'Additional Documentation Required', cls: 'status-docs'  },
+  closed:    { label: 'Closed',                             cls: 'status-closed' }
 };
 
 function renderTracker() {
@@ -2391,8 +2361,50 @@ function renderTracker() {
   body.innerHTML = `<div class="tracker-cards" role="list" aria-label="Your submitted requests">${cards}</div>`;
 }
 
-// Init tracker on load
-renderTracker();
+// Init tracker — fetch live statuses from Supabase, fall back to sessionStorage
+async function initTracker() {
+  try {
+    const sbClient = initSupabase();
+    if (sbClient && _sid && _sid !== 'anon') {
+      const p = loadStudentData();
+      let query = sbClient
+        .from('student_form_submissions')
+        .select('reference_number, form_key, form_title, form_category, subject, institutional_email, status, submitted_at')
+        .order('submitted_at', { ascending: false });
+
+      // Match by student_id OR email so we catch all their records
+      if (p.student_id && p.email) {
+        query = query.or(`student_id.eq.${p.student_id},institutional_email.eq.${p.email}`);
+      } else if (p.student_id) {
+        query = query.eq('student_id', p.student_id);
+      } else if (p.email) {
+        query = query.eq('institutional_email', p.email);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        submissions = data.map(r => ({
+          ref:      r.reference_number,
+          key:      r.form_key,
+          title:    r.form_title,
+          category: r.form_category,
+          subject:  r.subject,
+          studentId: _sid,
+          status:   r.status || 'submitted',
+          date:     r.submitted_at
+            ? new Date(r.submitted_at).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })
+            : '—',
+          timestamp: r.submitted_at ? new Date(r.submitted_at).getTime() : 0
+        }));
+        try { sessionStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(submissions)); } catch(e){}
+      }
+    }
+  } catch(e) {
+    console.warn('Tracker fetch failed, using cached data:', e);
+  }
+  renderTracker();
+}
+initTracker();
 
 /* ============================================================
    LOGO FALLBACK
