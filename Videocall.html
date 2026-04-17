@@ -1408,6 +1408,87 @@
       background: rgba(52,199,89,0.18); border: 1px solid rgba(52,199,89,0.4);
       color: #34c759; cursor: pointer; white-space: nowrap;
     }
+
+    /* ── Google Meet–style: speaking indicator ─────────────────── */
+    .video-tile {
+      transition: box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .video-tile.speaking {
+      box-shadow: 0 0 0 3px #22c55e, 0 0 24px rgba(34, 197, 94, 0.35);
+      border-color: #22c55e !important;
+    }
+
+    /* ── Mic / camera-off badge on tile ───────────────────────── */
+    .tile-badges {
+      position: absolute;
+      bottom: 42px;
+      left: 10px;
+      z-index: 5;
+      display: flex;
+      gap: 4px;
+      pointer-events: none;
+    }
+    .tile-badge {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      background: rgba(239, 68, 68, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    /* ── Chat bubbles (Google Meet–style) ─────────────────────── */
+    .chat-log { display: flex; flex-direction: column; gap: 8px; }
+    .chat-bubble {
+      padding: 9px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .chat-bubble.mine {
+      background: rgba(201, 168, 76, 0.14);
+      border: 1px solid rgba(201, 168, 76, 0.22);
+      align-self: flex-end;
+      max-width: 90%;
+    }
+    .chat-bubble.theirs {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      align-self: flex-start;
+      max-width: 90%;
+    }
+    .chat-bubble .chat-meta {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .chat-bubble .chat-meta strong { color: var(--text-secondary); }
+    .chat-bubble .chat-text { color: var(--text-primary); }
+
+    /* ── Join / Leave float toast ─────────────────────────────── */
+    .join-toast {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(16px);
+      opacity: 0;
+      background: rgba(7, 22, 40, 0.96);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      padding: 9px 22px;
+      font-size: 13px;
+      color: var(--text-primary);
+      z-index: 400;
+      pointer-events: none;
+      transition: opacity 0.28s, transform 0.28s;
+      white-space: nowrap;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+    }
+    .join-toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
   </style>
 </head>
 <body>
@@ -1533,10 +1614,6 @@
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
               Set Overlay
             </button>
-            <button class="control-btn hidden" id="overlayBtn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
-              Set Overlay
-            </button>
             <button class="control-btn" id="raiseHandBtn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
               Raise Hand
@@ -1652,26 +1729,36 @@
     </div>
   </div>
 
-  <!-- ── Overlay Selection Modal ── -->
-  <div class="overlay-modal hidden" id="overlayModal">
-    <div class="overlay-modal-content">
-      <div class="overlay-modal-header">
-        <div class="overlay-modal-title">Select Video Overlay</div>
-        <button class="btn btn-secondary" style="padding: 4px 8px; border: none; background: transparent; color: var(--text-muted);" id="closeOverlayModal" title="Close">✕</button>
+  <!-- ── Pre-join Overlay (student knocks before entering) ── -->
+  <div class="prejoin-overlay hidden" id="prejoinOverlay">
+    <div class="prejoin-card">
+      <div class="prejoin-logo">
+        <img data-acnhs-logo alt="ACNHS">
       </div>
-      
-      <label for="overlayTitleInput" style="display:block; margin-bottom:8px; font-size:0.9rem; color:var(--text-muted);">Host Name Overlay Text</label>
-      <input type="text" id="overlayTitleInput" class="form-input" style="margin-bottom: 20px;" placeholder="e.g. Dr. Hrach Vardanyan">
-      
-      <div class="overlay-list" id="overlayList"></div>
-      
-      <div class="overlay-modal-actions">
-        <button class="btn btn-secondary" id="clearOverlayBtn">Clear</button>
-        <button class="btn" id="uploadOverlayBtn">Upload New PNG</button>
-        <button class="btn btn-primary" id="applyOverlayBtn" style="background:var(--accent-blue); color:#fff; border:none;">Apply</button>
+      <h2>Ready to Join?</h2>
+      <div class="prejoin-session-name" id="prejoinSessionName">ACNHS Live Session</div>
+      <div class="prejoin-identity">
+        Joining as <strong id="prejoinUserName">—</strong> ·
+        <span id="prejoinUserRole">Student</span>
       </div>
-      <input type="file" id="overlayFileInput" accept="image/png" style="display:none;">
+      <button class="prejoin-btn" id="prejoinRequestBtn">Request to Join</button>
+      <div class="prejoin-waiting" id="prejoinWaiting">
+        <p><span class="wait-dot"></span>Waiting for the host to admit you…</p>
+      </div>
+      <div class="prejoin-denied" id="prejoinDenied">
+        <p>Your request was declined. You may request to join again.</p>
+      </div>
     </div>
+  </div>
+
+  <!-- ── Lobby Toast (host incoming-request notification) ── -->
+  <div class="lobby-toast" id="lobbyToast">
+    <div class="lt-dot"></div>
+    <div class="lt-text">
+      <div class="lt-name" id="toastName"></div>
+      <div class="lt-sub" id="toastSub"></div>
+    </div>
+    <button class="lt-btn" id="toastViewBtn">View</button>
   </div>
 
   <!-- ── Inline Sign-In Modal ── -->
@@ -1901,10 +1988,8 @@
     if (dom.toggleFullscreenBtnControl) {
       dom.toggleFullscreenBtnControl.addEventListener('click', toggleFullscreen);
     }
-    dom.leaveBtn.addEventListener('click', () => {
-      leaveSession();
-    });
     dom.sendChatBtn.addEventListener('click', sendChatMessage);
+    dom.chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendChatMessage(); });
 
     dom.toggleCameraBtn.addEventListener('click', () => toggleMedia('camera'));
     dom.toggleMicBtn.addEventListener('click', () => toggleMedia('mic'));
@@ -2492,6 +2577,7 @@
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
+      await fetchChatHistory();
       setupWebRTC();
       // Host: listen for lobby join requests from students
       subscribeLobby();
@@ -2555,6 +2641,7 @@
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
+      await fetchChatHistory();
       setupWebRTC();
       // Host joining via code: also listen for lobby requests
       if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
@@ -2895,6 +2982,7 @@
       teardownWebRTC();
 
       stopLocalMedia();
+      stopSpeakingDetection();
       clearPersistedSession();
       stopTimer();
       stopLobbyPolling();
@@ -3003,12 +3091,7 @@
       state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
         const msg = payload.payload;
         if (!msg || msg.userId === user.id) return;
-        const node = document.createElement('div');
-        node.className = 'panel-card';
-        node.innerHTML = `<strong>${escapeHtml(msg.userName || 'Participant')}</strong> <small style="color:var(--text-muted)">${escapeHtml(msg.userRole || '')}</small><br><small>${escapeHtml(msg.time || '')}</small><p>${escapeHtml(msg.message || '')}</p>`;
-        dom.chatLog.querySelector('.empty-state')?.remove();
-        dom.chatLog.appendChild(node);
-        dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+        appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '', false);
       });
 
       // ── Listen for hand-raise status from other participants ──
@@ -3071,19 +3154,18 @@
       });
 
       // ── Listen for lobby admit/deny events (host actions) ───────
+      // lobby_admitted / lobby_denied: future-use broadcast events.
+      // Actual admission is polled by the student via startLobbyPolling().
       state.broadcastChannel.on('broadcast', { event: 'lobby_admitted' }, payload => {
         const msg = payload.payload;
-        console.log('[WebRTC] Student admitted to lobby:', msg.userId, msg.userName);
-        // Remove from waiting list
-        state.lobbyRequests = state.lobbyRequests.filter(r => r.id === req.id);
+        if (!msg?.userId) return;
+        state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
         renderLobby();
-        showLobbyToast(req);
       });
       state.broadcastChannel.on('broadcast', { event: 'lobby_denied' }, payload => {
         const msg = payload.payload;
-        console.log('[WebRTC] Student denied from lobby:', msg.userId, msg.userName);
-        // Remove from waiting list
-        state.lobbyRequests = state.lobbyRequests.filter(r => r.id === req.id);
+        if (!msg?.userId) return;
+        state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
         renderLobby();
       });
 
@@ -3185,7 +3267,11 @@
       peer.on('stream', remoteStream => {
         console.log('[WebRTC] ✅ Received remote stream from', targetUserId);
         state.remoteStreams[targetUserId] = remoteStream;
+        attachSpeakingDetection(targetUserId, remoteStream);
         updateVideoGrid();
+        // Show join toast using name from attendance rows
+        const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === targetUserId);
+        if (row?.participant_name) showJoinToast(`${row.participant_name} joined`);
       });
 
       peer.on('connect', () => {
@@ -3215,6 +3301,9 @@
         try { peer.destroy(); } catch (_) {}
         delete state.peers[targetUserId];
       }
+      detachSpeakingDetection(targetUserId);
+      const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === targetUserId);
+      if (row?.participant_name) showJoinToast(`${row.participant_name} left`);
       delete state.remoteStreams[targetUserId];
     }
 
@@ -3579,6 +3668,7 @@
       await updateAttendance('join');  // Attendance starts HERE — only after admission
       await fetchAttendance();
       subscribeAttendance();
+      await fetchChatHistory();
       setupWebRTC();
       startTimer();
     }
@@ -3609,6 +3699,7 @@
 
       teardownWebRTC();
       stopLocalMedia();
+      stopSpeakingDetection();
 
       if (db) {
         await db
@@ -3875,13 +3966,8 @@
       const message = dom.chatInput.value.trim();
       if (!message) return;
       const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const node = document.createElement('div');
-      node.className = 'panel-card';
-      node.innerHTML = `<strong>${escapeHtml(user.name)}</strong><br><small>${timestamp}</small><p>${escapeHtml(message)}</p>`;
-      dom.chatLog.querySelector('.empty-state')?.remove();
-      dom.chatLog.appendChild(node);
+      appendChatBubble(user.name, message, timestamp, true);
       dom.chatInput.value = '';
-      dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
 
       // Log chat to activity log
       logActivity('chat_message');
@@ -3998,6 +4084,8 @@
 
         state.media.camera = true;
         state.media.mic = true;
+        attachSpeakingDetection('local', state.localStream);
+        startSpeakingDetection();
         updateVideoGrid();
         updateMediaButtons();
       } catch (err) {
@@ -4008,6 +4096,8 @@
           state.localStream = audioStream;
           state.media.camera = false;
           state.media.mic = true;
+          attachSpeakingDetection('local', audioStream);
+          startSpeakingDetection();
           showNotice('Camera not available — microphone only. Check camera permissions.');
           updateVideoGrid();
           updateMediaButtons();
@@ -4198,14 +4288,14 @@
         state.media.handRaised ? 'active' : '');
 
       setBtn(dom.toggleFullscreenBtnControl,
-        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>`,
+        `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>`,
         'Fullscreen',
         '');
 
       // Special case: if in fullscreen mode, override the button to show "Exit Fullscreen"
       if (document.fullscreenElement || document.webkitFullscreenElement) {
         setBtn(dom.toggleFullscreenBtnControl,
-          `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3m10 0h3a2 2 0 0 1 2 2v3m0 10v3a2 2 0 0 1-2 2h-3m-10 0H5a2 2 0 0 1-2-2v-3"/>`,
+          `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V5a2 2 0 0 1 2-2h3m10 0h3a2 2 0 0 1 2 2v3m0 10v3a2 2 0 0 1-2 2h-3m-10 0H5a2 2 0 0 1-2-2v-3"/></svg>`,
           'Exit Fullscreen',
           '');
       }
@@ -4219,6 +4309,97 @@
       ].forEach(({ btn, panel }) => {
         btn.classList.toggle('active', panel === activePanel);
       });
+    }
+
+    // ── Speaking / audio-level detection (Google Meet–style) ──────
+    const _audioCtxMap = new Map(); // uid → { ctx, analyser, dataArr }
+    let _speakingTick = null;
+
+    function attachSpeakingDetection(uid, stream) {
+      if (!stream?.getAudioTracks().length) return;
+      detachSpeakingDetection(uid);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.4;
+        source.connect(analyser);
+        const dataArr = new Uint8Array(analyser.frequencyBinCount);
+        _audioCtxMap.set(uid, { ctx, analyser, dataArr });
+      } catch (e) {
+        console.warn('[Speaking] analyser error:', e.message);
+      }
+    }
+
+    function detachSpeakingDetection(uid) {
+      const entry = _audioCtxMap.get(uid);
+      if (entry) { try { entry.ctx.close(); } catch (_) {} _audioCtxMap.delete(uid); }
+    }
+
+    function startSpeakingDetection() {
+      if (_speakingTick) return;
+      _speakingTick = setInterval(() => {
+        const THRESHOLD = 10;
+        for (const [uid, { analyser, dataArr }] of _audioCtxMap) {
+          analyser.getByteFrequencyData(dataArr);
+          const rms = Math.sqrt(dataArr.reduce((s, v) => s + v * v, 0) / dataArr.length);
+          const isSpeaking = rms > THRESHOLD;
+          const audible = uid === 'local' ? state.media.mic : state.media.speaker;
+          const tile = uid === 'local'
+            ? document.getElementById('localVideoTile')
+            : document.querySelector(`.video-tile[data-uid="${uid}"]`);
+          if (tile) tile.classList.toggle('speaking', isSpeaking && audible);
+        }
+      }, 150);
+    }
+
+    function stopSpeakingDetection() {
+      clearInterval(_speakingTick);
+      _speakingTick = null;
+      for (const uid of _audioCtxMap.keys()) detachSpeakingDetection(uid);
+      document.querySelectorAll('.video-tile.speaking').forEach(t => t.classList.remove('speaking'));
+    }
+
+    // ── Chat helpers ──────────────────────────────────────────────
+    function appendChatBubble(userName, message, time, isMine) {
+      const node = document.createElement('div');
+      node.className = `chat-bubble ${isMine ? 'mine' : 'theirs'}`;
+      node.innerHTML = `<div class="chat-meta"><strong>${escapeHtml(userName)}</strong> &middot; ${escapeHtml(time)}</div><div class="chat-text">${escapeHtml(message)}</div>`;
+      dom.chatLog.querySelector('.empty-state')?.remove();
+      dom.chatLog.appendChild(node);
+      dom.chatLog.scrollTop = dom.chatLog.scrollHeight;
+    }
+
+    async function fetchChatHistory() {
+      if (!db || !state.sessionId) return;
+      const { data, error } = await db
+        .from('video_call_chat')
+        .select('*')
+        .eq('session_id', state.sessionId)
+        .order('sent_at', { ascending: true });
+      if (error || !data?.length) return;
+      dom.chatLog.innerHTML = '';
+      data.forEach(msg => {
+        const time = new Date(msg.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        appendChatBubble(msg.user_name || 'Participant', msg.message || '', time, msg.user_id === user.id);
+      });
+    }
+
+    // ── Join / leave float toast ──────────────────────────────────
+    let _joinToastTimeout = null;
+    function showJoinToast(message) {
+      let toast = document.getElementById('_joinToast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = '_joinToast';
+        toast.className = 'join-toast';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(_joinToastTimeout);
+      _joinToastTimeout = setTimeout(() => toast.classList.remove('show'), 3500);
     }
 
     function formatTime(value) {
