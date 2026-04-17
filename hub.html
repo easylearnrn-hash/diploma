@@ -6485,10 +6485,13 @@
         }
 
         // 1. Check native ACNHS Video Call Sessions FIRST
+        const TWO_HOURS_AGO = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+
         const { data: sessions, error: sessionErr } = await db
           .from('video_call_sessions')
-          .select('room_code, room_name, host_name')
+          .select('room_code, room_name, host_name, created_at')
           .in('status', ['live', 'connecting'])
+          .gte('created_at', TWO_HOURS_AGO)
           .order('created_at', { ascending: false })
           .limit(1);
 
@@ -6515,7 +6518,7 @@
         // 2. Fallback to external class_join_links
         const { data, error } = await db
           .from('class_join_links')
-          .select('*')
+          .select('*, created_at')
           .is('ended_at', null)
           .eq('is_active', true)
           .order('created_at', { ascending: false })
@@ -6540,17 +6543,17 @@
         if (matchingLinks.length > 0) {
           hubActiveClassLink = matchingLinks[0];
           
-          // Check expiration
-          if (hubActiveClassLink.expires_at) {
-            const now = new Date();
-            const expiresAt = new Date(hubActiveClassLink.expires_at);
-            if (now >= expiresAt) {
-              console.log('🔗 Hub: Link expired at', expiresAt);
-              if (joinButton) joinButton.style.display = 'none';
-              if (joinBanner) joinBanner.style.display = 'none';
-              hubActiveClassLink = null;
-              return;
-            }
+          // Check expiration — use expires_at if set, otherwise created_at + 2 hours
+          const now = new Date();
+          const expirySource = hubActiveClassLink.expires_at
+            ? new Date(hubActiveClassLink.expires_at)
+            : new Date(new Date(hubActiveClassLink.created_at).getTime() + 2 * 60 * 60 * 1000);
+          if (now >= expirySource) {
+            console.log('🔗 Hub: Link expired at', expirySource);
+            if (joinButton) joinButton.style.display = 'none';
+            if (joinBanner) joinBanner.style.display = 'none';
+            hubActiveClassLink = null;
+            return;
           }
           
           // Show BOTH the button and the banner!
