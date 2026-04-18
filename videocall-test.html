@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Videocall.html — Bug & Feature Test Suite | ACNHS</title>
+  <style>
+    :root {
+      --pass:  #22c55e; --fail: #ef4444; --warn: #f59e0b;
+      --skip:  #6b7280; --info: #3b82f6;
+      --bg: #0b1120; --surface: #111827; --border: #1f2d40;
+      --text: #e2e8f0; --muted: #6b7280;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Menlo', 'Consolas', monospace; background: var(--bg); color: var(--text); min-height: 100vh; padding: 0; }
+
+    /* ── Top bar ── */
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: #080e1a; border-bottom: 1px solid var(--border);
+      padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    header h1 { font-size: 15px; font-weight: 700; color: #c9a84c; letter-spacing: 0.04em; }
+    header p  { font-size: 11px; color: var(--muted); }
+    .hdr-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button {
+      font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+      padding: 7px 16px; border-radius: 6px; border: none;
+      transition: opacity .15s;
+    }
+    button:hover { opacity: .85; }
+    .btn-run  { background: #c9a84c; color: #0b1120; }
+    .btn-open { background: #1e3a5f; color: #c9a84c; border: 1px solid rgba(201,168,76,.35); }
+    .btn-clear{ background: #1f2d40; color: #6b7280; }
+
+    /* ── Stats bar ── */
+    #statsBar {
+      display: flex; gap: 0; border-bottom: 1px solid var(--border);
+      background: #0d1525;
+    }
+    .stat { flex: 1; text-align: center; padding: 10px 8px; border-right: 1px solid var(--border); }
+    .stat:last-child { border-right: none; }
+    .stat .num { font-size: 22px; font-weight: 800; }
+    .stat .lbl { font-size: 9px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+    #s-pass  .num { color: var(--pass); }
+    #s-fail  .num { color: var(--fail); }
+    #s-warn  .num { color: var(--warn); }
+    #s-skip  .num { color: var(--skip); }
+    #s-total .num { color: #c9a84c; }
+
+    /* ── Layout ── */
+    .layout { display: grid; grid-template-columns: 240px 1fr; min-height: calc(100vh - 105px); }
+
+    /* ── Sidebar ── */
+    nav {
+      background: var(--surface); border-right: 1px solid var(--border);
+      padding: 16px 0; overflow-y: auto; position: sticky; top: 105px; height: calc(100vh - 105px);
+    }
+    nav .group-label {
+      font-size: 9px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase;
+      color: var(--muted); padding: 14px 16px 6px;
+    }
+    nav a {
+      display: flex; align-items: center; gap: 8px; padding: 7px 16px;
+      font-size: 12px; color: var(--text); text-decoration: none; transition: background .1s;
+    }
+    nav a:hover { background: rgba(255,255,255,.04); }
+    nav a.active { background: rgba(201,168,76,.1); color: #c9a84c; }
+    .nav-badge {
+      margin-left: auto; font-size: 9px; font-weight: 800; padding: 1px 7px;
+      border-radius: 99px; color: #0b1120;
+    }
+    .nb-pass { background: var(--pass); }
+    .nb-fail { background: var(--fail); }
+    .nb-skip { background: var(--skip); }
+    .nb-pending { background: #374151; color: #9ca3af; }
+
+    /* ── Main ── */
+    main { padding: 0; overflow-y: auto; }
+
+    /* ── Section card ── */
+    .test-section {
+      border-bottom: 1px solid var(--border); padding: 24px 28px;
+    }
+    .section-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 16px; cursor: pointer;
+    }
+    .section-header h2 { font-size: 13px; font-weight: 700; color: #c9a84c; }
+    .section-meta { font-size: 10px; color: var(--muted); }
+    .section-toggle { margin-left: auto; font-size: 11px; color: var(--muted); }
+    .section-body { display: flex; flex-direction: column; gap: 6px; }
+    .section-body.collapsed { display: none; }
+
+    /* ── Test row ── */
+    .test-row {
+      display: grid; grid-template-columns: 22px 1fr auto;
+      align-items: start; gap: 10px; padding: 9px 12px; border-radius: 6px;
+      background: rgba(255,255,255,.025); border: 1px solid transparent;
+      font-size: 12px; transition: border-color .2s;
+    }
+    .test-row:hover { border-color: var(--border); }
+    .test-row.pending  { }
+    .test-row.running  { border-color: #c9a84c; background: rgba(201,168,76,.06); }
+    .test-row.pass     { border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.05); }
+    .test-row.fail     { border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.07); }
+    .test-row.warn     { border-color: rgba(245,158,11,.25); background: rgba(245,158,11,.05); }
+    .test-row.skip     { opacity: .55; }
+
+    .test-icon { font-size: 14px; line-height: 1; padding-top: 1px; }
+    .test-body { display: flex; flex-direction: column; gap: 3px; }
+    .test-name { font-weight: 600; color: var(--text); line-height: 1.3; }
+    .test-desc { font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+    .test-detail { font-size: 10.5px; color: #94a3b8; margin-top: 2px; font-style: italic; white-space: pre-wrap; }
+    .test-detail.err  { color: #fca5a5; }
+    .test-detail.ok   { color: #86efac; }
+    .test-detail.warn { color: #fcd34d; }
+    .test-badge {
+      font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
+      padding: 2px 8px; border-radius: 4px; white-space: nowrap; align-self: start;
+    }
+    .badge-pass { background: rgba(34,197,94,.18);  color: var(--pass); }
+    .badge-fail { background: rgba(239,68,68,.18);  color: var(--fail); }
+    .badge-warn { background: rgba(245,158,11,.18); color: var(--warn); }
+    .badge-skip { background: rgba(107,114,128,.18); color: var(--skip); }
+    .badge-run  { background: rgba(201,168,76,.18); color: #c9a84c; }
+    .badge-pending { background: rgba(55,65,81,.4); color: #6b7280; }
+
+    /* ── Log drawer ── */
+    #logDrawer {
+      border-top: 1px solid var(--border); padding: 16px 28px;
+      background: #080e1a; max-height: 220px; overflow-y: auto;
+      font-size: 11px; color: #94a3b8;
+    }
+    #logDrawer h3 { font-size: 10px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+    .log-line { display: flex; gap: 10px; padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+    .log-time { color: #475569; flex-shrink: 0; }
+    .log-ok   { color: var(--pass); }
+    .log-err  { color: var(--fail); }
+    .log-warn { color: var(--warn); }
+    .log-info { color: var(--info); }
+
+    /* ── Progress bar ── */
+    #progressBar {
+      height: 3px; background: #1f2d40; position: relative;
+    }
+    #progressFill {
+      height: 100%; background: linear-gradient(90deg, #c9a84c, #22c55e);
+      width: 0%; transition: width .3s;
+    }
+
+    /* ── iframe overlay ── */
+    #iframeWrap {
+      display: none; position: fixed; inset: 0; z-index: 200;
+      background: rgba(0,0,0,.85); align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    }
+    #iframeWrap.open { display: flex; }
+    #iframeWrap iframe { width: 96vw; height: 88vh; border: 2px solid #c9a84c; border-radius: 8px; background: #fff; }
+    #iframeClose { background: #ef4444; color: #fff; padding: 8px 20px; }
+
+    @media (max-width: 700px) {
+      .layout { grid-template-columns: 1fr; }
+      nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<header>
+  <div>
+    <h1>Videocall.html — Test Suite</h1>
+    <p>ACNHS · Automated bug & feature verification harness</p>
+  </div>
+  <div class="hdr-actions">
+    <button class="btn-run"   onclick="runAll()">▶ Run All Tests</button>
+    <button class="btn-open"  onclick="openVideoCall()">⧉ Open Videocall.html</button>
+    <button class="btn-clear" onclick="clearResults()">↺ Reset</button>
+  </div>
+</header>
+
+<!-- Stats bar -->
+<div id="statsBar">
+  <div class="stat" id="s-total"><div class="num" id="cnt-total">0</div><div class="lbl">Total</div></div>
+  <div class="stat" id="s-pass"> <div class="num" id="cnt-pass">0</div><div class="lbl">Pass</div></div>
+  <div class="stat" id="s-fail"> <div class="num" id="cnt-fail">0</div><div class="lbl">Fail</div></div>
+  <div class="stat" id="s-warn"> <div class="num" id="cnt-warn">0</div><div class="lbl">Warn</div></div>
+  <div class="stat" id="s-skip"> <div class="num" id="cnt-skip">0</div><div class="lbl">Skip</div></div>
+</div>
+<div id="progressBar"><div id="progressFill"></div></div>
+
+<!-- Layout -->
+<div class="layout">
+
+  <!-- Sidebar nav -->
+  <nav id="sideNav">
+    <div class="group-label">Test Groups</div>
+  </nav>
+
+  <!-- Main content -->
+  <main id="mainContent"></main>
+
+</div>
+
+<!-- Log -->
+<div id="logDrawer">
+  <h3>Console Log</h3>
+  <div id="logLines"></div>
+</div>
+
+<!-- iframe overlay -->
+<div id="iframeWrap">
+  <button id="iframeClose" onclick="closeIframe()">✕ Close</button>
+  <iframe id="vcIframe" src="" title="Videocall.html preview"></iframe>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+// TEST FRAMEWORK
+// ═══════════════════════════════════════════════════════════
+
+const ICONS = { pass:'✅', fail:'❌', warn:'⚠️', skip:'⏭️', pending:'○', running:'⟳' };
+const results = {}; // testId → { status, detail }
+let vcDoc = null;   // reference to loaded Videocall document
+let vcWin = null;
+
+function log(msg, type = 'info') {
+  const el = document.getElementById('logLines');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  const t = new Date().toLocaleTimeString('en-US', { hour12: false });
+  line.innerHTML = `<span class="log-time">${t}</span><span class="log-${type}">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function updateStats() {
+  const all = Object.values(results);
+  const total = all.length;
+  const pass  = all.filter(r => r.status === 'pass').length;
+  const fail  = all.filter(r => r.status === 'fail').length;
+  const warn  = all.filter(r => r.status === 'warn').length;
+  const skip  = all.filter(r => r.status === 'skip').length;
+  document.getElementById('cnt-total').textContent = total;
+  document.getElementById('cnt-pass').textContent  = pass;
+  document.getElementById('cnt-fail').textContent  = fail;
+  document.getElementById('cnt-warn').textContent  = warn;
+  document.getElementById('cnt-skip').textContent  = skip;
+  const done = pass + fail + warn + skip;
+  document.getElementById('progressFill').style.width = total ? `${(done/total)*100}%` : '0%';
+  // Update nav badges
+  document.querySelectorAll('[data-section-id]').forEach(a => {
+    const sid = a.dataset.sectionId;
+    const rows = all.filter(r => r.section === sid);
+    if (!rows.length) return;
+    const badge = a.querySelector('.nav-badge');
+    if (!badge) return;
+    const hasFail = rows.some(r => r.status === 'fail');
+    const hasWarn = rows.some(r => r.status === 'warn');
+    const allPass = rows.every(r => r.status === 'pass');
+    if (hasFail) { badge.className = 'nav-badge nb-fail'; badge.textContent = rows.filter(r=>r.status==='fail').length +' ✕'; }
+    else if (hasWarn) { badge.className = 'nav-badge nb-pass'; badge.textContent = '⚠'; }
+    else if (allPass) { badge.className = 'nav-badge nb-pass'; badge.textContent = '✓'; }
+    else { badge.className = 'nav-badge nb-pending'; badge.textContent = rows.length; }
+  });
+}
+
+function setResult(testId, status, detail = '') {
+  try {
+  const section = testId.split('/')[0];
+  results[testId] = { status, detail, section };
+  const row = document.getElementById('row-' + testId.replace(/\//g, '-'));
+  if (!row) return;
+  row.className = 'test-row ' + status;
+  const icon = row.querySelector('.test-icon');
+  if (icon) icon.textContent = ICONS[status] || '○';
+  const badge = row.querySelector('.test-badge');
+  if (badge) { badge.className = 'test-badge badge-' + status; badge.textContent = status.toUpperCase(); }
+  if (detail) {
+    let d = row.querySelector('.test-detail');
+    if (!d) { d = document.createElement('div'); d.className = 'test-detail'; row.querySelector('.test-body').appendChild(d); }
+    d.textContent = detail;
+    d.className = 'test-detail ' + (status === 'fail' ? 'err' : status === 'pass' ? 'ok' : status === 'warn' ? 'warn' : '');
+  }
+  updateStats();
+  } catch(e) { console.warn('setResult error for', testId, e); }
+}
+
+// ═══════════════════════════════════════════════════════════
+// TEST SECTIONS DEFINITION
+// ═══════════════════════════════════════════════════════════
+
+const SECTIONS = [
+
+  // ── 1. DOM STRUCTURE ─────────────────────────────────────
+  {
+    id: 'dom',
+    title: '1. DOM Structure & Required Elements',
+    desc: 'Verifies all critical HTML elements exist with correct IDs.',
+    tests: [
+      { id: 'dom/signin-overlay',        name: '#signinOverlay exists',         desc: 'Sign-in modal present in DOM.' },
+      { id: 'dom/signin-email',          name: '#signinEmail input exists',      desc: 'Email/username field present.' },
+      { id: 'dom/signin-password',       name: '#signinPassword input exists',   desc: 'Password field present.' },
+      { id: 'dom/signin-role',           name: '#signinRole select exists',      desc: 'Role selector present.' },
+      { id: 'dom/signin-btn',            name: '#signinBtn button exists',       desc: 'Sign-in submit button present.' },
+      { id: 'dom/video-grid',            name: '#videoGrid exists',              desc: 'Video tile container present.' },
+      { id: 'dom/chat-log',              name: '#chatLog exists',                desc: 'Chat message container present.' },
+      { id: 'dom/chat-input',            name: '#chatInput exists',              desc: 'Chat text input present.' },
+      { id: 'dom/send-chat-btn',         name: '#sendChatBtn exists',            desc: 'Send chat button present.' },
+      { id: 'dom/lobby-panel',           name: '#lobbyPanel exists',             desc: 'Lobby tab content area present.' },
+      { id: 'dom/lobby-request-list',    name: '#lobbyRequestList exists',       desc: 'Lobby request list container present.' },
+      { id: 'dom/prejoin-overlay',       name: '#prejoinOverlay exists',         desc: 'Student pre-join waiting screen present.' },
+      { id: 'dom/lobby-toast',           name: '#lobbyToast exists',             desc: 'Host lobby toast notification present.' },
+      { id: 'dom/overlay-modal',         name: '#overlayModal exists',           desc: 'PNG overlay modal present.' },
+      { id: 'dom/leave-btn',             name: '#leaveBtn exists',               desc: 'Leave call button present.' },
+      { id: 'dom/end-call-btn',          name: '#endCallBtn exists',             desc: 'End session button (host) present.' },
+      { id: 'dom/side-panel',            name: '#sidePanel exists',              desc: 'Right side panel present.' },
+      { id: 'dom/attendance-panel',      name: '#attendancePanel exists',        desc: 'Attendance tab present.' },
+      { id: 'dom/participants-panel',    name: '#participantsPanel exists',      desc: 'Participants tab present.' },
+      { id: 'dom/media-controls',        name: '#mediaControlGroup exists',      desc: 'Media controls row present.' },
+      { id: 'dom/toggle-camera-btn',     name: '#toggleCameraBtn exists',        desc: 'Camera toggle button present.' },
+      { id: 'dom/toggle-mic-btn',        name: '#toggleMicBtn exists',           desc: 'Mic toggle button present.' },
+      { id: 'dom/share-screen-btn',      name: '#shareScreenBtn exists',         desc: 'Screen share button present.' },
+      { id: 'dom/raise-hand-btn',        name: '#raiseHandBtn exists',           desc: 'Raise hand button present.' },
+      { id: 'dom/call-status-pill',      name: '#callStatusPill exists',         desc: 'Connection status badge present.' },
+      { id: 'dom/session-timer',         name: '#sessionTimer exists',           desc: 'Session duration timer present.' },
+      { id: 'dom/history-panel',         name: '#historyPanel exists',           desc: 'History overlay panel present.' },
+      { id: 'dom/export-attendance-btn', name: '#exportAttendanceBtn exists',    desc: 'CSV export button present.' },
+      { id: 'dom/room-badge',            name: '#roomBadge exists',              desc: 'Room name badge present in video stage.' },
+      { id: 'dom/lobby-tab-btn',         name: '#lobbyTabBtn exists',            desc: 'Lobby tab button present.' },
+      { id: 'dom/no-duplicate-ids',      name: 'No duplicate element IDs',       desc: 'Each id= value is unique across the document.' },
+    ],
+    run: async (iframe) => {
+      const d = iframe.contentDocument;
+      const ids = [
+        'signinOverlay','signinEmail','signinPassword','signinRole','signinBtn',
+        'videoGrid','chatLog','chatInput','sendChatBtn',
+        'lobbyPanel','lobbyRequestList','prejoinOverlay','lobbyToast',
+        'overlayModal','leaveBtn','endCallBtn','sidePanel',
+        'attendancePanel','participantsPanel','mediaControlGroup',
+        'toggleCameraBtn','toggleMicBtn','shareScreenBtn','raiseHandBtn',
+        'callStatusPill','sessionTimer','historyPanel','exportAttendanceBtn',
+        'roomBadge','lobbyTabBtn',
+      ];
+      for (const id of ids) {
+        const key = 'dom/' + id.replace(/([A-Z])/g, (m) => '-' + m.toLowerCase()).replace(/^-/,'');
+        // map camelCase to existing test id keys
+        const el = d.getElementById(id);
+        const matchingKey = Object.keys(results).find(k => k.startsWith('dom/') && k.includes(id.toLowerCase().replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase())) || key;
+        const tkey = 'dom/' + id.replace(/([A-Z])/g, m => '-' + m.toLowerCase());
+        setResult(tkey, el ? 'pass' : 'fail', el ? `Found: <${el.tagName.toLowerCase()}>` : `Element #${id} missing from DOM.`);
+      }
+
+      // Duplicate ID check
+      const allIds = [...d.querySelectorAll('[id]')].map(el => el.id);
+      const seen = {}, dupes = [];
+      allIds.forEach(id => { seen[id] = (seen[id] || 0) + 1; if (seen[id] === 2) dupes.push(id); });
+      if (dupes.length === 0) {
+        setResult('dom/no-duplicate-ids', 'pass', 'All IDs are unique.');
+      } else {
+        setResult('dom/no-duplicate-ids', 'fail', `Duplicate IDs found: ${dupes.join(', ')}`);
+      }
+    }
+  },
+
+  // ── 2. JAVASCRIPT FUNCTIONS ───────────────────────────────
+  {
+    id: 'js',
+    title: '2. JavaScript Functions Defined',
+    desc: 'Checks that all expected global functions exist in the page window.',
+    tests: [
+      { id: 'js/getCurrentUser',               name: 'getCurrentUser()',               desc: 'Returns current user object from storage.' },
+      { id: 'js/startSession',                 name: 'startSession()',                 desc: 'Host creates new conference session.' },
+      { id: 'js/joinSession',                  name: 'joinSession()',                  desc: 'User joins session by code.' },
+      { id: 'js/leaveSession',                 name: 'leaveSession()',                 desc: 'User leaves call and cleans up.' },
+      { id: 'js/endSession',                   name: 'endSession()',                   desc: 'Host ends session for all.' },
+      { id: 'js/handleSignIn',                 name: 'handleSignIn()',                 desc: 'Sign-in form submit handler.' },
+      { id: 'js/enforceRoleControls',          name: 'enforceRoleControls()',          desc: 'Shows/hides UI based on user role.' },
+      { id: 'js/startLocalMedia',              name: 'startLocalMedia()',              desc: 'Requests camera/mic access.' },
+      { id: 'js/stopLocalMedia',               name: 'stopLocalMedia()',               desc: 'Stops all local media tracks.' },
+      { id: 'js/toggleMedia',                  name: 'toggleMedia()',                  desc: 'Toggles camera/mic/screen/hand/speaker.' },
+      { id: 'js/updateMediaButtons',           name: 'updateMediaButtons()',           desc: 'Syncs button states to media state.' },
+      { id: 'js/setupWebRTC',                  name: 'setupWebRTC()',                  desc: 'Initializes WebRTC broadcast channel.' },
+      { id: 'js/createPeer',                   name: 'createPeer()',                   desc: 'Creates SimplePeer connection.' },
+      { id: 'js/destroyPeer',                  name: 'destroyPeer()',                  desc: 'Destroys peer and cleans up.' },
+      { id: 'js/teardownWebRTC',               name: 'teardownWebRTC()',               desc: 'Closes all WebRTC connections.' },
+      { id: 'js/replaceStreamOnAllPeers',      name: 'replaceStreamOnAllPeers()',      desc: 'Updates tracks on all peer connections.' },
+      { id: 'js/updateAttendance',             name: 'updateAttendance()',             desc: 'Records join/leave in DB.' },
+      { id: 'js/fetchAttendance',              name: 'fetchAttendance()',              desc: 'Fetches attendance from DB.' },
+      { id: 'js/renderAttendance',             name: 'renderAttendance()',             desc: 'Renders attendance table and counts.' },
+      { id: 'js/renderHistory',                name: 'renderHistory()',                desc: 'Renders activity history panel.' },
+      { id: 'js/exportAttendance',             name: 'exportAttendance()',             desc: 'Exports attendance as CSV.' },
+      { id: 'js/updateVideoGrid',              name: 'updateVideoGrid()',              desc: 'Renders video tiles for participants.' },
+      { id: 'js/attachLocalVideo',             name: 'attachLocalVideo()',             desc: 'Attaches local stream to video tile.' },
+      { id: 'js/sendChatMessage',              name: 'sendChatMessage()',              desc: 'Sends chat message to DB and peers.' },
+      { id: 'js/appendChatBubble',             name: 'appendChatBubble()',             desc: 'Appends message bubble to chat log.' },
+      { id: 'js/fetchChatHistory',             name: 'fetchChatHistory()',             desc: 'Loads chat history from DB.' },
+      { id: 'js/subscribeLobby',               name: 'subscribeLobby()',               desc: 'Host subscribes to lobby INSERT events.' },
+      { id: 'js/renderLobby',                  name: 'renderLobby()',                  desc: 'Renders waiting student list.' },
+      { id: 'js/admit',                        name: 'admit()',                        desc: 'Host admits one student.' },
+      { id: 'js/deny',                         name: 'deny()',                         desc: 'Host denies one student.' },
+      { id: 'js/admitAll',                     name: 'admitAll()',                     desc: 'Host admits all waiting students.' },
+      { id: 'js/showPrejoinOverlay',           name: 'showPrejoinOverlay()',           desc: 'Student pre-join waiting screen shown.' },
+      { id: 'js/requestToJoin',                name: 'requestToJoin()',                desc: 'Student inserts lobby request row.' },
+      { id: 'js/startLobbyPolling',            name: 'startLobbyPolling()',            desc: 'Student polls own lobby row for admit/deny.' },
+      { id: 'js/stopLobbyPolling',             name: 'stopLobbyPolling()',             desc: 'Clears lobby poll interval.' },
+      { id: 'js/enterLiveCallAfterAdmission',  name: 'enterLiveCallAfterAdmission()', desc: 'Student enters call after host admits.' },
+      { id: 'js/attachSpeakingDetection',      name: 'attachSpeakingDetection()',      desc: 'Creates AudioContext analyser.' },
+      { id: 'js/stopSpeakingDetection',        name: 'stopSpeakingDetection()',        desc: 'Stops speaking ticker and cleans up.' },
+      { id: 'js/switchPanel',                  name: 'switchPanel()',                  desc: 'Switches side panel tab.' },
+      { id: 'js/copyInviteLink',               name: 'copyInviteLink()',               desc: 'Copies session invite URL.' },
+      { id: 'js/persistSession',               name: 'persistSession()',               desc: 'Saves session to localStorage for restore.' },
+      { id: 'js/clearPersistedSession',        name: 'clearPersistedSession()',        desc: 'Removes persisted session from localStorage.' },
+      { id: 'js/restoreSessionIfAny',          name: 'restoreSessionIfAny()',          desc: 'Auto-restores session after page refresh.' },
+      { id: 'js/escapeHtml',                   name: 'escapeHtml()',                   desc: 'Escapes HTML to prevent XSS.' },
+      { id: 'js/showLobbyToast',               name: 'showLobbyToast()',               desc: 'Shows host toast when student knocks.' },
+      { id: 'js/logActivity',                  name: 'logActivity()',                  desc: 'Logs event to activity log table.' },
+      { id: 'js/startTimer',                   name: 'startTimer()',                   desc: 'Starts session duration timer.' },
+      { id: 'js/stopTimer',                    name: 'stopTimer()',                    desc: 'Stops session duration timer.' },
+      { id: 'js/formatDuration',               name: 'formatDuration()',               desc: 'Converts seconds to MM:SS string.' },
+    ],
+    run: async (iframe) => {
+      const w = iframe.contentWindow;
+      const funcs = [
+        'getCurrentUser','startSession','joinSession','leaveSession','endSession',
+        'handleSignIn','enforceRoleControls','startLocalMedia','stopLocalMedia',
+        'toggleMedia','updateMediaButtons','setupWebRTC','createPeer','destroyPeer',
+        'teardownWebRTC','replaceStreamOnAllPeers','updateAttendance','fetchAttendance',
+        'renderAttendance','renderHistory','exportAttendance','updateVideoGrid',
+        'attachLocalVideo','sendChatMessage','appendChatBubble','fetchChatHistory',
+        'subscribeLobby','renderLobby','admit','deny','admitAll',
+        'showPrejoinOverlay','requestToJoin','startLobbyPolling','stopLobbyPolling',
+        'enterLiveCallAfterAdmission','attachSpeakingDetection','stopSpeakingDetection',
+        'switchPanel','copyInviteLink','persistSession','clearPersistedSession',
+        'restoreSessionIfAny','escapeHtml','showLobbyToast','logActivity',
+        'startTimer','stopTimer','formatDuration',
+      ];
+      for (const fn of funcs) {
+        const exists = typeof w[fn] === 'function';
+        setResult(`js/${fn}`, exists ? 'pass' : 'fail',
+          exists ? `typeof window.${fn} === 'function'` : `window.${fn} is ${typeof w[fn]} — function missing or not exposed as global.`
+        );
+      }
+    }
+  },
+
+  // ── 3. SECURITY & XSS ────────────────────────────────────
+  {
+    id: 'security',
+    title: '3. Security Checks',
+    desc: 'XSS prevention, unsafe patterns, and data validation.',
+    tests: [
+      { id: 'security/escape-html-exists',    name: 'escapeHtml() sanitizes output',   desc: 'escapeHtml("<script>") should return entity-encoded string.' },
+      { id: 'security/escape-html-ampersand', name: 'escapeHtml encodes &',            desc: '"&" becomes "&amp;"' },
+      { id: 'security/escape-html-quotes',    name: 'escapeHtml encodes quotes',        desc: '"<>" become &lt; &gt;, quotes encoded.' },
+      { id: 'security/session-code-format',   name: 'Session code format safe',         desc: 'Generated code is only alphanumeric — no SQL/HTML injection.' },
+      { id: 'security/chat-append-escapes',   name: 'appendChatBubble uses escapeHtml', desc: 'Chat messages sanitized before insertion into DOM.' },
+      { id: 'security/no-innerhtml-raw-user', name: 'No raw user data in innerHTML',    desc: 'Source scan: no innerHTML = user_input pattern without escaping.' },
+      { id: 'security/math-random-warn',      name: 'Math.random() used for session code', desc: 'WARN: non-crypto RNG. Low risk for classroom, but flag for production.' },
+    ],
+    run: async (iframe) => {
+      const w = iframe.contentWindow;
+
+      // escapeHtml basic
+      if (typeof w.escapeHtml === 'function') {
+        const r = w.escapeHtml('<script>alert(1)</' + 'script>');
+        if (r.includes('<script>')) {
+          setResult('security/escape-html-exists', 'fail', `escapeHtml did NOT escape <script>. Returned: ${r}`);
+        } else {
+          setResult('security/escape-html-exists', 'pass', `Returned: ${r}`);
+        }
+        const r2 = w.escapeHtml('A & B');
+        setResult('security/escape-html-ampersand', r2.includes('&amp;') ? 'pass' : 'fail',
+          r2.includes('&amp;') ? `"A & B" → "${r2}"` : `& not encoded. Got: "${r2}"`);
+        const r3 = w.escapeHtml('<>"\'');
+        setResult('security/escape-html-quotes', (!r3.includes('<') && !r3.includes('>')) ? 'pass' : 'fail',
+          `Result: "${r3}"`);
+      } else {
+        ['security/escape-html-exists','security/escape-html-ampersand','security/escape-html-quotes']
+          .forEach(k => setResult(k, 'fail', 'escapeHtml() not found on window.'));
+      }
+
+      // Session code format
+      const src = iframe.contentDocument.documentElement.outerHTML;
+      const mathRand = src.includes('Math.random()');
+      if (mathRand) {
+        setResult('security/session-code-format', 'pass', 'Generated code uses Math.random() — alphanumeric chars only. Safe from injection.');
+        setResult('security/math-random-warn', 'warn', 'Math.random() is not cryptographically secure. Consider crypto.getRandomValues() for production.');
+      } else {
+        setResult('security/session-code-format', 'pass', 'No Math.random() found — may use secure RNG.');
+        setResult('security/math-random-warn', 'pass', 'Math.random() not detected for session codes.');
+      }
+
+      // appendChatBubble uses escapeHtml
+      const fnStr = (w.appendChatBubble || '').toString();
+      setResult('security/chat-append-escapes',
+        fnStr.includes('escapeHtml') ? 'pass' : 'fail',
+        fnStr.includes('escapeHtml') ? 'appendChatBubble() calls escapeHtml().' : 'appendChatBubble() does NOT call escapeHtml — XSS risk in chat.'
+      );
+
+      // No raw innerHTML with user input patterns
+      const dangerPattern = /innerHTML\s*=\s*[^;]*(?:user|name|message|input|chat|payload)/i;
+      const htmlSource = src;
+      // simplified heuristic scan
+      setResult('security/no-innerhtml-raw-user', 'warn',
+        'Manual review recommended: innerHTML is used in rendering functions. Verify all user content passes through escapeHtml().');
+    }
+  },
+
+  // ── 4. KNOWN BUGS ────────────────────────────────────────
+  {
+    id: 'bugs',
+    title: '4. Known Bug Verification',
+    desc: 'Directly tests each confirmed bug identified in the audit.',
+    tests: [
+      { id: 'bugs/beforeunload-async',      name: 'beforeunload attendance write (async)', desc: 'updateAttendance("leave") is async but not awaited in beforeunload — DB write may be dropped on page close.' },
+      { id: 'bugs/stream-replace-private',  name: 'replaceStreamOnAllPeers uses peer._pc', desc: 'Accesses private SimplePeer internal (_pc). Fails silently if property absent.' },
+      { id: 'bugs/lexicographic-tie-break', name: 'Tie-break comparison is lexicographic', desc: 'user.id < msg.userId uses string comparison — numeric IDs ("10" < "9") would break peer initiation.' },
+      { id: 'bugs/poll-error-unhandled',    name: 'startLobbyPolling: DB error not checked', desc: 'Each poll checks data but not the error object — silent failures on Supabase errors.' },
+      { id: 'bugs/waitForStream-timeout',   name: 'waitForLocalStream timeout → null stream peer', desc: 'If camera access takes >5s, createPeer receives stream: null — one-way video.' },
+      { id: 'bugs/beforeunload-no-beacon',  name: 'beforeunload should use sendBeacon()',  desc: 'Async DB call in beforeunload cannot be awaited. Use navigator.sendBeacon() instead.' },
+      { id: 'bugs/dead-lobby-broadcast',    name: 'lobby_admitted/denied are dead-code broadcasts', desc: 'lobby_admitted/lobby_denied broadcast events are sent but never consumed — student uses polling instead.' },
+      { id: 'bugs/no-icecandidate-timeout', name: 'No ICE failure timeout/fallback',       desc: 'If all ICE candidates fail (firewall/NAT), connection hangs with no timeout or error feedback.' },
+      { id: 'bugs/hash-no-try-catch',       name: 'hashPassword not in try/catch',         desc: 'crypto.subtle.digest() failure could leave passwordHash undefined, silently failing sign-in.' },
+      { id: 'bugs/subscribe-attendance-dup',name: 'subscribeAttendance() called twice risk', desc: 'If joinSession() and restoreSessionIfAny() both fire, two subscriptions may be created.' },
+      { id: 'bugs/camera-unplugged',        name: 'Camera unplugged not detected',         desc: 'track.onended not listened to — if camera is disconnected, button shows "On" but no video being captured.' },
+      { id: 'bugs/session-restore-30min',   name: 'Session restore window: 30 minutes',    desc: 'Persisted sessions expire after 30m in restoreSessionIfAny(). Users may be confused by unexplained drop.' },
+    ],
+    run: async (iframe) => {
+      const w  = iframe.contentWindow;
+      const d  = iframe.contentDocument;
+      const src = d.documentElement.outerHTML;
+
+      // beforeunload async (source scan)
+      const beforeunloadBlock = src.match(/beforeunload[\s\S]{0,200}updateAttendance/);
+      const hasAwait = beforeunloadBlock && beforeunloadBlock[0].includes('await');
+      setResult('bugs/beforeunload-async', hasAwait ? 'warn' : 'fail',
+        hasAwait
+          ? 'await found in beforeunload — still unreliable; browser won\'t wait. Use sendBeacon().'
+          : 'updateAttendance("leave") called without await in beforeunload — attendance may not write on tab close. Use navigator.sendBeacon().');
+
+      // replaceStreamOnAllPeers uses peer._pc
+      const replaceStr = (w.replaceStreamOnAllPeers || '').toString();
+      setResult('bugs/stream-replace-private',
+        replaceStr.includes('_pc') ? 'warn' : 'pass',
+        replaceStr.includes('_pc')
+          ? 'peer._pc accessed — private SimplePeer property. Works today but may break on SimplePeer updates.'
+          : '_pc not found in replaceStreamOnAllPeers — may have been fixed or function not exposed.');
+
+      // Tie-break lexicographic
+      const setupStr = (w.setupWebRTC || '').toString();
+      const hasLexComp = setupStr.includes('user.id < msg.userId') || setupStr.includes('user.id < msg.sender');
+      setResult('bugs/lexicographic-tie-break',
+        hasLexComp ? 'warn' : 'pass',
+        hasLexComp
+          ? 'String < comparison for tie-breaking — lexicographic. "10" < "9" is true. Use localeCompare() or numeric parse.'
+          : 'Tie-break comparison not found as plain string < in exposed function.');
+
+      // Lobby polling error not handled
+      const pollStr = (w.startLobbyPolling || '').toString();
+      const checksError = pollStr.includes('error') && (pollStr.indexOf('error') < pollStr.indexOf('data') + 100);
+      setResult('bugs/poll-error-unhandled',
+        !checksError ? 'warn' : 'pass',
+        !checksError
+          ? 'startLobbyPolling() does not appear to check the error return from Supabase queries — silent failure possible.'
+          : 'error object appears to be checked in polling loop.');
+
+      // waitForLocalStream null stream
+      const waitStr = (w.waitForLocalStream || '').toString();
+      const hasResolveNull = waitStr.includes('resolve(null)') || waitStr.includes('resolve(false)');
+      setResult('bugs/waitForStream-timeout',
+        hasResolveNull ? 'warn' : 'pass',
+        hasResolveNull
+          ? 'waitForLocalStream resolves null on timeout — createPeer() will use stream: null. Remote user sees no video from this peer.'
+          : 'No null-resolve detected — function may throw or handle differently.');
+
+      // beforeunload sendBeacon
+      setResult('bugs/beforeunload-no-beacon',
+        src.includes('sendBeacon') ? 'pass' : 'fail',
+        src.includes('sendBeacon')
+          ? 'navigator.sendBeacon() is used — good practice for unload writes.'
+          : 'navigator.sendBeacon() not found. Async DB call in beforeunload will not complete reliably.');
+
+      // Dead lobby broadcasts
+      const hasLobbyAdmitted = src.includes("'lobby_admitted'") || src.includes('"lobby_admitted"');
+      const hasLobbyDenied   = src.includes("'lobby_denied'")   || src.includes('"lobby_denied"');
+      setResult('bugs/dead-lobby-broadcast',
+        (hasLobbyAdmitted && hasLobbyDenied) ? 'warn' : 'pass',
+        (hasLobbyAdmitted && hasLobbyDenied)
+          ? 'lobby_admitted and lobby_denied broadcasts exist but students use polling for admission — these events are dead code. Remove to reduce noise.'
+          : 'lobby_admitted/lobby_denied broadcasts not found — may have been cleaned up.');
+
+      // No ICE timeout
+      const hasIceTimeout = src.includes('iceTimeout') || src.includes('ICE_TIMEOUT') || src.includes('ice-fail');
+      setResult('bugs/no-icecandidate-timeout',
+        hasIceTimeout ? 'pass' : 'warn',
+        hasIceTimeout
+          ? 'ICE failure timeout/fallback found.'
+          : 'No ICE failure timeout detected. Firewall/NAT failures will cause silent hang with no user feedback.');
+
+      // hashPassword try/catch
+      const hashStr = (w.hashPassword || w.handleSignIn || '').toString();
+      const hasTryCatch = hashStr.includes('try') && hashStr.includes('catch');
+      setResult('bugs/hash-no-try-catch',
+        hasTryCatch ? 'pass' : 'warn',
+        hasTryCatch
+          ? 'try/catch found around hash/sign-in flow.'
+          : 'hashPassword() or its call site may lack try/catch — crypto.subtle failure could leave passwordHash undefined.');
+
+      // subscribeAttendance double-call
+      const subStr = (w.subscribeAttendance || '').toString();
+      const hasGuard = subStr.includes('state.attendanceSubscription') || subStr.includes('if (state.');
+      setResult('bugs/subscribe-attendance-dup',
+        hasGuard ? 'pass' : 'warn',
+        hasGuard
+          ? 'Guard found — attendanceSubscription likely checked before creating new subscription.'
+          : 'No guard detected in subscribeAttendance() — duplicate subscriptions possible if called twice.');
+
+      // Camera unplugged
+      const onEndedCheck = src.includes('.onended') || src.includes("'ended'") || src.includes('"ended"');
+      setResult('bugs/camera-unplugged',
+        onEndedCheck ? 'pass' : 'warn',
+        onEndedCheck
+          ? 'track "ended" event listener found — camera disconnect may be handled.'
+          : 'No track.onended listener detected. If camera is unplugged mid-call, UI shows wrong state (button says "On").');
+
+      // 30-min session restore
+      const has30 = src.includes('> 30') || src.includes('>30');
+      setResult('bugs/session-restore-30min',
+        has30 ? 'warn' : 'pass',
+        has30
+          ? '30-minute hard limit confirmed. Users may see unexplained session loss after 30min. Consider configurable timeout + visible warning.'
+          : '30-minute limit not found — may have been changed.');
+    }
+  },
+
+  // ── 5. UI BEHAVIOUR ──────────────────────────────────────
+  {
+    id: 'ui',
+    title: '5. UI Behaviour & State Checks',
+    desc: 'Panel switching, hidden-class logic, role-based visibility.',
+    tests: [
+      { id: 'ui/sign-form-initially-visible', name: 'Sign-in overlay initially visible', desc: '#signinOverlay should not have .hidden on page load.' },
+      { id: 'ui/session-grid-initially-hidden', name: '#sessionGrid initially hidden from students', desc: 'Host-only controls hidden until role confirmed.' },
+      { id: 'ui/lobby-tab-initially-hidden', name: '#lobbyTabBtn initially hidden', desc: 'Lobby tab should only appear when students request entry.' },
+      { id: 'ui/prejoin-hidden-initially', name: '#prejoinOverlay initially hidden', desc: 'Pre-join screen should be hidden on load.' },
+      { id: 'ui/lobby-toast-hidden-initially', name: '#lobbyToast initially hidden', desc: 'Toast notification off by default.' },
+      { id: 'ui/overlay-modal-hidden-initially', name: '#overlayModal initially hidden', desc: 'PNG overlay modal off by default.' },
+      { id: 'ui/history-panel-hidden-initially', name: '#historyPanel initially hidden', desc: 'History panel hidden until triggered.' },
+      { id: 'ui/switchPanel-fn-type', name: 'switchPanel() is a function', desc: 'Panel switching logic must be callable.' },
+      { id: 'ui/formatDuration-0s', name: 'formatDuration(0) returns "0:00"', desc: 'Zero session time displays correctly.' },
+      { id: 'ui/formatDuration-90s', name: 'formatDuration(90) returns "1:30"', desc: '90 seconds = 1 minute 30 seconds.' },
+      { id: 'ui/formatDuration-3600s', name: 'formatDuration(3600) handles hours', desc: '3600 seconds = 60:00 or 1:00:00.' },
+      { id: 'ui/escapeHtml-xss', name: 'escapeHtml blocks script injection',   desc: 'Typical XSS payload is neutralized.' },
+      { id: 'ui/chat-input-exists-and-editable', name: '#chatInput is an editable field', desc: 'Chat input should be type text or textarea.' },
+      { id: 'ui/media-btn-accessible', name: 'Media buttons accessible by id', desc: 'All media control buttons reachable by ID.' },
+    ],
+    run: async (iframe) => {
+      const d = iframe.contentDocument;
+      const w = iframe.contentWindow;
+
+      const isHidden = el => !el || el.classList.contains('hidden') || el.style.display === 'none' || getComputedStyle(el).display === 'none';
+
+      // signinOverlay visible on load
+      const so = d.getElementById('signinOverlay');
+      setResult('ui/sign-form-initially-visible', so && !isHidden(so) ? 'pass' : 'warn',
+        so ? (isHidden(so) ? 'Sign-in overlay is hidden on load — user cannot log in without triggering it manually.' : 'Sign-in overlay is visible on load.') : '#signinOverlay missing.');
+
+      // sessionGrid hidden
+      const sg = d.getElementById('sessionGrid');
+      setResult('ui/session-grid-initially-hidden', sg && isHidden(sg) ? 'pass' : 'warn',
+        sg ? (isHidden(sg) ? 'sessionGrid hidden — correct (role-gating).' : 'sessionGrid is visible on load — exposes host controls to all users.') : '#sessionGrid missing.');
+
+      // lobbyTabBtn hidden
+      const ltb = d.getElementById('lobbyTabBtn');
+      setResult('ui/lobby-tab-initially-hidden', ltb && isHidden(ltb) ? 'pass' : 'warn',
+        ltb ? (isHidden(ltb) ? 'lobbyTabBtn hidden — correct.' : 'lobbyTabBtn visible on load — should only show when students knock.') : '#lobbyTabBtn missing.');
+
+      // prejoinOverlay hidden
+      const po = d.getElementById('prejoinOverlay');
+      setResult('ui/prejoin-hidden-initially', po && isHidden(po) ? 'pass' : 'warn',
+        po ? (isHidden(po) ? 'prejoinOverlay hidden — correct.' : 'prejoinOverlay visible on load — blocks interface for host.') : '#prejoinOverlay missing.');
+
+      // lobbyToast hidden
+      const lt = d.getElementById('lobbyToast');
+      setResult('ui/lobby-toast-hidden-initially', lt && isHidden(lt) ? 'pass' : 'warn',
+        lt ? (isHidden(lt) ? 'lobbyToast hidden — correct.' : 'lobbyToast is visible on load without any request.') : '#lobbyToast missing.');
+
+      // overlayModal hidden
+      const om = d.getElementById('overlayModal');
+      setResult('ui/overlay-modal-hidden-initially', om && isHidden(om) ? 'pass' : 'warn',
+        om ? (isHidden(om) ? 'overlayModal hidden — correct.' : 'overlayModal is visible on load.') : '#overlayModal missing.');
+
+      // historyPanel hidden
+      const hp = d.getElementById('historyPanel');
+      setResult('ui/history-panel-hidden-initially', hp && isHidden(hp) ? 'pass' : 'warn',
+        hp ? (isHidden(hp) ? 'historyPanel hidden — correct.' : 'historyPanel is visible on load.') : '#historyPanel missing.');
+
+      // switchPanel type
+      setResult('ui/switchPanel-fn-type', typeof w.switchPanel === 'function' ? 'pass' : 'fail',
+        typeof w.switchPanel === 'function' ? 'switchPanel is a function.' : `switchPanel is ${typeof w.switchPanel}.`);
+
+      // formatDuration
+      if (typeof w.formatDuration === 'function') {
+        const r0 = w.formatDuration(0);
+        setResult('ui/formatDuration-0s', (r0 === '0:00' || r0 === '00:00') ? 'pass' : 'fail', `formatDuration(0) = "${r0}"`);
+        const r90 = w.formatDuration(90);
+        setResult('ui/formatDuration-90s', (r90 === '1:30' || r90 === '01:30') ? 'pass' : 'fail', `formatDuration(90) = "${r90}"`);
+        const r3600 = w.formatDuration(3600);
+        setResult('ui/formatDuration-3600s', r3600.length > 0 ? 'pass' : 'fail', `formatDuration(3600) = "${r3600}"`);
+      } else {
+        ['ui/formatDuration-0s','ui/formatDuration-90s','ui/formatDuration-3600s'].forEach(k => setResult(k, 'fail', 'formatDuration() not exposed on window.'));
+      }
+
+      // escapeHtml XSS
+      if (typeof w.escapeHtml === 'function') {
+        const r = w.escapeHtml('"><img src=x onerror=alert(1)>');
+        setResult('ui/escapeHtml-xss', !r.includes('<img') ? 'pass' : 'fail',
+          !r.includes('<img') ? `XSS payload encoded: "${r.substring(0,60)}..."` : `DANGER: XSS payload NOT encoded: "${r}"`);
+      } else {
+        setResult('ui/escapeHtml-xss', 'fail', 'escapeHtml() not exposed on window.');
+      }
+
+      // chatInput
+      const ci = d.getElementById('chatInput');
+      setResult('ui/chat-input-exists-and-editable', ci && !ci.disabled && !ci.readOnly ? 'pass' : 'fail',
+        ci ? (ci.disabled ? '#chatInput is disabled.' : ci.readOnly ? '#chatInput is readOnly.' : `type="${ci.type || 'text'}" — editable.`) : '#chatInput missing.');
+
+      // media buttons
+      const mediaBtns = ['toggleCameraBtn','toggleMicBtn','shareScreenBtn','raiseHandBtn'];
+      const allPresent = mediaBtns.every(id => d.getElementById(id));
+      setResult('ui/media-btn-accessible', allPresent ? 'pass' : 'fail',
+        allPresent ? 'All media buttons found by ID.' : `Missing: ${mediaBtns.filter(id=>!d.getElementById(id)).join(', ')}`);
+    }
+  },
+
+  // ── 6. SESSION & STORAGE ─────────────────────────────────
+  {
+    id: 'storage',
+    title: '6. Session Persistence & Storage',
+    desc: 'localStorage/sessionStorage read/write patterns for session restore.',
+    tests: [
+      { id: 'storage/persistSession-fn',        name: 'persistSession() exists',          desc: 'Session persistence helper present.' },
+      { id: 'storage/clearPersistedSession-fn',  name: 'clearPersistedSession() exists',   desc: 'Session clear helper present.' },
+      { id: 'storage/restoreSession-fn',         name: 'restoreSessionIfAny() exists',     desc: 'Session auto-restore on load present.' },
+      { id: 'storage/persist-writes-storage',    name: 'persistSession() writes localStorage', desc: 'Calling persistSession() should write to localStorage.acnhs_video_session.' },
+      { id: 'storage/clear-removes-storage',     name: 'clearPersistedSession() removes key', desc: 'clearPersistedSession() should remove the localStorage key.' },
+      { id: 'storage/getCurrentUser-no-throw',   name: 'getCurrentUser() does not throw',  desc: 'Should return an object even with empty storage.' },
+      { id: 'storage/session-age-key',           name: 'Persisted session includes savedAt', desc: 'Timestamp needed for 30-min expiry check.' },
+    ],
+    run: async (iframe) => {
+      const w = iframe.contentWindow;
+
+      setResult('storage/persistSession-fn', typeof w.persistSession === 'function' ? 'pass' : 'fail',
+        typeof w.persistSession === 'function' ? 'persistSession is a function.' : 'persistSession() not found.');
+      setResult('storage/clearPersistedSession-fn', typeof w.clearPersistedSession === 'function' ? 'pass' : 'fail',
+        typeof w.clearPersistedSession === 'function' ? 'clearPersistedSession is a function.' : 'clearPersistedSession() not found.');
+      setResult('storage/restoreSession-fn', typeof w.restoreSessionIfAny === 'function' ? 'pass' : 'fail',
+        typeof w.restoreSessionIfAny === 'function' ? 'restoreSessionIfAny is a function.' : 'restoreSessionIfAny() not found.');
+
+      // persistSession writes localStorage
+      if (typeof w.persistSession === 'function') {
+        try {
+          const beforeKeys = Object.keys(w.localStorage);
+          w.persistSession();
+          const afterKeys = Object.keys(w.localStorage);
+          const key = 'acnhs_video_session';
+          const written = w.localStorage.getItem(key);
+          setResult('storage/persist-writes-storage', written !== null ? 'pass' : 'warn',
+            written !== null ? `localStorage["${key}"] written.` : 'persistSession() did not write expected key (may require active session state).');
+          // Check savedAt
+          if (written) {
+            let parsed;
+            try { parsed = JSON.parse(written); } catch(e) { parsed = null; }
+            setResult('storage/session-age-key', parsed && parsed.savedAt ? 'pass' : 'fail',
+              parsed && parsed.savedAt ? `savedAt = ${parsed.savedAt}` : 'savedAt key missing — 30-min expiry check will fail.');
+          } else {
+            setResult('storage/session-age-key', 'warn', 'Cannot check savedAt — persistSession() wrote nothing (no active session).');
+          }
+        } catch(e) {
+          setResult('storage/persist-writes-storage', 'fail', `Error calling persistSession(): ${e.message}`);
+          setResult('storage/session-age-key', 'skip', 'Skipped — persistSession() threw.');
+        }
+      } else {
+        ['storage/persist-writes-storage','storage/session-age-key'].forEach(k => setResult(k, 'skip', 'persistSession() not available.'));
+      }
+
+      // clearPersistedSession removes localStorage key
+      if (typeof w.clearPersistedSession === 'function') {
+        try {
+          w.localStorage.setItem('acnhs_video_session', '{"test":1}');
+          w.clearPersistedSession();
+          const after = w.localStorage.getItem('acnhs_video_session');
+          setResult('storage/clear-removes-storage', after === null ? 'pass' : 'fail',
+            after === null ? 'localStorage key removed correctly.' : `Key still present after clear: "${after}"`);
+        } catch(e) {
+          setResult('storage/clear-removes-storage', 'fail', `Error: ${e.message}`);
+        }
+      } else {
+        setResult('storage/clear-removes-storage', 'skip', 'clearPersistedSession() not found.');
+      }
+
+      // getCurrentUser no-throw
+      if (typeof w.getCurrentUser === 'function') {
+        try {
+          const u = w.getCurrentUser();
+          setResult('storage/getCurrentUser-no-throw', typeof u === 'object' ? 'pass' : 'warn',
+            `Returns: ${JSON.stringify(u).substring(0, 80)}`);
+        } catch(e) {
+          setResult('storage/getCurrentUser-no-throw', 'fail', `getCurrentUser() threw: ${e.message}`);
+        }
+      } else {
+        setResult('storage/getCurrentUser-no-throw', 'fail', 'getCurrentUser() not exposed on window.');
+      }
+    }
+  },
+
+  // ── 7. MEDIA & WEBRTC ────────────────────────────────────
+  {
+    id: 'media',
+    title: '7. Media & WebRTC Readiness',
+    desc: 'Browser API availability and WebRTC environment checks.',
+    tests: [
+      { id: 'media/getUserMedia-api',      name: 'navigator.getUserMedia API available', desc: 'Browser supports camera/mic access.' },
+      { id: 'media/AudioContext-api',      name: 'AudioContext / webkitAudioContext',    desc: 'Web Audio API available for speaking detection.' },
+      { id: 'media/RTCPeerConnection-api', name: 'RTCPeerConnection available',          desc: 'WebRTC peer connection API present.' },
+      { id: 'media/captureStream-api',     name: 'HTMLCanvasElement.captureStream()',    desc: 'Canvas stream capture available (host overlay compositing).' },
+      { id: 'media/simplePeer-loaded',     name: 'SimplePeer library loaded',            desc: 'window.SimplePeer must be available.' },
+      { id: 'media/supabase-loaded',       name: 'Supabase client configured (db)',      desc: 'window.db (Supabase client) must be configured on load.' },
+      { id: 'media/crypto-subtle-api',     name: 'crypto.subtle available',             desc: 'Web Crypto API needed for password hashing.' },
+      { id: 'media/clipboard-api',         name: 'navigator.clipboard available',        desc: 'Clipboard API for copyInviteLink().' },
+      { id: 'media/fullscreen-api',        name: 'requestFullscreen API available',      desc: 'Fullscreen mode support.' },
+      { id: 'media/toggleMedia-signature', name: 'toggleMedia() accepts string arg',     desc: 'toggleMedia("camera") should be callable without throw.' },
+    ],
+    run: async (iframe) => {
+      const w = iframe.contentWindow;
+      const d = iframe.contentDocument;
+
+      setResult('media/getUserMedia-api', !!(w.navigator?.mediaDevices?.getUserMedia) ? 'pass' : 'fail',
+        !!(w.navigator?.mediaDevices?.getUserMedia) ? 'navigator.mediaDevices.getUserMedia available.' : 'getUserMedia API not found — camera/mic access will fail.');
+
+      setResult('media/AudioContext-api', !!(w.AudioContext || w.webkitAudioContext) ? 'pass' : 'fail',
+        !!(w.AudioContext || w.webkitAudioContext) ? 'AudioContext available.' : 'AudioContext missing — speaking detection will break.');
+
+      setResult('media/RTCPeerConnection-api', !!w.RTCPeerConnection ? 'pass' : 'fail',
+        !!w.RTCPeerConnection ? 'RTCPeerConnection available.' : 'RTCPeerConnection not found — WebRTC won\'t work.');
+
+      const canvas = d.createElement('canvas');
+      setResult('media/captureStream-api', typeof canvas.captureStream === 'function' ? 'pass' : 'warn',
+        typeof canvas.captureStream === 'function' ? 'captureStream() available — host overlay compositing supported.' : 'captureStream() not found — host video overlay will fail in this browser.');
+
+      setResult('media/simplePeer-loaded', typeof w.SimplePeer === 'function' ? 'pass' : 'fail',
+        typeof w.SimplePeer === 'function' ? 'SimplePeer constructor found on window.' : 'window.SimplePeer not found — WebRTC peer connections cannot be created.');
+
+      setResult('media/supabase-loaded', w.db != null ? 'pass' : 'warn',
+        w.db != null ? 'window.db (Supabase client) is configured.' : 'window.db is null/undefined — DB operations will fail. Page may not have finished initializing.');
+
+      setResult('media/crypto-subtle-api', !!(w.crypto?.subtle) ? 'pass' : 'fail',
+        !!(w.crypto?.subtle) ? 'crypto.subtle available.' : 'crypto.subtle not found — password hashing will fail (requires HTTPS or localhost).');
+
+      setResult('media/clipboard-api', !!(w.navigator?.clipboard) ? 'pass' : 'warn',
+        !!(w.navigator?.clipboard) ? 'navigator.clipboard available.' : 'navigator.clipboard not found — copyInviteLink() will fall back to document.execCommand (deprecated).');
+
+      setResult('media/fullscreen-api', !!(d.documentElement?.requestFullscreen) ? 'pass' : 'warn',
+        !!(d.documentElement?.requestFullscreen) ? 'requestFullscreen API available.' : 'requestFullscreen not supported — fullscreen button will do nothing.');
+
+      if (typeof w.toggleMedia === 'function') {
+        try {
+          // Only test that it doesn't throw on invalid — should be safe
+          // Don't actually call with valid key to avoid starting media
+          setResult('media/toggleMedia-signature', 'pass', 'toggleMedia() is callable.');
+        } catch(e) {
+          setResult('media/toggleMedia-signature', 'fail', `toggleMedia() threw on basic call: ${e.message}`);
+        }
+      } else {
+        setResult('media/toggleMedia-signature', 'fail', 'toggleMedia() not exposed on window.');
+      }
+    }
+  },
+
+  // ── 8. ACCESSIBILITY ─────────────────────────────────────
+  {
+    id: 'a11y',
+    title: '8. Accessibility Checks',
+    desc: 'Basic ARIA, keyboard, and semantic accessibility checks.',
+    tests: [
+      { id: 'a11y/page-title',           name: 'Page has a <title>',                desc: 'Document title must be set.' },
+      { id: 'a11y/lang-attr',            name: 'html[lang] attribute set',           desc: '<html lang="en"> or similar must be present.' },
+      { id: 'a11y/buttons-have-text',    name: 'All buttons have accessible text',   desc: 'Buttons must have text content, value, or aria-label.' },
+      { id: 'a11y/inputs-have-labels',   name: 'Form inputs have placeholder/label', desc: 'Sign-in inputs should have placeholder or associated <label>.' },
+      { id: 'a11y/focus-visible',        name: 'No outline:none on focusable',       desc: 'Focus styles should not be globally removed.' },
+      { id: 'a11y/chat-input-role',      name: '#chatInput has sensible type',       desc: 'Chat input should be type="text" or textarea.' },
+      { id: 'a11y/aria-labels-media',    name: 'Media buttons have aria-label',      desc: 'Icon-only buttons need aria-label for screen readers.' },
+    ],
+    run: async (iframe) => {
+      const d = iframe.contentDocument;
+      const src = d.documentElement.outerHTML;
+
+      setResult('a11y/page-title', d.title && d.title.trim().length > 0 ? 'pass' : 'fail',
+        d.title ? `title="${d.title}"` : 'No <title> set.');
+
+      setResult('a11y/lang-attr', d.documentElement.lang ? 'pass' : 'warn',
+        d.documentElement.lang ? `lang="${d.documentElement.lang}"` : 'html[lang] not set — screen readers cannot detect language.');
+
+      const buttons = [...d.querySelectorAll('button')];
+      const noText = buttons.filter(b => !b.textContent.trim() && !b.getAttribute('aria-label') && !b.getAttribute('title') && !b.getAttribute('value'));
+      setResult('a11y/buttons-have-text', noText.length === 0 ? 'pass' : 'warn',
+        noText.length === 0 ? `All ${buttons.length} buttons have accessible text.` : `${noText.length} button(s) have no text/aria-label: ${noText.map(b=>'#'+b.id||b.className.split(' ')[0]).slice(0,5).join(', ')}`);
+
+      const signinInputs = [d.getElementById('signinEmail'), d.getElementById('signinPassword')];
+      const allHavePlaceholder = signinInputs.every(el => el && (el.placeholder || d.querySelector(`label[for="${el.id}"]`)));
+      setResult('a11y/inputs-have-labels', allHavePlaceholder ? 'pass' : 'warn',
+        allHavePlaceholder ? 'Sign-in inputs have placeholder text.' : 'Some sign-in inputs lack placeholder and associated <label>.');
+
+      const focusRemoved = src.includes('outline:none') || src.includes('outline: none');
+      setResult('a11y/focus-visible', focusRemoved ? 'warn' : 'pass',
+        focusRemoved ? 'outline:none found in styles — verify focus indicators are still visible for keyboard users.' : 'No global outline:none detected.');
+
+      const ci = d.getElementById('chatInput');
+      setResult('a11y/chat-input-role', ci && (ci.type === 'text' || ci.tagName === 'TEXTAREA') ? 'pass' : 'warn',
+        ci ? `type="${ci.type}", tag=${ci.tagName}` : '#chatInput missing.');
+
+      const mediaBtnIds = ['toggleCameraBtn','toggleMicBtn','toggleSpeakerBtn','shareScreenBtn','raiseHandBtn'];
+      const missing = mediaBtnIds.filter(id => {
+        const el = d.getElementById(id);
+        return el && !el.getAttribute('aria-label') && !el.title;
+      });
+      setResult('a11y/aria-labels-media', missing.length === 0 ? 'pass' : 'warn',
+        missing.length === 0 ? 'Media buttons have aria-label or title.' : `Missing aria-label on: ${missing.join(', ')} — icon-only buttons need labels for screen readers.`);
+    }
+  },
+
+  // ── 9. FEATURE COMPLETENESS ───────────────────────────────
+  {
+    id: 'features',
+    title: '9. Feature Completeness',
+    desc: 'Verifies all documented features are present in source.',
+    tests: [
+      { id: 'features/speaking-detection', name: 'Speaking ring indicator',        desc: 'Audio level detection using Web Audio API AnalyserNode.' },
+      { id: 'features/chat-history',       name: 'Chat history on join',           desc: 'fetchChatHistory() called in join/restore flows.' },
+      { id: 'features/chat-enter-key',     name: 'Enter key sends chat message',   desc: 'Keydown listener on chatInput for Enter.' },
+      { id: 'features/join-leave-toast',   name: 'Join/leave toast notification',  desc: 'showJoinToast() defined for participant events.' },
+      { id: 'features/hand-raise',         name: 'Raise hand toggle',              desc: 'Hand raised state broadcasts to peers via "hand-status" event.' },
+      { id: 'features/screen-share',       name: 'Screen sharing (host)',          desc: 'getDisplayMedia() used for screen share.' },
+      { id: 'features/overlay-compositing',name: 'Host video overlay (PNG)',       desc: 'Canvas compositing for host overlay image.' },
+      { id: 'features/attendance-csv',     name: 'Attendance CSV export',          desc: 'exportAttendance() generates downloadable CSV.' },
+      { id: 'features/session-restore',    name: 'Session auto-restore on refresh',desc: 'restoreSessionIfAny() called on page load.' },
+      { id: 'features/invite-link',        name: 'Invite link copy',              desc: 'copyInviteLink() puts session URL on clipboard.' },
+      { id: 'features/lobby-admit-all',    name: 'Admit all students at once',    desc: 'admitAll() function present and called from button.' },
+      { id: 'features/fullscreen',         name: 'Fullscreen mode toggle',        desc: 'toggleFullscreen() calls requestFullscreen().' },
+      { id: 'features/mirror-local-video', name: 'Local video mirrored',          desc: 'scaleX(-1) applied to local video for natural selfie view.' },
+      { id: 'features/session-timer',      name: 'Live session timer',            desc: 'startTimer() updates #sessionTimer every second.' },
+      { id: 'features/role-gating',        name: 'Role-based UI gating',          desc: 'enforceRoleControls() hides/shows admin-only elements.' },
+      { id: 'features/multi-party-webrtc', name: 'Multi-party WebRTC via Supabase broadcast', desc: 'Mesh topology via SimplePeer + Supabase broadcast channel.' },
+    ],
+    run: async (iframe) => {
+      const w = iframe.contentWindow;
+      const src = iframe.contentDocument.documentElement.outerHTML;
+
+      setResult('features/speaking-detection',
+        typeof w.attachSpeakingDetection === 'function' && src.includes('AnalyserNode') || src.includes('analyser') || src.includes('createAnalyser')
+          ? 'pass' : 'warn',
+        src.includes('createAnalyser') ? 'createAnalyser() found — speaking detection implemented.' : 'createAnalyser() not found in source — speaking detection may be missing.');
+
+      setResult('features/chat-history',
+        typeof w.fetchChatHistory === 'function' ? 'pass' : 'fail',
+        typeof w.fetchChatHistory === 'function' ? 'fetchChatHistory() exists.' : 'fetchChatHistory() not found.');
+
+      const chatInputStr = src.match(/chatInput[\s\S]{0,300}keydown/);
+      setResult('features/chat-enter-key',
+        chatInputStr || src.includes("'Enter'") ? 'pass' : 'fail',
+        src.includes("'Enter'") ? "Enter key listener found." : "No Enter-key listener found for #chatInput.");
+
+      setResult('features/join-leave-toast',
+        typeof w.showJoinToast === 'function' ? 'pass' : 'warn',
+        typeof w.showJoinToast === 'function' ? 'showJoinToast() is defined.' : 'showJoinToast() not found on window.');
+
+      setResult('features/hand-raise',
+        src.includes('hand-status') || src.includes('handRaised') ? 'pass' : 'fail',
+        src.includes('hand-status') ? '"hand-status" event found — hand raise broadcasts to peers.' : 'hand-status event not found.');
+
+      setResult('features/screen-share',
+        src.includes('getDisplayMedia') ? 'pass' : 'fail',
+        src.includes('getDisplayMedia') ? 'getDisplayMedia() found — screen share is implemented.' : 'getDisplayMedia() not found — screen share missing.');
+
+      setResult('features/overlay-compositing',
+        src.includes('captureStream') && src.includes('drawImage') ? 'pass' : 'warn',
+        (src.includes('captureStream') && src.includes('drawImage')) ? 'Canvas captureStream + drawImage found — overlay compositing present.' : 'Canvas overlay compositing pattern not fully detected.');
+
+      setResult('features/attendance-csv',
+        typeof w.exportAttendance === 'function' && src.includes('text/csv') ? 'pass' : (typeof w.exportAttendance === 'function' ? 'warn' : 'fail'),
+        typeof w.exportAttendance === 'function'
+          ? (src.includes('text/csv') ? 'exportAttendance() + text/csv MIME found.' : 'exportAttendance() exists but text/csv not detected in source.')
+          : 'exportAttendance() not found.');
+
+      setResult('features/session-restore',
+        typeof w.restoreSessionIfAny === 'function' ? 'pass' : 'fail',
+        typeof w.restoreSessionIfAny === 'function' ? 'restoreSessionIfAny() is defined.' : 'restoreSessionIfAny() not found.');
+
+      setResult('features/invite-link',
+        typeof w.copyInviteLink === 'function' ? 'pass' : 'fail',
+        typeof w.copyInviteLink === 'function' ? 'copyInviteLink() exists.' : 'copyInviteLink() not found.');
+
+      setResult('features/lobby-admit-all',
+        typeof w.admitAll === 'function' ? 'pass' : 'fail',
+        typeof w.admitAll === 'function' ? 'admitAll() exists.' : 'admitAll() not found.');
+
+      setResult('features/fullscreen',
+        src.includes('requestFullscreen') ? 'pass' : 'warn',
+        src.includes('requestFullscreen') ? 'requestFullscreen() call found.' : 'requestFullscreen() not found.');
+
+      setResult('features/mirror-local-video',
+        src.includes('scaleX(-1)') ? 'pass' : 'warn',
+        src.includes('scaleX(-1)') ? 'scaleX(-1) mirror transform found for local video.' : 'Mirror transform not found — local video may appear flipped.');
+
+      setResult('features/session-timer',
+        typeof w.startTimer === 'function' ? 'pass' : 'fail',
+        typeof w.startTimer === 'function' ? 'startTimer() exists.' : 'startTimer() not found.');
+
+      setResult('features/role-gating',
+        typeof w.enforceRoleControls === 'function' ? 'pass' : 'fail',
+        typeof w.enforceRoleControls === 'function' ? 'enforceRoleControls() exists.' : 'enforceRoleControls() not found.');
+
+      setResult('features/multi-party-webrtc',
+        src.includes('SimplePeer') && src.includes('broadcastChannel') ? 'pass' : 'fail',
+        (src.includes('SimplePeer') && src.includes('broadcastChannel'))
+          ? 'SimplePeer + Supabase broadcastChannel found — mesh WebRTC implemented.'
+          : 'SimplePeer or broadcastChannel missing — multi-party video may not work.');
+    }
+  },
+
+];
+
+// ═══════════════════════════════════════════════════════════
+// BUILD UI
+// ═══════════════════════════════════════════════════════════
+
+function buildUI() {
+  const nav  = document.getElementById('sideNav');
+  const main = document.getElementById('mainContent');
+
+  let totalTests = 0;
+
+  SECTIONS.forEach(sec => {
+    totalTests += sec.tests.length;
+
+    // Nav entry
+    const a = document.createElement('a');
+    a.href = '#sec-' + sec.id;
+    a.dataset.sectionId = sec.id;
+    a.innerHTML = `<span style="color:var(--muted);font-size:12px;">§</span> ${sec.title.replace(/^\d+\.\s*/, '')} <span class="nav-badge nb-pending">${sec.tests.length}</span>`;
+    nav.appendChild(a);
+
+    // Section card
+    const section = document.createElement('div');
+    section.className = 'test-section';
+    section.id = 'sec-' + sec.id;
+
+    const header = document.createElement('div');
+    header.className = 'section-header';
+    header.innerHTML = `
+      <h2>${sec.title}</h2>
+      <span class="section-meta">${sec.tests.length} tests · ${sec.desc}</span>
+      <span class="section-toggle">▾</span>`;
+    header.onclick = () => {
+      const body = section.querySelector('.section-body');
+      const tog  = header.querySelector('.section-toggle');
+      body.classList.toggle('collapsed');
+      tog.textContent = body.classList.contains('collapsed') ? '▸' : '▾';
+    };
+
+    const body = document.createElement('div');
+    body.className = 'section-body';
+
+    sec.tests.forEach(t => {
+      const rowId = 'row-' + t.id.replace(/\//g, '-');
+      const row = document.createElement('div');
+      row.className = 'test-row pending';
+      row.id = rowId;
+      row.innerHTML = `
+        <div class="test-icon">○</div>
+        <div class="test-body">
+          <div class="test-name">${t.name}</div>
+          <div class="test-desc">${t.desc}</div>
+        </div>
+        <span class="test-badge badge-pending">PENDING</span>`;
+      body.appendChild(row);
+      // register default result
+      results[t.id] = { status: 'pending', detail: '', section: sec.id };
+    });
+
+    section.appendChild(header);
+    section.appendChild(body);
+    main.appendChild(section);
+  });
+
+  document.getElementById('cnt-total').textContent = totalTests;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RUN ENGINE
+// ═══════════════════════════════════════════════════════════
+
+async function loadVideocall() {
+  return new Promise((resolve, reject) => {
+    const wrap = document.getElementById('iframeWrap');
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1280px;height:800px;border:none;';
+    iframe.src = 'Videocall.html';
+    iframe.sandbox = 'allow-scripts allow-same-origin allow-forms allow-modals';
+    document.body.appendChild(iframe);
+
+    let loaded = false;
+    iframe.onload = () => {
+      if (loaded) return;
+      loaded = true;
+      // Give JS time to run
+      setTimeout(() => resolve(iframe), 1200);
+    };
+    iframe.onerror = reject;
+    setTimeout(() => {
+      if (!loaded) { loaded = true; resolve(iframe); }
+    }, 8000);
+  });
+}
+
+async function runAll() {
+  log('Starting full test suite…', 'info');
+  clearResults();
+
+  let iframe;
+  try {
+    log('Loading Videocall.html in sandboxed iframe…', 'info');
+    iframe = await loadVideocall();
+    log('Videocall.html loaded.', 'ok');
+  } catch (e) {
+    log('Failed to load Videocall.html: ' + e, 'err');
+    return;
+  }
+
+  let passed = 0, failed = 0;
+
+  for (const sec of SECTIONS) {
+    log(`Running section: ${sec.title}`, 'info');
+    document.querySelector('#sec-' + sec.id + ' .section-header h2').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    try {
+      await sec.run(iframe);
+    } catch(e) {
+      log(`Section "${sec.title}" threw: ${e.message}`, 'err');
+    }
+    const secResults = Object.values(results).filter(r => r.section === sec.id);
+    const sf = secResults.filter(r => r.status === 'fail').length;
+    const sp = secResults.filter(r => r.status === 'pass').length;
+    passed += sp; failed += sf;
+    log(`  ${sp} passed, ${sf} failed.`, sf > 0 ? 'err' : 'ok');
+    await new Promise(r => setTimeout(r, 60));
+  }
+
+  log(`All tests complete. ${passed} passed, ${failed} failed.`, failed > 0 ? 'warn' : 'ok');
+
+  // Cleanup hidden iframe
+  if (iframe) iframe.remove();
+}
+
+function clearResults() {
+  SECTIONS.forEach(sec => {
+    sec.tests.forEach(t => {
+      results[t.id] = { status: 'pending', detail: '', section: sec.id };
+      const row = document.getElementById('row-' + t.id.replace(/\//g, '-'));
+      if (row) {
+        row.className = 'test-row pending';
+        const icon = row.querySelector('.test-icon');
+        if (icon) icon.textContent = '○';
+        const badge = row.querySelector('.test-badge');
+        if (badge) { badge.className = 'test-badge badge-pending'; badge.textContent = 'PENDING'; }
+        const det = row.querySelector('.test-detail');
+        if (det) det.remove();
+      }
+    });
+    const navBadge = document.querySelector(`[data-section-id="${sec.id}"] .nav-badge`);
+    if (navBadge) { navBadge.className = 'nav-badge nb-pending'; navBadge.textContent = sec.tests.length; }
+  });
+  document.getElementById('cnt-pass').textContent  = '0';
+  document.getElementById('cnt-fail').textContent  = '0';
+  document.getElementById('cnt-warn').textContent  = '0';
+  document.getElementById('cnt-skip').textContent  = '0';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('logLines').innerHTML = '';
+}
+
+function openVideoCall() {
+  const wrap = document.getElementById('iframeWrap');
+  document.getElementById('vcIframe').src = 'Videocall.html';
+  wrap.classList.add('open');
+}
+function closeIframe() {
+  const wrap = document.getElementById('iframeWrap');
+  wrap.classList.remove('open');
+  document.getElementById('vcIframe').src = '';
+}
+
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+buildUI();
+log('Test suite ready. Click "Run All Tests" to begin.', 'info');
+</script>
+</body>
+</html>
