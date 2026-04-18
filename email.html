@@ -2661,6 +2661,22 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       // Real-time preview - also listen to applicant name and email
       document.getElementById('recipientEmail').addEventListener('input', updatePreview);
       document.getElementById('applicantName').addEventListener('input', updatePreview);
+
+      // Auto-fill recipient name from DB when a valid email is entered
+      let _autoFillTimer = null;
+      document.getElementById('recipientEmail').addEventListener('input', function() {
+        clearTimeout(_autoFillTimer);
+        const emailVal = this.value.trim();
+        _autoFillTimer = setTimeout(async () => {
+          if (!validateEmail(emailVal)) return;
+          const nameField = document.getElementById('applicantName');
+          const data = await fetchApplicationIdentifiersByEmail(emailVal);
+          if (data && data.full_name && !nameField.value.trim()) {
+            nameField.value = data.full_name;
+            updatePreview();
+          }
+        }, 600);
+      });
       document.getElementById('emailSubject').addEventListener('input', updatePreview);
       document.getElementById('senderEmail').addEventListener('change', updatePreview); // Update preview when sender changes
       
@@ -2877,7 +2893,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       try {
         const { data, error } = await db
           .from('applications')
-          .select('reference_number, control_number, document_id, verification_hash')
+          .select('reference_number, control_number, document_id, verification_hash, full_name')
           .eq('email', email)
           .order('submission_date', { ascending: false, nullsFirst: false })
           .limit(1)
