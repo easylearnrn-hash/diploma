@@ -113,7 +113,7 @@
     AAA:     'Abdominal Aortic Aneurysm',
     AS:      'Aortic Stenosis',
     MR:      'Mitral Regurgitation',
-    MS:      'Mitral Stenosis',
+    MS:      'Multiple Sclerosis',
     QT:      'QT Interval (cardiac rhythm measure)',
     QRS:     'QRS Complex (ventricular depolarization on ECG)',
     SV:      'Stroke Volume',
