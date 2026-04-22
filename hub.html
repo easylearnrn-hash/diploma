@@ -1299,6 +1299,10 @@
       box-shadow: 0 14px 32px rgba(0,0,0,.30);
     }
     .note-item:active{ transform: translateY(0); }
+    /* Reset <a> defaults when note-item / mod-card is rendered as a native link */
+    a.note-item, a.mod-card { text-decoration: none; color: inherit; }
+    a.note-item { display: block; }
+    a.mod-card  { display: flex; }
     .note-item::before{
       content:"";
       position:absolute;
@@ -3801,10 +3805,14 @@
     }
 
     // ==================== NOTE OPENER (bridges auth to localStorage) ====================
-    function openHubNote(url) {
-      // Bridge student identity into localStorage so the new tab (empty sessionStorage) can read it
+    // Bridge student identity into localStorage so the new tab can read it.
+    // Extracted as a standalone function so <a href> note cards call it
+    // from onclick WITHOUT calling window.open — the browser follows the href
+    // natively, which is NEVER blocked by popup blockers (unlike window.open
+    // when called from a page that was itself opened via window.open).
+    function bridgeHubNote() {
       const sd = studentData || {};
-      const bridgeMap = {
+      const m = {
         'isLoggedIn':      'true',
         'userRole':        'student',
         'userName':        sd.fullName  || sd.name      || '',
@@ -3812,11 +3820,23 @@
         'studentRecordId': sd.id        || sd.studentDbId || currentStudentId || '',
         'studentId':       sd.studentId || sd.student_id  || '',
       };
-      Object.entries(bridgeMap).forEach(([k, v]) => {
-        if (v) localStorage.setItem(k, v);
-      });
+      Object.entries(m).forEach(([k, v]) => { if (v) localStorage.setItem(k, v); });
       try { localStorage.setItem('hubStudentData', JSON.stringify(sd)); } catch(_) {}
-      window.open(url, '_blank');
+    }
+
+    function openHubNote(url) {
+      bridgeHubNote();
+      // Use a hidden <a>.click() instead of window.open — popup blockers
+      // block window.open from pages opened via window.open, but a
+      // programmatic link click is always allowed by every browser.
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { if (a.parentNode) a.parentNode.removeChild(a); }, 100);
     }
 
     // ==================== PROGRESS OVERVIEW (LIVE REFRESH) ====================
@@ -6032,8 +6052,9 @@
 
         notesList.innerHTML = visibleNotes.map(note => {
           return `
-            <div class="note-item" data-title="${escapeAttr(cleanNoteTitle(note.title))}"
-              onclick="openHubNote('${escapeAttr(note.htmlFile)}')">  
+            <a class="note-item" href="${escapeAttr(note.htmlFile)}" target="_blank" rel="noopener noreferrer"
+              data-title="${escapeAttr(cleanNoteTitle(note.title))}"
+              onclick="bridgeHubNote()">
               <div class="note-item-header">
                 <div class="note-title">${escapeHtml(cleanNoteTitle(note.title))}</div>
                 <div class="note-actions-small">
@@ -6046,7 +6067,7 @@
                 </div>
               </div>
             <div class="note-text"></div>
-          </div>
+            </a>
         `;
       }).join('');
 
@@ -6253,7 +6274,7 @@
         const initials = note.title.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
         const pct = readModuleProgress(note.id);
         moduleCards.push(`
-          <div class="mod-card" onclick="openHubNote('${escapeAttr(note.htmlFile)}')">
+          <a class="mod-card" href="${escapeAttr(note.htmlFile)}" target="_blank" rel="noopener noreferrer" onclick="bridgeHubNote()">
             <div class="mod-card-accent" style="background:${cfg.accent}"></div>
             <div class="mod-card-body">
               <div class="mod-card-icon" style="background:linear-gradient(145deg,${cfg.c1},${cfg.c2});box-shadow:0 8px 24px ${cfg.c1}40">
@@ -6275,7 +6296,7 @@
               <div class="mod-prog-track"><div class="mod-prog-fill" data-target="${pct}" style="width:0%;background:${cfg.prog}"></div></div>
               <span class="mod-prog-pct">${pct}%</span>
             </div>
-          </div>`);
+          </a>`);
       }
 
       applyCardPreview('modules', moduleCards);
