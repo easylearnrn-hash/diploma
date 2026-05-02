@@ -1510,14 +1510,16 @@ tr:last-child td{border-bottom:none}
 .fin-enroll-dollar{font-size:13px;font-weight:700;color:var(--text-muted)}
 .fin-enroll-input{background:none;border:none;outline:none;width:90px;font-size:14px;font-weight:800;color:var(--text-primary);text-align:right}
 .fin-enroll-warn{font-size:11px;color:#f59e0b;font-weight:600;line-height:1.45;max-width:210px;text-align:right;display:none}
-/* Editable enrollment amount */
-.fin-enroll-col{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
-.fin-enroll-input-wrap{display:flex;align-items:center;gap:4px;background:rgba(255,255,255,0.05);border:1.5px solid rgba(201,168,76,0.35);border-radius:8px;padding:5px 10px;transition:border-color 0.18s}
-.fin-enroll-input-wrap:focus-within{border-color:#c9a84c}
-.fin-enroll-input-wrap.warn-border{border-color:#f59e0b}
-.fin-enroll-dollar{font-size:13px;font-weight:700;color:var(--text-muted)}
-.fin-enroll-input{background:none;border:none;outline:none;width:90px;font-size:14px;font-weight:800;color:var(--text-primary);text-align:right}
-.fin-enroll-warn{font-size:11px;color:#f59e0b;font-weight:600;line-height:1.45;max-width:210px;text-align:right;display:none}
+/* Enrollment payment history */
+.fin-enroll-history-toggle{background:none;border:none;color:var(--gold-300);font-size:11px;font-weight:700;cursor:pointer;padding:0;margin-top:2px;display:flex;align-items:center;gap:4px;opacity:0.75;white-space:nowrap}
+.fin-enroll-history-toggle:hover{opacity:1}
+.fin-enroll-history{display:none;margin-top:8px;border-top:1px solid rgba(201,168,76,0.15);padding-top:8px;width:100%}
+.fin-enroll-history.open{display:block}
+.fin-enroll-history-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,0.04)}
+.fin-enroll-history-row:last-child{border-bottom:none}
+.fin-enroll-history-date{font-size:11px;color:var(--text-muted);font-weight:600;flex:1}
+.fin-enroll-history-amt{font-size:12px;color:#4ade80;font-weight:800;white-space:nowrap}
+.fin-enroll-history-summary{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--text-secondary);margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
 .fin-suggested-badge{
   display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;
   text-transform:uppercase;color:#020617;
@@ -7464,12 +7466,14 @@ function _finParsePartials(notes) {
   const result = [];
   sections.forEach((sec, i) => {
     if (i === 0) return;
-    const amtMatch = sec.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
-    const appMatch = sec.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
+    const amtMatch  = sec.match(/Amount:\s*\$?([\d,]+\.?\d*)/);
+    const appMatch  = sec.match(/Applied To:\s*\*{0,3}(.+?)\*{0,3}(?=\n|$)/);
+    const dateMatch = sec.match(/Date:\s*(.+?)(?=\n|$)/);
     if (amtMatch && appMatch) {
       result.push({
         amount:    parseFloat(amtMatch[1].replace(/,/g, '')) || 0,
-        appliedTo: appMatch[1].trim()
+        appliedTo: appMatch[1].trim(),
+        date:      dateMatch ? dateMatch[1].trim() : null
       });
     }
   });
@@ -7543,7 +7547,13 @@ function _finParsePendingItems(inv) {
     } else if (d.type === 'month') {
       sublabel = 'Monthly tuition fee';
     }
-    pending.push({ id: d.id, desc: d.desc, total: d.total, paid: d.paid, owed, suggestedAmount, type: d.type, monthIdx: d.monthIdx, sublabel });
+    // Attach payments that match this item for history display
+    const itemPartials = !isPaidFull ? partials.filter(p =>
+      d.desc.toLowerCase().includes(p.appliedTo.toLowerCase().substring(0, 14)) ||
+      p.appliedTo.toLowerCase().includes(d.desc.toLowerCase().substring(0, 14)) ||
+      (d.type === 'enrollment' && (p.appliedTo.toLowerCase().includes('enrollment') || p.appliedTo.toLowerCase().includes('down payment')))
+    ) : [];
+    pending.push({ id: d.id, desc: d.desc, total: d.total, paid: d.paid, owed, suggestedAmount, type: d.type, monthIdx: d.monthIdx, sublabel, partials: itemPartials });
   });
 
   pending.sort((a, b) => {
@@ -7579,18 +7589,47 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
     const badge       = isSuggested ? '<span class="fin-suggested-badge">Suggested</span>' : '';
 
     if (item.type === 'enrollment') {
-      // Enrollment: editable input + 25% warning
-      const minWarnCents = Math.round(item.total * 0.25 * 100); // 25% of ORIGINAL total
+      // Enrollment: editable input + 25% warning + expandable history
+      const minWarnCents = Math.round(item.total * 0.25 * 100);
       const inputVal     = (amtCents / 100).toFixed(2);
+      const hasPriorPayments = item.partials && item.partials.length > 0;
+
+      let historyHtml = '';
+      if (hasPriorPayments) {
+        const rows = item.partials.map(p =>
+          `<div class="fin-enroll-history-row">
+            <span class="fin-enroll-history-date">${_finEsc(p.date || 'Payment recorded')}</span>
+            <span class="fin-enroll-history-amt">+${_finFmt(Math.round(p.amount * 100))}</span>
+          </div>`
+        ).join('');
+        const totalPaidCents = Math.round(item.paid * 100);
+        const totalCents     = Math.round(item.total * 100);
+        historyHtml = `
+          <button class="fin-enroll-history-toggle" type="button" onclick="_finToggleEnrollHistory(${item.id});event.preventDefault()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="finEnrollChevron_${item.id}"><polyline points="6 9 12 15 18 9"/></svg>
+            View ${item.partials.length} payment${item.partials.length > 1 ? 's' : ''} (${_finFmt(totalPaidCents)} paid)
+          </button>
+          <div class="fin-enroll-history" id="finEnrollHistory_${item.id}">
+            ${rows}
+            <div class="fin-enroll-history-summary">
+              <span>Total paid</span><span style="color:#4ade80">${_finFmt(totalPaidCents)}</span>
+            </div>
+            <div class="fin-enroll-history-summary">
+              <span>Remaining</span><span style="color:#f87171">${_finFmt(Math.round(item.owed * 100))}</span>
+            </div>
+          </div>`;
+      }
+
       html += `
-      <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}" for="finItem_${item.id}" style="align-items:flex-start">
+      <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}" for="finItem_${item.id}" style="align-items:flex-start;flex-wrap:wrap">
         <div class="fin-item-check-wrap">
           <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}" data-is-enroll="1"
             ${isSuggested ? 'checked' : ''} onchange="_finRecalcFromSelections()">
         </div>
-        <div class="fin-item-info">
+        <div class="fin-item-info" style="flex:1;min-width:0">
           <div class="fin-item-label">${_finEsc(item.desc)} ${badge}</div>
           ${item.sublabel ? `<div class="fin-item-sublabel">${_finEsc(item.sublabel)}</div>` : ''}
+          ${historyHtml}
         </div>
         <div class="fin-enroll-col">
           <div class="fin-enroll-input-wrap" id="finEnrollWrap_${item.id}">
@@ -7763,6 +7802,16 @@ function finCloseModal() {
 function finModalBgClose(e) {
   if (e.target === document.getElementById('finModalOverlay')) finCloseModal();
 }
+
+// ── Toggle enrollment payment history ──────────────────────────────────────
+function _finToggleEnrollHistory(id) {
+  const panel   = document.getElementById(`finEnrollHistory_${id}`);
+  const chevron = document.getElementById(`finEnrollChevron_${id}`);
+  if (!panel) return;
+  const open = panel.classList.toggle('open');
+  if (chevron) chevron.style.transform = open ? 'rotate(180deg)' : '';
+}
+window._finToggleEnrollHistory = _finToggleEnrollHistory;
 
 // ── Enrollment input change handler ────────────────────────────────────────
 function _finEnrollInputChange(input) {
