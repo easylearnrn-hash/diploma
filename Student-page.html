@@ -1520,9 +1520,6 @@ tr:last-child td{border-bottom:none}
 .fin-enroll-history-date{font-size:11px;color:var(--text-muted);font-weight:600;flex:1}
 .fin-enroll-history-amt{font-size:12px;color:#4ade80;font-weight:800;white-space:nowrap}
 .fin-enroll-history-summary{display:flex;justify-content:space-between;font-size:11px;font-weight:700;color:var(--text-secondary);margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.06)}
-.fin-paid-pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
-.fin-paid-pill{display:inline-flex;align-items:center;gap:4px;background:rgba(74,222,128,0.12);border:1px solid rgba(74,222,128,0.3);color:#4ade80;font-size:10px;font-weight:800;padding:2px 8px;border-radius:999px;white-space:nowrap}
-.fin-paid-pill-date{font-weight:500;color:rgba(74,222,128,0.7);font-size:9px}
 .fin-suggested-badge{
   display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;
   text-transform:uppercase;color:#020617;
@@ -1535,6 +1532,25 @@ tr:last-child td{border-bottom:none}
   background:#dc2626;
   padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;
 }
+.fin-paid-history{
+  margin-bottom:14px;padding:10px 14px;border-radius:10px;
+  background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.18);
+}
+.fin-paid-history-label{
+  font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
+  color:#4ade80;margin-bottom:8px;
+}
+.fin-paid-pills{
+  display:flex;flex-wrap:wrap;gap:6px;
+}
+.fin-paid-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;font-weight:700;
+  color:#4ade80;background:rgba(16,185,129,0.12);
+  border:1px solid rgba(16,185,129,0.30);
+  border-radius:999px;padding:3px 10px;
+}
+.fin-paid-pill svg{flex-shrink:0}
 .fin-full-balance-btn{
   width:100%;padding:11px 16px;border-radius:10px;
   background:transparent;border:1px solid rgba(201,168,76,0.22);
@@ -7580,6 +7596,48 @@ function _finSuggestItems(pendingItems) {
   return suggested;
 }
 
+// Build green-pill paid history from all invoices (excluding current)
+function _finBuildPaidHistory(allInvoices) {
+  const paidItems = [];
+  (allInvoices || []).forEach(inv => {
+    const items = Array.isArray(inv.items) ? inv.items : [];
+    const partials = _finParsePartials(inv.notes);
+    const isPaidFull = inv.status === 'paid';
+    items.forEach(item => {
+      const cls = _finClassifyItem(item.description);
+      if (cls.type !== 'month') return;
+      const total = _finItemTotal(item);
+      let paid = isPaidFull ? total : 0;
+      if (!isPaidFull && partials.length > 0) {
+        partials.forEach(p => {
+          if (item.description.toLowerCase().includes(p.appliedTo.toLowerCase().substring(0, 14)) ||
+              p.appliedTo.toLowerCase().includes(item.description.toLowerCase().substring(0, 14))) {
+            paid = Math.min(total, paid + p.amount);
+          }
+        });
+      }
+      const owed = Math.max(0, Math.round((total - paid) * 100) / 100);
+      if (owed <= 0 && paid > 0) {
+        paidItems.push({ desc: item.description, paid, monthIdx: cls.monthIdx });
+      }
+    });
+  });
+  if (!paidItems.length) return '';
+  // Sort by month
+  paidItems.sort((a, b) => a.monthIdx - b.monthIdx);
+  const pills = paidItems.map(p => {
+    const shortDesc = p.desc.replace(/tuition/i, '').replace(/bachelor of science in nursing/i, '').replace(/bsn/i, '').trim().replace(/[-–]+$/, '').trim();
+    return `<span class="fin-paid-pill">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+      ${_finEsc(shortDesc || p.desc)} &mdash; ${_finFmt(Math.round(p.paid * 100))}
+    </span>`;
+  }).join('');
+  return `<div class="fin-paid-history">
+    <div class="fin-paid-history-label">&#10003; Previously Paid</div>
+    <div class="fin-paid-pills">${pills}</div>
+  </div>`;
+}
+
 // Build the selectable item rows HTML
 function _finBuildItemSelector(pendingItems, suggestedIds) {
   if (!pendingItems.length) {
@@ -7599,10 +7657,28 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
 
       let historyHtml = '';
       if (hasPriorPayments) {
-        const pills = item.partials.map(p =>
-          `<span class="fin-paid-pill">✓ ${_finFmt(Math.round(p.amount * 100))}${p.date ? `<span class="fin-paid-pill-date">${_finEsc(p.date)}</span>` : ''}</span>`
+        const rows = item.partials.map(p =>
+          `<div class="fin-enroll-history-row">
+            <span class="fin-enroll-history-date">${_finEsc(p.date || 'Payment recorded')}</span>
+            <span class="fin-enroll-history-amt">+${_finFmt(Math.round(p.amount * 100))}</span>
+          </div>`
         ).join('');
-        historyHtml = `<div class="fin-paid-pills">${pills}</div>`;
+        const totalPaidCents = Math.round(item.paid * 100);
+        const totalCents     = Math.round(item.total * 100);
+        historyHtml = `
+          <button class="fin-enroll-history-toggle" type="button" onclick="_finToggleEnrollHistory(${item.id});event.preventDefault()">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" id="finEnrollChevron_${item.id}"><polyline points="6 9 12 15 18 9"/></svg>
+            View ${item.partials.length} payment${item.partials.length > 1 ? 's' : ''} (${_finFmt(totalPaidCents)} paid)
+          </button>
+          <div class="fin-enroll-history" id="finEnrollHistory_${item.id}">
+            ${rows}
+            <div class="fin-enroll-history-summary">
+              <span>Total paid</span><span style="color:#4ade80">${_finFmt(totalPaidCents)}</span>
+            </div>
+            <div class="fin-enroll-history-summary">
+              <span>Remaining</span><span style="color:#f87171">${_finFmt(Math.round(item.owed * 100))}</span>
+            </div>
+          </div>`;
       }
 
       html += `
@@ -7631,11 +7707,6 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
       const currentMonthIdx = new Date().getMonth();
       const isPastUnpaid    = item.type === 'month' && item.monthIdx >= 0 && item.monthIdx < currentMonthIdx;
       const unpaidBadge     = isPastUnpaid ? '<span class="fin-unpaid-badge">Unpaid</span>' : '';
-      const nonEnrollPills  = (item.partials && item.partials.length > 0)
-        ? '<div class="fin-paid-pills">' + item.partials.map(p =>
-            `<span class="fin-paid-pill">✓ ${_finFmt(Math.round(p.amount * 100))}${p.date ? `<span class="fin-paid-pill-date">${_finEsc(p.date)}</span>` : ''}</span>`
-          ).join('') + '</div>'
-        : '';
       html += `
       <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}${isPastUnpaid ? ' is-overdue' : ''}" for="finItem_${item.id}">
         <div class="fin-item-check-wrap">
@@ -7645,7 +7716,6 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
         <div class="fin-item-info">
           <div class="fin-item-label">${_finEsc(item.desc)} ${badge}${unpaidBadge}</div>
           ${item.sublabel ? `<div class="fin-item-sublabel">${_finEsc(item.sublabel)}</div>` : ''}
-          ${nonEnrollPills}
         </div>
         <div class="fin-item-amount">${_finFmt(amtCents)}</div>
       </label>`;
@@ -7777,7 +7847,8 @@ function finOpenModal(idx) {
 
   const pendingItems = _finParsePendingItems(inv);
   const suggestedIds = _finSuggestItems(pendingItems);
-  document.getElementById('finItemSelector').innerHTML = _finBuildItemSelector(pendingItems, suggestedIds);
+  const paidHistoryHtml = _finBuildPaidHistory(_finInvoices);
+  document.getElementById('finItemSelector').innerHTML = paidHistoryHtml + _finBuildItemSelector(pendingItems, suggestedIds);
 
   _finRecalcFromSelections();
   document.getElementById('finModalOverlay').classList.add('open');
