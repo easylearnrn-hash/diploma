@@ -22,8 +22,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon.svg">
     <link rel="apple-touch-icon" sizes="180x180" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.svg">
-<script src="js/acnhs-logo-base64.js"></script>
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800;900&family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/watermark.css">
 <link rel="stylesheet" href="css/cookie-consent.css">
@@ -1686,32 +1687,18 @@ if (isStudentViewer) {
   document.body.classList.remove('viewer-mode');
 }
 
-console.log('Student Page - Auth check:');
-console.log('  isLoggedIn:', isLoggedIn);
-console.log('  isAdmin:', isAdmin);
-console.log('  isStudentViewer:', isStudentViewer);
-console.log('  sessionStorage.isAdmin:', sessionStorage.getItem('isAdmin'));
-console.log('  localStorage.isAdmin:', localStorage.getItem('isAdmin'));
-console.log('  userEmail:', sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'));
-console.log('  viewerAccountEmail:', sessionStorage.getItem('viewerAccountEmail') || localStorage.getItem('viewerAccountEmail'));
-
 if (isStudentViewer && !hasSelectedViewerStudent) {
-  console.log('Student Page - Viewer session missing student selection, redirecting to list');
   window.location.href = STUDENT_VIEWER_SELECTION_PAGE;
 }
 
 // Redirect if not logged in
 if (!isLoggedIn) {
-  console.log('Student Page - Not logged in, redirecting to login');
   window.location.href = 'login.html';
 }
 
 // Redirect admins to admin dashboard
 if (isAdmin) {
-  console.log('Student Page - Admin detected, redirecting to admin-home.html');
   window.location.href = 'admin-home.html';
-} else {
-  console.log('Student Page - Regular student, staying on page');
 }
 
 
@@ -3419,7 +3406,6 @@ document.addEventListener('click', (e) => {
 </div>
 </div>
 
-<script src="js/html2pdf.bundle.min.js"></script>
 <!-- Supabase Client Library -->
 <script src="js/supabase.min.js"></script>
 <!-- Supabase Configuration -->
@@ -5212,17 +5198,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let studentProfile = null;
   try {
-    console.log('🔍 Fetching student profile with credentials:', {
-      email: sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail'),
-      studentId: sessionStorage.getItem('userId') || localStorage.getItem('userId'),
-      studentRecordId: sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId')
-    });
-    
     studentProfile = await fetchStudentProfile();
     portalState.profile = studentProfile;
     
     if (studentProfile) {
-      console.log('✅ Student profile loaded successfully:', studentProfile.full_name, studentProfile.student_id);
       // Save full student object so alerts.js can read group/program for targeting
       try {
         sessionStorage.setItem('studentData', JSON.stringify(studentProfile));
@@ -5253,33 +5232,31 @@ document.addEventListener('DOMContentLoaded', async () => {
   wirePolicyListeners();
 
   const studentData = buildStudentData(studentProfile || {});
-  let verificationCodes = {};
-  const transcriptVersions = [
+
+  // Generate codes immediately (deterministic — no DB wait needed for render)
+  const verificationCodes = {
+    standard: generateSecureVerificationCode(studentData.student_id),
+    ministry: generateSecureVerificationCode(studentData.student_id),
+    useval:   generateSecureVerificationCode(studentData.student_id)
+  };
+
+  // Persist transcript records to DB in the background after page is interactive
+  const _transcriptVersions = [
     { key: 'standard', type: 'standard' },
     { key: 'ministry', type: 'ministry' },
     { key: 'useval', type: 'us-evaluation' }
   ];
-
-  try {
-    for (const version of transcriptVersions) {
-      const record = await saveTranscriptToDatabase({
-        ...studentData,
-        transcript_type: version.type
-      });
-      verificationCodes[version.key] = record.verification_code;
-      if (record.issue_date) {
-        portalState.dataset.transcript.issueDate = record.issue_date;
-      }
-    }
-    console.log('✅ Transcript records stored', verificationCodes);
-  } catch (error) {
-    console.warn('⚠️ Transcript persistence unavailable. Using session-only codes.', error);
-    verificationCodes = {
-      standard: generateSecureVerificationCode(studentData.student_id),
-      ministry: generateSecureVerificationCode(studentData.student_id),
-      useval: generateSecureVerificationCode(studentData.student_id)
-    };
-  }
+  (typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn) => setTimeout(fn, 200))(() => {
+    (async () => {
+      try {
+        for (const version of _transcriptVersions) {
+          const record = await saveTranscriptToDatabase({ ...studentData, transcript_type: version.type });
+          if (record?.verification_code) portalState.transcriptCodes[version.key] = record.verification_code;
+          if (record?.issue_date) portalState.dataset.transcript.issueDate = record.issue_date;
+        }
+      } catch (e) { /* local codes already rendered — DB sync is best-effort */ }
+    })();
+  });
 
   portalState.transcriptCodes = verificationCodes;
   portalState.dataset.transcript.hash = verificationCodes.standard;
@@ -6818,7 +6795,11 @@ async function submitProfileRequest() {
 
 function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNHS_Official_Transcript'){
   if(typeof html2pdf==='undefined'){
-    console.error('html2pdf library failed to load');
+    const s = document.createElement('script');
+    s.src = 'js/html2pdf.bundle.min.js';
+    s.onload = () => generateTranscriptPDF(transcriptId, filename);
+    s.onerror = () => showCustomAlert('⚠️ Failed to load PDF library. Please refresh and try again.', 'error');
+    document.head.appendChild(s);
     return;
   }
 
@@ -7290,11 +7271,13 @@ function joinActiveClass() {
 // Make function globally available
 window.joinActiveClass = joinActiveClass;
 
-// Initialize when page loads
+// Initialize after page is interactive (non-blocking)
+const _scheduleClassLinks = () =>
+  (typeof requestIdleCallback === 'function' ? requestIdleCallback : (fn) => setTimeout(fn, 300))(initializeClassLinkChecker);
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => { initializeClassLinkChecker(); });
+  document.addEventListener('DOMContentLoaded', _scheduleClassLinks);
 } else {
-  initializeClassLinkChecker();
+  _scheduleClassLinks();
 }
 
 // ── Tuition Due Banner ────────────────────────────────────────────────────
@@ -8059,8 +8042,8 @@ document.addEventListener('keydown', e => {
 </script>
 
 <!-- Analytics & Cookie Consent -->
-<script src="js/analytics-config.js"></script>
-<script src="js/cookie-consent.js"></script>
+<script defer src="js/analytics-config.js"></script>
+<script defer src="js/cookie-consent.js"></script>
 
   <!-- Portal Alert Engine -->
   <script defer src="js/alerts.js"></script>
@@ -8157,5 +8140,6 @@ document.addEventListener('keydown', e => {
     </div>
   </div>
 </div>
+<script defer src="js/acnhs-logo-base64.js"></script>
 </body>
 </html>
