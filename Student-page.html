@@ -7923,6 +7923,34 @@ async function finInitStripeModal() {
   btn.textContent = `Pay ${_finFmt(chargeCents)}`;
 }
 
+// ── Reset back to step 1 (let student change payment method) ─────────────────
+function finResetPayMethod() {
+  // Unmount Stripe element
+  if (_finPayEl) { try { _finPayEl.unmount(); } catch(e){} _finPayEl = null; }
+  _finStripe   = null;
+  _finElements = null;
+  _finReady    = false;
+  _finIntentMode = false;
+
+  // Hide Stripe section
+  document.getElementById('finStripeSection').style.display = 'none';
+  document.getElementById('finPaymentElement').innerHTML    = '';
+  _finShowModalMsg('');
+
+  // Re-enable everything
+  document.querySelectorAll('#finItemSelector input, .fin-full-balance-btn, .fin-method-tab').forEach(el => el.disabled = false);
+
+  // Restore Continue button
+  const isBank      = _finPayMethod === 'bank';
+  const chargeCents = _finSelectedCents > 0
+    ? (isBank ? _finCalcChargeACH(_finSelectedCents) : _finCalcCharge(_finSelectedCents))
+    : 0;
+  const btn = document.getElementById('finModalActionBtn');
+  btn.disabled    = _finSelectedCents <= 0;
+  btn.textContent = _finSelectedCents > 0 ? `Continue — ${_finFmt(chargeCents)}` : 'Select at least one item to continue';
+}
+window.finResetPayMethod = finResetPayMethod;
+
 async function finHandleSubmit() {
   if (!_finStripe || !_finElements || !_finReady) return;
   const amtCents    = _finSelectedCents;
@@ -8071,7 +8099,13 @@ document.addEventListener('keydown', e => {
 
         <!-- Stripe Payment Element (step 2) -->
         <div id="finStripeSection" style="display:none">
-          <div class="fin-modal-section-label" id="finPaymentSectionLabel">Card Details</div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <div class="fin-modal-section-label" id="finPaymentSectionLabel" style="margin-bottom:0">Card Details</div>
+            <button onclick="finResetPayMethod()" style="background:none;border:none;color:var(--gold-300);font-size:12px;font-weight:700;cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;opacity:0.8" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg>
+              Change method
+            </button>
+          </div>
           <div class="fin-stripe-wrap">
             <div id="finPaymentElement"><!-- Stripe mounts here --></div>
           </div>
