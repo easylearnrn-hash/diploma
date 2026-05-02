@@ -7852,6 +7852,23 @@ async function finInitStripeModal() {
   // Lock selections while initializing
   document.querySelectorAll('#finItemSelector input, .fin-full-balance-btn, .fin-method-tab').forEach(el => el.disabled = true);
 
+  // Ensure Stripe.js is loaded (may not be if modal opened from banner before Financial tab)
+  if (typeof Stripe === 'undefined') {
+    try {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://js.stripe.com/v3/'; s.onload = res; s.onerror = rej;
+        document.head.appendChild(s);
+      });
+    } catch(e) {
+      _finShowModalMsg('Failed to load payment system. Please check your connection and try again.');
+      btn.disabled = false;
+      btn.textContent = `Continue — ${_finFmt(chargeCents)}`;
+      document.querySelectorAll('#finItemSelector input, .fin-full-balance-btn, .fin-method-tab').forEach(el => el.disabled = false);
+      return;
+    }
+  }
+
   const supabase    = initSupabase();
   const studentId   = sessionStorage.getItem('userId') || localStorage.getItem('userId') ||
                       sessionStorage.getItem('viewerActiveStudentId') || localStorage.getItem('viewerActiveStudentId');
