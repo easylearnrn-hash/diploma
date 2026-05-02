@@ -1483,6 +1483,7 @@ tr:last-child td{border-bottom:none}
 }
 .fin-item-row:hover{border-color:rgba(201,168,76,0.32);background:rgba(7,27,48,0.78)}
 .fin-item-row.is-suggested{border-color:rgba(201,168,76,0.34)}
+.fin-item-row.is-overdue{border-color:rgba(220,38,38,0.30);background:rgba(220,38,38,0.04)}
 .fin-item-check-wrap{flex-shrink:0;margin-top:1px}
 .fin-item-check-wrap input[type=checkbox]{
   appearance:none;-webkit-appearance:none;
@@ -1521,6 +1522,12 @@ tr:last-child td{border-bottom:none}
   display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;
   text-transform:uppercase;color:#020617;
   background:linear-gradient(135deg,#c9a84c,#d4b56a);
+  padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;
+}
+.fin-unpaid-badge{
+  display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;color:#fff;
+  background:#dc2626;
   padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;
 }
 .fin-full-balance-btn{
@@ -7597,14 +7604,17 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
         </div>
       </label>`;
     } else {
+      const currentMonthIdx = new Date().getMonth();
+      const isPastUnpaid    = item.type === 'month' && item.monthIdx >= 0 && item.monthIdx < currentMonthIdx;
+      const unpaidBadge     = isPastUnpaid ? '<span class="fin-unpaid-badge">Unpaid</span>' : '';
       html += `
-      <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}" for="finItem_${item.id}">
+      <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}${isPastUnpaid ? ' is-overdue' : ''}" for="finItem_${item.id}">
         <div class="fin-item-check-wrap">
           <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}"
             ${isSuggested ? 'checked' : ''} onchange="_finRecalcFromSelections()">
         </div>
         <div class="fin-item-info">
-          <div class="fin-item-label">${_finEsc(item.desc)} ${badge}</div>
+          <div class="fin-item-label">${_finEsc(item.desc)} ${badge}${unpaidBadge}</div>
           ${item.sublabel ? `<div class="fin-item-sublabel">${_finEsc(item.sublabel)}</div>` : ''}
         </div>
         <div class="fin-item-amount">${_finFmt(amtCents)}</div>
