@@ -7596,7 +7596,7 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
       html += `
       <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}" for="finItem_${item.id}" style="align-items:flex-start;flex-wrap:wrap">
         <div class="fin-item-check-wrap">
-          <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}" data-is-enroll="1"
+          <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}" data-is-enroll="1" data-desc="${_finEsc(item.desc)}"
             ${isSuggested ? 'checked' : ''} onchange="_finRecalcFromSelections()">
         </div>
         <div class="fin-item-info" style="flex:1;min-width:0">
@@ -7622,7 +7622,7 @@ function _finBuildItemSelector(pendingItems, suggestedIds) {
       html += `
       <label class="fin-item-row${isSuggested ? ' is-suggested' : ''}${isPastUnpaid ? ' is-overdue' : ''}" for="finItem_${item.id}">
         <div class="fin-item-check-wrap">
-          <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}"
+          <input type="checkbox" id="finItem_${item.id}" data-cents="${amtCents}" data-desc="${_finEsc(item.desc)}"
             ${isSuggested ? 'checked' : ''} onchange="_finRecalcFromSelections()">
         </div>
         <div class="fin-item-info">
@@ -8011,7 +8011,8 @@ async function _finOnSuccess(amtCents) {
       // Append one payment record per selected item
       const checkedLabels = [];
       document.querySelectorAll('#finItemSelector input[type=checkbox]:checked').forEach(cb => {
-        const label = cb.closest('label')?.querySelector('.fin-item-label')?.firstChild?.textContent?.trim();
+        // Use data-desc (exact DB description) for reliable matching in invoice-view
+        const label = cb.dataset.desc || cb.closest('label')?.querySelector('.fin-item-label')?.firstChild?.textContent?.trim();
         const cents = parseInt(cb.dataset.cents || '0', 10);
         if (cents > 0 && label) {
           const fmtAmt = (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
