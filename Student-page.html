@@ -2094,6 +2094,25 @@ function getStoredStudentId() {
 
     <!-- Profile Alert -->
     <p class="student-card-subtext" id="studentProfileAlert" style="display:none;color:#ef4444;margin-top:16px;padding:12px 16px;background:rgba(239,68,68,0.08);border-left:3px solid #ef4444;border-radius:6px;font-weight:600;font-size:13px"></p>
+
+    <!-- Tuition Due Banner (shown from 1st of each month while unpaid) -->
+    <div id="tuitionDueBanner" style="display:none;margin-top:16px;padding:14px 20px;background:rgba(239,68,68,0.07);border:1.5px solid rgba(239,68,68,0.30);border-radius:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:12px;font-weight:800;color:#f87171;margin-bottom:3px;display:flex;align-items:center;gap:6px">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Tuition Due
+          </div>
+          <div style="font-size:12px;color:var(--text-secondary);font-weight:600" id="tuitionDueBannerDesc">Your tuition payment for this month is outstanding.</div>
+        </div>
+        <button
+          onclick="_finOpenTuitionBannerModal()"
+          style="padding:9px 22px;background:linear-gradient(135deg,#c9a84c,#d4b56a);border:none;border-radius:8px;color:#1b1307;font-weight:800;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0"
+          onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">
+          Pay Now
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- ── Enrollment Details Footer Strip ── -->
@@ -5224,6 +5243,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderTranscriptMeta(portalState.dataset.transcript, verificationCodes);
 
   showTab('dashboard');
+
+  // Check if this month's tuition is outstanding and show banner
+  _finCheckTuitionBanner();
 });
 
 // Application Modal Functions
@@ -7313,6 +7335,71 @@ window.testClassLinkChecker = async function() {
   await checkForActiveClassLink();
 };
 
+// ── Tuition Due Banner ────────────────────────────────────────────────────
+// Queries invoices on page load. If today >= 1st of the month and the
+// current month's tuition item is unpaid, shows a banner with a Pay Now btn.
+let _finTuitionBannerInvoiceIdx = -1;
+
+async function _finCheckTuitionBanner() {
+  try {
+    const supabase  = initSupabase();
+    const studentId = sessionStorage.getItem('userId') || localStorage.getItem('userId') ||
+                      sessionStorage.getItem('viewerActiveStudentId') || localStorage.getItem('viewerActiveStudentId');
+    if (!studentId || !supabase) return;
+
+    const today = new Date();
+    // Only show banner from the 1st of the current month onwards
+    if (today.getDate() < 1) return; // always passes — safety guard
+
+    const { data: invoices, error } = await supabase
+      .from('invoices').select('*')
+      .eq('student_id', studentId)
+      .order('invoice_date', { ascending: false });
+
+    if (error || !invoices?.length) return;
+
+    // Pre-populate so finOpenModal works without opening the financial tab first
+    _finInvoices = invoices;
+
+    const currentMonthIdx = today.getMonth();
+    const currentMonthName = today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    // Find first invoice with an unpaid current-month tuition item
+    let foundIdx = -1;
+    let foundDesc = null;
+    let foundOwed = 0;
+    for (let i = 0; i < invoices.length; i++) {
+      const inv = invoices[i];
+      if (inv.status === 'paid') continue;
+      const pending = _finParsePendingItems(inv);
+      const monthItem = pending.find(p => p.type === 'month' && p.monthIdx === currentMonthIdx);
+      if (monthItem && monthItem.owed > 0) {
+        foundIdx  = i;
+        foundDesc = monthItem.desc || (currentMonthName + ' Tuition');
+        foundOwed = monthItem.owed;
+        break;
+      }
+    }
+
+    if (foundIdx === -1) return; // nothing due this month
+
+    _finTuitionBannerInvoiceIdx = foundIdx;
+    const banner = document.getElementById('tuitionDueBanner');
+    const desc   = document.getElementById('tuitionDueBannerDesc');
+    if (!banner) return;
+    if (desc) desc.textContent = `${foundDesc} — ${_finFmt(Math.round(foundOwed * 100))} outstanding`;
+    banner.style.display = 'block';
+  } catch(e) {
+    // Non-critical — silently fail
+  }
+}
+
+function _finOpenTuitionBannerModal() {
+  if (_finTuitionBannerInvoiceIdx < 0) return;
+  finOpenModal(_finTuitionBannerInvoiceIdx);
+}
+window._finOpenTuitionBannerModal = _finOpenTuitionBannerModal;
+
 // ── FINANCIAL TAB — Stripe Tuition Payment ────────────────────────────────
 // Fee pass-through: student pays Stripe fees so school receives exact amount.
 // Formula: charge = ceil((payment_cents + 30) / (1 - 0.029))
@@ -7800,6 +7887,9 @@ async function _finOnSuccess(amtCents) {
   document.getElementById('finModalSuccess').style.display = 'block';
   document.getElementById('finSuccessBody').innerHTML =
     `${_finFmt(amtCents)} received for ${_finEsc(_finMonthLabel())}.<br>Your invoice has been updated.`;
+  // Hide the tuition due banner since payment was made
+  const banner = document.getElementById('tuitionDueBanner');
+  if (banner) banner.style.display = 'none';
   setTimeout(() => loadFinancialView(), 1200);
 }
 
