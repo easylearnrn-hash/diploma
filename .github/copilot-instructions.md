@@ -36,7 +36,7 @@ python3 start-server.py  # Serves on localhost:8000
 
 ### Database Schema Changes
 1. Write idempotent SQL in new `.sql` file (use `IF NOT EXISTS`, `DO $$` blocks)
-2. Test in Supabase SQL Editor: https://supabase.com/dashboard → Project `zlvnxvrzotamhpezqedr`
+2. Test in Supabase SQL Editor: https://supabase.com/dashboard → Project `eyhksbiceueoiamwnqpr`
 3. Add migration guide in `<FEATURE>-SETUP.md` (see `CREDENTIALS-SCREENSHOT-SETUP.md`)
 4. Update `supabase/schema.sql` master file
 
@@ -111,7 +111,7 @@ Must run on `localhost:8000` (not `file://`) due to canvas tainting. Error modal
 ### Edge Function Timeouts
 SMS/email functions have 10s Supabase timeout. For debugging, check:
 ```bash
-supabase functions logs send-sms --project-ref zlvnxvrzotamhpezqedr
+supabase functions logs send-sms --project-ref eyhksbiceueoiamwnqpr
 ```
 
 ## Key Files Reference

@@ -68,6 +68,12 @@
         permission: 'view_applications'
       },
       { 
+        href: 'info.html', 
+        icon: '🗂️', 
+        text: 'All Applicants', 
+        permission: 'view_applications'
+      },
+      { 
         href: 'admin-forms.html', 
         icon: '📝', 
         text: 'Student Services', 
@@ -126,6 +132,12 @@
         href: 'certificate.html', 
         icon: '🏅', 
         text: 'Certificates', 
+        permission: 'view_reports'
+      },
+      { 
+        href: 'documents.html', 
+        icon: '📜', 
+        text: 'Documents', 
         permission: 'view_reports'
       }, 
       { 

@@ -15,6 +15,7 @@ const CORS_HEADERS = {
 interface PaymentIntentRequest {
   amount: number          // in cents, e.g. 5000 = $50.00
   currency: string        // e.g. 'usd'
+  payment_method?: string // 'card' | 'us_bank_account' — restricts PaymentIntent to one method
   application_id?: string
   control_number?: string
   applicant_name?: string
@@ -36,7 +37,7 @@ serve(async (req) => {
 
   try {
     const body: PaymentIntentRequest = await req.json()
-    const { amount, currency, application_id, control_number, applicant_name, description } = body
+    const { amount, currency, payment_method, application_id, control_number, applicant_name, description } = body
 
     // Validate required fields
     if (!amount || amount < 50) {
@@ -53,11 +54,13 @@ serve(async (req) => {
     }
 
     // Build Stripe PaymentIntent request
+    // Restrict to the method chosen on the client so the fee calculation stays correct
+    const allowedMethod = payment_method === 'us_bank_account' ? 'us_bank_account' : 'card'
     const stripeParams = new URLSearchParams({
       amount:      String(amount),
       currency:    currency.toLowerCase(),
       description: description || 'ACNHS Application Filing Fee',
-      'payment_method_types[]': 'card',
+      'payment_method_types[]': allowedMethod,
     })
 
     // Attach metadata for reconciliation
