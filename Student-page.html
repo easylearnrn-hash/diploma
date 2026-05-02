@@ -1972,23 +1972,6 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function formatStatus(status) {
-  const statusMap = {
-    'active': 'Active',
-    'inactive': 'Inactive',
-    'graduated': 'Graduated',
-    'suspended': 'Suspended',
-    'withdrawn': 'Withdrawn'
-  };
-  return statusMap[status] || status;
-}
-
-function getStoredStudentId() {
-  return sessionStorage.getItem('viewerActiveStudentId') || 
-         localStorage.getItem('viewerActiveStudentId') ||
-         sessionStorage.getItem('studentId') ||
-         localStorage.getItem('studentId');
-}
 </script>
 
 <div class="page">
@@ -3655,7 +3638,9 @@ function getStoredStudentEmail() {
 }
 
 function getStoredStudentId() {
-  return sessionStorage.getItem('userId') || localStorage.getItem('userId') || '';
+  return sessionStorage.getItem('userId') || localStorage.getItem('userId') ||
+         sessionStorage.getItem('viewerActiveStudentId') || localStorage.getItem('viewerActiveStudentId') ||
+         sessionStorage.getItem('studentId') || localStorage.getItem('studentId') || '';
 }
 
 function resolveProfileInstitutionalEmail(profile = {}) {
@@ -3754,7 +3739,7 @@ function setProgressBar(elementId, percent = 0) {
 }
 
 function updateStandingBadge(statusText = 'Good Standing') {
-  const badge = document.getElementById('academicStandingBadge');
+  const badge = document.getElementById('dashboardStandingValue');
   if (!badge) return;
   // Normalize empty / null / "New Student" → "Good Standing"
   const text = (!statusText || statusText.trim() === '' || /new student/i.test(statusText))
@@ -6582,17 +6567,13 @@ window.SUPPORTING_DOCS_MAP = {
 
 function handleUpdateTypeChange() {
   const updateType = document.getElementById('updateType')?.value || '';
-  
-  console.log('🔍 handleUpdateTypeChange called, updateType:', updateType);
-  console.log('🔍 SUPPORTING_DOCS_MAP exists?', !!window.SUPPORTING_DOCS_MAP);
-  console.log('🔍 SUPPORTING_DOCS_MAP[updateType]:', window.SUPPORTING_DOCS_MAP?.[updateType]);
-  
+
   // Hide all dynamic fields first
   document.getElementById('nameChangeFields').style.display = 'none';
   document.getElementById('contactFields').style.display = 'none';
   document.getElementById('addressFields').style.display = 'none';
   document.getElementById('dobFields').style.display = 'none';
-  
+
   // Show relevant fields based on selection
   switch(updateType) {
     case 'name_change':
@@ -6613,14 +6594,9 @@ function handleUpdateTypeChange() {
 
   // Update supporting documents dropdown
   const supportingDocsSelect = document.getElementById('supportingDocs');
-  const supportingDocsGroup = document.getElementById('supportingDocsGroup');
-  
-  console.log('🔍 supportingDocsSelect element:', supportingDocsSelect);
-  
+  if (!supportingDocsSelect) return;
+
   if (updateType && window.SUPPORTING_DOCS_MAP && window.SUPPORTING_DOCS_MAP[updateType]) {
-    console.log('✅ Populating documents for:', updateType, window.SUPPORTING_DOCS_MAP[updateType]);
-    
-    // Populate with relevant documents for this update type
     supportingDocsSelect.innerHTML = '';
     window.SUPPORTING_DOCS_MAP[updateType].forEach(doc => {
       const option = document.createElement('option');
@@ -6630,11 +6606,7 @@ function handleUpdateTypeChange() {
     });
     supportingDocsSelect.style.background = '#ffffff';
     supportingDocsSelect.disabled = false;
-    console.log('✅ Documents dropdown populated with', supportingDocsSelect.options.length, 'options');
   } else {
-    console.log('⚠️ No update type selected or map not found, showing placeholder');
-    
-    // Reset to placeholder
     supportingDocsSelect.innerHTML = '<option value="" disabled selected style="color:#64748b;font-style:italic;">Select update type above to see document options</option>';
     supportingDocsSelect.style.background = '#f8fafc';
     supportingDocsSelect.disabled = true;
@@ -6724,34 +6696,6 @@ function renderUploadedFiles() {
 function removeFile(index) {
   window.uploadedFiles.splice(index, 1);
   renderUploadedFiles();
-}
-
-function handleUpdateTypeChange() {
-  const updateType = document.getElementById('updateType')?.value || '';
-  
-  // Hide all dynamic fields first
-  document.getElementById('nameChangeFields').style.display = 'none';
-  document.getElementById('contactFields').style.display = 'none';
-  document.getElementById('addressFields').style.display = 'none';
-  document.getElementById('dobFields').style.display = 'none';
-  
-  // Show relevant fields based on selection
-  switch(updateType) {
-    case 'name_change':
-    case 'name_correction':
-      document.getElementById('nameChangeFields').style.display = 'block';
-      break;
-    case 'contact_info':
-    case 'emergency_contact':
-      document.getElementById('contactFields').style.display = 'block';
-      break;
-    case 'address':
-      document.getElementById('addressFields').style.display = 'block';
-      break;
-    case 'date_of_birth':
-      document.getElementById('dobFields').style.display = 'block';
-      break;
-  }
 }
 
 async function submitProfileRequest() {
@@ -6948,12 +6892,6 @@ function generateTranscriptPDF(transcriptId='transcriptDocument', filename='ACNH
   });
 }
 
-// Toggle Help Dropdown
-function toggleHelpDropdown() {
-  const dropdown = document.getElementById('helpDropdown');
-  dropdown.classList.toggle('active');
-}
-
 // Custom Alert System (consistent with application-status.html design)
 function showCustomAlert(message, type = 'info') {
   // Remove existing alert if any
@@ -6999,25 +6937,6 @@ function showCustomAlert(message, type = 'info') {
     }
   }, 5000);
 }
-
-// Coming Soon alert
-function showComingSoon(event, feature) {
-  event.preventDefault();
-  const dropdown = document.getElementById('helpDropdown');
-  dropdown.classList.remove('active');
-  showCustomAlert(`📋 ${feature}\n\nThis feature is coming soon! We're working hard to bring you comprehensive ${feature.toLowerCase()} resources.\n\nCheck back later for updates.`, 'info');
-}
-
-// Close dropdown when clicking outside
-document.addEventListener('click', function(event) {
-  const dropdown = document.getElementById('helpDropdown');
-  if (!dropdown) return;
-  const isClickInside = dropdown.contains(event.target);
-  
-  if (!isClickInside && dropdown.classList.contains('active')) {
-    dropdown.classList.remove('active');
-  }
-});
 
 // Open Student Hub with all student data
 async function openStudentHub() {
@@ -7372,26 +7291,11 @@ function joinActiveClass() {
 window.joinActiveClass = joinActiveClass;
 
 // Initialize when page loads
-console.log('🔗 Student-page.html Join Class system loading...');
-console.log('🔗 document.readyState:', document.readyState);
 if (document.readyState === 'loading') {
-  console.log('🔗 Adding DOMContentLoaded listener...');
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log('🔗 DOMContentLoaded fired, calling initializeClassLinkChecker...');
-    initializeClassLinkChecker();
-  });
+  document.addEventListener('DOMContentLoaded', () => { initializeClassLinkChecker(); });
 } else {
-  console.log('🔗 DOM already loaded, calling initializeClassLinkChecker immediately...');
   initializeClassLinkChecker();
 }
-
-// Also add a manual test function accessible from console
-window.testClassLinkChecker = async function() {
-  console.log('🔗 MANUAL TEST: Checking for active class links...');
-  console.log('🔗 Button element:', document.getElementById('joinClassButton'));
-  console.log('🔗 Student group in storage:', sessionStorage.getItem('studentGroup'), localStorage.getItem('studentGroup'));
-  await checkForActiveClassLink();
-};
 
 // ── Tuition Due Banner ────────────────────────────────────────────────────
 // Queries invoices on page load. If today >= 1st of the month and the
