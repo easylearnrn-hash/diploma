@@ -1533,24 +1533,37 @@ tr:last-child td{border-bottom:none}
   padding:2px 7px;border-radius:999px;margin-left:6px;vertical-align:middle;
 }
 .fin-paid-history{
-  margin-bottom:14px;padding:10px 14px;border-radius:10px;
-  background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.18);
+  display:flex;flex-direction:column;gap:9px;
+  padding-bottom:4px;
+  border-bottom:1px solid rgba(201,168,76,0.10);
+  margin-bottom:4px;
 }
 .fin-paid-history-label{
-  font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;
-  color:#4ade80;margin-bottom:8px;
+  font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--gold-300);
+  display:flex;align-items:center;gap:8px;
+}
+.fin-paid-history-label::before{
+  content:'';display:inline-block;width:14px;height:1.5px;
+  background:var(--gold-500);border-radius:2px;flex-shrink:0;
+  opacity:0.7;
 }
 .fin-paid-pills{
-  display:flex;flex-wrap:wrap;gap:6px;
+  display:flex;flex-wrap:wrap;gap:5px;
 }
 .fin-paid-pill{
-  display:inline-flex;align-items:center;gap:4px;
-  font-size:11px;font-weight:700;
-  color:#4ade80;background:rgba(16,185,129,0.12);
-  border:1px solid rgba(16,185,129,0.30);
-  border-radius:999px;padding:3px 10px;
+  display:inline-flex;align-items:center;gap:5px;
+  font-size:10px;font-weight:700;letter-spacing:.01em;
+  color:#10b981;
+  background:rgba(16,185,129,0.06);
+  border:1px solid rgba(16,185,129,0.18);
+  border-radius:6px;padding:3px 9px;
+  line-height:1.5;
 }
-.fin-paid-pill svg{flex-shrink:0}
+.fin-paid-pill-dot{
+  width:5px;height:5px;border-radius:50%;
+  background:#10b981;flex-shrink:0;opacity:0.8;
+}
 .fin-full-balance-btn{
   width:100%;padding:11px 16px;border-radius:10px;
   background:transparent;border:1px solid rgba(201,168,76,0.22);
@@ -7598,6 +7611,7 @@ function _finSuggestItems(pendingItems) {
 
 // Build green-pill paid history from all invoices (excluding current)
 function _finBuildPaidHistory(allInvoices) {
+  const MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const paidItems = [];
   (allInvoices || []).forEach(inv => {
     const items = Array.isArray(inv.items) ? inv.items : [];
@@ -7623,19 +7637,12 @@ function _finBuildPaidHistory(allInvoices) {
     });
   });
   if (!paidItems.length) return '';
-  // Sort by month
   paidItems.sort((a, b) => a.monthIdx - b.monthIdx);
   const pills = paidItems.map(p => {
-    const shortDesc = p.desc.replace(/tuition/i, '').replace(/bachelor of science in nursing/i, '').replace(/bsn/i, '').trim().replace(/[-–]+$/, '').trim();
-    return `<span class="fin-paid-pill">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
-      ${_finEsc(shortDesc || p.desc)} &mdash; ${_finFmt(Math.round(p.paid * 100))}
-    </span>`;
+    const mon = p.monthIdx >= 0 ? MON_ABBR[p.monthIdx] : (p.desc.split(' ')[0] || 'Payment');
+    return `<span class="fin-paid-pill"><span class="fin-paid-pill-dot"></span>${_finEsc(mon)}&thinsp;&middot;&thinsp;${_finFmt(Math.round(p.paid * 100))}</span>`;
   }).join('');
-  return `<div class="fin-paid-history">
-    <div class="fin-paid-history-label">&#10003; Previously Paid</div>
-    <div class="fin-paid-pills">${pills}</div>
-  </div>`;
+  return `<div class="fin-paid-history"><div class="fin-paid-history-label">Payment Record</div><div class="fin-paid-pills">${pills}</div></div>`;
 }
 
 // Build the selectable item rows HTML
