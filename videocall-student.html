@@ -419,7 +419,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
-  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script>
     // ── Restore session from URL params (hub passes identity on file://) ──
     (function () {
@@ -471,7 +471,7 @@
       joinTimestamp: null,
       currentAttendanceId: null,
       localStream: null,
-      peers: {},
+      livekitRoom: null,
       remoteStreams: {},
       broadcastChannel: null,
       attendanceRowsDeduped: [],
@@ -795,7 +795,7 @@
       startSessionHealthPoll(state.sessionId);
       await fetchChatHistory();
       setupChatSubscription();
-      setupWebRTC();
+      await setupWebRTC();
 
       setStatus('Live', true);
     }
@@ -968,10 +968,11 @@
         if (track) {
           state.media.camera = !state.media.camera;
           track.enabled = state.media.camera;
-          Object.values(state.peers).forEach(peer => {
-            if (peer?.destroyed) return;
-            try { peer._pc?.getSenders?.()?.find(s => s.track?.kind === 'video')?.replaceTrack(state.media.camera ? track : null); } catch (_) {}
-          });
+          // Sync LiveKit mute state
+          if (state.livekitRoom) {
+            const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera);
+            if (pub) state.media.camera ? pub.unmute() : pub.mute();
+          }
           updateVideoGrid();
         }
       } else if (key === 'mic') {
@@ -980,6 +981,11 @@
         if (track) {
           state.media.mic = !state.media.mic;
           track.enabled = state.media.mic;
+          // Sync LiveKit mute state
+          if (state.livekitRoom) {
+            const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+            if (pub) state.media.mic ? pub.unmute() : pub.mute();
+          }
         }
       } else if (key === 'speaker') {
         state.media.speaker = !state.media.speaker;
@@ -1150,147 +1156,130 @@
       try { state.broadcastChannel.send(payload); } catch (_) {}
     }
 
-    function setupWebRTC() {
+    async function setupWebRTC() {
       if (!db || !state.sessionCode) return;
-      if (state.broadcastChannel) return; // already set up
+      if (state.livekitRoom) return; // already set up
 
-      const channelName = `webrtc-${state.sessionCode}`;
-      state.broadcastChannel = db.channel(channelName, { config: { broadcast: { self: false } } });
+      console.log('[LiveKit] Student connecting to session:', state.sessionCode);
+      const LIVEKIT_URL = 'wss://acnhs-6k7vywwh.livekit.cloud';
 
-      // Signaling
-      state.broadcastChannel.on('broadcast', { event: 'signal' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.target !== user.id) return;
-        let peer = state.peers[msg.sender];
-        if (!peer) peer = createPeer(msg.sender, false);
-        if (peer && !peer.destroyed) {
-          try { peer.signal(msg.signal); } catch (e) {
-            destroyPeer(msg.sender);
-            peer = createPeer(msg.sender, false);
-            try { peer.signal(msg.signal); } catch (_) {}
-          }
-        }
-      });
+      // ── Get token from Edge Function ──────────────────────────────
+      let token;
+      try {
+        const { data, error } = await initSupabase().functions.invoke('generate-livekit-token', {
+          body: { roomName: state.sessionCode, participantIdentity: user.id, participantName: user.name }
+        });
+        if (error || !data?.token) throw new Error(error?.message || 'No token returned');
+        token = data.token;
+      } catch (e) {
+        console.error('[LiveKit] Token error:', e.message);
+        showNotice('Could not connect to video server. Please refresh.');
+        return;
+      }
 
-      // Peer joined — initiate if we have tie-break priority
-      state.broadcastChannel.on('broadcast', { event: 'peer-joined' }, payload => {
-        const msg = payload.payload;
-        if (!msg?.userId || msg.userId === user.id) return;
-        if (!state.peers[msg.userId] && user.id < msg.userId) createPeer(msg.userId, true);
-      });
+      // ── Create Room ────────────────────────────────────────────────
+      const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      state.livekitRoom = room;
 
-      // Peer left
-      state.broadcastChannel.on('broadcast', { event: 'peer-left' }, payload => {
-        const uid = payload.payload?.userId;
-        if (uid) destroyPeer(uid);
-      });
-
-      // Session ended
-      state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
-        handleSessionEndedByHost(payload.payload);
-      });
-
-      // Chat messages from peers
-      state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
-        const msg = payload.payload;
-        if (!msg) return;
-        appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '--', msg.userId === user.id);
-      });
-
-      // Hand raise
-      state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
-        const msg = payload.payload;
-        if (!msg) return;
-        const tile = document.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
-        if (tile) {
-          const nameEl = tile.querySelector('.tile-name');
-          const base = msg.userName || 'Participant';
-          if (nameEl) nameEl.textContent = msg.raised ? `✋ ${base}` : base;
-        }
-      });
-
-      state.broadcastChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          // Wait for local stream
-          await new Promise(resolve => {
-            if (state.localStream) return resolve();
-            const start = Date.now();
-            const check = setInterval(() => {
-              if (state.localStream || Date.now() - start > 5000) { clearInterval(check); resolve(); }
-            }, 200);
-          });
-
-          // Guard: may have been torn down while awaiting
-          if (!state.broadcastChannel) return;
-
-          safeChannelSend({
-            type: 'broadcast', event: 'peer-joined',
-            payload: { userId: user.id, userName: user.name, userRole: user.role }
-          });
-
-          // Connect to existing participants
-          setTimeout(() => {
-            if (!state.broadcastChannel) return;
-            state.attendanceRowsDeduped.forEach(row => {
-              if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
-                if (!state.peers[row.participant_user_id] && user.id < row.participant_user_id) {
-                  createPeer(row.participant_user_id, true);
-                }
-              }
-            });
-          }, 1500);
-        }
-      });
-    }
-
-    function createPeer(targetId, initiator) {
-      if (state.peers[targetId] && !state.peers[targetId].destroyed) return state.peers[targetId];
-      const peer = new SimplePeer({
-        initiator,
-        stream: state.localStream || undefined,
-        trickle: true,
-        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
-      });
-
-      peer.on('signal', signal => {
-        if (!state.broadcastChannel) return;
-        safeChannelSend({ type: 'broadcast', event: 'signal', payload: { sender: user.id, target: targetId, signal } });
-      });
-
-      peer.on('stream', stream => {
-        state.remoteStreams[targetId] = stream;
-        attachSpeakingDetection(targetId, stream);
+      room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+        const uid = participant.identity;
+        if (!state.remoteStreams[uid]) state.remoteStreams[uid] = new MediaStream();
+        state.remoteStreams[uid].addTrack(track.mediaStreamTrack);
+        attachSpeakingDetection(uid, state.remoteStreams[uid]);
         updateVideoGrid();
       });
 
-      peer.on('close', () => destroyPeer(targetId));
-
-      peer.on('error', e => {
-        console.warn('[WebRTC] peer error:', e.message);
-        destroyPeer(targetId);
-        setTimeout(() => { if (state.sessionCode && !state.peers[targetId]) createPeer(targetId, initiator); }, 2000);
+      room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+        const uid = participant.identity;
+        if (state.remoteStreams[uid]) {
+          state.remoteStreams[uid].removeTrack(track.mediaStreamTrack);
+          if (!state.remoteStreams[uid].getTracks().length) {
+            detachSpeakingDetection(uid);
+            delete state.remoteStreams[uid];
+          }
+        }
+        updateVideoGrid();
       });
 
-      state.peers[targetId] = peer;
-      return peer;
+      room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+        const uid = participant.identity;
+        detachSpeakingDetection(uid);
+        delete state.remoteStreams[uid];
+        const tile = document.querySelector(`.video-tile[data-uid="${uid}"]`);
+        tile?.remove();
+        updateVideoGrid();
+      });
+
+      // ── Connect ────────────────────────────────────────────────────
+      try {
+        await room.connect(LIVEKIT_URL, token);
+        console.log('[LiveKit] Student connected to room:', state.sessionCode);
+      } catch (e) {
+        console.error('[LiveKit] Connect error:', e.message);
+        showNotice('Failed to connect to video server. Check your connection.');
+        state.livekitRoom = null;
+        return;
+      }
+
+      // ── Publish local stream tracks (started in startLocalMedia) ──
+      if (state.localStream) {
+        const videoTrack = state.localStream.getVideoTracks()[0];
+        const audioTrack = state.localStream.getAudioTracks()[0];
+        if (videoTrack) await room.localParticipant.publishTrack(videoTrack, { source: LivekitClient.Track.Source.Camera });
+        if (audioTrack) await room.localParticipant.publishTrack(audioTrack, { source: LivekitClient.Track.Source.Microphone });
+      }
+
+      // ── Broadcast channel for chat / hand-status / session-ended ──
+      if (!state.broadcastChannel) {
+        const channelName = `webrtc-${state.sessionCode}`;
+        state.broadcastChannel = db.channel(channelName, { config: { broadcast: { self: false } } });
+
+        state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
+          handleSessionEndedByHost(payload.payload);
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
+          const msg = payload.payload;
+          if (!msg) return;
+          appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '--', msg.userId === user.id);
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
+          const msg = payload.payload;
+          if (!msg) return;
+          const tile = document.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
+          if (tile) {
+            const nameEl = tile.querySelector('.tile-name');
+            const base = msg.userName || 'Participant';
+            if (nameEl) nameEl.textContent = msg.raised ? `✋ ${base}` : base;
+          }
+        });
+
+        state.broadcastChannel.subscribe(() => {
+          console.log('[LiveKit] Student broadcast channel subscribed');
+        });
+      }
     }
 
+    // Stubs — no longer needed with LiveKit
+    function createPeer() { return null; }
+
     function destroyPeer(uid) {
-      const peer = state.peers[uid];
-      if (peer) { try { peer.destroy(); } catch (_) {} delete state.peers[uid]; }
-      delete state.remoteStreams[uid];
       detachSpeakingDetection(uid);
+      delete state.remoteStreams[uid];
       const tile = document.querySelector(`.video-tile[data-uid="${uid}"]`);
       tile?.remove();
     }
 
     function teardownWebRTC() {
       if (state.broadcastChannel) {
-        try { safeChannelSend({ type: 'broadcast', event: 'peer-left', payload: { userId: user.id } }); } catch (_) {}
         db?.removeChannel(state.broadcastChannel);
         state.broadcastChannel = null;
       }
-      Object.keys(state.peers).forEach(destroyPeer);
+      if (state.livekitRoom) {
+        try { state.livekitRoom.disconnect(); } catch (_) {}
+        state.livekitRoom = null;
+      }
       state.remoteStreams = {};
     }
 

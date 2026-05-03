@@ -1795,7 +1795,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
-  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script>
     const state = {
       sessionId: null,
@@ -1822,7 +1822,7 @@
       lobbyRequests: [],        // { id, user_id, user_name, user_role, user_email, requested_at }
       lobbySubscription: null,  // realtime channel
       lobbyPollInterval: null,  // fallback poll for student waiting status
-      peers: {}, // SimplePeer instances: map participant_user_id -> peer
+      livekitRoom: null,        // LiveKit Room instance
       remoteStreams: {}, // map participant_user_id -> MediaStream
       broadcastChannel: null, // supabase realtime broadcast channel
       _healthPollId: null,     // fallback session-ended detector (15 s poll)
@@ -2246,7 +2246,7 @@
         await fetchAttendance();
         subscribeAttendance();
         startSessionHealthPoll(state.sessionId);
-        setupWebRTC();
+        await setupWebRTC();
         if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
         startTimer();
         showNotice('Session restored after refresh.');
@@ -2590,7 +2590,7 @@
       await fetchAttendance();
       subscribeAttendance();
       await fetchChatHistory();
-      setupWebRTC();
+      await setupWebRTC();
       // Host: listen for lobby join requests from students
       subscribeLobby();
       fetchLobbyRequests();
@@ -2660,7 +2660,7 @@
       subscribeAttendance();
       startSessionHealthPoll(state.sessionId);
       await fetchChatHistory();
-      setupWebRTC();
+      await setupWebRTC();
       // Host joining via code: also listen for lobby requests
       if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
       startTimer();
@@ -3075,263 +3075,148 @@
     }
     // ══════════════════════════════════════════════════════════════
 
-    function setupWebRTC() {
+    async function setupWebRTC() {
       if (!db || !state.sessionCode) {
         console.warn('setupWebRTC: no db or sessionCode, skipping');
         return;
       }
-      // Prevent double-setup
-      if (state.broadcastChannel) {
+      if (state.livekitRoom) {
         console.log('setupWebRTC: already set up, skipping');
         return;
       }
 
-      console.log('[WebRTC] Setting up for session:', state.sessionCode, 'user:', user.id);
+      console.log('[LiveKit] Setting up for session:', state.sessionCode);
+      const LIVEKIT_URL = 'wss://acnhs-6k7vywwh.livekit.cloud';
 
-      const channelName = `webrtc-${state.sessionCode}`;
-      state.broadcastChannel = db.channel(channelName, {
-        config: { broadcast: { self: false } }
-      });
-
-      // ── Listen for signaling messages (offers, answers, ICE candidates) ──
-      state.broadcastChannel.on('broadcast', { event: 'signal' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.target !== user.id) return;
-
-        console.log('[WebRTC] Signal from', msg.sender, '→', msg.signal?.type || 'ice');
-
-        let peer = state.peers[msg.sender];
-
-        if (!peer) {
-          // We received a signal from someone we don't have a peer for
-          // Create a non-initiator peer to answer
-          console.log('[WebRTC] Creating answering peer for', msg.sender);
-          peer = createPeer(msg.sender, false);
-        }
-
-        if (peer && !peer.destroyed) {
-          try {
-            peer.signal(msg.signal);
-          } catch (e) {
-            console.warn('[WebRTC] signal error, recreating peer:', e.message);
-            destroyPeer(msg.sender);
-            peer = createPeer(msg.sender, false);
-            try { peer.signal(msg.signal); } catch (e2) { console.error('[WebRTC] signal retry failed:', e2); }
-          }
-        }
-      });
-
-      // ── Listen for peer announcements (new user joined, user left) ──
-      state.broadcastChannel.on('broadcast', { event: 'peer-joined' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.userId === user.id) return;
-
-        console.log('[WebRTC] Peer joined announcement from:', msg.userId, msg.userName);
-
-        // Tie-breaker: to avoid glare (both sides initiating concurrently),
-        // only the lower ID initiates. 
-        if (!state.peers[msg.userId]) {
-          if (user.id < msg.userId) {
-            console.log('[WebRTC] Initiating connection to new peer:', msg.userId);
-            createPeer(msg.userId, true);
-          } else {
-            console.log('[WebRTC] Waiting for new peer to initiate:', msg.userId);
-            // We don't initiate; we let them initiate and handle it via 'signal' event
-          }
-        }
-      });
-
-      state.broadcastChannel.on('broadcast', { event: 'peer-left' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.userId === user.id) return;
-        console.log('[WebRTC] Peer left:', msg.userId);
-        destroyPeer(msg.userId);
-        updateVideoGrid();
-      });
-
-      // ── Listen for chat messages from other participants ──
-      state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.userId === user.id) return;
-        appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '', false);
-      });
-
-      // ── Listen for hand-raise status from other participants ──
-      state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
-        const msg = payload.payload;
-        if (!msg || msg.userId === user.id) return;
-        // Update the name bar on their video tile
-        const tile = dom.videoGrid.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
-        if (tile) {
-          const nameEl = tile.querySelector('.tile-name');
-          const baseName = msg.userName || 'Participant';
-          nameEl.textContent = msg.raised ? `✋ ${baseName}` : baseName;
-        }
-      });
-
-      // ── Listen for session-ended event (host ended the call) ──
-      state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
-        console.log('[WebRTC] Session ended by host:', payload.payload?.endedByName || payload.payload?.endedBy);
-        handleSessionEndedByHost(payload.payload);
-      });
-
-      // ── Listen for lobby admit/deny events (host actions) ───────
-      // lobby_admitted / lobby_denied: future-use broadcast events.
-      // Actual admission is polled by the student via startLobbyPolling().
-      state.broadcastChannel.on('broadcast', { event: 'lobby_admitted' }, payload => {
-        const msg = payload.payload;
-        if (!msg?.userId) return;
-        state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
-        renderLobby();
-      });
-      state.broadcastChannel.on('broadcast', { event: 'lobby_denied' }, payload => {
-        const msg = payload.payload;
-        if (!msg?.userId) return;
-        state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
-        renderLobby();
-      });
-
-      state.broadcastChannel.subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('[WebRTC] Broadcast channel subscribed');
-
-          // Wait for local media to be ready before announcing
-          await waitForLocalStream(5000);
-
-          // Guard: channel may have been torn down (e.g. host ended session)
-          // while we were awaiting local media startup.
-          if (!state.broadcastChannel) return;
-
-          // Announce ourselves so existing peers can initiate connections to us
-          safeChannelSend({
-            type: 'broadcast',
-            event: 'peer-joined',
-            payload: { userId: user.id, userName: user.name, userRole: user.role }
-          });
-
-          // Also proactively connect to anyone already in the attendance list
-          setTimeout(() => {
-            if (!state.broadcastChannel) return; // may have been torn down
-            const present = state.attendanceRowsDeduped.length
-              ? state.attendanceRowsDeduped
-              : state.attendanceRows;
-            present.forEach(row => {
-              if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
-                if (!state.peers[row.participant_user_id]) {
-                  // Use same tie-breaker logic to avoid glare
-                  if (user.id < row.participant_user_id) {
-                    console.log('[WebRTC] Proactively initiating to participant:', row.participant_user_id);
-                    createPeer(row.participant_user_id, true);
-                  }
-                }
-              }
-            });
-          }, 1500);
-        }
-      });
-    }
-
-    // Wait up to `timeout` ms for localStream to be available
-    function waitForLocalStream(timeout) {
-      return new Promise(resolve => {
-        if (state.localStream) return resolve();
-        const start = Date.now();
-        const check = setInterval(() => {
-          if (state.localStream || Date.now() - start > timeout) {
-            clearInterval(check);
-            resolve();
-          }
-        }, 200);
-      });
-    }
-
-    function createPeer(targetUserId, initiator) {
-      // Don't create peer to self
-      if (targetUserId === user.id) return null;
-
-      // Clean up any existing peer first
-      if (state.peers[targetUserId]) {
-        destroyPeer(targetUserId);
-      }
-
-      if (typeof SimplePeer === 'undefined' || !SimplePeer.WEBRTC_SUPPORT) {
-        console.warn('[WebRTC] SimplePeer not available or WebRTC not supported');
-        return null;
-      }
-
-      const stream = state.localStream || null;
-      console.log('[WebRTC] createPeer to', targetUserId, 'initiator:', initiator, 'has stream:', !!stream);
-
-      const peer = new SimplePeer({
-        initiator: initiator,
-        stream: stream,
-        trickle: true,
-        config: {
-          iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' }
-          ]
-        }
-      });
-
-      peer._targetUserId = targetUserId;
-
-      peer.on('signal', data => {
-        if (!state.broadcastChannel) return;
-        safeChannelSend({
-          type: 'broadcast',
-          event: 'signal',
-          payload: {
-            sender: user.id,
-            target: targetUserId,
-            signal: data
-          }
+      // ── Get access token from Edge Function ──────────────────────
+      let token;
+      try {
+        const { data, error } = await initSupabase().functions.invoke('generate-livekit-token', {
+          body: { roomName: state.sessionCode, participantIdentity: user.id, participantName: user.name }
         });
+        if (error || !data?.token) throw new Error(error?.message || 'No token returned');
+        token = data.token;
+      } catch (e) {
+        console.error('[LiveKit] Token error:', e.message);
+        showNotice('Could not connect to video server. Please refresh.');
+        return;
+      }
+
+      // ── Create and configure Room ─────────────────────────────────
+      const room = new LivekitClient.Room({ adaptiveStream: true, dynacast: true });
+      state.livekitRoom = room;
+
+      room.on(LivekitClient.RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+        const uid = participant.identity;
+        if (!state.remoteStreams[uid]) state.remoteStreams[uid] = new MediaStream();
+        state.remoteStreams[uid].addTrack(track.mediaStreamTrack);
+        attachSpeakingDetection(uid, state.remoteStreams[uid]);
+        updateVideoGrid();
       });
 
-      peer.on('stream', remoteStream => {
-        console.log('[WebRTC] ✅ Received remote stream from', targetUserId);
-        state.remoteStreams[targetUserId] = remoteStream;
-        attachSpeakingDetection(targetUserId, remoteStream);
+      room.on(LivekitClient.RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
+        const uid = participant.identity;
+        if (state.remoteStreams[uid]) {
+          state.remoteStreams[uid].removeTrack(track.mediaStreamTrack);
+          if (!state.remoteStreams[uid].getTracks().length) {
+            detachSpeakingDetection(uid);
+            delete state.remoteStreams[uid];
+          }
+        }
         updateVideoGrid();
-        // Show join toast using name from attendance rows
-        const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === targetUserId);
+      });
+
+      room.on(LivekitClient.RoomEvent.ParticipantDisconnected, (participant) => {
+        const uid = participant.identity;
+        detachSpeakingDetection(uid);
+        delete state.remoteStreams[uid];
+        const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === uid);
+        if (row?.participant_name) showJoinToast(`${row.participant_name} left`);
+        updateVideoGrid();
+      });
+
+      room.on(LivekitClient.RoomEvent.ParticipantConnected, (participant) => {
+        const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === participant.identity);
         if (row?.participant_name) showJoinToast(`${row.participant_name} joined`);
       });
 
-      peer.on('connect', () => {
-        console.log('[WebRTC] ✅ Peer connected to', targetUserId);
-      });
+      // ── Connect ────────────────────────────────────────────────────
+      try {
+        await room.connect(LIVEKIT_URL, token);
+        console.log('[LiveKit] Connected to room:', state.sessionCode);
+      } catch (e) {
+        console.error('[LiveKit] Connect error:', e.message);
+        showNotice('Failed to connect to video server. Check your internet connection.');
+        state.livekitRoom = null;
+        return;
+      }
 
-      peer.on('close', () => {
-        console.log('[WebRTC] Peer closed:', targetUserId);
-        delete state.peers[targetUserId];
-        delete state.remoteStreams[targetUserId];
-        updateVideoGrid();
-      });
+      // ── Publish local stream tracks ────────────────────────────────
+      if (state.localStream) {
+        const videoTrack = state.localStream.getVideoTracks()[0];
+        const audioTrack = state.localStream.getAudioTracks()[0];
+        if (videoTrack) {
+          await room.localParticipant.publishTrack(videoTrack, { source: LivekitClient.Track.Source.Camera });
+        }
+        if (audioTrack) {
+          await room.localParticipant.publishTrack(audioTrack, { source: LivekitClient.Track.Source.Microphone });
+        }
+      }
 
-      peer.on('error', err => {
-        console.warn('[WebRTC] Peer error with', targetUserId, ':', err.message);
-        destroyPeer(targetUserId);
-        updateVideoGrid();
-      });
+      // ── Broadcast channel for chat / hand-status / session-ended ──
+      if (!state.broadcastChannel) {
+        const channelName = `webrtc-${state.sessionCode}`;
+        state.broadcastChannel = db.channel(channelName, { config: { broadcast: { self: false } } });
 
-      state.peers[targetUserId] = peer;
-      return peer;
+        state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
+          const msg = payload.payload;
+          if (!msg || msg.userId === user.id) return;
+          appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '', false);
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
+          const msg = payload.payload;
+          if (!msg || msg.userId === user.id) return;
+          const tile = dom.videoGrid.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
+          if (tile) {
+            const nameEl = tile.querySelector('.tile-name');
+            const baseName = msg.userName || 'Participant';
+            if (nameEl) nameEl.textContent = msg.raised ? `✋ ${baseName}` : baseName;
+          }
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
+          handleSessionEndedByHost(payload.payload);
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'lobby_admitted' }, payload => {
+          const msg = payload.payload;
+          if (!msg?.userId) return;
+          state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
+          renderLobby();
+        });
+
+        state.broadcastChannel.on('broadcast', { event: 'lobby_denied' }, payload => {
+          const msg = payload.payload;
+          if (!msg?.userId) return;
+          state.lobbyRequests = state.lobbyRequests.filter(r => r.user_id !== msg.userId);
+          renderLobby();
+        });
+
+        state.broadcastChannel.subscribe(() => {
+          console.log('[LiveKit] Broadcast channel subscribed');
+        });
+      }
     }
 
-    function destroyPeer(targetUserId) {
-      const peer = state.peers[targetUserId];
-      if (peer) {
-        try { peer.destroy(); } catch (_) {}
-        delete state.peers[targetUserId];
-      }
-      detachSpeakingDetection(targetUserId);
-      const row = state.attendanceRowsDeduped.find(r => r.participant_user_id === targetUserId);
-      if (row?.participant_name) showJoinToast(`${row.participant_name} left`);
-      delete state.remoteStreams[targetUserId];
+    // Stubs retained for any legacy call sites — no longer do P2P signaling
+    function createPeer() { return null; }
+
+    function destroyPeer(uid) {
+      detachSpeakingDetection(uid);
+      delete state.remoteStreams[uid];
+      const tile = dom.videoGrid?.querySelector(`.video-tile[data-uid="${uid}"]`);
+      tile?.remove();
     }
 
     // Helper: send on the broadcast channel only when it is SUBSCRIBED (avoids REST fallback warning)
@@ -3342,50 +3227,19 @@
     }
 
     function teardownWebRTC() {
-      // Announce departure only when channel is still live
       if (state.broadcastChannel) {
-        safeChannelSend({
-          type: 'broadcast',
-          event: 'peer-left',
-          payload: { userId: user.id }
-        });
         db?.removeChannel(state.broadcastChannel);
         state.broadcastChannel = null;
       }
-      // Destroy all peers
-      Object.keys(state.peers).forEach(uid => destroyPeer(uid));
+      if (state.livekitRoom) {
+        try { state.livekitRoom.disconnect(); } catch (_) {}
+        state.livekitRoom = null;
+      }
       state.remoteStreams = {};
     }
 
-    // When local stream changes (camera toggle, screen share), replace tracks on all peers
-    function replaceStreamOnAllPeers(newStream) {
-      if (!newStream) return;
-      Object.entries(state.peers).forEach(([uid, peer]) => {
-        if (peer && !peer.destroyed) {
-          try {
-            // Remove old tracks and add new ones
-            const videoTrack = newStream.getVideoTracks()[0];
-            const audioTrack = newStream.getAudioTracks()[0];
-            if (videoTrack) {
-              const senders = peer._pc?.getSenders?.() || [];
-              const videoSender = senders.find(s => s.track?.kind === 'video');
-              if (videoSender) {
-                videoSender.replaceTrack(videoTrack);
-              }
-            }
-            if (audioTrack) {
-              const senders = peer._pc?.getSenders?.() || [];
-              const audioSender = senders.find(s => s.track?.kind === 'audio');
-              if (audioSender) {
-                audioSender.replaceTrack(audioTrack);
-              }
-            }
-          } catch (e) {
-            console.warn('[WebRTC] replaceTrack failed for', uid, e.message);
-          }
-        }
-      });
-    }
+    // Stub — no longer needed with LiveKit (tracks are managed by the SFU)
+    function replaceStreamOnAllPeers() {}
 
     // ══════════════════════════════════════════════════════════════
     //  LOBBY SYSTEM
@@ -4322,6 +4176,11 @@
             const rawTrack = state.rawVideoStream.getVideoTracks()[0];
             if (rawTrack) rawTrack.enabled = state.media.camera;
           }
+          // Sync LiveKit mute state
+          if (state.livekitRoom) {
+            const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera);
+            if (pub) state.media.camera ? pub.unmute() : pub.mute();
+          }
           logActivity(state.media.camera ? 'camera_on' : 'camera_off');
           // Show/hide avatar vs live video in tile
           const localTile = document.getElementById('localVideoTile');
@@ -4343,6 +4202,11 @@
         if (audioTrack) {
           state.media.mic = !state.media.mic;
           audioTrack.enabled = state.media.mic;
+          // Sync LiveKit mute state
+          if (state.livekitRoom) {
+            const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
+            if (pub) state.media.mic ? pub.unmute() : pub.mute();
+          }
           logActivity(state.media.mic ? 'mic_on' : 'mic_off');
         } else {
           showNotice('No microphone track available. Check permissions.');
@@ -4356,13 +4220,22 @@
             state.media.screen = true;
             logActivity('screen_on');
             attachLocalVideo();
-            replaceStreamOnAllPeers(screenStream);
-            screenStream.getVideoTracks()[0].onended = () => {
+            // Publish screen track to LiveKit
+            const screenTrack = screenStream.getVideoTracks()[0];
+            if (screenTrack && state.livekitRoom) {
+              await state.livekitRoom.localParticipant.publishTrack(screenTrack, {
+                source: LivekitClient.Track.Source.ScreenShare,
+              });
+            }
+            screenTrack.onended = async () => {
               state.screenStream = null;
               state.media.screen = false;
               logActivity('screen_off');
               attachLocalVideo();
-              if (state.localStream) replaceStreamOnAllPeers(state.localStream);
+              if (state.livekitRoom) {
+                const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShare);
+                if (pub?.track) await state.livekitRoom.localParticipant.unpublishTrack(pub.track, true);
+              }
               updateMediaButtons();
             };
           } catch (err) {
@@ -4377,7 +4250,10 @@
           state.media.screen = false;
           logActivity('screen_off');
           attachLocalVideo();
-          if (state.localStream) replaceStreamOnAllPeers(state.localStream);
+          if (state.livekitRoom) {
+            const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.ScreenShare);
+            if (pub?.track) await state.livekitRoom.localParticipant.unpublishTrack(pub.track, true);
+          }
         }
       } else if (key === 'handRaised') {
         state.media.handRaised = !state.media.handRaised;
