@@ -429,11 +429,15 @@
       const uemail= p.get('uemail');
       const urole = p.get('urole');
       if (uid) {
+        // Normalize role — this page is for students only; never let a stale
+        // admin role contaminate storage (hub.html may have leaked one).
+        const HOST_ROLES = ['admin', 'teacher', 'super_admin', 'super admin', 'instructor', 'faculty'];
+        const safeRole = (!urole || HOST_ROLES.includes((urole || '').toLowerCase())) ? 'Student' : urole;
         ['sessionStorage','localStorage'].forEach(store => {
           window[store].setItem('userId',    uid);
           window[store].setItem('userName',  uname  || '');
           window[store].setItem('userEmail', uemail || '');
-          window[store].setItem('userRole',  urole  || 'Student');
+          window[store].setItem('userRole',  safeRole);
           window[store].setItem('isLoggedIn','true');
         });
         // Hide the sign-in overlay immediately — user is already identified
