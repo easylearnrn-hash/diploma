@@ -816,14 +816,6 @@
       <select id="filterSession"><option value="">All Sessions</option></select>
     </div>
 
-    <div class="filter-group">
-      <span class="filter-label">Role</span>
-      <select id="filterRole">
-        <option value="">All Roles</option>
-        <option value="Student">Students</option>
-        <option value="Admin">Admins / Hosts</option>
-      </select>
-    </div>
 
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
@@ -1166,7 +1158,6 @@
     // ── Per-student aggregation ───────────────────────────────────
     function aggregateStudents() {
       const sessionFilter = document.getElementById('filterSession')?.value || '';
-      const roleFilter    = document.getElementById('filterRole')?.value    || '';
       const searchQ       = (document.getElementById('searchStudent')?.value || '').toLowerCase().trim();
 
       // Map: userId → { name, role, sessions: {}, logs: [] }
@@ -1185,7 +1176,10 @@
             session_name: allSessions.find(s => s.session_id === p.session_id)?.room_name || p.session_id,
             joined_at: p.joined_at,
             left_at: p.left_at,
-            duration_seconds: p.total_duration_seconds || 0,
+            duration_seconds: p.total_duration_seconds ||
+              (p.joined_at && p.left_at
+                ? Math.max(0, Math.round((new Date(p.left_at) - new Date(p.joined_at)) / 1000))
+                : 0),
             participant_id: p.id
           };
         }
@@ -1203,7 +1197,7 @@
       // Compute per-student stats and filter
       const result = [];
       for (const [uid, data] of map) {
-        if (roleFilter && data.role !== roleFilter) continue;
+        if (data.role !== 'Student') continue;
         if (searchQ && !data.name.toLowerCase().includes(searchQ) && !uid.toLowerCase().includes(searchQ)) continue;
 
         // Session count
@@ -1351,6 +1345,14 @@
 
       const maxSecs = Math.max(...displayData.map(r => r.totalSecs), 1);
 
+      // Total class time = sum of sessions that have explicit started_at + ended_at, capped at 12h each
+      const MAX_SESSION_SECS = 12 * 3600;
+      const classTotalSecs = allSessions.reduce((sum, s) => {
+        if (!s.started_at || !s.ended_at) return sum;
+        const dur = Math.max(0, Math.round((new Date(s.ended_at) - new Date(s.started_at)) / 1000));
+        return sum + Math.min(dur, MAX_SESSION_SECS);
+      }, 0);
+
       let rows = '';
       displayData.forEach((r, i) => {
         const initials = r.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) || '??';
@@ -1385,7 +1387,12 @@
             <td><span class="badge ${rollBadge}">${escapeHtml(r.role)}</span></td>
             <td class="right">${r.sessCount} <span style="font-size:10px;color:var(--text-muted)">/ ${allSessions.length}</span></td>
             <td class="right">${absCell}</td>
-            <td class="right">${fmt(r.totalSecs)}</td>
+            <td class="right">
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+                <span>${fmt(r.totalSecs)}</span>
+                ${classTotalSecs > 0 ? `<span style="font-size:10px;color:var(--text-muted)">/ ${fmt(classTotalSecs)}</span>` : ''}
+              </div>
+            </td>
             <td class="right">
               <div class="metric-cell">
                 <div class="metric-top">${r.micOnTimes}× <span class="stu-role">${fmt(r.micOnSecs)} on</span></div>
@@ -1755,9 +1762,11 @@
           </div>
         </div>
 
-        <div class="detail-card">
+        <div class="detail-card" style="display:flex;flex-direction:column;">
           <div class="dc-title">🗓 Session Breakdown</div>
-          ${sessRows || '<div class="dc-stat-row"><span class="dc-stat-label" style="color:var(--text-muted)">No sessions recorded in this period</span></div>'}
+          <div style="overflow-y:auto;max-height:220px;flex:1;padding-right:4px;">
+            ${sessRows || '<div class="dc-stat-row"><span class="dc-stat-label" style="color:var(--text-muted)">No sessions recorded in this period</span></div>'}
+          </div>
         </div>
 
         <div class="detail-card" style="grid-column: 1 / -1">
