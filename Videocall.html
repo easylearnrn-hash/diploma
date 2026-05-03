@@ -4497,14 +4497,29 @@
       // ── Non-host users: always redirect to the student-only page ──
       // A user is a host only if they are already signed in as admin/teacher.
       // Unauthenticated users are also sent to the student page to sign in there.
+
+      // If the URL explicitly carries a student role (passed by hub.html), redirect
+      // immediately — this prevents stale admin localStorage from keeping a student
+      // on the host page when hub.html shares a Videocall.html link.
+      const urlRole = (params.get('urole') || '').toLowerCase();
+      const HOST_ROLES = ['admin', 'teacher', 'super_admin', 'super admin', 'instructor', 'faculty'];
+      const urlSaysStudent = urlRole && !HOST_ROLES.includes(urlRole);
+
+      if (urlSaysStudent) {
+        // Forward ALL original query params so identity arrives intact on student page
+        window.location.replace('videocall-student.html' + window.location.search);
+        return;
+      }
+
       const isLoggedIn = ss('isLoggedIn') === 'true';
       const isAdminFlag = isLoggedIn && ss('isAdmin') === 'true';
       const roleStr = (ss('userRole') || '').toLowerCase();
       const isHostUser = isAdminFlag
-        || (isLoggedIn && ['admin', 'teacher', 'super_admin', 'super admin', 'instructor'].includes(roleStr));
+        || (isLoggedIn && HOST_ROLES.includes(roleStr));
 
       if (!isHostUser) {
-        window.location.replace(`videocall-student.html?session=${encodeURIComponent(sessionCode)}`);
+        // Forward ALL original query params (uid, uname, uemail, urole) to student page
+        window.location.replace('videocall-student.html' + window.location.search);
         return;
       }
 
