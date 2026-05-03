@@ -6672,9 +6672,12 @@
         return;
       }
       // Pass the current user's identity so the new tab restores the session
-      const uid   = sessionStorage.getItem('userId')   || localStorage.getItem('userId')   || '';
-      const uname = sessionStorage.getItem('userName') || localStorage.getItem('userName') || (studentData?.fullName || studentData?.name || '');
-      const uemail= sessionStorage.getItem('userEmail')|| localStorage.getItem('userEmail')|| (studentData?.email || '');
+      // Always prioritise studentData (the authoritative profile loaded in this tab)
+      // over potentially stale sessionStorage/localStorage values from other pages.
+      const sd    = studentData || {};
+      const uid   = sd.id        || sd.studentDbId || sessionStorage.getItem('userId')   || localStorage.getItem('userId')   || '';
+      const uname = sd.fullName  || sd.name        || sessionStorage.getItem('userName') || localStorage.getItem('userName') || '';
+      const uemail= sd.email     || sessionStorage.getItem('userEmail')|| localStorage.getItem('userEmail')|| '';
       const urole = sessionStorage.getItem('userRole') || localStorage.getItem('userRole') || 'Student';
       const sep = hubActiveClassLink.url.includes('?') ? '&' : '?';
       const fullUrl = hubActiveClassLink.url
