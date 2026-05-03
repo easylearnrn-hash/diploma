@@ -3764,10 +3764,18 @@
 
       if (db) {
         try {
+          // 1. Mark the session as ended
           await db
             .from('video_call_sessions')
             .update({ ended_at: new Date().toISOString(), status: 'ended' })
             .eq('session_id', state.sessionId);
+
+          // 2. Invalidate all pending lobby requests — denies re-entry via invite links
+          await db
+            .from('video_call_lobby')
+            .update({ status: 'denied', decided_at: new Date().toISOString() })
+            .eq('session_code', state.sessionCode)
+            .eq('status', 'waiting');
         } catch (e) {
           console.warn('endSession DB update failed:', e.message);
         }

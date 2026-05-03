@@ -1,0 +1,1342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Class | ACNHS Student View</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="js/acnhs-logo-base64.js"></script>
+  <style>
+    .hidden { display: none !important; }
+
+    :root {
+      --navy-950: #02060f;
+      --navy-900: #04111f;
+      --navy-800: #0a1b32;
+      --gold-500: #c9a84c;
+      --gold-400: #d4b56a;
+      --gold-200: #f1e3bc;
+      --border-gold: rgba(201,168,76,0.28);
+      --text-primary: #f5f1e8;
+      --text-secondary: #d4c9b8;
+      --text-muted: #9b917f;
+      --success: #22c55e;
+      --danger: #ef4444;
+      --radius-md: 16px;
+      --radius-lg: 22px;
+      --shadow-soft: 0 22px 60px rgba(0,0,0,0.45);
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-font-smoothing:antialiased; }
+    html { color-scheme: dark; }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: linear-gradient(160deg, #020a18 0%, #07162c 45%, #030915 100%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .stu-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 20px;
+      background: rgba(4,17,31,0.92);
+      border-bottom: 1px solid var(--border-gold);
+      flex-shrink: 0;
+    }
+    .stu-brand { display:flex; align-items:center; gap:12px; }
+    .stu-logo { width:36px; height:36px; border-radius:50%; border:1.5px solid var(--gold-500); overflow:hidden; flex-shrink:0; }
+    .stu-logo img { width:100%; height:100%; object-fit:contain; padding:3px; }
+    .stu-title { font-size:13px; font-weight:700; color:var(--gold-200); }
+    .stu-session-name { font-size:11px; color:var(--text-muted); margin-top:1px; }
+    .stu-header-right { display:flex; align-items:center; gap:10px; }
+    .status-pill {
+      padding:4px 12px; border-radius:999px; font-size:11px; font-weight:700;
+      display:flex; align-items:center; gap:6px;
+      background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.3); color:#f87171;
+    }
+    .status-pill .dot { width:7px; height:7px; border-radius:50%; background:#ef4444; }
+    .status-pill.live { background:rgba(34,197,94,0.12); border-color:rgba(34,197,94,0.3); color:#4ade80; }
+    .status-pill.live .dot { background:#22c55e; animation:livePulse 1.5s ease-in-out infinite; }
+    @keyframes livePulse {
+      0%,100% { box-shadow:0 0 0 0 rgba(34,197,94,0.6); }
+      60%      { box-shadow:0 0 0 4px rgba(34,197,94,0); }
+    }
+
+    /* ── Main layout ── */
+    .stu-body {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    /* ── Video grid ── */
+    .stu-grid-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .video-grid {
+      flex: 1;
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      overflow: hidden;
+      min-height: 0;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      align-content: start;
+    }
+    .video-tile {
+      background: rgba(7,15,30,0.9);
+      border: 1px solid rgba(201,168,76,0.16);
+      border-radius: var(--radius-md);
+      aspect-ratio: 16/9;
+      overflow: hidden;
+      position: relative;
+      transition: box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+    .video-tile.speaking {
+      box-shadow: 0 0 0 2px #22c55e, 0 0 20px rgba(34,197,94,0.3);
+      border-color: #22c55e !important;
+    }
+    .video-avatar {
+      position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+      font-size:28px; font-weight:800; color:rgba(201,168,76,0.55);
+      background:radial-gradient(circle, rgba(7,25,50,0.8), rgba(2,6,15,0.95));
+    }
+    .tile-badges { position:absolute; bottom:38px; left:8px; z-index:5; display:flex; gap:4px; pointer-events:none; }
+    .tile-badge { width:20px; height:20px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; background:rgba(239,68,68,0.82); border:1px solid rgba(255,255,255,0.18); color:#fff; }
+    .tile-name-bar { position:absolute; bottom:0; left:0; right:0; padding:6px 10px; background:linear-gradient(transparent,rgba(0,0,0,0.72)); z-index:5; }
+    .tile-name { font-size:12px; font-weight:700; color:#fff; }
+    .tile-role { font-size:10px; color:rgba(255,255,255,0.6); }
+    .tile-status { position:absolute; top:8px; left:8px; z-index:5; background:rgba(0,0,0,0.65); border-radius:999px; padding:3px 8px; display:flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:#fff; }
+    .tile-status span { width:6px; height:6px; border-radius:50%; background:#6b7280; display:inline-block; }
+    .tile-status span.green { background:#22c55e; }
+    .empty-state { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; font-size:12px; color:var(--text-muted); padding:16px; }
+
+    /* ── Chat panel ── */
+    .stu-chat {
+      width: 300px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      border-left: 1px solid var(--border-gold);
+      background: rgba(4,12,26,0.92);
+      overflow: hidden;
+    }
+    .chat-heading {
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0;
+    }
+    .chat-log {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.08) transparent;
+    }
+    .chat-bubble { padding:8px 11px; border-radius:12px; font-size:13px; line-height:1.5; word-break:break-word; }
+    .chat-bubble.mine { background:rgba(201,168,76,0.14); border:1px solid rgba(201,168,76,0.2); }
+    .chat-bubble.theirs { background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08); }
+    .chat-meta { font-size:10px; color:var(--text-muted); margin-bottom:4px; font-weight:600; }
+    .chat-text { font-size:13px; color:var(--text-primary); }
+    .chat-input-row { display:flex; gap:8px; padding:10px; border-top:1px solid rgba(255,255,255,0.07); flex-shrink:0; }
+    .chat-input-row input { flex:1; background:rgba(255,255,255,0.05); border:1px solid rgba(201,168,76,0.2); border-radius:10px; padding:8px 12px; color:var(--text-primary); font-size:13px; outline:none; }
+    .chat-input-row input:focus { border-color:rgba(201,168,76,0.4); }
+    .chat-input-row input::placeholder { color:var(--text-muted); }
+    .chat-send-btn { padding:8px 14px; background:rgba(201,168,76,0.18); border:1px solid rgba(201,168,76,0.35); border-radius:10px; color:var(--gold-200); font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; }
+    .chat-send-btn:hover { background:rgba(201,168,76,0.28); }
+
+    /* ── Controls bar ── */
+    .stu-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 10px 20px;
+      background: rgba(4,17,31,0.92);
+      border-top: 1px solid var(--border-gold);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .ctrl-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      color: var(--text-secondary);
+      font-size: 10px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      min-width: 60px;
+    }
+    .ctrl-btn svg { display:block; }
+    .ctrl-btn.active { background:rgba(201,168,76,0.15); border-color:rgba(201,168,76,0.4); color:var(--gold-200); }
+    .ctrl-btn.off { background:rgba(239,68,68,0.12); border-color:rgba(239,68,68,0.3); color:#f87171; }
+    .ctrl-btn.leave { background:rgba(239,68,68,0.14); border-color:rgba(239,68,68,0.35); color:#f87171; }
+    .ctrl-btn.leave:hover { background:rgba(239,68,68,0.28); }
+    .ctrl-btn:hover:not(.leave) { background:rgba(255,255,255,0.1); }
+
+    /* ── Notice toast ── */
+    .auth-notice {
+      position:fixed; top:16px; left:50%; transform:translateX(-50%);
+      background:rgba(7,22,40,0.97); border:1px solid rgba(201,168,76,0.35);
+      border-radius:12px; padding:10px 20px; font-size:13px; font-weight:600;
+      color:var(--gold-200); z-index:500; transition:opacity 0.3s;
+      pointer-events:none; white-space:nowrap; max-width:90vw;
+    }
+    .auth-notice.hidden { opacity:0; }
+
+    /* ── Pre-join overlay ── */
+    .prejoin-overlay {
+      position:fixed; inset:0; z-index:400;
+      background:rgba(2,6,15,0.92); backdrop-filter:blur(14px);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .prejoin-card {
+      background:linear-gradient(160deg,rgba(7,22,40,0.95),rgba(3,10,24,0.95));
+      border:1px solid var(--border-gold);
+      border-radius:24px;
+      padding:44px 40px 40px;
+      width:min(400px,90vw);
+      text-align:center;
+      box-shadow:0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(201,168,76,0.08);
+    }
+    .prejoin-logo { width:68px; height:68px; border-radius:50%; border:2px solid var(--gold-500); display:flex; align-items:center; justify-content:center; background:radial-gradient(circle,rgba(201,168,76,0.18),transparent 65%); margin:0 auto 20px; }
+    .prejoin-logo img { width:50px; height:50px; object-fit:contain; }
+    .prejoin-card h2 { font-size:22px; font-weight:800; color:var(--gold-200); margin-bottom:10px; }
+    .prejoin-session-name { font-size:15px; font-weight:700; color:var(--text-primary); margin-bottom:8px; }
+    .prejoin-identity { font-size:12.5px; color:var(--text-muted); margin-bottom:28px; }
+    .prejoin-btn {
+      width:100%; padding:14px 24px;
+      background:linear-gradient(135deg,var(--gold-500),#a07830);
+      border:none; border-radius:14px;
+      color:var(--navy-900); font-weight:800; font-size:15px;
+      cursor:pointer; transition:all 0.2s;
+    }
+    .prejoin-btn:hover { transform:translateY(-1px); box-shadow:0 8px 24px rgba(201,168,76,0.35); }
+    .prejoin-btn:disabled { opacity:0.55; cursor:not-allowed; transform:none; }
+    .prejoin-waiting {
+      margin-top:20px; padding:14px 16px;
+      background:rgba(201,168,76,0.06); border:1px solid rgba(201,168,76,0.2);
+      border-radius:12px; display:none;
+    }
+    .prejoin-waiting.show { display:block; }
+    .prejoin-waiting p { font-size:13px; color:var(--text-secondary); }
+    .wait-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--gold-500); animation:wPulse 1.4s ease-in-out infinite; margin-right:6px; vertical-align:middle; }
+    @keyframes wPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+    .prejoin-denied { margin-top:20px; padding:14px 16px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:12px; display:none; }
+    .prejoin-denied.show { display:block; }
+    .prejoin-denied p { font-size:13px; color:#fca5a5; }
+    .prejoin-ended { margin-top:20px; padding:14px 16px; background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.25); border-radius:12px; }
+    .prejoin-ended p { font-size:13px; color:#fca5a5; }
+
+    /* ── Sign-in overlay ── */
+    .signin-overlay {
+      position:fixed; inset:0; z-index:500;
+      background:rgba(2,6,15,0.95); backdrop-filter:blur(14px);
+      display:flex; align-items:center; justify-content:center;
+    }
+    .signin-card {
+      background:linear-gradient(160deg,rgba(7,22,40,0.98),rgba(3,10,24,0.98));
+      border:1px solid var(--border-gold); border-radius:24px;
+      padding:40px 36px; width:min(420px,92vw);
+      box-shadow:0 40px 80px rgba(0,0,0,0.6);
+    }
+    .signin-logo { text-align:center; margin-bottom:20px; }
+    .signin-logo img { width:52px; height:52px; }
+    .signin-card h2 { text-align:center; font-size:20px; font-weight:800; color:var(--gold-200); margin-bottom:6px; }
+    .signin-card .signin-sub { text-align:center; font-size:12.5px; color:var(--text-muted); margin-bottom:24px; }
+    .signin-field { margin-bottom:14px; }
+    .signin-field label { display:block; font-size:11.5px; font-weight:600; color:var(--text-secondary); margin-bottom:5px; }
+    .signin-field input, .signin-field select { width:100%; padding:10px 14px; background:rgba(255,255,255,0.05); border:1px solid rgba(201,168,76,0.2); border-radius:10px; color:var(--text-primary); font-size:13px; outline:none; }
+    .signin-field input:focus, .signin-field select:focus { border-color:rgba(201,168,76,0.4); }
+    .signin-btn { width:100%; padding:13px; background:linear-gradient(135deg,var(--gold-500),#a07830); border:none; border-radius:12px; color:var(--navy-900); font-weight:800; font-size:14px; cursor:pointer; margin-top:6px; }
+    .signin-btn:disabled { opacity:0.55; cursor:not-allowed; }
+    .signin-error { display:none; font-size:12px; color:#f87171; margin-top:8px; text-align:center; }
+    .signin-error.show { display:block; }
+
+    /* ── Session-ended screen ── */
+    .ended-screen {
+      position:fixed; inset:0; z-index:300;
+      background:rgba(2,6,15,0.96); display:flex; align-items:center; justify-content:center;
+    }
+    .ended-card {
+      text-align:center; padding:48px 40px;
+      background:rgba(7,22,40,0.95); border:1px solid rgba(239,68,68,0.25);
+      border-radius:24px; width:min(380px,90vw);
+    }
+    .ended-card .icon { font-size:48px; margin-bottom:16px; }
+    .ended-card h2 { font-size:20px; font-weight:800; color:#fca5a5; margin-bottom:8px; }
+    .ended-card p { font-size:13px; color:var(--text-muted); line-height:1.6; }
+
+    @media (max-width:720px) {
+      .stu-chat { display:none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ── -->
+  <header class="stu-header">
+    <div class="stu-brand">
+      <div class="stu-logo"><img data-acnhs-logo alt="ACNHS"></div>
+      <div>
+        <div class="stu-title">Armenian College of Nursing &amp; Health Sciences</div>
+        <div class="stu-session-name" id="sessionNameDisplay">Connecting…</div>
+      </div>
+    </div>
+    <div class="stu-header-right">
+      <div class="status-pill" id="statusPill">
+        <span class="dot"></span>
+        <span id="statusText">Waiting</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Body: video + chat ── -->
+  <div class="stu-body">
+    <div class="stu-grid-wrap">
+      <div class="video-grid" id="videoGrid">
+        <div class="video-tile" data-empty="true">
+          <div class="tile-status"><span></span>Waiting</div>
+          <div class="video-avatar">AC</div>
+          <div class="tile-name-bar">
+            <div class="tile-name">Waiting for host</div>
+            <div class="tile-role">You'll be admitted shortly</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="stu-chat">
+      <div class="chat-heading">💬 Live Chat</div>
+      <div class="chat-log" id="chatLog">
+        <div class="empty-state" style="position:static;padding:8px;font-size:12px;color:var(--text-muted);">No messages yet.</div>
+      </div>
+      <div class="chat-input-row">
+        <input type="text" id="chatInput" placeholder="Send a message…" autocomplete="off">
+        <button class="chat-send-btn" id="sendChatBtn">Send</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── Controls ── -->
+  <div class="stu-controls" id="stuControls">
+    <button class="ctrl-btn off" id="btnCamera" onclick="toggleMedia('camera')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/><line x1="2" y1="2" x2="22" y2="22" stroke="var(--danger)" stroke-width="2.5"/></svg>
+      Camera Off
+    </button>
+    <button class="ctrl-btn off" id="btnMic" onclick="toggleMedia('mic')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      Mic Muted
+    </button>
+    <button class="ctrl-btn active" id="btnSpeaker" onclick="toggleMedia('speaker')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      Speaker On
+    </button>
+    <button class="ctrl-btn" id="btnHand" onclick="toggleMedia('hand')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+      Raise Hand
+    </button>
+    <button class="ctrl-btn leave" onclick="leaveSession()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      Leave
+    </button>
+  </div>
+
+  <!-- ── Notice toast ── -->
+  <div class="auth-notice hidden" id="authNotice"></div>
+
+  <!-- ── Pre-join overlay ── -->
+  <div class="prejoin-overlay" id="prejoinOverlay">
+    <div class="prejoin-card">
+      <div class="prejoin-logo"><img data-acnhs-logo alt="ACNHS"></div>
+      <h2>Ready to Join?</h2>
+      <div class="prejoin-session-name" id="prejoinSessionName">ACNHS Live Session</div>
+      <div class="prejoin-identity">Joining as <strong id="prejoinUserName">—</strong> · <span id="prejoinUserRole">Student</span></div>
+      <button class="prejoin-btn" id="prejoinRequestBtn" onclick="requestToJoin()">Request to Join</button>
+      <div class="prejoin-waiting" id="prejoinWaiting">
+        <p><span class="wait-dot"></span>Waiting for the host to admit you…</p>
+      </div>
+      <div class="prejoin-denied" id="prejoinDenied">
+        <p>Your request was declined. You may tap the button again to re-request.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Session-ended screen (shown when host ends mid-session OR link is stale) ── -->
+  <div class="ended-screen hidden" id="endedScreen">
+    <div class="ended-card">
+      <div class="icon">🔴</div>
+      <h2>Session Ended</h2>
+      <p id="endedMessage">The instructor has ended this session.<br>You may close this tab or return to the hub.</p>
+      <button onclick="window.close()" style="margin-top:24px;padding:10px 24px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:var(--text-secondary);font-size:13px;cursor:pointer;">Close Tab</button>
+    </div>
+  </div>
+
+  <!-- ── Sign-in overlay ── -->
+  <div class="signin-overlay" id="signinOverlay">
+    <div class="signin-card">
+      <div class="signin-logo"><img data-acnhs-logo alt="ACNHS" style="width:52px;height:52px;"></div>
+      <h2>Sign In to Join</h2>
+      <p class="signin-sub" id="signinSubtitle">Sign in with your ACNHS student account to enter this class.</p>
+      <div class="signin-field">
+        <label>Email or Username</label>
+        <input type="text" id="signinEmail" placeholder="e.g. n.abrahamyan" autocomplete="username" spellcheck="false" autocapitalize="none">
+      </div>
+      <div class="signin-field">
+        <label>Password</label>
+        <input type="password" id="signinPassword" placeholder="Enter your password" autocomplete="current-password">
+      </div>
+      <button class="signin-btn" id="signinBtn" onclick="handleSignIn()">Sign In &amp; Join Class</button>
+      <div class="signin-error" id="signinError"></div>
+    </div>
+  </div>
+
+  <script src="js/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+  <script>
+    // ── Supabase + user ───────────────────────────────────────────
+    const db = initSupabase();
+
+    function ss(k) { return sessionStorage.getItem(k) || localStorage.getItem(k) || ''; }
+
+    function getCurrentUser() {
+      return {
+        id:    ss('userId')   || ss('applicantId') || null,
+        name:  ss('userName') || ss('applicantName') || 'Student',
+        email: ss('userEmail') || '',
+        role:  'Student'
+      };
+    }
+
+    let user = getCurrentUser();
+
+    // ── State ─────────────────────────────────────────────────────
+    const state = {
+      sessionId: null,
+      sessionCode: null,
+      sessionName: null,
+      sessionStart: null,
+      joinTimestamp: null,
+      currentAttendanceId: null,
+      localStream: null,
+      peers: {},
+      remoteStreams: {},
+      broadcastChannel: null,
+      attendanceRowsDeduped: [],
+      lobbyRowId: null,
+      lobbyPollInterval: null,
+      _healthPollId: null,
+      media: { camera: false, mic: false, speaker: true, hand: false }
+    };
+
+    // DOM shortcuts
+    const $ = id => document.getElementById(id);
+    const videoGrid       = $('videoGrid');
+    const chatLog         = $('chatLog');
+    const chatInput       = $('chatInput');
+    const prejoinOverlay  = $('prejoinOverlay');
+    const prejoinWaiting  = $('prejoinWaiting');
+    const prejoinDenied   = $('prejoinDenied');
+    const prejoinRqBtn    = $('prejoinRequestBtn');
+    const signinOverlay   = $('signinOverlay');
+    const signinBtn       = $('signinBtn');
+    const signinError     = $('signinError');
+    const endedScreen     = $('endedScreen');
+    const authNotice      = $('authNotice');
+    const statusPill      = $('statusPill');
+    const statusText      = $('statusText');
+    const sessionNameDisp = $('sessionNameDisplay');
+
+    // ── ACNHS logo injection ──────────────────────────────────────
+    if (typeof ACNHS_LOGO_BASE64 !== 'undefined') {
+      document.querySelectorAll('[data-acnhs-logo]').forEach(img => { img.src = ACNHS_LOGO_BASE64; });
+    }
+
+    // ── Utility ───────────────────────────────────────────────────
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    let _noticeTimer = null;
+    function showNotice(msg, duration = 5000) {
+      authNotice.textContent = msg;
+      authNotice.classList.remove('hidden');
+      clearTimeout(_noticeTimer);
+      _noticeTimer = setTimeout(() => authNotice.classList.add('hidden'), duration);
+    }
+
+    function setStatus(label, isLive = false) {
+      statusText.textContent = label;
+      statusPill.className = 'status-pill' + (isLive ? ' live' : '');
+    }
+
+    // ── Sign-in ───────────────────────────────────────────────────
+    async function hashPassword(password) {
+      const data = new TextEncoder().encode(password);
+      const buf = await crypto.subtle.digest('SHA-256', data);
+      return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    }
+
+    async function handleSignIn() {
+      const raw = $('signinEmail').value.trim();
+      const password = $('signinPassword').value;
+      if (!raw || !password) { showSigninError('Enter your email/username and password.'); return; }
+
+      signinBtn.disabled = true;
+      signinBtn.textContent = 'Signing in…';
+      signinError.classList.remove('show');
+
+      const identifier = raw.toLowerCase();
+      const passwordHash = await hashPassword(password);
+
+      try {
+        if (!db) throw new Error('Database not available. Use localhost:8000.');
+
+        // Student only — check applications table
+        const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+        let appRow = null;
+
+        let res = await db.from('applications').select(selectFields).eq('email', identifier).limit(1);
+        if (res.data?.length) appRow = res.data[0];
+
+        if (!appRow) {
+          res = await db.from('applications').select(selectFields).eq('username', identifier).limit(1);
+          if (res.data?.length) appRow = res.data[0];
+        }
+
+        if (!appRow || appRow.password_hash !== passwordHash) {
+          throw new Error('Invalid credentials. Please try again.');
+        }
+
+        const name = appRow.applicant_name || appRow.payload?.fullName || identifier;
+        const id   = appRow.id || appRow.reference_number;
+
+        sessionStorage.setItem('userId', id);
+        sessionStorage.setItem('userName', name);
+        sessionStorage.setItem('userEmail', appRow.email || '');
+        sessionStorage.setItem('userRole', 'Student');
+        sessionStorage.setItem('isLoggedIn', 'true');
+        sessionStorage.setItem('isAdmin', 'false');
+        localStorage.setItem('userId', id);
+        localStorage.setItem('userName', name);
+        localStorage.setItem('userEmail', appRow.email || '');
+        localStorage.setItem('userRole', 'Student');
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('isAdmin', 'false');
+
+        user = getCurrentUser();
+        signinOverlay.classList.add('hidden');
+
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('session');
+        if (code) handleInviteLinkOpened(code);
+      } catch (err) {
+        showSigninError(err.message || 'Sign-in failed.');
+        signinBtn.disabled = false;
+        signinBtn.textContent = 'Sign In & Join Class';
+      }
+    }
+
+    function showSigninError(msg) {
+      signinError.textContent = msg;
+      signinError.classList.add('show');
+      signinBtn.disabled = false;
+      signinBtn.textContent = 'Sign In & Join Class';
+    }
+
+    // ── Entry point: read ?session=CODE ──────────────────────────
+    function hydrateFromQuery() {
+      const code = new URLSearchParams(window.location.search).get('session');
+      if (!code) {
+        showEndedScreen('No session code in this link. Please use the link from your instructor.');
+        return;
+      }
+      if (!user.id) {
+        if ($('signinSubtitle')) $('signinSubtitle').textContent = `Sign in to join session ${code}.`;
+        signinOverlay.classList.remove('hidden');
+        return;
+      }
+      handleInviteLinkOpened(code);
+    }
+
+    async function handleInviteLinkOpened(sessionCode) {
+      // Check if session is still live
+      let sessionName = 'ACNHS Live Class';
+      if (db) {
+        try {
+          const { data } = await db
+            .from('video_call_sessions')
+            .select('room_name, session_id, status')
+            .eq('room_code', sessionCode)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (data) {
+            if (data.status === 'ended') {
+              showEndedScreen('This session has already ended.');
+              return;
+            }
+            sessionName = data.room_name || sessionName;
+            state.sessionId = data.session_id;
+          }
+        } catch (e) {
+          console.warn('Session lookup failed:', e.message);
+          // Continue anyway — show pre-join and let the lobby insert fail gracefully
+        }
+      }
+
+      state.sessionCode = sessionCode;
+      sessionNameDisp.textContent = sessionName;
+      $('prejoinSessionName').textContent = sessionName;
+      $('prejoinUserName').textContent = user.name;
+      $('prejoinUserRole').textContent = user.role;
+
+      // Show pre-join screen
+      prejoinOverlay.classList.remove('hidden');
+      endedScreen.classList.add('hidden');
+      setStatus('Waiting');
+    }
+
+    // ── Request to join (lobby insert) ───────────────────────────
+    async function requestToJoin() {
+      if (!state.sessionCode) return;
+
+      prejoinRqBtn.disabled = true;
+      prejoinRqBtn.textContent = 'Sending request…';
+      prejoinDenied.classList.remove('show');
+
+      const payload = {
+        session_id:   state.sessionId || `local-${state.sessionCode}`,
+        session_code: state.sessionCode,
+        user_id:      user.id,
+        user_name:    user.name,
+        user_role:    user.role,
+        user_email:   user.email,
+        status:       'waiting',
+        requested_at: new Date().toISOString()
+      };
+
+      if (db) {
+        try {
+          // Resume if we already have a waiting row
+          const { data: existing } = await db
+            .from('video_call_lobby')
+            .select('id, status')
+            .eq('session_code', state.sessionCode)
+            .eq('user_id', user.id)
+            .order('requested_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (existing && existing.status === 'waiting') {
+            state.lobbyRowId = existing.id;
+          } else {
+            const { data: inserted, error } = await db
+              .from('video_call_lobby')
+              .insert([payload])
+              .select('id')
+              .maybeSingle();
+
+            if (error) {
+              console.warn('Lobby insert failed:', error.message);
+              prejoinRqBtn.disabled = false;
+              prejoinRqBtn.textContent = 'Retry Request';
+              showNotice('Could not send join request. Check your connection and try again.');
+              return;
+            }
+            state.lobbyRowId = inserted?.id || null;
+          }
+        } catch (e) {
+          console.warn('Lobby error:', e.message);
+          prejoinRqBtn.disabled = false;
+          prejoinRqBtn.textContent = 'Retry Request';
+          showNotice('Could not send join request. Tap Retry.');
+          return;
+        }
+      } else {
+        // No DB — join directly (dev mode)
+        prejoinOverlay.classList.add('hidden');
+        await enterLiveCall();
+        return;
+      }
+
+      prejoinWaiting.classList.add('show');
+      prejoinRqBtn.textContent = 'Request Sent';
+      startLobbyPolling();
+    }
+
+    // ── Lobby polling: watch for admit / deny ─────────────────────
+    function startLobbyPolling() {
+      stopLobbyPolling();
+      if (!db || !state.sessionCode || !user.id) return;
+
+      state.lobbyPollInterval = setInterval(async () => {
+        try {
+          // 1. Check if session itself ended
+          if (state.sessionId) {
+            const { data: sess } = await db
+              .from('video_call_sessions')
+              .select('status')
+              .eq('session_id', state.sessionId)
+              .maybeSingle();
+            if (sess?.status === 'ended') {
+              stopLobbyPolling();
+              showEndedScreen('The session ended before you were admitted.');
+              return;
+            }
+          }
+
+          // 2. Check our lobby row
+          const { data } = await db
+            .from('video_call_lobby')
+            .select('status')
+            .eq('session_code', state.sessionCode)
+            .eq('user_id', user.id)
+            .order('requested_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (!data) return;
+
+          if (data.status === 'admitted') {
+            stopLobbyPolling();
+            prejoinOverlay.classList.add('hidden');
+            await enterLiveCall();
+          } else if (data.status === 'denied') {
+            stopLobbyPolling();
+            prejoinWaiting.classList.remove('show');
+            prejoinDenied.classList.add('show');
+            prejoinRqBtn.disabled = false;
+            prejoinRqBtn.textContent = 'Request to Join Again';
+          }
+        } catch (e) {
+          console.warn('[LobbyPoll] error:', e.message);
+        }
+      }, 3000);
+    }
+
+    function stopLobbyPolling() {
+      clearInterval(state.lobbyPollInterval);
+      state.lobbyPollInterval = null;
+    }
+
+    // ── Enter live call after admission ───────────────────────────
+    async function enterLiveCall() {
+      setStatus('Connecting…');
+      sessionNameDisp.textContent = state.sessionName || state.sessionCode || 'Live Class';
+
+      await startLocalMedia();
+      await updateAttendance('join');
+      await fetchAttendance();
+      subscribeAttendance();
+      startSessionHealthPoll(state.sessionId);
+      await fetchChatHistory();
+      setupChatSubscription();
+      setupWebRTC();
+
+      setStatus('Live', true);
+    }
+
+    // ── Attendance ────────────────────────────────────────────────
+    async function updateAttendance(action) {
+      if (!db || !state.sessionId || !user.id) return;
+      const now = new Date();
+
+      if (action === 'join') {
+        state.joinTimestamp = now;
+        const { data, error } = await db.from('video_call_participants').insert([{
+          session_id:            state.sessionId,
+          session_code:          state.sessionCode,
+          participant_user_id:   user.id,
+          participant_name:      user.name,
+          participant_role:      user.role,
+          participant_email:     user.email,
+          joined_at:             now.toISOString(),
+          is_present:            true
+        }]).select('id').maybeSingle();
+        if (!error) state.currentAttendanceId = data?.id || null;
+      }
+
+      if (action === 'leave' && state.currentAttendanceId) {
+        const dur = state.joinTimestamp ? Math.floor((now - state.joinTimestamp) / 1000) : 0;
+        await db.from('video_call_participants').update({
+          left_at: now.toISOString(),
+          is_present: false,
+          total_duration_seconds: dur
+        }).eq('id', state.currentAttendanceId).catch(() => {});
+        state.joinTimestamp = null;
+        state.currentAttendanceId = null;
+      }
+    }
+
+    async function fetchAttendance() {
+      if (!db || !state.sessionId) return;
+      const { data } = await db
+        .from('video_call_participants')
+        .select('*')
+        .eq('session_id', state.sessionId)
+        .order('joined_at', { ascending: false });
+      if (!data) return;
+
+      // Deduplicate: one entry per user (most recent)
+      const seen = new Map();
+      for (const row of data) {
+        if (!seen.has(row.participant_user_id)) seen.set(row.participant_user_id, row);
+      }
+      state.attendanceRowsDeduped = [...seen.values()];
+      updateVideoGrid();
+    }
+
+    function subscribeAttendance() {
+      if (!db || !state.sessionId) return;
+      db.channel(`attendance-${state.sessionId}`)
+        .on('postgres_changes', {
+          event: '*', schema: 'public',
+          table: 'video_call_participants',
+          filter: `session_id=eq.${state.sessionId}`
+        }, () => fetchAttendance())
+        .subscribe();
+    }
+
+    // ── Session health poll (detect session ended via DB) ─────────
+    function startSessionHealthPoll(sessionId) {
+      stopSessionHealthPoll();
+      if (!db || !sessionId || sessionId.startsWith('local-')) return;
+      state._healthPollId = setInterval(async () => {
+        if (!state.sessionId) { stopSessionHealthPoll(); return; }
+        try {
+          const { data } = await db
+            .from('video_call_sessions')
+            .select('status')
+            .eq('session_id', sessionId)
+            .maybeSingle();
+          if (data?.status === 'ended') {
+            stopSessionHealthPoll();
+            handleSessionEndedByHost({ endedByName: 'The instructor' });
+          }
+        } catch (e) { console.warn('[HealthPoll]', e.message); }
+      }, 12000);
+    }
+
+    function stopSessionHealthPoll() {
+      clearInterval(state._healthPollId);
+      state._healthPollId = null;
+    }
+
+    // ── Handle host-ended event ───────────────────────────────────
+    function handleSessionEndedByHost(msg) {
+      stopLobbyPolling();
+      stopSessionHealthPoll();
+      teardownWebRTC();
+      stopLocalMedia();
+      stopSpeakingDetection();
+      state.sessionId = null;
+      state.sessionCode = null;
+      state.sessionName = null;
+      setStatus('Ended');
+      showEndedScreen(`${msg?.endedByName || 'The instructor'} has ended this session.`);
+    }
+
+    function showEndedScreen(msg) {
+      $('endedMessage').innerHTML = escapeHtml(msg) + '<br>You may close this tab or return to the hub.';
+      endedScreen.classList.remove('hidden');
+      prejoinOverlay.classList.add('hidden');
+    }
+
+    // ── Leave session ─────────────────────────────────────────────
+    async function leaveSession() {
+      stopLobbyPolling();
+      stopSessionHealthPoll();
+      await updateAttendance('leave');
+      teardownWebRTC();
+      stopLocalMedia();
+      stopSpeakingDetection();
+      setStatus('Left');
+      videoGrid.innerHTML = `<div class="video-tile" data-empty="true">
+        <div class="tile-status"><span></span>Left</div>
+        <div class="video-avatar">AC</div>
+        <div class="tile-name-bar"><div class="tile-name">You left</div><div class="tile-role">Close this tab to return</div></div>
+      </div>`;
+    }
+
+    // ── Local media ───────────────────────────────────────────────
+    async function startLocalMedia() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        state.localStream = stream;
+        state.media.camera = true;
+        state.media.mic = true;
+        attachSpeakingDetection('local', stream);
+        startSpeakingDetection();
+        updateVideoGrid();
+        updateMediaButtons();
+      } catch (err) {
+        try {
+          const audio = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+          state.localStream = audio;
+          state.media.camera = false;
+          state.media.mic = true;
+          attachSpeakingDetection('local', audio);
+          startSpeakingDetection();
+          showNotice('Camera unavailable — mic only.');
+          updateVideoGrid();
+          updateMediaButtons();
+        } catch (e) {
+          state.media.camera = false;
+          state.media.mic = false;
+          showNotice('Camera and mic access denied. Grant permission to participate fully.');
+          updateMediaButtons();
+        }
+      }
+    }
+
+    function stopLocalMedia() {
+      state.localStream?.getTracks().forEach(t => t.stop());
+      state.localStream = null;
+      state.media.camera = false;
+      state.media.mic = false;
+      updateMediaButtons();
+    }
+
+    // ── Media toggles ─────────────────────────────────────────────
+    async function toggleMedia(key) {
+      if (key === 'camera') {
+        if (!state.localStream) return;
+        const track = state.localStream.getVideoTracks()[0];
+        if (track) {
+          state.media.camera = !state.media.camera;
+          track.enabled = state.media.camera;
+          Object.values(state.peers).forEach(peer => {
+            if (peer?.destroyed) return;
+            try { peer._pc?.getSenders?.()?.find(s => s.track?.kind === 'video')?.replaceTrack(state.media.camera ? track : null); } catch (_) {}
+          });
+          updateVideoGrid();
+        }
+      } else if (key === 'mic') {
+        if (!state.localStream) return;
+        const track = state.localStream.getAudioTracks()[0];
+        if (track) {
+          state.media.mic = !state.media.mic;
+          track.enabled = state.media.mic;
+        }
+      } else if (key === 'speaker') {
+        state.media.speaker = !state.media.speaker;
+        document.querySelectorAll('.video-tile video').forEach(v => { if (!v.muted || !state.media.speaker) v.muted = !state.media.speaker; });
+      } else if (key === 'hand') {
+        state.media.hand = !state.media.hand;
+        const localTile = document.getElementById('localVideoTile');
+        if (localTile) {
+          const nameEl = localTile.querySelector('.tile-name');
+          const base = user.name || 'You';
+          if (nameEl) nameEl.textContent = state.media.hand ? `✋ ${base}` : base;
+        }
+        if (state.broadcastChannel) {
+          state.broadcastChannel.send({
+            type: 'broadcast', event: 'hand-status',
+            payload: { userId: user.id, userName: user.name, raised: state.media.hand }
+          });
+        }
+      }
+      updateMediaButtons();
+    }
+
+    function updateMediaButtons() {
+      const btnCam = $('btnCamera');
+      const btnMic = $('btnMic');
+      const btnSpk = $('btnSpeaker');
+      const btnHnd = $('btnHand');
+
+      if (btnCam) {
+        btnCam.className = `ctrl-btn ${state.media.camera ? 'active' : 'off'}`;
+        btnCam.innerHTML = state.media.camera
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>Camera On`
+          : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/><line x1="2" y1="2" x2="22" y2="22" stroke="var(--danger)" stroke-width="2.5"/></svg>Camera Off`;
+      }
+      if (btnMic) {
+        btnMic.className = `ctrl-btn ${state.media.mic ? 'active' : 'off'}`;
+        btnMic.innerHTML = state.media.mic
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>Mic On`
+          : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>Mic Muted`;
+      }
+      if (btnSpk) {
+        btnSpk.className = `ctrl-btn ${state.media.speaker ? 'active' : 'off'}`;
+        btnSpk.innerHTML = state.media.speaker
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>Speaker On`
+          : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>Speaker Off`;
+      }
+      if (btnHnd) {
+        btnHnd.className = `ctrl-btn ${state.media.hand ? 'active' : ''}`;
+        btnHnd.innerHTML = state.media.hand
+          ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>Lower Hand`
+          : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v0"/><path d="M14 10V4a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2v0a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>Raise Hand`;
+      }
+    }
+
+    // ── Video grid ────────────────────────────────────────────────
+    const _cachedVideos = new Map();
+
+    function updateVideoGrid() {
+      const rows = state.attendanceRowsDeduped;
+      if (!rows.length) {
+        videoGrid.innerHTML = `<div class="video-tile" data-empty="true">
+          <div class="tile-status"><span class="green"></span>Live</div>
+          <div class="video-avatar">AC</div>
+          <div class="tile-name-bar"><div class="tile-name">Connecting…</div><div class="tile-role">Participants joining</div></div>
+        </div>`;
+        attachLocalVideoTile();
+        return;
+      }
+
+      // Build/maintain tiles
+      videoGrid.innerHTML = '';
+      rows.forEach(row => {
+        const uid = row.participant_user_id;
+        const isMe = uid === user.id;
+        const tileId = `tile-${uid}`;
+        let tile = document.getElementById(tileId);
+
+        if (!tile) {
+          tile = document.createElement('div');
+          tile.className = 'video-tile';
+          tile.id = tileId;
+          if (isMe) tile.id = 'localVideoTile';
+          tile.dataset.uid = uid;
+          const initials = (row.participant_name || 'P').split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
+          const hasCam = isMe ? (state.media.camera) : !!state.remoteStreams[uid];
+          tile.innerHTML = `
+            <div class="tile-status"><span class="${row.is_present ? 'green' : ''}"></span>${row.is_present ? 'Live' : 'Away'}</div>
+            <div class="video-avatar" style="${hasCam ? 'display:none' : ''}">${escapeHtml(initials)}</div>
+            <div class="tile-badges"></div>
+            <div class="tile-name-bar">
+              <div class="tile-name">${escapeHtml(row.participant_name || 'Participant')}${isMe ? ' (You)' : ''}</div>
+              <div class="tile-role">${escapeHtml(row.participant_role || 'Student')}</div>
+            </div>`;
+        }
+
+        videoGrid.appendChild(tile);
+
+        // Attach video streams
+        const cacheKey = isMe ? 'local' : uid;
+        if (isMe && state.localStream && state.media.camera) {
+          let vid = _cachedVideos.get('local');
+          if (!vid) { vid = document.createElement('video'); vid.autoplay = true; vid.muted = true; vid.playsInline = true; vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);transform:scaleX(-1);position:absolute;top:0;left:0;'; _cachedVideos.set('local', vid); }
+          tile.style.position = 'relative';
+          if (!tile.contains(vid)) tile.insertBefore(vid, tile.firstChild);
+          if (vid.srcObject !== state.localStream) vid.srcObject = state.localStream;
+          vid.play().catch(() => {});
+          tile.querySelector('.video-avatar')?.style && (tile.querySelector('.video-avatar').style.display = 'none');
+        } else if (!isMe && state.remoteStreams[uid]) {
+          let vid = _cachedVideos.get(uid);
+          if (!vid) { vid = document.createElement('video'); vid.autoplay = true; vid.playsInline = true; vid.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);position:absolute;top:0;left:0;'; _cachedVideos.set(uid, vid); }
+          vid.muted = !state.media.speaker;
+          tile.style.position = 'relative';
+          if (!tile.contains(vid)) tile.insertBefore(vid, tile.firstChild);
+          if (vid.srcObject !== state.remoteStreams[uid]) vid.srcObject = state.remoteStreams[uid];
+          vid.play().catch(() => {});
+          tile.querySelector('.video-avatar')?.style && (tile.querySelector('.video-avatar').style.display = 'none');
+        }
+      });
+    }
+
+    function attachLocalVideoTile() {
+      if (!state.localStream || !state.media.camera) return;
+      let tile = document.querySelector('.video-tile[data-empty]');
+      if (!tile) return;
+      tile.id = 'localVideoTile';
+      tile.removeAttribute('data-empty');
+      tile.dataset.uid = user.id;
+      const initials = (user.name || 'Me').split(' ').map(p => p[0]).join('').toUpperCase().slice(0,2);
+      tile.innerHTML = `
+        <div class="tile-status"><span class="green"></span>Live</div>
+        <div class="video-avatar" style="display:none">${escapeHtml(initials)}</div>
+        <div class="tile-badges"></div>
+        <div class="tile-name-bar"><div class="tile-name">${escapeHtml(user.name)} (You)</div><div class="tile-role">Student</div></div>`;
+      let vid = _cachedVideos.get('local');
+      if (!vid) { vid = document.createElement('video'); vid.autoplay=true; vid.muted=true; vid.playsInline=true; vid.style.cssText='width:100%;height:100%;object-fit:cover;transform:scaleX(-1);position:absolute;top:0;left:0;'; _cachedVideos.set('local', vid); }
+      tile.style.position='relative';
+      if (!tile.contains(vid)) tile.insertBefore(vid, tile.firstChild);
+      vid.srcObject = state.localStream;
+      vid.play().catch(()=>{});
+    }
+
+    // ── WebRTC ────────────────────────────────────────────────────
+    function setupWebRTC() {
+      if (!db || !state.sessionCode) return;
+      if (state.broadcastChannel) return; // already set up
+
+      const channelName = `webrtc-${state.sessionCode}`;
+      state.broadcastChannel = db.channel(channelName, { config: { broadcast: { self: false } } });
+
+      // Signaling
+      state.broadcastChannel.on('broadcast', { event: 'signal' }, payload => {
+        const msg = payload.payload;
+        if (!msg || msg.target !== user.id) return;
+        let peer = state.peers[msg.sender];
+        if (!peer) peer = createPeer(msg.sender, false);
+        if (peer && !peer.destroyed) {
+          try { peer.signal(msg.signal); } catch (e) {
+            destroyPeer(msg.sender);
+            peer = createPeer(msg.sender, false);
+            try { peer.signal(msg.signal); } catch (_) {}
+          }
+        }
+      });
+
+      // Peer joined — initiate if we have tie-break priority
+      state.broadcastChannel.on('broadcast', { event: 'peer-joined' }, payload => {
+        const msg = payload.payload;
+        if (!msg?.userId || msg.userId === user.id) return;
+        if (!state.peers[msg.userId] && user.id < msg.userId) createPeer(msg.userId, true);
+      });
+
+      // Peer left
+      state.broadcastChannel.on('broadcast', { event: 'peer-left' }, payload => {
+        const uid = payload.payload?.userId;
+        if (uid) destroyPeer(uid);
+      });
+
+      // Session ended
+      state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
+        handleSessionEndedByHost(payload.payload);
+      });
+
+      // Chat messages from peers
+      state.broadcastChannel.on('broadcast', { event: 'chat-message' }, payload => {
+        const msg = payload.payload;
+        if (!msg) return;
+        appendChatBubble(msg.userName || 'Participant', msg.message || '', msg.time || '--', msg.userId === user.id);
+      });
+
+      // Hand raise
+      state.broadcastChannel.on('broadcast', { event: 'hand-status' }, payload => {
+        const msg = payload.payload;
+        if (!msg) return;
+        const tile = document.querySelector(`.video-tile[data-uid="${msg.userId}"]`);
+        if (tile) {
+          const nameEl = tile.querySelector('.tile-name');
+          const base = msg.userName || 'Participant';
+          if (nameEl) nameEl.textContent = msg.raised ? `✋ ${base}` : base;
+        }
+      });
+
+      state.broadcastChannel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          // Wait for local stream
+          await new Promise(resolve => {
+            if (state.localStream) return resolve();
+            const start = Date.now();
+            const check = setInterval(() => {
+              if (state.localStream || Date.now() - start > 5000) { clearInterval(check); resolve(); }
+            }, 200);
+          });
+
+          // Guard: may have been torn down while awaiting
+          if (!state.broadcastChannel) return;
+
+          state.broadcastChannel.send({
+            type: 'broadcast', event: 'peer-joined',
+            payload: { userId: user.id, userName: user.name, userRole: user.role }
+          });
+
+          // Connect to existing participants
+          setTimeout(() => {
+            if (!state.broadcastChannel) return;
+            state.attendanceRowsDeduped.forEach(row => {
+              if (row.participant_user_id && row.participant_user_id !== user.id && row.is_present) {
+                if (!state.peers[row.participant_user_id] && user.id < row.participant_user_id) {
+                  createPeer(row.participant_user_id, true);
+                }
+              }
+            });
+          }, 1500);
+        }
+      });
+    }
+
+    function createPeer(targetId, initiator) {
+      if (state.peers[targetId] && !state.peers[targetId].destroyed) return state.peers[targetId];
+      const peer = new SimplePeer({
+        initiator,
+        stream: state.localStream || undefined,
+        trickle: true,
+        config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] }
+      });
+
+      peer.on('signal', signal => {
+        if (!state.broadcastChannel) return;
+        state.broadcastChannel.send({ type: 'broadcast', event: 'signal', payload: { sender: user.id, target: targetId, signal } });
+      });
+
+      peer.on('stream', stream => {
+        state.remoteStreams[targetId] = stream;
+        attachSpeakingDetection(targetId, stream);
+        updateVideoGrid();
+      });
+
+      peer.on('close', () => destroyPeer(targetId));
+
+      peer.on('error', e => {
+        console.warn('[WebRTC] peer error:', e.message);
+        destroyPeer(targetId);
+        setTimeout(() => { if (state.sessionCode && !state.peers[targetId]) createPeer(targetId, initiator); }, 2000);
+      });
+
+      state.peers[targetId] = peer;
+      return peer;
+    }
+
+    function destroyPeer(uid) {
+      const peer = state.peers[uid];
+      if (peer) { try { peer.destroy(); } catch (_) {} delete state.peers[uid]; }
+      delete state.remoteStreams[uid];
+      detachSpeakingDetection(uid);
+      const tile = document.querySelector(`.video-tile[data-uid="${uid}"]`);
+      tile?.remove();
+    }
+
+    function teardownWebRTC() {
+      if (state.broadcastChannel) {
+        try { state.broadcastChannel.send({ type: 'broadcast', event: 'peer-left', payload: { userId: user.id } }); } catch (_) {}
+        db?.removeChannel(state.broadcastChannel);
+        state.broadcastChannel = null;
+      }
+      Object.keys(state.peers).forEach(destroyPeer);
+      state.remoteStreams = {};
+    }
+
+    // ── Chat ──────────────────────────────────────────────────────
+    async function fetchChatHistory() {
+      if (!db || !state.sessionId) return;
+      const { data } = await db.from('video_call_chat').select('*').eq('session_id', state.sessionId).order('sent_at', { ascending: true });
+      if (!data?.length) return;
+      chatLog.innerHTML = '';
+      data.forEach(msg => {
+        const t = new Date(msg.sent_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+        appendChatBubble(msg.user_name || 'Participant', msg.message || '', t, msg.user_id === user.id);
+      });
+    }
+
+    function setupChatSubscription() {
+      if (!db || !state.sessionId) return;
+      db.channel(`chat-${state.sessionId}`)
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'video_call_chat', filter: `session_id=eq.${state.sessionId}` }, payload => {
+          const msg = payload.new;
+          if (msg.user_id === user.id) return; // already shown locally
+          const t = new Date(msg.sent_at).toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+          appendChatBubble(msg.user_name || 'Participant', msg.message || '', t, false);
+        })
+        .subscribe();
+    }
+
+    function sendChatMessage() {
+      const message = chatInput.value.trim();
+      if (!message || !state.sessionId) return;
+      const time = new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+      appendChatBubble(user.name, message, time, true);
+      chatInput.value = '';
+
+      if (db) {
+        db.from('video_call_chat').insert([{
+          session_id: state.sessionId, session_code: state.sessionCode,
+          user_id: user.id, user_name: user.name, user_role: user.role,
+          message, sent_at: new Date().toISOString()
+        }]).then(({ error }) => { if (error) console.warn('Chat save error:', error.message); });
+      }
+
+      if (state.broadcastChannel) {
+        state.broadcastChannel.send({ type: 'broadcast', event: 'chat-message', payload: { userId: user.id, userName: user.name, userRole: user.role, message, time } });
+      }
+    }
+
+    function appendChatBubble(name, message, time, isMine) {
+      const el = document.createElement('div');
+      el.className = `chat-bubble ${isMine ? 'mine' : 'theirs'}`;
+      el.innerHTML = `<div class="chat-meta">${escapeHtml(name)} · ${escapeHtml(time)}</div><div class="chat-text">${escapeHtml(message)}</div>`;
+      chatLog.querySelector('.empty-state')?.remove();
+      chatLog.appendChild(el);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    // ── Speaking detection ────────────────────────────────────────
+    const _audioCtxMap = new Map();
+    let _speakingTick = null;
+
+    function attachSpeakingDetection(uid, stream) {
+      if (!stream?.getAudioTracks().length) return;
+      detachSpeakingDetection(uid);
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const src = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        analyser.smoothingTimeConstant = 0.4;
+        src.connect(analyser);
+        const dataArr = new Uint8Array(analyser.frequencyBinCount);
+        _audioCtxMap.set(uid, { ctx, analyser, dataArr });
+      } catch (e) {}
+    }
+
+    function detachSpeakingDetection(uid) {
+      const e = _audioCtxMap.get(uid);
+      if (e) { try { e.ctx.close(); } catch (_) {} _audioCtxMap.delete(uid); }
+    }
+
+    function startSpeakingDetection() {
+      if (_speakingTick) return;
+      _speakingTick = setInterval(() => {
+        for (const [uid, { analyser, dataArr }] of _audioCtxMap) {
+          analyser.getByteFrequencyData(dataArr);
+          const rms = Math.sqrt(dataArr.reduce((s,v) => s + v*v, 0) / dataArr.length);
+          const audible = uid === 'local' ? state.media.mic : state.media.speaker;
+          const tile = uid === 'local' ? document.getElementById('localVideoTile') : document.querySelector(`.video-tile[data-uid="${uid}"]`);
+          if (tile) tile.classList.toggle('speaking', rms > 10 && audible);
+        }
+      }, 150);
+    }
+
+    function stopSpeakingDetection() {
+      clearInterval(_speakingTick); _speakingTick = null;
+      for (const uid of _audioCtxMap.keys()) detachSpeakingDetection(uid);
+      document.querySelectorAll('.video-tile.speaking').forEach(t => t.classList.remove('speaking'));
+    }
+
+    // ── Event listeners ───────────────────────────────────────────
+    $('sendChatBtn').addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) sendChatMessage(); });
+    $('signinPassword').addEventListener('keydown', e => { if (e.key === 'Enter') handleSignIn(); });
+
+    // ── Boot ──────────────────────────────────────────────────────
+    hydrateFromQuery();
+  </script>
+</body>
+</html>
