@@ -1038,7 +1038,28 @@
     const _cachedVideos = new Map();
 
     function updateVideoGrid() {
-      const rows = state.attendanceRowsDeduped;
+      // Merge attendance rows with any active remote streams not yet in attendance
+      // (e.g. attendance INSERT failed or session_id mismatch) so video always shows.
+      const attendanceRows = state.attendanceRowsDeduped;
+      const inAttendance = new Set(attendanceRows.map(r => r.participant_user_id));
+      const streamOnlyRows = Object.keys(state.remoteStreams)
+        .filter(uid => uid && uid !== user.id && !inAttendance.has(uid))
+        .map(uid => ({
+          participant_user_id: uid,
+          participant_name: uid,
+          participant_role: 'Host',
+          is_present: true,
+          _streamOnly: true
+        }));
+      // Always include self if we have a local stream
+      const selfRow = (state.localStream && !inAttendance.has(user.id)) ? [{
+        participant_user_id: user.id,
+        participant_name: user.name,
+        participant_role: user.role,
+        is_present: true,
+        _streamOnly: true
+      }] : [];
+      const rows = [...selfRow, ...attendanceRows, ...streamOnlyRows];
       if (!rows.length) {
         videoGrid.innerHTML = `<div class="video-tile" data-empty="true">
           <div class="tile-status"><span class="green"></span>Live</div>

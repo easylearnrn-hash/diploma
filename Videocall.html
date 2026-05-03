@@ -2897,14 +2897,25 @@
       };
 
       let rows;
-      if (state.attendanceRowsDeduped.length) {
-        // Deduplicated: one row per user, local user first
+      {
         const deduped = state.attendanceRowsDeduped;
         const localFromDB = deduped.find(r => r.participant_user_id === user.id);
         const others = deduped.filter(r => r.participant_user_id !== user.id);
-        rows = [localFromDB || localRow, ...others];
-      } else {
-        rows = [localRow];
+        const base = [localFromDB || localRow, ...others];
+
+        // Always show a tile for any active WebRTC remote stream even if the
+        // attendance row is missing (e.g. session_id mismatch or DB error).
+        const inBase = new Set(base.map(r => r.participant_user_id));
+        const streamOnlyRows = Object.keys(state.remoteStreams)
+          .filter(uid => uid && uid !== user.id && !inBase.has(uid))
+          .map(uid => ({
+            participant_user_id: uid,
+            participant_name: uid,
+            participant_role: 'Student',
+            is_present: true,
+            _streamOnly: true
+          }));
+        rows = [...base, ...streamOnlyRows];
       }
 
       // Preserve existing video elements to prevent stream reloading/flicker
