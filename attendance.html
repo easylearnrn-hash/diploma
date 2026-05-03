@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance & Participation Report — ACNHS</title>
+  <script src="js/supabase-config.js"></script>
+  <style>
+    :root {
+      --bg: #0a0f1a;
+      --surface: #111827;
+      --surface2: #1a2236;
+      --border: rgba(255,255,255,0.08);
+      --gold: #c9a84c;
+      --gold-light: #e8c97a;
+      --text: #e8e8e8;
+      --text-muted: #7a8a9a;
+      --green: #22c55e;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --purple: #a855f7;
+      --amber: #f59e0b;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────────── */
+    .page-header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .page-header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .page-logo {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1.5px solid var(--gold);
+    }
+
+    .page-title {
+      font-size: 17px;
+      font-weight: 800;
+      color: var(--gold-light);
+      letter-spacing: 0.04em;
+    }
+
+    .page-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+
+    /* ── Toolbar ──────────────────────────────────────────────── */
+    .toolbar {
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .filter-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .filter-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    select, input[type="date"], input[type="text"] {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    select:focus, input:focus {
+      border-color: var(--gold);
+    }
+
+    .btn {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+
+    .btn:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn:active { transform: none; }
+
+    .btn-gold {
+      background: var(--gold);
+      color: #0a0f1a;
+    }
+
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-outline:hover { border-color: var(--gold); color: var(--gold); }
+
+    /* ── Period Tabs ──────────────────────────────────────────── */
+    .period-tabs {
+      display: flex;
+      gap: 6px;
+      padding: 14px 24px 0;
+    }
+
+    .period-tab {
+      padding: 8px 20px;
+      border-radius: 8px 8px 0 0;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      background: var(--surface2);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 700;
+      transition: all 0.2s;
+    }
+
+    .period-tab.active {
+      background: var(--surface);
+      color: var(--gold-light);
+      border-color: rgba(201,168,76,0.4);
+      border-bottom: 2px solid var(--surface);
+    }
+
+    /* ── Main Content ─────────────────────────────────────────── */
+    .main {
+      padding: 0 24px 40px;
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* ── Summary Cards ────────────────────────────────────────── */
+    .summary-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 12px;
+      padding: 20px 0;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 900;
+      color: var(--gold-light);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-top: 6px;
+    }
+
+    /* ── Student List ──────────────────────────────────────────── */
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 4px 0 12px;
+    }
+
+    .student-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .student-table thead tr {
+      border-bottom: 2px solid rgba(201,168,76,0.25);
+    }
+
+    .student-table th {
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      white-space: nowrap;
+    }
+
+    .student-table th.right { text-align: right; }
+
+    .student-table tbody tr {
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .student-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+    .student-table tbody tr.expanded { background: rgba(201,168,76,0.04); }
+
+    .student-table td {
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .student-table td.right { text-align: right; }
+
+    .stu-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #1e3a5f, #2a1a5e);
+      border: 1px solid rgba(201,168,76,0.3);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--gold-light);
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    .stu-name { font-weight: 700; color: var(--text); }
+    .stu-role { font-size: 11px; color: var(--text-muted); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .badge-green { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .badge-red   { background: rgba(239,68,68,0.15);  color: #ef4444; }
+    .badge-amber { background: rgba(245,158,11,0.15); color: #f59e0b; }
+
+    .meter-bar {
+      background: rgba(255,255,255,0.07);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+      min-width: 80px;
+      display: inline-block;
+      vertical-align: middle;
+      margin-left: 6px;
+    }
+
+    .meter-fill { height: 100%; border-radius: 4px; transition: width 0.4s; }
+    .meter-fill.mic   { background: var(--green); }
+    .meter-fill.cam   { background: var(--blue); }
+    .meter-fill.talk  { background: var(--purple); }
+
+    /* ── Detail Drawer ─────────────────────────────────────────── */
+    .detail-row td {
+      padding: 0 !important;
+    }
+
+    .detail-inner {
+      display: none;
+      background: rgba(10,15,26,0.6);
+      border-top: 1px solid var(--border);
+    }
+
+    .detail-inner.open { display: block; }
+
+    .detail-body {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+    }
+
+    .detail-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .dc-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 12px;
+    }
+
+    .dc-stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 5px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 12px;
+    }
+
+    .dc-stat-row:last-child { border-bottom: none; }
+    .dc-stat-label { color: var(--text-muted); }
+    .dc-stat-val   { font-weight: 700; color: var(--text); }
+    .dc-stat-val.green { color: var(--green); }
+    .dc-stat-val.red   { color: var(--red); }
+    .dc-stat-val.blue  { color: var(--blue); }
+    .dc-stat-val.purple{ color: var(--purple); }
+    .dc-stat-val.amber { color: var(--amber); }
+
+    /* ── Timeline ──────────────────────────────────────────────── */
+    .timeline { padding: 12px 0 0; max-height: 240px; overflow-y: auto; }
+
+    .tl-item {
+      display: flex;
+      gap: 10px;
+      padding: 6px 0;
+      border-left: 2px solid var(--border);
+      padding-left: 14px;
+      position: relative;
+      font-size: 12px;
+    }
+
+    .tl-item::before {
+      content: '';
+      position: absolute;
+      left: -5px;
+      top: 10px;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--surface2);
+      border: 2px solid var(--border);
+    }
+
+    .tl-item.join::before   { border-color: var(--green); }
+    .tl-item.leave::before  { border-color: var(--red); }
+    .tl-item.mic::before    { border-color: var(--green); }
+    .tl-item.camera::before { border-color: var(--blue); }
+    .tl-item.hand::before   { border-color: var(--amber); }
+    .tl-item.chat::before   { border-color: var(--purple); }
+    .tl-item.speak::before  { border-color: #a855f7; }
+
+    .tl-time { color: var(--text-muted); min-width: 68px; }
+    .tl-text { color: var(--text); }
+
+    /* ── Sessions expansion ────────────────────────────────────── */
+    .session-block {
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .session-block-title {
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--gold);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+
+    /* ── Loading & Empty States ────────────────────────────────── */
+    .loading-state, .empty-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--text-muted);
+    }
+
+    .loading-spinner {
+      width: 36px;
+      height: 36px;
+      border: 3px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-icon {
+      font-size: 36px;
+      margin-bottom: 12px;
+      opacity: 0.5;
+    }
+
+    .empty-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .empty-sub   { font-size: 12px; color: var(--text-muted); }
+
+    /* ── Chevron ───────────────────────────────────────────────── */
+    .chevron {
+      display: inline-block;
+      transition: transform 0.2s;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    tr.expanded .chevron { transform: rotate(180deg); }
+
+    /* ── Search ────────────────────────────────────────────────── */
+    .search-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 180px;
+      max-width: 300px;
+    }
+
+    .search-wrap input {
+      width: 100%;
+      padding-left: 30px;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 9px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 13px;
+      pointer-events: none;
+    }
+
+    /* ── Scrollbar ─────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
+
+    @media (max-width: 640px) {
+      .toolbar { padding: 12px 14px; }
+      .main { padding: 0 14px 40px; }
+      .period-tabs { padding: 12px 14px 0; }
+      .student-table th:nth-child(n+5),
+      .student-table td:nth-child(n+5) { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────── -->
+  <header class="page-header">
+    <div class="page-header-left">
+      <img class="page-logo" src="img/acnhs-logo.png" onerror="this.style.display='none'" alt="ACNHS" />
+      <div>
+        <div class="page-title">Attendance &amp; Participation Report</div>
+        <div class="page-subtitle" id="reportSubtitle">ACNHS Live Class System</div>
+      </div>
+    </div>
+    <button class="btn btn-outline" onclick="window.close()">✕ Close</button>
+  </header>
+
+  <!-- ── Toolbar ─────────────────────────────────────────────── -->
+  <div class="toolbar">
+    <div class="filter-group">
+      <span class="filter-label">Period</span>
+      <select id="periodFrom"><option value="">From…</option></select>
+      <select id="periodTo"><option value="">To…</option></select>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Session</span>
+      <select id="filterSession"><option value="">All Sessions</option></select>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Role</span>
+      <select id="filterRole">
+        <option value="">All Roles</option>
+        <option value="Student">Students</option>
+        <option value="Admin">Admins / Hosts</option>
+      </select>
+    </div>
+
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchStudent" placeholder="Search student…" />
+    </div>
+
+    <button class="btn btn-gold" onclick="applyFilters()">Apply</button>
+    <button class="btn btn-outline" onclick="exportCSV()">⬇ Export CSV</button>
+  </div>
+
+  <!-- ── Period Tabs ──────────────────────────────────────────── -->
+  <div class="period-tabs">
+    <button class="period-tab active" onclick="setPeriod('all',this)">All Time</button>
+    <button class="period-tab" onclick="setPeriod('today',this)">Today</button>
+    <button class="period-tab" onclick="setPeriod('week',this)">This Week</button>
+    <button class="period-tab" onclick="setPeriod('month',this)">This Month</button>
+  </div>
+
+  <!-- ── Main ────────────────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Summary Row -->
+    <div class="summary-row">
+      <div class="stat-card">
+        <div class="stat-value" id="sumSessions">—</div>
+        <div class="stat-label">Total Sessions</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="sumStudents">—</div>
+        <div class="stat-label">Unique Students</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="sumMins">—</div>
+        <div class="stat-label">Total Student-Minutes</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="sumMicOn">—</div>
+        <div class="stat-label">Mic Toggle Events</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="sumCamOn">—</div>
+        <div class="stat-label">Camera Toggle Events</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="sumSpeech">—</div>
+        <div class="stat-label">Total Speech Intervals</div>
+      </div>
+    </div>
+
+    <!-- Student Table -->
+    <div class="section-title">Student Participation Details</div>
+
+    <div id="tableWrap">
+      <div class="loading-state">
+        <div class="loading-spinner"></div>
+        <div>Loading attendance data…</div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    'use strict';
+
+    // ── Supabase ──────────────────────────────────────────────────
+    const db = (typeof initSupabase === 'function') ? initSupabase() : null;
+
+    // ── State ─────────────────────────────────────────────────────
+    let allLogs = [];         // all activity_log rows in period
+    let allParticipants = []; // all video_call_participants rows in period
+    let allSessions   = [];   // all sessions in period
+    let filteredData  = [];   // per-student summary after filters
+
+    let periodStart = null;
+    let periodEnd   = null;
+    let preselectedSessionId = null;
+
+    // ── On load: read params passed from opener ───────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      preselectedSessionId = params.get('session_id') || null;
+      const sessionName    = params.get('session_name') || null;
+
+      if (preselectedSessionId && sessionName) {
+        document.getElementById('reportSubtitle').textContent =
+          `Session: ${sessionName}`;
+      }
+
+      loadData();
+    });
+
+    // ── Period helpers ────────────────────────────────────────────
+    function setPeriod(period, btn) {
+      document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      const now = new Date();
+
+      if (period === 'today') {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+        periodEnd   = null;
+      } else if (period === 'week') {
+        const monDiff = (now.getDay() + 6) % 7;
+        const mon = new Date(now);
+        mon.setDate(now.getDate() - monDiff);
+        mon.setHours(0,0,0,0);
+        periodStart = mon.toISOString();
+        periodEnd   = null;
+      } else if (period === 'month') {
+        periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        periodEnd   = null;
+      } else {
+        periodStart = null;
+        periodEnd   = null;
+      }
+
+      loadData();
+    }
+
+    function applyFilters() {
+      renderTable();
+    }
+
+    // ── Data loading ──────────────────────────────────────────────
+    async function loadData() {
+      if (!db) {
+        document.getElementById('tableWrap').innerHTML =
+          '<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Supabase not connected</div></div>';
+        return;
+      }
+
+      showLoading();
+
+      try {
+        // Build queries with date filters
+        let logsQ = db.from('video_call_activity_log').select('*').order('ts', { ascending: true });
+        let partQ = db.from('video_call_participants').select('*').order('joined_at', { ascending: true });
+        let sessQ = db.from('video_call_sessions').select('session_id, room_name, host_name, created_at, ended_at, started_at').order('created_at', { ascending: false });
+
+        if (periodStart) {
+          logsQ = logsQ.gte('ts', periodStart);
+          partQ = partQ.gte('joined_at', periodStart);
+          sessQ = sessQ.gte('created_at', periodStart);
+        }
+        if (periodEnd) {
+          logsQ = logsQ.lte('ts', periodEnd);
+          partQ = partQ.lte('joined_at', periodEnd);
+          sessQ = sessQ.lte('created_at', periodEnd);
+        }
+        if (preselectedSessionId) {
+          logsQ = logsQ.eq('session_id', preselectedSessionId);
+          partQ = partQ.eq('session_id', preselectedSessionId);
+          sessQ = sessQ.eq('session_id', preselectedSessionId);
+        }
+
+        const [logsRes, partRes, sessRes] = await Promise.all([logsQ, partQ, sessQ]);
+
+        if (logsRes.error) throw new Error(logsRes.error.message);
+        if (partRes.error) throw new Error(partRes.error.message);
+
+        allLogs         = logsRes.data || [];
+        allParticipants = partRes.data || [];
+        allSessions     = sessRes.data || [];
+
+        populateSessionFilter();
+        renderSummaryCards();
+        renderTable();
+
+      } catch (err) {
+        document.getElementById('tableWrap').innerHTML =
+          `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Error loading data</div><div class="empty-sub">${escapeHtml(err.message)}</div></div>`;
+      }
+    }
+
+    function showLoading() {
+      document.getElementById('tableWrap').innerHTML =
+        '<div class="loading-state"><div class="loading-spinner"></div><div>Loading…</div></div>';
+    }
+
+    // ── Session filter ────────────────────────────────────────────
+    function populateSessionFilter() {
+      const sel = document.getElementById('filterSession');
+      const existing = new Set([...sel.options].map(o => o.value));
+      for (const s of allSessions) {
+        if (!existing.has(s.session_id)) {
+          const opt = document.createElement('option');
+          opt.value = s.session_id;
+          opt.textContent = s.room_name || s.session_id;
+          sel.appendChild(opt);
+        }
+      }
+      if (preselectedSessionId) sel.value = preselectedSessionId;
+    }
+
+    // ── Summary cards ─────────────────────────────────────────────
+    function renderSummaryCards() {
+      const sessionIds = new Set(allLogs.map(l => l.session_id).filter(Boolean));
+      const userIds    = new Set(allLogs.map(l => l.user_id).filter(Boolean));
+      const totalMins  = allParticipants.reduce((s, p) => s + (p.total_duration_seconds || 0), 0) / 60;
+      const micEvents  = allLogs.filter(l => l.event_type === 'mic_on' || l.event_type === 'mic_off').length;
+      const camEvents  = allLogs.filter(l => l.event_type === 'camera_on' || l.event_type === 'camera_off').length;
+      const speechEvts = allLogs.filter(l => l.event_type === 'started_speaking').length;
+
+      document.getElementById('sumSessions').textContent = sessionIds.size;
+      document.getElementById('sumStudents').textContent = userIds.size;
+      document.getElementById('sumMins').textContent     = Math.round(totalMins).toLocaleString();
+      document.getElementById('sumMicOn').textContent    = micEvents;
+      document.getElementById('sumCamOn').textContent    = camEvents;
+      document.getElementById('sumSpeech').textContent   = speechEvts;
+    }
+
+    // ── Per-student aggregation ───────────────────────────────────
+    function aggregateStudents() {
+      const sessionFilter = document.getElementById('filterSession')?.value || '';
+      const roleFilter    = document.getElementById('filterRole')?.value    || '';
+      const searchQ       = (document.getElementById('searchStudent')?.value || '').toLowerCase().trim();
+
+      // Map: userId → { name, role, sessions: {}, logs: [] }
+      const map = new Map();
+
+      // Seed from participants rows
+      for (const p of allParticipants) {
+        if (sessionFilter && p.session_id !== sessionFilter) continue;
+        const uid = p.participant_user_id;
+        if (!uid) continue;
+        if (!map.has(uid)) map.set(uid, { name: p.participant_name || uid, role: p.participant_role || 'Student', sessions: {}, logs: [] });
+        const entry = map.get(uid);
+        if (!entry.sessions[p.session_id]) {
+          entry.sessions[p.session_id] = {
+            session_id: p.session_id,
+            session_name: allSessions.find(s => s.session_id === p.session_id)?.room_name || p.session_id,
+            joined_at: p.joined_at,
+            left_at: p.left_at,
+            duration_seconds: p.total_duration_seconds || 0,
+            participant_id: p.id
+          };
+        }
+      }
+
+      // Attach log events
+      for (const l of allLogs) {
+        if (sessionFilter && l.session_id !== sessionFilter) continue;
+        const uid = l.user_id;
+        if (!uid) continue;
+        if (!map.has(uid)) map.set(uid, { name: l.user_name || uid, role: l.user_role || 'Student', sessions: {}, logs: [] });
+        map.get(uid).logs.push(l);
+      }
+
+      // Compute per-student stats and filter
+      const result = [];
+      for (const [uid, data] of map) {
+        if (roleFilter && data.role !== roleFilter) continue;
+        if (searchQ && !data.name.toLowerCase().includes(searchQ) && !uid.toLowerCase().includes(searchQ)) continue;
+
+        // Session count
+        const sessCount = Object.keys(data.sessions).length;
+
+        // Total duration in seconds (from participant rows)
+        const totalSecs = Object.values(data.sessions).reduce((s, p) => s + (p.duration_seconds || 0), 0);
+
+        // Mic stats
+        const micOnTimes     = data.logs.filter(l => l.event_type === 'mic_on').length;
+        const micOffTimes    = data.logs.filter(l => l.event_type === 'mic_off').length;
+        const micOnSecs      = computeTotalDuration(data.logs, 'mic_on', 'mic_off');
+
+        // Camera stats
+        const camOnTimes     = data.logs.filter(l => l.event_type === 'camera_on').length;
+        const camOffTimes    = data.logs.filter(l => l.event_type === 'camera_off').length;
+        const camOffSecs     = computeTotalDuration(data.logs, 'camera_off', 'camera_on');
+
+        // Speaking stats
+        const speakStartCount = data.logs.filter(l => l.event_type === 'started_speaking').length;
+        const speakSecs       = computeTotalDuration(data.logs, 'started_speaking', 'stopped_speaking');
+
+        // Join/leave events
+        const joinLeave = data.logs.filter(l => l.event_type === 'joined' || l.event_type === 'left');
+        const reconnects = Math.max(0, data.logs.filter(l => l.event_type === 'joined').length - 1);
+
+        // Hand raises
+        const handRaises = data.logs.filter(l => l.event_type === 'hand_raised').length;
+
+        result.push({
+          uid, name: data.name, role: data.role,
+          sessCount, totalSecs,
+          micOnTimes, micOffTimes, micOnSecs,
+          camOnTimes, camOffTimes, camOffSecs,
+          speakStartCount, speakSecs,
+          handRaises, reconnects,
+          sessions: data.sessions,
+          logs: data.logs
+        });
+      }
+
+      // Sort by total duration desc
+      result.sort((a, b) => b.totalSecs - a.totalSecs);
+      return result;
+    }
+
+    // Compute total seconds between matching start/end event pairs
+    function computeTotalDuration(logs, startEvent, endEvent) {
+      let total = 0;
+      let startTs = null;
+      for (const l of logs) {
+        if (l.event_type === startEvent) {
+          startTs = new Date(l.ts);
+        } else if (l.event_type === endEvent && startTs) {
+          total += (new Date(l.ts) - startTs) / 1000;
+          startTs = null;
+        }
+      }
+      return Math.round(total);
+    }
+
+    function fmt(secs) {
+      if (secs < 60) return `${secs}s`;
+      const m = Math.floor(secs / 60);
+      const s = secs % 60;
+      if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+      const h = Math.floor(m / 60);
+      return `${h}h ${m % 60}m`;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Table render ──────────────────────────────────────────────
+    function renderTable() {
+      filteredData = aggregateStudents();
+
+      // Recompute summary with filtered data
+      const totalMaterSecs = filteredData.reduce((s, r) => s + r.totalSecs, 0);
+      const sessionIds = new Set(filteredData.flatMap(r => Object.keys(r.sessions)));
+      const micEvents  = filteredData.reduce((s, r) => s + r.micOnTimes + r.micOffTimes, 0);
+      const camEvents  = filteredData.reduce((s, r) => s + r.camOnTimes + r.camOffTimes, 0);
+      const speechEvts = filteredData.reduce((s, r) => s + r.speakStartCount, 0);
+
+      document.getElementById('sumSessions').textContent = sessionIds.size;
+      document.getElementById('sumStudents').textContent = filteredData.length;
+      document.getElementById('sumMins').textContent     = Math.round(totalMaterSecs / 60).toLocaleString();
+      document.getElementById('sumMicOn').textContent    = micEvents;
+      document.getElementById('sumCamOn').textContent    = camEvents;
+      document.getElementById('sumSpeech').textContent   = speechEvts;
+
+      if (!filteredData.length) {
+        document.getElementById('tableWrap').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <div class="empty-title">No participation data found</div>
+            <div class="empty-sub">Adjust the filters or date range to see results.</div>
+          </div>`;
+        return;
+      }
+
+      const maxSecs = Math.max(...filteredData.map(r => r.totalSecs), 1);
+
+      let rows = '';
+      filteredData.forEach((r, i) => {
+        const initials = r.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) || '??';
+        const micPct   = Math.round(r.micOnSecs / Math.max(r.totalSecs, 1) * 100);
+        const camPct   = Math.round((r.totalSecs - r.camOffSecs) / Math.max(r.totalSecs, 1) * 100);
+        const talkPct  = Math.round(r.speakSecs / Math.max(r.totalSecs, 1) * 100);
+        const rollBadge = r.role === 'Admin' ? 'badge-amber' : 'badge-green';
+
+        rows += `
+          <tr onclick="toggleDetail('dr_${i}')" id="tr_${i}">
+            <td>
+              <span class="stu-avatar">${escapeHtml(initials)}</span>
+              <span class="stu-name">${escapeHtml(r.name)}</span>
+            </td>
+            <td><span class="badge ${rollBadge}">${escapeHtml(r.role)}</span></td>
+            <td class="right">${r.sessCount}</td>
+            <td class="right">${fmt(r.totalSecs)}</td>
+            <td class="right">
+              ${r.micOnTimes}×
+              <span class="meter-bar"><span class="meter-fill mic" style="width:${micPct}%"></span></span>
+              <span class="stu-role">${fmt(r.micOnSecs)} on</span>
+            </td>
+            <td class="right">
+              ${r.camOnTimes}×
+              <span class="meter-bar"><span class="meter-fill cam" style="width:${camPct}%"></span></span>
+              <span class="stu-role">${camPct}% on</span>
+            </td>
+            <td class="right">
+              ${fmt(r.speakSecs)}
+              <span class="meter-bar"><span class="meter-fill talk" style="width:${talkPct}%"></span></span>
+            </td>
+            <td class="right">${r.handRaises}</td>
+            <td class="right">${r.reconnects > 0 ? `<span class="badge badge-red">${r.reconnects}</span>` : '—'}</td>
+            <td class="right"><span class="chevron">▼</span></td>
+          </tr>
+          <tr class="detail-row" id="dr_${i}">
+            <td colspan="10">
+              <div class="detail-inner" id="di_${i}">
+                ${buildDetailBody(r, i)}
+              </div>
+            </td>
+          </tr>`;
+      });
+
+      document.getElementById('tableWrap').innerHTML = `
+        <table class="student-table">
+          <thead>
+            <tr>
+              <th>Student</th>
+              <th>Role</th>
+              <th class="right">Sessions</th>
+              <th class="right">Total Time</th>
+              <th class="right">Microphone</th>
+              <th class="right">Camera</th>
+              <th class="right">Speaking Time</th>
+              <th class="right">Hand Raises</th>
+              <th class="right">Reconnects</th>
+              <th class="right"></th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    // ── Detail body panels ────────────────────────────────────────
+    function buildDetailBody(r, i) {
+      // Mic details
+      const micOnTotal  = fmt(r.micOnSecs);
+      const micOffTotal = fmt(Math.max(r.totalSecs - r.micOnSecs, 0));
+      const micPct      = r.totalSecs > 0 ? Math.round(r.micOnSecs / r.totalSecs * 100) : 0;
+
+      // Camera details
+      const camOnSecs   = Math.max(r.totalSecs - r.camOffSecs, 0);
+      const camOnPct    = r.totalSecs > 0 ? Math.round(camOnSecs / r.totalSecs * 100) : 0;
+
+      // Speaking
+      const speakPct    = r.totalSecs > 0 ? Math.round(r.speakSecs / r.totalSecs * 100) : 0;
+
+      // Sessions list
+      let sessRows = '';
+      for (const [sid, s] of Object.entries(r.sessions)) {
+        const jt = s.joined_at ? new Date(s.joined_at).toLocaleString() : '—';
+        const lt = s.left_at   ? new Date(s.left_at).toLocaleString()   : 'Still in session';
+        sessRows += `
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">${escapeHtml(s.session_name)}</span>
+            <span class="dc-stat-val">${fmt(s.duration_seconds)}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">↳ Joined</span>
+            <span class="dc-stat-val blue" style="font-size:11px">${escapeHtml(jt)}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">↳ Left</span>
+            <span class="dc-stat-val" style="font-size:11px">${escapeHtml(lt)}</span>
+          </div>`;
+      }
+
+      // Timeline (last 40 events)
+      const eventMeta = {
+        joined:           { label: 'Joined',             cat: 'join'   },
+        left:             { label: 'Left',               cat: 'leave'  },
+        camera_on:        { label: 'Camera On',          cat: 'camera' },
+        camera_off:       { label: 'Camera Off',         cat: 'camera' },
+        mic_on:           { label: 'Mic Unmuted',        cat: 'mic'    },
+        mic_off:          { label: 'Mic Muted',          cat: 'mic'    },
+        hand_raised:      { label: 'Hand Raised',        cat: 'hand'   },
+        hand_lowered:     { label: 'Hand Lowered',       cat: 'hand'   },
+        started_speaking: { label: 'Started Speaking',   cat: 'speak'  },
+        stopped_speaking: { label: 'Stopped Speaking',   cat: 'speak'  },
+        chat_message:     { label: 'Sent Chat Message',  cat: 'chat'   },
+        screen_on:        { label: 'Screen Share On',    cat: 'camera' },
+        screen_off:       { label: 'Screen Share Off',   cat: 'camera' },
+        lobby_request:    { label: 'Requested to Join',  cat: 'join'   },
+      };
+
+      const logsToShow = [...r.logs].reverse().slice(0, 50);
+      let tlHtml = '';
+      for (const l of logsToShow) {
+        const m = eventMeta[l.event_type] || { label: l.event_type, cat: 'join' };
+        const t = new Date(l.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const dateStr = new Date(l.ts).toLocaleDateString([], { month: 'short', day: 'numeric' });
+        tlHtml += `<div class="tl-item ${escapeHtml(m.cat)}">
+          <span class="tl-time">${dateStr}, ${t}</span>
+          <span class="tl-text">${escapeHtml(m.label)}</span>
+        </div>`;
+      }
+      if (!tlHtml) tlHtml = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No detailed event log yet for this period.</div>';
+
+      return `<div class="detail-body">
+
+        <div class="detail-card">
+          <div class="dc-title">🎤 Microphone Activity</div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Times Unmuted</span>
+            <span class="dc-stat-val green">${r.micOnTimes}×</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Times Muted</span>
+            <span class="dc-stat-val red">${r.micOffTimes}×</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Time On</span>
+            <span class="dc-stat-val green">${micOnTotal}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Time Off</span>
+            <span class="dc-stat-val red">${micOffTotal}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Mic-On %</span>
+            <span class="dc-stat-val">${micPct}%</span>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="dc-title">📷 Camera Activity</div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Times Turned On</span>
+            <span class="dc-stat-val green">${r.camOnTimes}×</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Times Turned Off</span>
+            <span class="dc-stat-val red">${r.camOffTimes}×</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Time On</span>
+            <span class="dc-stat-val green">${fmt(camOnSecs)}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Time Off</span>
+            <span class="dc-stat-val red">${fmt(r.camOffSecs)}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Camera-On %</span>
+            <span class="dc-stat-val">${camOnPct}%</span>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="dc-title">💬 Participation</div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Speaking Time</span>
+            <span class="dc-stat-val purple">${fmt(r.speakSecs)}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Speech Events</span>
+            <span class="dc-stat-val">${r.speakStartCount}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Speaking %</span>
+            <span class="dc-stat-val">${speakPct}%</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Hand Raises</span>
+            <span class="dc-stat-val amber">${r.handRaises}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Reconnections</span>
+            <span class="dc-stat-val ${r.reconnects > 0 ? 'red' : ''}">${r.reconnects}</span>
+          </div>
+          <div class="dc-stat-row">
+            <span class="dc-stat-label">Total Time Present</span>
+            <span class="dc-stat-val">${fmt(r.totalSecs)}</span>
+          </div>
+        </div>
+
+        <div class="detail-card">
+          <div class="dc-title">🗓 Session Breakdown</div>
+          ${sessRows || '<div class="dc-stat-row"><span class="dc-stat-label" style="color:var(--text-muted)">No sessions recorded in this period</span></div>'}
+        </div>
+
+        <div class="detail-card" style="grid-column: 1 / -1">
+          <div class="dc-title">⏱ Full Activity Timeline <span style="font-weight:400;color:var(--text-muted)">(most recent first)</span></div>
+          <div class="timeline">${tlHtml}</div>
+        </div>
+
+      </div>`;
+    }
+
+    // ── Toggle detail drawer ──────────────────────────────────────
+    function toggleDetail(detailRowId) {
+      const idx   = detailRowId.replace('dr_', '');
+      const inner = document.getElementById(`di_${idx}`);
+      const tr    = document.getElementById(`tr_${idx}`);
+      if (!inner) return;
+      const isOpen = inner.classList.contains('open');
+      inner.classList.toggle('open', !isOpen);
+      tr?.classList.toggle('expanded', !isOpen);
+    }
+
+    // ── CSV export ────────────────────────────────────────────────
+    function exportCSV() {
+      if (!filteredData.length) { alert('No data to export.'); return; }
+
+      const headers = ['Student Name','Role','Sessions','Total Time (min)','Mic On Count','Mic Off Count','Mic On (sec)','Cam On Count','Cam Off Count','Cam Off (sec)','Speaking Time (sec)','Speech Events','Hand Raises','Reconnects'];
+      const rows = filteredData.map(r => [
+        r.name, r.role, r.sessCount,
+        Math.round(r.totalSecs / 60),
+        r.micOnTimes, r.micOffTimes, r.micOnSecs,
+        r.camOnTimes, r.camOffTimes, r.camOffSecs,
+        r.speakSecs, r.speakStartCount, r.handRaises, r.reconnects
+      ]);
+
+      const csv  = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url;
+      a.download = `ACNHS_Attendance_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── Real-time refresh every 30s during a live session ─────────
+    setInterval(() => {
+      if (document.visibilityState === 'visible') loadData();
+    }, 30000);
+  </script>
+</body>
+</html>
