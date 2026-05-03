@@ -1255,7 +1255,9 @@
       return result;
     }
 
-    // Compute total seconds between matching start/end event pairs
+    // Compute total seconds between matching start/end event pairs.
+    // If a pair is never closed (e.g. mic still on when student left),
+    // close it against the timestamp of the last log entry.
     function computeTotalDuration(logs, startEvent, endEvent) {
       let total = 0;
       let startTs = null;
@@ -1266,6 +1268,11 @@
           total += (new Date(l.ts) - startTs) / 1000;
           startTs = null;
         }
+      }
+      // Close any unclosed interval against the last log timestamp
+      if (startTs && logs.length) {
+        const lastTs = new Date(logs[logs.length - 1].ts);
+        if (lastTs > startTs) total += (lastTs - startTs) / 1000;
       }
       return Math.round(total);
     }
