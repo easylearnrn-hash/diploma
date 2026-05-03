@@ -1467,6 +1467,10 @@
     @media (prefers-reduced-motion:reduce){ .notes-hub *{ transition:none !important; } }
 
     /* ── Right column stack ──────────────────────────────────────── */
+    @keyframes hub-live-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+      60%       { box-shadow: 0 0 0 5px rgba(34,197,94,0); }
+    }
     .stack{
       position: relative;
       overflow: hidden;
@@ -2768,41 +2772,28 @@
             </div>
           </div>
 
-          <!-- JOIN CLASS BANNER (Only shows if active link exists) -->
-          <div id="hubJoinClassBanner" style="
-            display:none;
-            background:linear-gradient(135deg, rgba(34,197,94,0.12), rgba(34,197,94,0.05));
-            border:1.5px solid rgba(34,197,94,0.35);
-            border-radius:var(--radius-xl);
-            padding:18px 20px;
-            box-shadow:0 8px 24px rgba(34,197,94,0.12);
-          ">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
-              <div>
-                <div style="font-size:14px;font-weight:900;color:#16a34a;letter-spacing:-0.2px">🟢 Live Class in Progress</div>
-                <p style="margin-top:4px;font-size:12.5px;color:#15803d;font-weight:600">Your instructor is live. Tap to enter the waiting room — you'll be admitted shortly.</p>
+          <!-- JOIN CLASS BANNER (compact pill — visible when a live session is active) -->
+          <div
+            id="hubJoinClassBanner"
+            onclick="hubJoinActiveClass()"
+            style="
+              display:none;
+              background:linear-gradient(135deg,rgba(34,197,94,0.13),rgba(34,197,94,0.06));
+              border:1.5px solid rgba(34,197,94,0.38);
+              border-radius:40px;
+              padding:10px 16px 10px 14px;
+              cursor:pointer;
+              transition:background 0.2s;
+            "
+            onmouseover="this.style.background='linear-gradient(135deg,rgba(34,197,94,0.22),rgba(34,197,94,0.12))'"
+            onmouseout="this.style.background='linear-gradient(135deg,rgba(34,197,94,0.13),rgba(34,197,94,0.06))'"
+          >
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+              <div style="display:flex;align-items:center;gap:8px;min-width:0;">
+                <span style="width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;animation:hub-live-pulse 1.5s ease-in-out infinite;"></span>
+                <span id="hubBannerTitle" style="font-size:13px;font-weight:800;color:#16a34a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Live Class in Progress</span>
               </div>
-              <button 
-                onclick="hubJoinActiveClass()" 
-                style="
-                  padding:12px 28px;
-                  background:linear-gradient(135deg,#22c55e,#16a34a);
-                  border:none;
-                  border-radius:14px;
-                  color:white;
-                  font-weight:800;
-                  cursor:pointer;
-                  font-size:13px;
-                  transition:all 0.3s;
-                  box-shadow:0 4px 16px rgba(34,197,94,0.4);
-                  white-space:nowrap;
-                  letter-spacing:0.2px;
-                " 
-                onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(34,197,94,0.5)'" 
-                onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(34,197,94,0.4)'"
-              >
-                🚪 Request to Join
-              </button>
+              <span style="font-size:12px;font-weight:700;color:#15803d;white-space:nowrap;flex-shrink:0;">Request to Join →</span>
             </div>
           </div>
 
@@ -2966,32 +2957,6 @@
 
         <!-- RIGHT COLUMN - CAROUSEL -->
         <div class="stack">
-
-          <!-- JOIN CLASS BUTTON (floats above carousel when a live session is active) -->
-          <button
-            id="hubJoinClassButton"
-            onclick="hubJoinActiveClass()"
-            style="
-              display:none;
-              padding:13px 20px;
-              background:linear-gradient(135deg,#22c55e,#16a34a);
-              border:none;
-              border-radius:14px;
-              color:white;
-              font-weight:800;
-              cursor:pointer;
-              font-size:13px;
-              transition:all 0.3s;
-              box-shadow:0 4px 16px rgba(34,197,94,0.4);
-              width:100%;
-              letter-spacing:0.2px;
-              text-align:center;
-            "
-            onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 20px rgba(34,197,94,0.5)'"
-            onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 16px rgba(34,197,94,0.4)'"
-          >
-            🚪 Request to Join
-          </button>
 
           <div class="carousel-container">
             <!-- Navigation Arrows -->
@@ -6613,7 +6578,7 @@
 
         const studentGroup = getHubStudentGroup();
 
-        const joinButton = document.getElementById('hubJoinClassButton');
+        const joinButton = null; // button merged into banner — banner itself is now clickable
         const joinBanner = document.getElementById('hubJoinClassBanner');
         if (!joinButton && !joinBanner) {
           console.warn('🔗 Hub: Join Class elements not found in DOM');
@@ -6640,13 +6605,10 @@
           };
 
           if (joinBanner) {
-            const bannerTitle = joinBanner.querySelector('div > div > div');
-            const bannerDesc  = joinBanner.querySelector('p');
-            if (bannerTitle) bannerTitle.innerHTML = `🟢 Live Class: ${escapeHtml(sessions[0].room_name || 'ACNHS Room')}`;
-            if (bannerDesc)  bannerDesc.textContent = `Hosted by ${escapeHtml(sessions[0].host_name || 'Instructor')}. Tap to enter the waiting room — you'll be admitted shortly.`;
+            const bannerTitle = document.getElementById('hubBannerTitle');
+            if (bannerTitle) bannerTitle.textContent = `Live Class: ${escapeHtml(sessions[0].room_name || 'ACNHS Room')}`;
           }
 
-          if (joinButton) joinButton.style.display = 'block';
           if (joinBanner) joinBanner.style.display = 'block';
           return;
         }
@@ -6686,21 +6648,18 @@
             : new Date(new Date(hubActiveClassLink.created_at).getTime() + 2 * 60 * 60 * 1000);
           if (now >= expirySource) {
             console.log('🔗 Hub: Link expired at', expirySource);
-            if (joinButton) joinButton.style.display = 'none';
             if (joinBanner) joinBanner.style.display = 'none';
             hubActiveClassLink = null;
             return;
           }
           
-          // Show BOTH the button and the banner!
-          if (joinButton) joinButton.style.display = 'block';
+          // Show the banner
           if (joinBanner) joinBanner.style.display = 'block';
-          console.log('🔗 Hub: ✅ Join Class button + banner are NOW VISIBLE! URL:', hubActiveClassLink.url);
+          console.log('🔗 Hub: ✅ Join Class banner is NOW VISIBLE! URL:', hubActiveClassLink.url);
         } else {
-          if (joinButton) joinButton.style.display = 'none';
           if (joinBanner) joinBanner.style.display = 'none';
           hubActiveClassLink = null;
-          console.log('🔗 Hub: No matching active links. Button hidden.');
+          console.log('🔗 Hub: No matching active links. Banner hidden.');
         }
       } catch (error) {
         console.error('🔗 Hub: Error checking for active class link:', error);
@@ -6725,7 +6684,6 @@
 
     // Initialize the class link checker
     console.log('🔗 Hub: Starting Join Class Link initialization...');
-    console.log('🔗 Hub: Button element:', document.getElementById('hubJoinClassButton'));
     console.log('🔗 Hub: Banner element:', document.getElementById('hubJoinClassBanner'));
     console.log('🔗 Hub: Student data group:', studentData?.group);
     initHubClassLinkChecker();

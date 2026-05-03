@@ -3588,10 +3588,14 @@
             .select('id')
             .maybeSingle();
           if (error) {
-            console.warn('Lobby insert failed, falling back to direct join:', error.message);
-            // Fallback: if table doesn't exist yet, just join directly
-            dom.prejoinOverlay?.classList.add('hidden');
-            await enterLiveCallAfterAdmission();
+            console.warn('Lobby request failed (DB error):', error.message);
+            // Do NOT bypass the waiting room — let the student retry
+            if (dom.prejoinRequestBtn) {
+              dom.prejoinRequestBtn.disabled = false;
+              dom.prejoinRequestBtn.textContent = 'Retry Request';
+            }
+            showNotice('Unable to send join request. Please tap "Retry Request".');
+            setTimeout(() => dom.authNotice?.classList.remove('show'), 4000);
             return;
           }
           state.lobbyRowId = inserted?.id || null;
