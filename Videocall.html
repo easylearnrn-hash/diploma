@@ -3203,7 +3203,7 @@
           if (!state.broadcastChannel) return;
 
           // Announce ourselves so existing peers can initiate connections to us
-          state.broadcastChannel.send({
+          safeChannelSend({
             type: 'broadcast',
             event: 'peer-joined',
             payload: { userId: user.id, userName: user.name, userRole: user.role }
@@ -3280,7 +3280,7 @@
 
       peer.on('signal', data => {
         if (!state.broadcastChannel) return;
-        state.broadcastChannel.send({
+        safeChannelSend({
           type: 'broadcast',
           event: 'signal',
           payload: {
@@ -3334,16 +3334,21 @@
       delete state.remoteStreams[targetUserId];
     }
 
+    // Helper: send on the broadcast channel only when it is SUBSCRIBED (avoids REST fallback warning)
+    function safeChannelSend(payload) {
+      if (!state.broadcastChannel) return;
+      if (state.broadcastChannel.state !== 'joined') return; // not yet / no longer live
+      try { state.broadcastChannel.send(payload); } catch (_) {}
+    }
+
     function teardownWebRTC() {
-      // Announce departure
+      // Announce departure only when channel is still live
       if (state.broadcastChannel) {
-        try {
-          state.broadcastChannel.send({
-            type: 'broadcast',
-            event: 'peer-left',
-            payload: { userId: user.id }
-          });
-        } catch (_) {}
+        safeChannelSend({
+          type: 'broadcast',
+          event: 'peer-left',
+          payload: { userId: user.id }
+        });
         db?.removeChannel(state.broadcastChannel);
         state.broadcastChannel = null;
       }
@@ -3817,13 +3822,11 @@
 
       // ── Broadcast session-ended to ALL participants BEFORE tearing down ──
       if (state.broadcastChannel) {
-        try {
-          state.broadcastChannel.send({
-            type: 'broadcast',
-            event: 'session-ended',
-            payload: { endedBy: user.id, endedByName: user.name }
-          });
-        } catch (_) {}
+        safeChannelSend({
+          type: 'broadcast',
+          event: 'session-ended',
+          payload: { endedBy: user.id, endedByName: user.name }
+        });
         // Give all participants 600 ms to receive the broadcast before teardown
         await new Promise(r => setTimeout(r, 600));
       }
@@ -4132,7 +4135,7 @@
 
       // Broadcast to other participants so they see the message
       if (state.broadcastChannel) {
-        state.broadcastChannel.send({
+        safeChannelSend({
           type: 'broadcast',
           event: 'chat-message',
           payload: {
@@ -4387,7 +4390,7 @@
         }
         // Broadcast hand status to other participants
         if (state.broadcastChannel) {
-          state.broadcastChannel.send({
+          safeChannelSend({
             type: 'broadcast',
             event: 'hand-status',
             payload: { userId: user.id, userName: user.name, raised: state.media.handRaised }

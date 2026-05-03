@@ -993,7 +993,7 @@
           if (nameEl) nameEl.textContent = state.media.hand ? `✋ ${base}` : base;
         }
         if (state.broadcastChannel) {
-          state.broadcastChannel.send({
+          safeChannelSend({
             type: 'broadcast', event: 'hand-status',
             payload: { userId: user.id, userName: user.name, raised: state.media.hand }
           });
@@ -1143,6 +1143,13 @@
     }
 
     // ── WebRTC ────────────────────────────────────────────────────
+    // Send on broadcast channel only when SUBSCRIBED — avoids Supabase REST fallback warning
+    function safeChannelSend(payload) {
+      if (!state.broadcastChannel) return;
+      if (state.broadcastChannel.state !== 'joined') return;
+      try { state.broadcastChannel.send(payload); } catch (_) {}
+    }
+
     function setupWebRTC() {
       if (!db || !state.sessionCode) return;
       if (state.broadcastChannel) return; // already set up
@@ -1216,7 +1223,7 @@
           // Guard: may have been torn down while awaiting
           if (!state.broadcastChannel) return;
 
-          state.broadcastChannel.send({
+          safeChannelSend({
             type: 'broadcast', event: 'peer-joined',
             payload: { userId: user.id, userName: user.name, userRole: user.role }
           });
@@ -1247,7 +1254,7 @@
 
       peer.on('signal', signal => {
         if (!state.broadcastChannel) return;
-        state.broadcastChannel.send({ type: 'broadcast', event: 'signal', payload: { sender: user.id, target: targetId, signal } });
+        safeChannelSend({ type: 'broadcast', event: 'signal', payload: { sender: user.id, target: targetId, signal } });
       });
 
       peer.on('stream', stream => {
@@ -1279,7 +1286,7 @@
 
     function teardownWebRTC() {
       if (state.broadcastChannel) {
-        try { state.broadcastChannel.send({ type: 'broadcast', event: 'peer-left', payload: { userId: user.id } }); } catch (_) {}
+        try { safeChannelSend({ type: 'broadcast', event: 'peer-left', payload: { userId: user.id } }); } catch (_) {}
         db?.removeChannel(state.broadcastChannel);
         state.broadcastChannel = null;
       }
@@ -1327,7 +1334,7 @@
       }
 
       if (state.broadcastChannel) {
-        state.broadcastChannel.send({ type: 'broadcast', event: 'chat-message', payload: { userId: user.id, userName: user.name, userRole: user.role, message, time } });
+        safeChannelSend({ type: 'broadcast', event: 'chat-message', payload: { userId: user.id, userName: user.name, userRole: user.role, message, time } });
       }
     }
 
