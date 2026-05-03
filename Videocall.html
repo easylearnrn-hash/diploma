@@ -3526,10 +3526,23 @@
     // ── HOST toast notification ───────────────────────────────────
     let toastTimeout = null;
     // ── Lobby chime (Web Audio API — no file needed) ──────────────
+    // ── Shared AudioContext — unlocked on first user gesture ──────
+    let _audioCtx = null;
+    function _getAudioCtx() {
+      if (!_audioCtx) {
+        try { _audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+      }
+      return _audioCtx;
+    }
+    // Unlock on first click/touch so Safari allows sound later (even w/o gesture at chime time)
+    document.addEventListener('click',     () => { const c = _getAudioCtx(); if (c?.state === 'suspended') c.resume(); }, { once: false, passive: true });
+    document.addEventListener('touchstart', () => { const c = _getAudioCtx(); if (c?.state === 'suspended') c.resume(); }, { once: false, passive: true });
+
     function playLobbyChime() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        // Two-note "ding-dong" chime: higher note then lower note
+      const ctx = _getAudioCtx();
+      if (!ctx) return;
+      // Resume in case it got suspended (Safari), then play
+      const play = () => {
         const notes = [
           { freq: 880, start: 0,    dur: 0.35 },
           { freq: 659, start: 0.28, dur: 0.55 }
@@ -3542,14 +3555,17 @@
           osc.type = 'sine';
           osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
           gain.gain.setValueAtTime(0, ctx.currentTime + start);
-          gain.gain.linearRampToValueAtTime(0.45, ctx.currentTime + start + 0.02);
+          gain.gain.linearRampToValueAtTime(0.5, ctx.currentTime + start + 0.02);
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
           osc.start(ctx.currentTime + start);
           osc.stop(ctx.currentTime + start + dur);
         });
-        // Close context after chime finishes to free resources
-        setTimeout(() => ctx.close(), 1200);
-      } catch (_) { /* AudioContext not available — silent fail */ }
+      };
+      if (ctx.state === 'suspended') {
+        ctx.resume().then(play).catch(() => {});
+      } else {
+        play();
+      }
     }
 
     function showLobbyToast(req) {
