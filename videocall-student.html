@@ -604,6 +604,23 @@
     }
 
     // ── Entry point: read ?session=CODE ──────────────────────────
+    function logActivity(event) {
+      if (!db || !state.sessionId || !user.id || state.sessionId.startsWith('local-')) return;
+      const entry = {
+        ts:           new Date().toISOString(),
+        session_id:   state.sessionId,
+        session_code: state.sessionCode,
+        session_name: state.sessionName,
+        user_id:      user.id,
+        user_name:    user.name,
+        user_role:    user.role,
+        event_type:   event
+      };
+      db.from('video_call_activity_log').insert([entry]).then(({ error }) => {
+        if (error) console.warn('logActivity DB error:', error.message);
+      });
+    }
+
     function hydrateFromQuery() {
       const code = new URLSearchParams(window.location.search).get('session');
       if (!code) {
@@ -808,6 +825,7 @@
 
       if (action === 'join') {
         state.joinTimestamp = now;
+        logActivity('joined');
         const { data, error } = await db.from('video_call_participants').insert([{
           session_id:            state.sessionId,
           participant_user_id:   user.id,
@@ -821,6 +839,7 @@
       }
 
       if (action === 'leave' && state.currentAttendanceId) {
+        logActivity('left');
         const dur = state.joinTimestamp ? Math.floor((now - state.joinTimestamp) / 1000) : 0;
         await db.from('video_call_participants').update({
           left_at: now.toISOString(),
@@ -990,6 +1009,7 @@
         if (track) {
           state.media.camera = !state.media.camera;
           track.enabled = state.media.camera;
+          logActivity(state.media.camera ? 'camera_on' : 'camera_off');
           // Sync LiveKit mute state
           if (state.livekitRoom) {
             const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Camera);
@@ -1003,6 +1023,7 @@
         if (track) {
           state.media.mic = !state.media.mic;
           track.enabled = state.media.mic;
+          logActivity(state.media.mic ? 'mic_on' : 'mic_off');
           // Sync LiveKit mute state
           if (state.livekitRoom) {
             const pub = state.livekitRoom.localParticipant.getTrackPublication(LivekitClient.Track.Source.Microphone);
@@ -1014,6 +1035,7 @@
         document.querySelectorAll('.video-tile video').forEach(v => { if (!v.muted || !state.media.speaker) v.muted = !state.media.speaker; });
       } else if (key === 'hand') {
         state.media.hand = !state.media.hand;
+        logActivity(state.media.hand ? 'hand_raised' : 'hand_lowered');
         const localTile = document.getElementById('localVideoTile');
         if (localTile) {
           const nameEl = localTile.querySelector('.tile-name');
@@ -1382,6 +1404,8 @@
       if (e) { try { e.ctx.close(); } catch (_) {} _audioCtxMap.delete(uid); }
     }
 
+    let _isLocalSpeaking = false;
+
     function startSpeakingDetection() {
       if (_speakingTick) return;
       _speakingTick = setInterval(() => {
@@ -1389,10 +1413,22 @@
           analyser.getByteFrequencyData(dataArr);
           const rms = Math.sqrt(dataArr.reduce((s,v) => s + v*v, 0) / dataArr.length);
           const audible = uid === 'local' ? state.media.mic : state.media.speaker;
+          const isSpeakingNow = rms > 10 && audible;
           const tile = uid === 'local' ? document.getElementById('localVideoTile') : document.querySelector(`.video-tile[data-uid="${uid}"]`);
-          if (tile) tile.classList.toggle('speaking', rms > 10 && audible);
+          if (tile) tile.classList.toggle('speaking', isSpeakingNow);
+
+          // Log local speaking activity
+          if (uid === 'local') {
+            if (isSpeakingNow && !_isLocalSpeaking) {
+              _isLocalSpeaking = true;
+              logActivity('started_speaking');
+            } else if (!isSpeakingNow && _isLocalSpeaking) {
+              _isLocalSpeaking = false;
+              logActivity('stopped_speaking');
+            }
+          }
         }
-      }, 150);
+      }, 500); // Increased interval to 500ms to avoid spamming short clips
     }
 
     function stopSpeakingDetection() {
