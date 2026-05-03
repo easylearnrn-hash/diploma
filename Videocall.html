@@ -3440,15 +3440,16 @@
 
     // ── HOST: admit one student ───────────────────────────────────
     async function admit(lobbyId, userId) {
-      if (!db || !state.sessionId) return;
+      if (!db) { console.error('[admit] No DB'); return; }
+      console.log('[admit] id=', lobbyId);
       const { error } = await db
         .from('video_call_lobby')
         .update({ status: 'admitted', decided_at: new Date().toISOString() })
         .eq('id', lobbyId);
-      if (error) { console.warn('admit error:', error.message); return; }
+      if (error) { console.error('[admit] DB error:', error.message); return; }
 
       // Mark locally
-      const req = state.lobbyRequests.find(r => r.id === lobbyId);
+      const req = state.lobbyRequests.find(r => String(r.id) === String(lobbyId));
       if (req) req.status = 'admitted';
       logActivity('lobby_admitted');
       // Also log who was admitted (using a detail-enriched entry)
@@ -3463,17 +3464,19 @@
       }
       renderLobby();
     }
+    window.admit = admit;
 
     // ── HOST: deny one student ────────────────────────────────────
     async function deny(lobbyId) {
-      if (!db || !state.sessionId) return;
+      if (!db) { console.error('[deny] No DB'); return; }
+      console.log('[deny] id=', lobbyId);
       const { error } = await db
         .from('video_call_lobby')
         .update({ status: 'denied', decided_at: new Date().toISOString() })
         .eq('id', lobbyId);
-      if (error) { console.warn('deny error:', error.message); return; }
+      if (error) { console.error('[deny] DB error:', error.message); return; }
 
-      const req = state.lobbyRequests.find(r => r.id === lobbyId);
+      const req = state.lobbyRequests.find(r => String(r.id) === String(lobbyId));
       if (req) req.status = 'denied';
       logActivity('lobby_denied');
       if (db && state.sessionId) {
@@ -3487,8 +3490,7 @@
       }
       renderLobby();
     }
-
-    // ── HOST: admit all waiting students ─────────────────────────
+    window.deny = deny;
     async function admitAll() {
       const waiting = state.lobbyRequests.filter(r => r.status === 'waiting');
       for (const req of waiting) {
