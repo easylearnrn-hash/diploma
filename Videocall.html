@@ -1825,6 +1825,7 @@
       peers: {}, // SimplePeer instances: map participant_user_id -> peer
       remoteStreams: {}, // map participant_user_id -> MediaStream
       broadcastChannel: null, // supabase realtime broadcast channel
+      _healthPollId: null,     // fallback session-ended detector (15 s poll)
       media: {
         camera: false,
         mic: false,
@@ -1997,14 +1998,8 @@
     dom.shareScreenBtn.addEventListener('click', () => toggleMedia('screen'));
 
     function escapeHtml(unsafe) {
-        return (unsafe || '').replace(/[&<"']/g, m => {
-            switch (m) {
-                case '&': return '&amp;';
-                case '<': return '&lt;';
-                case '"': return '&quot;';
-                case "'": return '&#039;';
-            }
-        });
+      const s = unsafe == null ? '' : String(unsafe);
+      return s.replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[m]));
     }
 
     function renderOverlayList() {
@@ -2222,6 +2217,19 @@
           clearPersistedSession();
           return;
         }
+
+        // Verify the session is still live in the database before restoring
+        if (db && saved.sessionId && !saved.sessionId.startsWith('local-')) {
+          const { data: sess } = await db
+            .from('video_call_sessions')
+            .select('status')
+            .eq('session_id', saved.sessionId)
+            .maybeSingle();
+          if (sess && sess.status === 'ended') {
+            clearPersistedSession();
+            return;
+          }
+        }
         state.sessionId   = saved.sessionId;
         state.sessionCode = saved.sessionCode;
         state.sessionName = saved.sessionName || 'ACNHS Conference Room';
@@ -2234,6 +2242,7 @@
         await updateAttendance('join');
         await fetchAttendance();
         subscribeAttendance();
+        startSessionHealthPoll(state.sessionId);
         setupWebRTC();
         if (state.isHost) { subscribeLobby(); fetchLobbyRequests(); }
         startTimer();
@@ -2620,6 +2629,11 @@
           state.sessionCode = code;
           state.sessionName = 'ACNHS Conference Room';
           state.sessionStart = new Date().toISOString();
+        } else if (data.status === 'ended') {
+          updateCallStatus('idle');
+          showNotice('This session has already ended. Ask the host to start a new session.');
+          setTimeout(() => dom.authNotice.classList.remove('show'), 5000);
+          return;
         } else {
           state.sessionId = data.session_id;
           state.sessionCode = data.room_code;
@@ -2641,6 +2655,7 @@
       await updateAttendance('join');
       await fetchAttendance();
       subscribeAttendance();
+      startSessionHealthPoll(state.sessionId);
       await fetchChatHistory();
       setupWebRTC();
       // Host joining via code: also listen for lobby requests
@@ -2754,6 +2769,38 @@
           fetchAttendance();
         })
         .subscribe();
+    }
+
+    // ── Session health poll ───────────────────────────────────────────────────
+    // Polls the DB every 15 s as a reliable fallback for session-ended
+    // detection in case the broadcast channel message is missed (e.g. on mobile
+    // network wake-up or a brief Supabase Realtime blip).
+    function startSessionHealthPoll(sessionId) {
+      stopSessionHealthPoll();
+      // Skip for local-mode sessions and for the host (they end it themselves)
+      if (!db || !sessionId || sessionId.startsWith('local-') || state.isHost) return;
+      state._healthPollId = setInterval(async () => {
+        // Stop if we're no longer in a session
+        if (!state.sessionId) { stopSessionHealthPoll(); return; }
+        try {
+          const { data } = await db
+            .from('video_call_sessions')
+            .select('status')
+            .eq('session_id', sessionId)
+            .maybeSingle();
+          if (data?.status === 'ended') {
+            stopSessionHealthPoll();
+            handleSessionEndedByHost({ endedByName: 'The host' });
+          }
+        } catch (e) {
+          console.warn('[HealthPoll] DB error:', e.message);
+        }
+      }, 15000);
+    }
+
+    function stopSessionHealthPoll() {
+      clearInterval(state._healthPollId);
+      state._healthPollId = null;
     }
 
     function renderAttendance() {
@@ -2985,6 +3032,7 @@
       stopSpeakingDetection();
       clearPersistedSession();
       stopTimer();
+      stopSessionHealthPoll();
       stopLobbyPolling();
       if (state.lobbySubscription) { db?.removeChannel(state.lobbySubscription); state.lobbySubscription = null; }
 
@@ -3109,48 +3157,8 @@
 
       // ── Listen for session-ended event (host ended the call) ──
       state.broadcastChannel.on('broadcast', { event: 'session-ended' }, payload => {
-        const msg = payload.payload;
-        console.log('[WebRTC] Session ended by host:', msg?.endedByName || msg?.endedBy);
-
-        // Don't process if we are the host who sent it
-        if (state.isHost) return;
-
-        // Stop local media tracks
-        stopLocalMedia();
-
-        // Tear down WebRTC connections and channel
-        teardownWebRTC();
-
-        // Stop lobby polling (if student was still in lobby)
-        stopLobbyPolling();
-        if (state.lobbySubscription) { db?.removeChannel(state.lobbySubscription); state.lobbySubscription = null; }
-
-        // Hide prejoin overlay (if student was waiting in lobby)
-        if (dom.prejoinOverlay) dom.prejoinOverlay.classList.add('hidden');
-
-        // Clear persisted session so refresh doesn't try to rejoin
-        clearPersistedSession();
-        stopTimer();
-        showGridEmptyState('ended');
-
-        // Tear down state
-        state.sessionId   = null;
-        state.sessionCode = null;
-        state.sessionName = null;
-        state.lobbyRequests = [];
-        state.attendanceRows = [];
-        state.attendanceRowsDeduped = [];
-
-        // Reset video grid to empty
-        showGridEmptyState('ended');
-
-        updateCallStatus('ended');
-        updateSessionDetails();
-
-        // Show disconnection notice to the participant
-        const hostName = msg?.endedByName || 'The host';
-        showNotice(`${hostName} has ended the session. You have been disconnected.`);
-        setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
+        console.log('[WebRTC] Session ended by host:', payload.payload?.endedByName || payload.payload?.endedBy);
+        handleSessionEndedByHost(payload.payload);
       });
 
       // ── Listen for lobby admit/deny events (host actions) ───────
@@ -3657,6 +3665,46 @@
       state.lobbyPollInterval = null;
     }
 
+    // ── Shared handler: host ended the session ────────────────────────────────
+    // Called from the broadcast handler AND the 15-second health poll so both
+    // entry points clean up identically.
+    function handleSessionEndedByHost(msg) {
+      if (state.isHost) return;                        // host owns their teardown
+      if (!state.sessionId && !state.sessionCode) return; // already cleaned up
+
+      stopLocalMedia();
+      teardownWebRTC();          // closes broadcast channel, destroys peers
+      stopSpeakingDetection();
+      stopLobbyPolling();
+      stopSessionHealthPoll();
+      if (state.lobbySubscription) {
+        db?.removeChannel(state.lobbySubscription);
+        state.lobbySubscription = null;
+      }
+
+      // Hide the pre-join overlay in case student was still waiting
+      if (dom.prejoinOverlay) dom.prejoinOverlay.classList.add('hidden');
+
+      clearPersistedSession();
+      stopTimer();
+
+      // Wipe local state
+      state.sessionId          = null;
+      state.sessionCode        = null;
+      state.sessionName        = null;
+      state.lobbyRequests      = [];
+      state.attendanceRows     = [];
+      state.attendanceRowsDeduped = [];
+
+      showGridEmptyState('ended');
+      updateCallStatus('ended');
+      updateSessionDetails();
+
+      const hostName = msg?.endedByName || 'The host';
+      showNotice(`${hostName} has ended the session. You have been disconnected.`);
+      setTimeout(() => dom.authNotice?.classList.remove('show'), 6000);
+    }
+
     // Called after host admits the student — performs the actual join + attendance
     async function enterLiveCallAfterAdmission() {
       updateCallStatus('connecting');
@@ -3668,6 +3716,7 @@
       await updateAttendance('join');  // Attendance starts HERE — only after admission
       await fetchAttendance();
       subscribeAttendance();
+      startSessionHealthPoll(state.sessionId);
       await fetchChatHistory();
       setupWebRTC();
       startTimer();
@@ -3693,8 +3742,8 @@
             payload: { endedBy: user.id, endedByName: user.name }
           });
         } catch (_) {}
-        // Small delay so the broadcast has time to reach participants
-        await new Promise(r => setTimeout(r, 300));
+        // Give all participants 600 ms to receive the broadcast before teardown
+        await new Promise(r => setTimeout(r, 600));
       }
 
       teardownWebRTC();
@@ -3711,6 +3760,7 @@
 
       clearPersistedSession();
       stopTimer();
+      stopSessionHealthPoll();
       stopLobbyPolling();
       if (state.lobbySubscription) { db?.removeChannel(state.lobbySubscription); state.lobbySubscription = null; }
 
@@ -4414,15 +4464,6 @@
       return `${mins}:${secs}`;
     }
 
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"]/g, (match) => ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;'
-      }[match]));
-    }
-
     function hydrateFromQuery() {
       const params = new URLSearchParams(window.location.search);
       const sessionCode = params.get('session');
@@ -4454,12 +4495,17 @@
       if (db) {
         const { data } = await db
           .from('video_call_sessions')
-          .select('room_name, session_id')
+          .select('room_name, session_id, status')
           .eq('room_code', sessionCode)
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle();
         if (data) {
+          if (data.status === 'ended') {
+            showNotice('This session has already ended. Ask the host to start a new session.');
+            setTimeout(() => dom.authNotice?.classList.remove('show'), 5000);
+            return;
+          }
           sessionName = data.room_name || sessionName;
           state.sessionId = data.session_id;
         }
