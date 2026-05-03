@@ -501,8 +501,9 @@
   <div class="toolbar">
     <div class="filter-group">
       <span class="filter-label">Period</span>
-      <select id="periodFrom"><option value="">From…</option></select>
-      <select id="periodTo"><option value="">To…</option></select>
+      <input type="date" id="periodFrom" title="From date" onchange="onDateChange()" />
+      <span style="color:var(--text-muted);font-size:13px">→</span>
+      <input type="date" id="periodTo"   title="To date"   onchange="onDateChange()" />
     </div>
 
     <div class="filter-group">
@@ -606,6 +607,10 @@
           `Session: ${sessionName}`;
       }
 
+      // Set today's date as default "To" date
+      const today = new Date().toISOString().slice(0, 10);
+      document.getElementById('periodTo').value = today;
+
       loadData();
     });
 
@@ -616,29 +621,54 @@
 
       const now = new Date();
 
+      const toISO = d => d.toISOString().slice(0, 10);
+      const today  = toISO(now);
+
       if (period === 'today') {
         periodStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
-        periodEnd   = null;
+        periodEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
+        document.getElementById('periodFrom').value = today;
+        document.getElementById('periodTo').value   = today;
       } else if (period === 'week') {
         const monDiff = (now.getDay() + 6) % 7;
         const mon = new Date(now);
         mon.setDate(now.getDate() - monDiff);
         mon.setHours(0,0,0,0);
         periodStart = mon.toISOString();
-        periodEnd   = null;
+        periodEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
+        document.getElementById('periodFrom').value = toISO(mon);
+        document.getElementById('periodTo').value   = today;
       } else if (period === 'month') {
         periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-        periodEnd   = null;
+        periodEnd   = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59).toISOString();
+        document.getElementById('periodFrom').value = toISO(new Date(now.getFullYear(), now.getMonth(), 1));
+        document.getElementById('periodTo').value   = today;
       } else {
         periodStart = null;
         periodEnd   = null;
+        document.getElementById('periodFrom').value = '';
+        document.getElementById('periodTo').value   = '';
       }
 
       loadData();
     }
 
+    function onDateChange() {
+      // When user manually picks dates, clear the period tab selection
+      document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
+      const from = document.getElementById('periodFrom').value;
+      const to   = document.getElementById('periodTo').value;
+      periodStart = from ? new Date(from).toISOString() : null;
+      periodEnd   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
+      loadData();
+    }
+
     function applyFilters() {
-      renderTable();
+      const from = document.getElementById('periodFrom').value;
+      const to   = document.getElementById('periodTo').value;
+      periodStart = from ? new Date(from).toISOString() : null;
+      periodEnd   = to   ? new Date(to + 'T23:59:59').toISOString() : null;
+      loadData();
     }
 
     // ── Data loading ──────────────────────────────────────────────
