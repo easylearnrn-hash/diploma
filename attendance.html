@@ -287,6 +287,30 @@
     .badge-red   { background: rgba(239,68,68,0.15);  color: #ef4444; }
     .badge-amber { background: rgba(245,158,11,0.15); color: #f59e0b; }
 
+    /* ── Policy Zone badges ───────────────────────────────────── */
+    .zone-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 9px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      white-space: nowrap;
+    }
+    .zone-green  { background: rgba(34,197,94,0.18);  color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+    .zone-orange { background: rgba(249,115,22,0.18); color: #f97316; border: 1px solid rgba(249,115,22,0.3); }
+    .zone-red    { background: rgba(239,68,68,0.18);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
+
+    .stat-card.zone-card-green  { border-color: rgba(34,197,94,0.3);  }
+    .stat-card.zone-card-orange { border-color: rgba(249,115,22,0.3); }
+    .stat-card.zone-card-red    { border-color: rgba(239,68,68,0.3);  }
+    .stat-card.zone-card-green  .stat-value { color: #22c55e; }
+    .stat-card.zone-card-orange .stat-value { color: #f97316; }
+    .stat-card.zone-card-red    .stat-value { color: #ef4444; }
+
     .meter-bar {
       background: rgba(255,255,255,0.07);
       border-radius: 4px;
@@ -566,6 +590,18 @@
         <div class="stat-value" id="sumSpeech">—</div>
         <div class="stat-label">Total Speech Intervals</div>
       </div>
+      <div class="stat-card zone-card-green">
+        <div class="stat-value" id="sumZoneGreen">—</div>
+        <div class="stat-label">🟢 Green Zone</div>
+      </div>
+      <div class="stat-card zone-card-orange">
+        <div class="stat-value" id="sumZoneOrange">—</div>
+        <div class="stat-label">🟠 Orange Zone</div>
+      </div>
+      <div class="stat-card zone-card-red">
+        <div class="stat-value" id="sumZoneRed">—</div>
+        <div class="stat-label">🔴 Red Zone</div>
+      </div>
     </div>
 
     <!-- Student Table -->
@@ -595,6 +631,75 @@
     let periodStart = null;
     let periodEnd   = null;
     let preselectedSessionId = null;
+
+    // ── College Participation Policy ──────────────────────────────
+    const POLICY = {
+      maxAbsencesPerMonth:    2,
+      cameraOffAllowanceSecs: 15 * 60,  // 15 min camera-off allowance per session
+      breakAllowanceSecs:     10 * 60,  // 10 min break per session (added to camera budget)
+      minMicOnsPerSession:    2,        // must unmute mic ≥2× per session
+      weights: { attendance: 0.40, camera: 0.30, mic: 0.30 },
+      greenThreshold:  85,
+      orangeThreshold: 70
+    };
+
+    // Compute policy zone for a single student row.
+    // Returns { zone, score, detail }
+    function computeZone(r) {
+      const totalSessions = allSessions.length;
+      if (totalSessions === 0) return { zone: 'grey', score: null, detail: null };
+
+      // ── Attendance score ──────────────────────────────────────
+      const absences = totalSessions - r.sessCount;
+      let months = 1;
+      if (periodStart && periodEnd) {
+        const ms = (new Date(periodEnd) - new Date(periodStart)) / (1000 * 60 * 60 * 24 * 30.44);
+        months = Math.max(1, Math.round(ms));
+      }
+      const allowedAbsences = POLICY.maxAbsencesPerMonth * months;
+      const excessAbsences  = Math.max(0, absences - allowedAbsences);
+      const rawAttendancePct = Math.round((r.sessCount / totalSessions) * 100);
+      // Each excess absence costs 10 points
+      const attendanceScore = Math.max(0, rawAttendancePct - excessAbsences * 10);
+
+      // ── Per-session camera & mic compliance ───────────────────
+      const camBudget = POLICY.cameraOffAllowanceSecs + POLICY.breakAllowanceSecs; // 1500 s
+      let camCompliantSessions = 0;
+      let micCompliantSessions = 0;
+
+      for (const [sid] of Object.entries(r.sessions)) {
+        const sessLogs = r.logs.filter(l => l.session_id === sid);
+        const sessLogs_ts = sessLogs.map(l => ({ ...l, ts: l.ts || l.created_at }));
+        const camOff = computeTotalDuration(sessLogs_ts, 'camera_off', 'camera_on');
+        if (camOff <= camBudget) camCompliantSessions++;
+        const micOns = sessLogs.filter(l => l.event_type === 'mic_on').length;
+        if (micOns >= POLICY.minMicOnsPerSession) micCompliantSessions++;
+      }
+
+      const cameraScore = r.sessCount > 0 ? Math.round((camCompliantSessions / r.sessCount) * 100) : 0;
+      const micScore    = r.sessCount > 0 ? Math.round((micCompliantSessions  / r.sessCount) * 100) : 0;
+
+      // ── Weighted composite ────────────────────────────────────
+      const composite = Math.round(
+        attendanceScore * POLICY.weights.attendance +
+        cameraScore     * POLICY.weights.camera     +
+        micScore        * POLICY.weights.mic
+      );
+
+      const zone = composite >= POLICY.greenThreshold  ? 'green'
+                 : composite >= POLICY.orangeThreshold ? 'orange'
+                 : 'red';
+
+      return {
+        zone, score: composite,
+        detail: {
+          attendanceScore, rawAttendancePct, cameraScore, micScore,
+          absences, allowedAbsences, excessAbsences,
+          camCompliantSessions, micCompliantSessions,
+          totalSessions
+        }
+      };
+    }
 
     // ── On load: read params passed from opener ───────────────────
     window.addEventListener('DOMContentLoaded', () => {
@@ -841,6 +946,11 @@
         });
       }
 
+      // Attach zone scores (needs allSessions to be populated first)
+      for (const r of result) {
+        r.zoneData = computeZone(r);
+      }
+
       // Sort by total duration desc
       result.sort((a, b) => b.totalSecs - a.totalSecs);
       return result;
@@ -892,6 +1002,14 @@
       document.getElementById('sumCamOn').textContent    = camEvents;
       document.getElementById('sumSpeech').textContent   = speechEvts;
 
+      // Zone counts
+      const zoneGreen  = filteredData.filter(r => r.zoneData?.zone === 'green').length;
+      const zoneOrange = filteredData.filter(r => r.zoneData?.zone === 'orange').length;
+      const zoneRed    = filteredData.filter(r => r.zoneData?.zone === 'red').length;
+      document.getElementById('sumZoneGreen').textContent  = zoneGreen;
+      document.getElementById('sumZoneOrange').textContent = zoneOrange;
+      document.getElementById('sumZoneRed').textContent    = zoneRed;
+
       if (!filteredData.length) {
         document.getElementById('tableWrap').innerHTML = `
           <div class="empty-state">
@@ -911,6 +1029,12 @@
         const camPct   = Math.round((r.totalSecs - r.camOffSecs) / Math.max(r.totalSecs, 1) * 100);
         const talkPct  = Math.round(r.speakSecs / Math.max(r.totalSecs, 1) * 100);
         const rollBadge = r.role === 'Admin' ? 'badge-amber' : 'badge-green';
+
+        // Zone badge
+        const zd = r.zoneData;
+        const zoneBadge = zd && zd.zone !== 'grey'
+          ? `<span class="zone-badge zone-${zd.zone}">${zd.zone === 'green' ? '🟢' : zd.zone === 'orange' ? '🟠' : '🔴'} ${zd.zone} · ${zd.score}%</span>`
+          : `<span style="color:var(--text-muted);font-size:11px">—</span>`;
 
         rows += `
           <tr onclick="toggleDetail('dr_${i}')" id="tr_${i}">
@@ -937,10 +1061,11 @@
             </td>
             <td class="right">${r.handRaises}</td>
             <td class="right">${r.reconnects > 0 ? `<span class="badge badge-red">${r.reconnects}</span>` : '—'}</td>
+            <td class="right">${zoneBadge}</td>
             <td class="right"><span class="chevron">▼</span></td>
           </tr>
           <tr class="detail-row" id="dr_${i}">
-            <td colspan="10">
+            <td colspan="11">
               <div class="detail-inner" id="di_${i}">
                 ${buildDetailBody(r, i)}
               </div>
@@ -961,6 +1086,7 @@
               <th class="right">Speaking Time</th>
               <th class="right">Hand Raises</th>
               <th class="right">Reconnects</th>
+              <th class="right">Policy Zone</th>
               <th class="right"></th>
             </tr>
           </thead>
@@ -1121,6 +1247,97 @@
           <div class="timeline">${tlHtml}</div>
         </div>
 
+        ${buildPolicyCard(r)}
+
+      </div>`;
+    }
+
+    // ── Policy compliance card ────────────────────────────────────
+    function buildPolicyCard(r) {
+      const zd = r.zoneData;
+      if (!zd || zd.zone === 'grey') {
+        return `<div class="detail-card" style="grid-column:1/-1">
+          <div class="dc-title">🏫 Policy Compliance</div>
+          <div class="dc-stat-row"><span class="dc-stat-label" style="color:var(--text-muted)">No sessions recorded in this period to evaluate.</span></div>
+        </div>`;
+      }
+
+      const d = zd.detail;
+      const zoneColor = zd.zone === 'green' ? 'green' : zd.zone === 'orange' ? 'amber' : 'red';
+      const zoneEmoji = zd.zone === 'green' ? '🟢' : zd.zone === 'orange' ? '🟠' : '🔴';
+      const scoreBar  = `<span class="meter-bar" style="min-width:120px"><span class="meter-fill ${zd.zone === 'green' ? 'mic' : zd.zone === 'orange' ? '' : ''}" style="width:${zd.score}%;background:${zd.zone === 'green' ? 'var(--green)' : zd.zone === 'orange' ? '#f97316' : 'var(--red)'}"></span></span>`;
+
+      const absColor   = d.excessAbsences > 0 ? 'red' : 'green';
+      const camColor   = d.cameraScore >= 85 ? 'green' : d.cameraScore >= 70 ? 'amber' : 'red';
+      const micColor   = d.micScore    >= 85 ? 'green' : d.micScore    >= 70 ? 'amber' : 'red';
+      const attColor   = d.attendanceScore >= 85 ? 'green' : d.attendanceScore >= 70 ? 'amber' : 'red';
+
+      return `<div class="detail-card" style="grid-column:1/-1">
+        <div class="dc-title">🏫 College Policy Compliance</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:4px">
+
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">OVERALL ZONE</div>
+            <span class="zone-badge zone-${zd.zone}" style="font-size:13px;padding:6px 14px">${zoneEmoji} ${zd.zone.toUpperCase()} — ${zd.score}%</span>
+            <div style="margin-top:10px">${scoreBar}</div>
+            <div style="font-size:11px;color:var(--text-muted);margin-top:6px">
+              Green ≥${POLICY.greenThreshold}% · Orange ≥${POLICY.orangeThreshold}% · Red &lt;${POLICY.orangeThreshold}%
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">ATTENDANCE (weight ${POLICY.weights.attendance * 100}%)</div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Sessions Attended</span>
+              <span class="dc-stat-val">${r.sessCount} / ${d.totalSessions}</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Absences</span>
+              <span class="dc-stat-val ${absColor}">${d.absences} (allowed: ${d.allowedAbsences})</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Raw Attendance %</span>
+              <span class="dc-stat-val">${d.rawAttendancePct}%</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Attendance Score</span>
+              <span class="dc-stat-val ${attColor}">${d.attendanceScore}%</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">CAMERA (weight ${POLICY.weights.camera * 100}%) — max ${POLICY.cameraOffAllowanceSecs/60}m off + ${POLICY.breakAllowanceSecs/60}m break</div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Sessions Compliant</span>
+              <span class="dc-stat-val">${d.camCompliantSessions} / ${r.sessCount}</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Camera Score</span>
+              <span class="dc-stat-val ${camColor}">${d.cameraScore}%</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Policy Limit per Session</span>
+              <span class="dc-stat-val">${(POLICY.cameraOffAllowanceSecs + POLICY.breakAllowanceSecs) / 60} min off</span>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:8px">MICROPHONE (weight ${POLICY.weights.mic * 100}%) — must unmute ≥${POLICY.minMicOnsPerSession}× / session</div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Sessions Compliant</span>
+              <span class="dc-stat-val">${d.micCompliantSessions} / ${r.sessCount}</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Mic Engagement Score</span>
+              <span class="dc-stat-val ${micColor}">${d.micScore}%</span>
+            </div>
+            <div class="dc-stat-row">
+              <span class="dc-stat-label">Scoring Formula</span>
+              <span class="dc-stat-val" style="font-size:11px;color:var(--text-muted)">Att×${POLICY.weights.attendance} + Cam×${POLICY.weights.camera} + Mic×${POLICY.weights.mic}</span>
+            </div>
+          </div>
+
+        </div>
       </div>`;
     }
 
@@ -1139,13 +1356,14 @@
     function exportCSV() {
       if (!filteredData.length) { alert('No data to export.'); return; }
 
-      const headers = ['Student Name','Role','Sessions','Total Time (min)','Mic On Count','Mic Off Count','Mic On (sec)','Cam On Count','Cam Off Count','Cam Off (sec)','Speaking Time (sec)','Speech Events','Hand Raises','Reconnects'];
+      const headers = ['Student Name','Role','Sessions','Total Time (min)','Mic On Count','Mic Off Count','Mic On (sec)','Cam On Count','Cam Off Count','Cam Off (sec)','Speaking Time (sec)','Speech Events','Hand Raises','Reconnects','Policy Zone','Zone Score (%)'];
       const rows = filteredData.map(r => [
         r.name, r.role, r.sessCount,
         Math.round(r.totalSecs / 60),
         r.micOnTimes, r.micOffTimes, r.micOnSecs,
         r.camOnTimes, r.camOffTimes, r.camOffSecs,
-        r.speakSecs, r.speakStartCount, r.handRaises, r.reconnects
+        r.speakSecs, r.speakStartCount, r.handRaises, r.reconnects,
+        r.zoneData?.zone || '', r.zoneData?.score ?? ''
       ]);
 
       const csv  = [headers, ...rows].map(row => row.map(v => `"${v}"`).join(',')).join('\n');
