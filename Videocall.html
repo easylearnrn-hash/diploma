@@ -3187,6 +3187,10 @@
           // Wait for local media to be ready before announcing
           await waitForLocalStream(5000);
 
+          // Guard: channel may have been torn down (e.g. host ended session)
+          // while we were awaiting local media startup.
+          if (!state.broadcastChannel) return;
+
           // Announce ourselves so existing peers can initiate connections to us
           state.broadcastChannel.send({
             type: 'broadcast',
@@ -3196,6 +3200,7 @@
 
           // Also proactively connect to anyone already in the attendance list
           setTimeout(() => {
+            if (!state.broadcastChannel) return; // may have been torn down
             const present = state.attendanceRowsDeduped.length
               ? state.attendanceRowsDeduped
               : state.attendanceRows;
