@@ -4492,19 +4492,29 @@
       const sessionCode = params.get('session');
       if (!sessionCode) return;
 
-      // Store the code so both host and student flows can use it
+      // ── Non-host users: always redirect to the student-only page ──
+      // A user is a host only if they are already signed in as admin/teacher.
+      // Unauthenticated users are also sent to the student page to sign in there.
+      const isLoggedIn = ss('isLoggedIn') === 'true';
+      const isAdminFlag = isLoggedIn && ss('isAdmin') === 'true';
+      const roleStr = (ss('userRole') || '').toLowerCase();
+      const isHostUser = isAdminFlag
+        || (isLoggedIn && ['admin', 'teacher', 'super_admin', 'super admin', 'instructor'].includes(roleStr));
+
+      if (!isHostUser) {
+        window.location.replace(`videocall-student.html?session=${encodeURIComponent(sessionCode)}`);
+        return;
+      }
+
+      // ── Host/Admin: continue with the full Videocall page ──────────
       dom.sessionCode.value = sessionCode;
       state.sessionCode = sessionCode;
-
-      // Pre-select Student role in the sign-in modal
-      if (dom.signinRole) dom.signinRole.value = 'Student';
 
       if (dom.signinSubtitle) {
         dom.signinSubtitle.textContent = `You've been invited to session ${sessionCode}. Sign in to join.`;
       }
 
       if (user.id) {
-        // Already signed in — go to pre-join screen (not the live room)
         handleInviteLinkOpened(sessionCode);
       }
       // If not signed in, handleInviteLinkOpened() is called after sign-in (see handleSignIn)
