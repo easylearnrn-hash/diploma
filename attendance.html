@@ -429,12 +429,75 @@
     .zone-orange { background: rgba(249,115,22,0.18); color: #f97316; border: 1px solid rgba(249,115,22,0.3); }
     .zone-red    { background: rgba(239,68,68,0.18);  color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
 
-    .stat-card.zone-card-green  { border-color: rgba(34,197,94,0.3);  }
-    .stat-card.zone-card-orange { border-color: rgba(249,115,22,0.3); }
-    .stat-card.zone-card-red    { border-color: rgba(239,68,68,0.3);  }
-    .stat-card.zone-card-green  .stat-value { color: #22c55e; }
-    .stat-card.zone-card-orange .stat-value { color: #f97316; }
-    .stat-card.zone-card-red    .stat-value { color: #ef4444; }
+    /* ── Zone filter pill bar ─────────────────────────────────── */
+    .zone-filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 8px;
+    }
+    .zone-filter-label {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+      color: var(--text-muted);
+      margin-right: 4px;
+      white-space: nowrap;
+    }
+    .zone-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      cursor: pointer;
+      border: 1px solid transparent;
+      transition: all 0.18s;
+      user-select: none;
+    }
+    .zone-pill-count {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 900;
+      background: rgba(255,255,255,0.12);
+    }
+    .zone-pill.zp-green  { background: rgba(34,197,94,0.12);  color: #22c55e; border-color: rgba(34,197,94,0.25); }
+    .zone-pill.zp-orange { background: rgba(249,115,22,0.12); color: #f97316; border-color: rgba(249,115,22,0.25); }
+    .zone-pill.zp-red    { background: rgba(239,68,68,0.12);  color: #ef4444; border-color: rgba(239,68,68,0.25); }
+    .zone-pill.zp-green.active  { background: rgba(34,197,94,0.28);  border-color: #22c55e; box-shadow: 0 0 0 2px rgba(34,197,94,0.20); }
+    .zone-pill.zp-orange.active { background: rgba(249,115,22,0.28); border-color: #f97316; box-shadow: 0 0 0 2px rgba(249,115,22,0.20); }
+    .zone-pill.zp-red.active    { background: rgba(239,68,68,0.28);  border-color: #ef4444; box-shadow: 0 0 0 2px rgba(239,68,68,0.20); }
+    .zone-pill:hover { opacity: 0.85; }
+    .zone-pill-clear {
+      margin-left: auto;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 4px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      transition: color 0.15s, border-color 0.15s;
+      display: none;
+    }
+    .zone-pill-clear.visible { display: inline-block; }
+    .zone-pill-clear:hover { color: var(--text); border-color: var(--text-muted); }
 
     .meter-bar {
       background: rgba(255,255,255,0.07);
@@ -763,18 +826,21 @@
         <div class="stat-value" id="sumSpeech">—</div>
         <div class="stat-label">Total Speech Intervals</div>
       </div>
-      <div class="stat-card zone-card-green">
-        <div class="stat-value" id="sumZoneGreen">—</div>
-        <div class="stat-label">🟢 Green Zone</div>
-      </div>
-      <div class="stat-card zone-card-orange">
-        <div class="stat-value" id="sumZoneOrange">—</div>
-        <div class="stat-label">🟠 Orange Zone</div>
-      </div>
-      <div class="stat-card zone-card-red">
-        <div class="stat-value" id="sumZoneRed">—</div>
-        <div class="stat-label">🔴 Red Zone</div>
-      </div>
+    </div>
+
+    <!-- Zone filter bar -->
+    <div class="zone-filter-bar">
+      <span class="zone-filter-label">Filter by zone:</span>
+      <span class="zone-pill zp-green" id="zpGreen" onclick="toggleZoneFilter('green')">
+        🟢 Green <span class="zone-pill-count" id="sumZoneGreen">—</span>
+      </span>
+      <span class="zone-pill zp-orange" id="zpOrange" onclick="toggleZoneFilter('orange')">
+        🟠 Orange <span class="zone-pill-count" id="sumZoneOrange">—</span>
+      </span>
+      <span class="zone-pill zp-red" id="zpRed" onclick="toggleZoneFilter('red')">
+        🔴 Red <span class="zone-pill-count" id="sumZoneRed">—</span>
+      </span>
+      <button class="zone-pill-clear" id="zoneClearBtn" onclick="toggleZoneFilter(null)">✕ Clear filter</button>
     </div>
 
     <!-- Student Table -->
@@ -805,6 +871,7 @@
     let periodEnd   = null;
     let preselectedSessionId = null;
     let currentPeriod = 'all'; // 'today' | 'week' | 'month' | 'all'
+    let activeZoneFilter = null; // 'green' | 'orange' | 'red' | null
 
     // ── College Participation Policy ──────────────────────────────
     const POLICY = {
@@ -1198,6 +1265,19 @@
       document.getElementById('sumZoneOrange').textContent = zoneOrange;
       document.getElementById('sumZoneRed').textContent    = zoneRed;
 
+      // Apply zone filter to display
+      const displayData = activeZoneFilter
+        ? filteredData.filter(r => r.zoneData?.zone === activeZoneFilter)
+        : filteredData;
+
+      // Update pill active states
+      ['green','orange','red'].forEach(z => {
+        const pill = document.getElementById('zp' + z.charAt(0).toUpperCase() + z.slice(1));
+        if (pill) pill.classList.toggle('active', activeZoneFilter === z);
+      });
+      const clearBtn = document.getElementById('zoneClearBtn');
+      if (clearBtn) clearBtn.classList.toggle('visible', !!activeZoneFilter);
+
       if (!filteredData.length) {
         document.getElementById('tableWrap').innerHTML = `
           <div class="empty-state">
@@ -1208,10 +1288,20 @@
         return;
       }
 
-      const maxSecs = Math.max(...filteredData.map(r => r.totalSecs), 1);
+      if (!displayData.length) {
+        document.getElementById('tableWrap').innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">${activeZoneFilter === 'green' ? '🟢' : activeZoneFilter === 'orange' ? '🟠' : '🔴'}</div>
+            <div class="empty-title">No students in the ${activeZoneFilter} zone</div>
+            <div class="empty-sub">Try a different zone filter or adjust the date range.</div>
+          </div>`;
+        return;
+      }
+
+      const maxSecs = Math.max(...displayData.map(r => r.totalSecs), 1);
 
       let rows = '';
-      filteredData.forEach((r, i) => {
+      displayData.forEach((r, i) => {
         const initials = r.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0,2) || '??';
         const micPct   = Math.round(r.micOnSecs / Math.max(r.totalSecs, 1) * 100);
         const camPct   = Math.round((r.totalSecs - r.camOffSecs) / Math.max(r.totalSecs, 1) * 100);
@@ -1280,6 +1370,13 @@
           </thead>
           <tbody>${rows}</tbody>
         </table>`;
+    }
+
+    // ── Zone filter toggle ────────────────────────────────────
+    function toggleZoneFilter(zone) {
+      // Clicking the active zone or null clears the filter
+      activeZoneFilter = (activeZoneFilter === zone || zone === null) ? null : zone;
+      renderTable();
     }
 
     // ── Narrative summary ─────────────────────────────────────────
