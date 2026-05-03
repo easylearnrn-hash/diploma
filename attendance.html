@@ -1308,6 +1308,10 @@
         const camPct   = Math.round((r.totalSecs - r.camOffSecs) / Math.max(r.totalSecs, 1) * 100);
         const talkPct  = Math.round(r.speakSecs / Math.max(r.totalSecs, 1) * 100);
         const rollBadge = r.role === 'Admin' ? 'badge-amber' : 'badge-blue';
+        const absences = Math.max(0, allSessions.length - r.sessCount);
+        const absCell = absences > 0
+          ? `<span class="badge badge-red">${absences}</span>`
+          : `<span style="color:var(--text-muted)">0</span>`;
 
         // Zone badge
         const zd = r.zoneData;
@@ -1322,7 +1326,8 @@
               <span class="stu-name">${escapeHtml(r.name)}</span>
             </td>
             <td><span class="badge ${rollBadge}">${escapeHtml(r.role)}</span></td>
-            <td class="right">${r.sessCount}</td>
+            <td class="right">${r.sessCount} <span style="font-size:10px;color:var(--text-muted)">/ ${allSessions.length}</span></td>
+            <td class="right">${absCell}</td>
             <td class="right">${fmt(r.totalSecs)}</td>
             <td class="right">
               ${r.micOnTimes}×
@@ -1344,7 +1349,7 @@
             <td class="right"><span class="chevron">▼</span></td>
           </tr>
           <tr class="detail-row" id="dr_${i}">
-            <td colspan="11">
+            <td colspan="12">
               <div class="detail-inner" id="di_${i}">
                 ${buildDetailBody(r, i)}
               </div>
@@ -1359,6 +1364,7 @@
               <th>Student</th>
               <th>Role</th>
               <th class="right">Sessions</th>
+              <th class="right">Absences</th>
               <th class="right">Total Time</th>
               <th class="right">Microphone</th>
               <th class="right">Camera</th>
@@ -1791,9 +1797,10 @@
     function exportCSV() {
       if (!filteredData.length) { alert('No data to export.'); return; }
 
-      const headers = ['Student Name','Role','Sessions','Total Time (min)','Mic On Count','Mic Off Count','Mic On (sec)','Cam On Count','Cam Off Count','Cam Off (sec)','Speaking Time (sec)','Speech Events','Hand Raises','Reconnects','Policy Zone','Zone Score (%)'];
+      const headers = ['Student Name','Role','Sessions','Absences','Total Time (min)','Mic On Count','Mic Off Count','Mic On (sec)','Cam On Count','Cam Off Count','Cam Off (sec)','Speaking Time (sec)','Speech Events','Hand Raises','Reconnects','Policy Zone','Zone Score (%)'];
       const rows = filteredData.map(r => [
         r.name, r.role, r.sessCount,
+        Math.max(0, allSessions.length - r.sessCount),
         Math.round(r.totalSecs / 60),
         r.micOnTimes, r.micOffTimes, r.micOnSecs,
         r.camOnTimes, r.camOffTimes, r.camOffSecs,
