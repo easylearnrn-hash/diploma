@@ -6580,10 +6580,10 @@
 
         const studentGroup = getHubStudentGroup();
 
-        const joinButton = null; // button merged into banner — banner itself is now clickable
         const joinBanner = document.getElementById('hubJoinClassBanner');
-        if (!joinButton && !joinBanner) {
-          console.warn('🔗 Hub: Join Class elements not found in DOM');
+        const bannerTitle = document.getElementById('hubBannerTitle');
+        if (!joinBanner) {
+          console.warn('🔗 Hub: Join Class banner not found in DOM');
           return;
         }
 
@@ -6606,12 +6606,8 @@
             isInternal: true
           };
 
-          if (joinBanner) {
-            const bannerTitle = document.getElementById('hubBannerTitle');
-            if (bannerTitle) bannerTitle.textContent = `Live Class: ${escapeHtml(sessions[0].room_name || 'ACNHS Room')}`;
-          }
-
-          if (joinBanner) joinBanner.style.display = 'block';
+          if (bannerTitle) bannerTitle.textContent = `Live Class: ${escapeHtml(sessions[0].room_name || 'ACNHS Room')}`;
+          joinBanner.style.display = 'block';
           return;
         }
 
@@ -6625,11 +6621,13 @@
           .limit(5);
 
         if (error) {
-          console.error('🔗 Hub: Error checking class link:', error);
+          console.warn('🔗 Hub: Error checking class link fallback, hiding banner:', error.message);
+          joinBanner.style.display = 'none';
+          hubActiveClassLink = null;
           return;
         }
         
-        console.log('🔗 Hub: Active class links found:', data?.length || 0, data);
+        console.log('🔗 Hub: Active class links found:', data?.length || 0);
 
         // Filter links matching this student's group or "all"
         const matchingLinks = (data || []).filter(link => {
@@ -6637,31 +6635,26 @@
           if (studentGroup && link.group_id === studentGroup) return true;
           return false;
         });
-        
-        console.log('🔗 Hub: Matching links for group "' + studentGroup + '":', matchingLinks.length);
 
         if (matchingLinks.length > 0) {
           hubActiveClassLink = matchingLinks[0];
           
-          // Check expiration — use expires_at if set, otherwise created_at + 2 hours
+          // Check expiration
           const now = new Date();
           const expirySource = hubActiveClassLink.expires_at
             ? new Date(hubActiveClassLink.expires_at)
             : new Date(new Date(hubActiveClassLink.created_at).getTime() + 2 * 60 * 60 * 1000);
           if (now >= expirySource) {
-            console.log('🔗 Hub: Link expired at', expirySource);
-            if (joinBanner) joinBanner.style.display = 'none';
+            joinBanner.style.display = 'none';
             hubActiveClassLink = null;
             return;
           }
           
-          // Show the banner
-          if (joinBanner) joinBanner.style.display = 'block';
-          console.log('🔗 Hub: ✅ Join Class banner is NOW VISIBLE! URL:', hubActiveClassLink.url);
+          if (bannerTitle) bannerTitle.textContent = `External Class: ${escapeHtml(hubActiveClassLink.platform || 'Join Now')}`;
+          joinBanner.style.display = 'block';
         } else {
-          if (joinBanner) joinBanner.style.display = 'none';
+          joinBanner.style.display = 'none';
           hubActiveClassLink = null;
-          console.log('🔗 Hub: No matching active links. Banner hidden.');
         }
       } catch (error) {
         console.error('🔗 Hub: Error checking for active class link:', error);
