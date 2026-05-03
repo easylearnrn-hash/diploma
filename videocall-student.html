@@ -640,6 +640,7 @@
             }
             sessionName = data.room_name || sessionName;
             state.sessionId = data.session_id;
+            subscribeSessionStatus();
           }
         } catch (e) {
           console.warn('Session lookup failed:', e.message);
@@ -860,6 +861,23 @@
         .subscribe();
     }
 
+    // ── Real-time Session Status Subscription ─────────────────────
+    function subscribeSessionStatus() {
+      if (!db || !state.sessionId) return;
+      if (state.sessionStatusChannel) return;
+      state.sessionStatusChannel = db.channel(`session-status-${state.sessionId}`)
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public',
+          table: 'video_call_sessions',
+          filter: `session_id=eq.${state.sessionId}`
+        }, (payload) => {
+          if (payload.new && payload.new.status === 'ended') {
+            handleSessionEndedByHost({ endedByName: 'The instructor' });
+          }
+        })
+        .subscribe();
+    }
+
     // ── Session health poll (detect session ended via DB) ─────────
     function startSessionHealthPoll(sessionId) {
       stopSessionHealthPoll();
@@ -887,6 +905,10 @@
 
     // ── Handle host-ended event ───────────────────────────────────
     function handleSessionEndedByHost(msg) {
+      if (state.sessionStatusChannel) {
+        state.sessionStatusChannel.unsubscribe();
+        state.sessionStatusChannel = null;
+      }
       stopLobbyPolling();
       stopSessionHealthPoll();
       teardownWebRTC();
