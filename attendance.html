@@ -473,6 +473,35 @@
       gap: 16px;
     }
 
+    .narrative-summary {
+      grid-column: 1 / -1;
+      background: linear-gradient(135deg, rgba(201,168,76,0.07) 0%, rgba(10,22,40,0.95) 100%);
+      border: 1px solid var(--gold-dim);
+      border-radius: 10px;
+      padding: 18px 22px;
+      position: relative;
+    }
+    .narrative-summary::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--gold-primary), transparent);
+      border-radius: 10px 10px 0 0;
+    }
+    .narrative-zone-green  { border-color: var(--green); }
+    .narrative-zone-orange { border-color: #f97316; }
+    .narrative-zone-red    { border-color: var(--red); }
+    .narrative-zone-green::before  { background: linear-gradient(90deg, var(--green), transparent); }
+    .narrative-zone-orange::before { background: linear-gradient(90deg, #f97316, transparent); }
+    .narrative-zone-red::before    { background: linear-gradient(90deg, var(--red), transparent); }
+    .narrative-label {
+      font-size: 9px; font-weight: 800; color: var(--gold-primary);
+      text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px;
+    }
+    .narrative-text {
+      font-size: 13.5px; line-height: 1.75; color: var(--text);
+      margin: 0;
+    }
+
     .detail-card {
       background: linear-gradient(135deg, #0a1628 0%, #0d1d30 100%);
       border: 1px solid var(--border);
@@ -775,6 +804,7 @@
     let periodStart = null;
     let periodEnd   = null;
     let preselectedSessionId = null;
+    let currentPeriod = 'all'; // 'today' | 'week' | 'month' | 'all'
 
     // ── College Participation Policy ──────────────────────────────
     const POLICY = {
@@ -879,6 +909,7 @@
     function setPeriod(period, btn) {
       document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      currentPeriod = period;
 
       const now = new Date();
 
@@ -917,6 +948,7 @@
     function onDateChange() {
       // When user manually picks dates, clear the period tab selection
       document.querySelectorAll('.period-tab').forEach(b => b.classList.remove('active'));
+      currentPeriod = 'custom';
       const from = document.getElementById('periodFrom').value;
       const to   = document.getElementById('periodTo').value;
       periodStart = from ? new Date(from).toISOString() : null;
@@ -1250,6 +1282,154 @@
         </table>`;
     }
 
+    // ── Narrative summary ─────────────────────────────────────────
+    function buildNarrativeSummary(r) {
+      const firstName = r.name.split(' ')[0] || r.name;
+      const totalSessions = allSessions.length;
+      const absences = Math.max(0, totalSessions - r.sessCount);
+      const camOffMins = Math.round(r.camOffSecs / 60);
+      const camBudgetMins = Math.round((POLICY.cameraOffAllowanceSecs + POLICY.breakAllowanceSecs) / 60);
+      const camCompliant = camOffMins <= camBudgetMins;
+      const zd = r.zoneData;
+      const zone = zd?.zone || 'grey';
+      const zoneLabel = zone === 'green' ? 'Green Zone' : zone === 'orange' ? 'Orange Zone' : zone === 'red' ? 'Red Zone' : null;
+
+      // Lateness: first join vs session start
+      let lateCount = 0;
+      for (const [sid, s] of Object.entries(r.sessions)) {
+        const sess = allSessions.find(ss => ss.session_id === sid);
+        if (sess && s.joined_at && (sess.started_at || sess.created_at)) {
+          const sessStart = new Date(sess.started_at || sess.created_at);
+          const joined    = new Date(s.joined_at);
+          if ((joined - sessStart) > 3 * 60 * 1000) lateCount++; // >3 min = late
+        }
+      }
+
+      // Last leave time
+      const leftTimes = Object.values(r.sessions)
+        .map(s => s.left_at ? new Date(s.left_at) : null)
+        .filter(Boolean)
+        .sort((a, b) => b - a);
+      const lastLeft = leftTimes[0]
+        ? leftTimes[0].toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : null;
+
+      // Per-session mic compliance count
+      let micNonCompliantSessions = 0;
+      for (const [sid] of Object.entries(r.sessions)) {
+        const micOns = r.logs.filter(l => l.session_id === sid && l.event_type === 'mic_on').length;
+        if (micOns < POLICY.minMicOnsPerSession) micNonCompliantSessions++;
+      }
+
+      const parts = [];
+
+      // ── Period-specific opener ────────────────────────────────
+      if (currentPeriod === 'today') {
+        // Attendance
+        if (r.sessCount === 0) {
+          parts.push(`${firstName} did not attend any recorded session today.`);
+        } else {
+          const lateStr = lateCount > 0 ? `, joining ${lateCount === 1 ? 'late' : `late on ${lateCount} occasions`}` : '';
+          parts.push(`Today, ${firstName} attended ${r.sessCount === 1 ? 'the session' : `${r.sessCount} sessions`}${lateStr}.`);
+        }
+        // Camera
+        if (r.sessCount > 0) {
+          if (camOffMins === 0) {
+            parts.push(`The camera remained on throughout the session.`);
+          } else {
+            parts.push(`The camera was off for a total of ${camOffMins} minute${camOffMins !== 1 ? 's' : ''}${camCompliant ? ', within the allowed limit' : ', exceeding the allowed limit'}.`);
+          }
+          // Mic
+          const micStr = r.micOnTimes === 0
+            ? `The microphone was not turned on during the session.`
+            : `The microphone was turned on ${r.micOnTimes} time${r.micOnTimes !== 1 ? 's' : ''}.`;
+          parts.push(micStr);
+          // Leave time
+          if (lastLeft) parts.push(`The student left the session at ${lastLeft}.`);
+        }
+
+      } else if (currentPeriod === 'week') {
+        // Attendance
+        if (r.sessCount === 0) {
+          parts.push(`This week, ${firstName} did not attend any recorded sessions.`);
+        } else if (absences === 0) {
+          const lateStr = lateCount > 0 ? `, arriving late on ${lateCount} occasion${lateCount !== 1 ? 's' : ''}` : '';
+          parts.push(`This week, ${firstName} attended all ${totalSessions} scheduled session${totalSessions !== 1 ? 's' : ''}${lateStr}.`);
+        } else {
+          parts.push(`This week, ${firstName} attended ${r.sessCount} of ${totalSessions} session${totalSessions !== 1 ? 's' : ''}${lateCount > 0 ? `, arriving late ${lateCount} time${lateCount !== 1 ? 's' : ''}` : ''}.`);
+        }
+        // Camera
+        if (r.sessCount > 0) {
+          parts.push(camOffMins === 0
+            ? `The camera was on for all attended sessions.`
+            : `The camera was off for a total of ${camOffMins} minute${camOffMins !== 1 ? 's' : ''} across sessions, ${camCompliant ? 'within acceptable limits' : 'exceeding the permitted allowance'}.`);
+          // Mic
+          parts.push(micNonCompliantSessions === 0
+            ? `The microphone engagement requirement was met in every session${r.micOnTimes > 0 ? ` (${r.micOnTimes} unmutes total)` : ''}.`
+            : `The microphone activation requirement was not met in ${micNonCompliantSessions} session${micNonCompliantSessions !== 1 ? 's' : ''}.`);
+        }
+        // Zone
+        if (zoneLabel) parts.push(`Based on this week's activity, the student is in the ${zoneLabel}.`);
+
+      } else if (currentPeriod === 'month') {
+        // Attendance
+        if (r.sessCount === 0) {
+          parts.push(`This month, ${firstName} did not attend any recorded sessions.`);
+        } else if (absences === 0) {
+          parts.push(`This month, ${firstName} attended all ${totalSessions} scheduled session${totalSessions !== 1 ? 's' : ''}${lateCount > 0 ? `, with ${lateCount} late arrival${lateCount !== 1 ? 's' : ''}` : ''}.`);
+        } else {
+          const withinLimit = absences <= POLICY.maxAbsencesPerMonth;
+          parts.push(`This month, ${firstName} missed ${absences} class${absences !== 1 ? 'es' : ''}${lateCount > 0 ? ` and joined late ${lateCount} time${lateCount !== 1 ? 's' : ''}` : ''}, ${withinLimit ? 'which is within the permitted absence limit' : 'exceeding the permitted absence limit of ' + POLICY.maxAbsencesPerMonth}.`);
+        }
+        // Camera
+        if (r.sessCount > 0) {
+          const camBudget = POLICY.cameraOffAllowanceSecs + POLICY.breakAllowanceSecs;
+          let camExceededCount = 0;
+          for (const [sid] of Object.entries(r.sessions)) {
+            const sessLogs = r.logs.filter(l => l.session_id === sid);
+            const off = computeTotalDuration(sessLogs, 'camera_off', 'camera_on');
+            if (off > camBudget) camExceededCount++;
+          }
+          parts.push(camExceededCount === 0
+            ? `Camera usage remained within the allowed limit throughout the month.`
+            : `The camera exceeded the permitted off-time in ${camExceededCount} session${camExceededCount !== 1 ? 's' : ''} this month.`);
+          // Mic
+          parts.push(r.micOnTimes > 0
+            ? `The microphone was activated regularly across sessions (${r.micOnTimes} total unmutes).`
+            : `No microphone activity was recorded this month.`);
+        }
+        // Zone
+        if (zoneLabel) parts.push(`Overall, ${firstName} is currently in the ${zoneLabel} for this month.`);
+
+      } else {
+        // All-time / custom
+        if (r.sessCount === 0) {
+          parts.push(`${firstName} has no recorded session attendance in the selected period.`);
+        } else {
+          parts.push(`Over this period, ${firstName} attended ${r.sessCount} session${r.sessCount !== 1 ? 's' : ''}${absences > 0 ? ` and was absent for ${absences}` : ''}${lateCount > 0 ? `, arriving late on ${lateCount} occasion${lateCount !== 1 ? 's' : ''}` : ''}.`);
+        }
+        if (r.sessCount > 0) {
+          parts.push(camOffMins === 0
+            ? `The camera was active throughout all sessions.`
+            : `Total camera-off time recorded was ${camOffMins} minute${camOffMins !== 1 ? 's' : ''}.`);
+          parts.push(r.micOnTimes > 0
+            ? `The microphone was unmuted ${r.micOnTimes} time${r.micOnTimes !== 1 ? 's' : ''} across all sessions.`
+            : `No microphone activity was recorded.`);
+        }
+        if (zoneLabel) parts.push(`The student's overall participation places them in the ${zoneLabel}.`);
+      }
+
+      if (!parts.length) return '';
+
+      const summaryText = parts.join(' ');
+      const zoneClass = zone !== 'grey' ? `narrative-zone-${zone}` : '';
+
+      return `<div class="narrative-summary ${zoneClass}">
+        <div class="narrative-label">📋 Summary Report</div>
+        <p class="narrative-text">${escapeHtml(summaryText)}</p>
+      </div>`;
+    }
+
     // ── Detail body panels ────────────────────────────────────────
     function buildDetailBody(r, i) {
       // Mic details
@@ -1316,6 +1496,7 @@
       if (!tlHtml) tlHtml = '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No detailed event log yet for this period.</div>';
 
       return `<div class="detail-body">
+        ${buildNarrativeSummary(r)}
 
         <div class="detail-card">
           <div class="dc-title">🎤 Microphone Activity</div>
