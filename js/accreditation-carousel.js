@@ -139,6 +139,10 @@
     '  max-height:70vh;',
     '  object-fit:scale-down;',
     '  transition:opacity .25s ease;',
+    '  pointer-events:none;',
+    '  -webkit-user-drag:none;',
+    '  user-select:none;',
+    '  -webkit-touch-callout:none;',
     '}',
     '#accred-img.fading{opacity:0}',
 
@@ -291,6 +295,7 @@
     document.body.style.overflow = '';
   }
 
+  document.getElementById('accred-img-wrap').addEventListener('contextmenu', function(e) { e.preventDefault(); });
   document.getElementById('accred-close').addEventListener('click', closeCarousel);
   document.getElementById('accred-prev').addEventListener('click', function(e) {
     e.stopPropagation(); showSlide(current - 1);
