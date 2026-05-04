@@ -364,4 +364,13 @@
   } else {
     attachTriggers();
   }
+
+  /* ── Global API for external callers ───────────────────────────── */
+  window.AccredCarousel = {
+    openSlide: function(idx) {
+      showSlide(idx);
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+  };
 })();
