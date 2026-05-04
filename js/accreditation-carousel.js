@@ -336,6 +336,7 @@
     while ((n = walker.nextNode())) {
       if (SKIP_TAGS[n.parentElement && n.parentElement.tagName]) continue;
       if (n.parentElement && n.parentElement.closest('.accred-clickable')) continue;
+      if (n.parentElement && n.parentElement.closest('#accred-overlay')) continue;
       WORD_PATTERN.lastIndex = 0;
       if (WORD_PATTERN.test(n.textContent)) nodes.push(n);
     }
@@ -358,13 +359,6 @@
       if (node.parentNode) node.parentNode.replaceChild(frag, node);
     });
   }
-
-  /* ── Public API (for about.html arrow button) ───────────────────── */
-  window.openAccredCarousel = function(startIdx) {
-    showSlide(startIdx || 0);
-    overlay.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  };
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', attachTriggers);
