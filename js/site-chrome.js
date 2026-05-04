@@ -530,6 +530,15 @@ function closeCatalogPicker() {
     const storedProgram = sessionStorage.getItem('acnhs_catalog_program');
     if (storedProgram === 'bsn' || storedProgram === 'asn') {
       window.setCatalogProgram(storedProgram, false);
+    } else {
+      // No program chosen — navigate back to where the user came from
+      if (window.location.pathname.includes('academic-catalog')) {
+        if (document.referrer && !document.referrer.includes('academic-catalog')) {
+          history.back();
+        } else {
+          window.location.href = 'index.html';
+        }
+      }
     }
   }
 }
