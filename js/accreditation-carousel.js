@@ -263,8 +263,10 @@
 
     imgEl.classList.add('fading');
     setTimeout(function() {
+      function show() { imgEl.classList.remove('fading'); }
+      imgEl.onload = show;
       imgEl.src = s.src;
-      imgEl.onload = function() { imgEl.classList.remove('fading'); };
+      if (imgEl.complete) show();
     }, 150);
 
     titleEl.textContent   = s.caption;
