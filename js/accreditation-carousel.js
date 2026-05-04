@@ -106,10 +106,11 @@
 
     /* tab bar */
     '#accred-tabs{',
-    '  display:flex;gap:0;',
+    '  display:flex;gap:0;flex-shrink:0;',
     '  border-bottom:1px solid rgba(201,168,76,0.15);',
     '  padding:0 24px;',
     '  background:rgba(0,0,0,0.15);',
+    '  position:relative;z-index:5;pointer-events:auto;',
     '}',
     '.accred-tab{',
     '  padding:11px 18px;',
@@ -247,7 +248,7 @@
     var tab = document.createElement('span');
     tab.className = 'accred-tab' + (i === 0 ? ' active' : '');
     tab.textContent = s.label;
-    tab.addEventListener('click', function() { showSlide(i); });
+    tab.addEventListener('click', function(e) { e.stopPropagation(); showSlide(i); });
     tabsWrap.appendChild(tab);
 
     var dot = document.createElement('span');
