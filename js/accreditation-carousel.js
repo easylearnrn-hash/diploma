@@ -197,6 +197,39 @@
         el.addEventListener('click', function(e) { e.stopPropagation(); openCarousel(); });
       }
     });
+
+    // 3. Wrap individual "accredit*" words in text nodes — no styling, just cursor + click
+    var WORD = /\baccredit\w*/gi;
+    var SKIP = new Set(['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','A','BUTTON','SELECT','OPTION']);
+
+    var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+    var textNodes = [];
+    var n;
+    while ((n = walker.nextNode())) {
+      if (SKIP.has(n.parentElement && n.parentElement.tagName)) continue;
+      if (n.parentElement && n.parentElement.closest('.accred-clickable')) continue;
+      WORD.lastIndex = 0;
+      if (WORD.test(n.textContent)) textNodes.push(n);
+    }
+
+    textNodes.forEach(function(node) {
+      var frag = document.createDocumentFragment();
+      var text = node.textContent;
+      var last = 0;
+      var m;
+      WORD.lastIndex = 0;
+      while ((m = WORD.exec(text)) !== null) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        var span = document.createElement('span');
+        span.className = 'accred-clickable';
+        span.textContent = m[0];
+        span.addEventListener('click', function(e) { e.stopPropagation(); openCarousel(); });
+        frag.appendChild(span);
+        last = WORD.lastIndex;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      if (node.parentNode) node.parentNode.replaceChild(frag, node);
+    });
   }
 
   if (document.readyState === 'loading') {
