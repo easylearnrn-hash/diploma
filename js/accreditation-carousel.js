@@ -359,18 +359,16 @@
     });
   }
 
+  /* ── Public API (for about.html arrow button) ───────────────────── */
+  window.openAccredCarousel = function(startIdx) {
+    showSlide(startIdx || 0);
+    overlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  };
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', attachTriggers);
   } else {
     attachTriggers();
   }
-
-  /* ── Global API for external callers ───────────────────────────── */
-  window.AccredCarousel = {
-    openSlide: function(idx) {
-      showSlide(idx);
-      overlay.classList.add('open');
-      document.body.style.overflow = 'hidden';
-    }
-  };
 })();
