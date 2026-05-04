@@ -8,6 +8,12 @@
 
   var SLIDES = [
     {
+      src:     'assets/images/IMG_1167.jpg',
+      label:   'Operating License',
+      caption: 'Official Operating License — Series А No. 0153',
+      sub:     'Ministry of Education, Science, Culture and Sport of the Republic of Armenia'
+    },
+    {
       src:     'assets/License/Accreditation-RN.jpg',
       label:   'RN Accreditation',
       caption: 'State Accreditation Certificate No. 213',
@@ -18,12 +24,6 @@
       label:   'LVN Accreditation',
       caption: 'State Accreditation Certificate No. 212',
       sub:     'Practical Nursing Program · Republic of Armenia · April 16, 2007'
-    },
-    {
-      src:     'assets/images/IMG_1167.jpg',
-      label:   'Operating License',
-      caption: 'Official Operating License — Series А No. 0153',
-      sub:     'Ministry of Education, Science, Culture and Sport of the Republic of Armenia'
     }
   ];
 
