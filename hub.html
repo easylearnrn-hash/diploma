@@ -6445,10 +6445,19 @@
 
       // ── Parallel data fetch ────────────────────────────
       const localCourse = _semesterCoursesCache.find(c => c.code === courseCode) || {};
-      let dbCourse = null, studentGradeRow = null, gradeItemRows = [], attendanceRows = [];
+      let dbCourse = null, studentGradeRow = null, gradeItemRows = [], attendanceRows = [], certRows = [];
+      // Text student ID (e.g. ACNHS-xxxxxxx) — used for certificates lookup
+      const studentIdText = studentData?.studentId || studentData?.student_id || null;
       await Promise.all([
         db.from('courses').select('*').eq('code', courseCode).maybeSingle()
           .then(({ data }) => { dbCourse = data; }).catch(() => {}),
+        // Fetch all valid certificates for this student (keyed by text ID)
+        studentIdText
+          ? db.from('certificates')
+              .select('exam_title,score,grade,semester')
+              .eq('student_id', studentIdText).eq('status', 'valid')
+              .then(({ data }) => { certRows = data || []; }).catch(() => {})
+          : Promise.resolve(),
         resolveStudentId().then(uid => {
           if (!uid) return;
           // Primary: fetch normalized per-item rows
@@ -6519,6 +6528,52 @@
             scores[item.name] = attPct;
             // Store detail for rich sub-text in the renderer
             scores['__att__' + item.id] = { total: totalSessions, present: presentCount, absent: absentCount, excused: excusedCount, pct: attPct };
+          }
+        });
+      }
+
+      // ── Certificate scores (source of truth for midterm / final / quiz certs) ──
+      // Match certificates by exam_title keyword → grade item name keyword.
+      // Score stored as "91%" string → parse to number.
+      if (certRows.length) {
+        // Build a map: keyword → numeric score + label from certificate
+        const certKeywords = [
+          { pattern: /midterm/i,       keys: ['midterm', 'midterm examination', 'midterm exam'] },
+          { pattern: /final/i,         keys: ['final examination', 'final exam', 'final'] },
+          { pattern: /quiz/i,          keys: ['quiz', 'quizzes'] },
+          { pattern: /assignment|case/i, keys: ['assignment', 'case studies', 'assignments / case studies'] },
+        ];
+        gradeItems.forEach(item => {
+          const nm = (item.name || item.id || '').toLowerCase();
+          for (const { pattern, keys } of certKeywords) {
+            if (!pattern.test(nm)) continue;
+            // Find the best matching certificate (prefer same semester if available)
+            const courseSemester = dbCourse?.semester || localCourse.semester || null;
+            const match = certRows.find(c => {
+              const et = (c.exam_title || '').toLowerCase();
+              const keyMatch = keys.some(k => et.includes(k));
+              if (!keyMatch) return false;
+              if (courseSemester && c.semester) return c.semester === courseSemester;
+              return true; // no semester filter if unavailable
+            }) || certRows.find(c => keys.some(k => (c.exam_title||'').toLowerCase().includes(k)));
+            if (!match) continue;
+            // Parse score string "91%" → 91, or fall back to letter grade conversion
+            let numScore = null;
+            if (match.score) {
+              const parsed = parseFloat(String(match.score).replace('%','').trim());
+              if (!isNaN(parsed)) numScore = parsed;
+            }
+            if (numScore == null && match.grade) {
+              // Letter grade fallback: A=95, A−=92, B+=88, B=85, B−=82 …
+              const lgMap = {'A':95,'A-':92,'A−':92,'B+':88,'B':85,'B-':82,'B−':82,'C+':78,'C':75,'C-':72,'C−':72,'D+':68,'D':65,'F':55,'Pass':80};
+              numScore = lgMap[match.grade.trim()] ?? null;
+            }
+            if (numScore != null && (scores[item.id] == null)) {
+              scores[item.id]   = numScore;
+              scores[item.name] = numScore;
+              scores['__cert__' + item.id] = { certTitle: match.exam_title, grade: match.grade, score: match.score };
+            }
+            break;
           }
         });
       }
@@ -6615,9 +6670,12 @@
                      : has ? `${pct} · ${letterGrade(raw)}` : 'Pending';
           const sub2 = row?.graded_by ? ` • Graded by ${escapeHtml(row.graded_by)}` : '';
           // Attendance item: show session counts from live attendance data
-          const attDetail = scores['__att__' + item.id];
+          const attDetail  = scores['__att__'  + item.id];
+          const certDetail = scores['__cert__' + item.id];
           const sub3 = attDetail
             ? ` • ${attDetail.present}/${attDetail.total} sessions attended${attDetail.absent ? ` (${attDetail.absent} absent)` : ''}`
+            : certDetail
+            ? ` • From certificate: ${escapeHtml(certDetail.certTitle)}${certDetail.grade ? ' · ' + escapeHtml(certDetail.grade) : ''}`
             : sub2;
           const note = row?.notes ? `<span class="cdm-grade-note">${escapeHtml(row.notes)}</span>` : '';
           return `
