@@ -7479,22 +7479,24 @@
       let matched = null;
       for (const card of cards) {
         const name = card.querySelector('h4')?.textContent?.toLowerCase() || '';
-        const sid  = card.querySelector('[style*="monospace"]')?.textContent?.toLowerCase() || '';
+        // The monospace element shows the ACNHS student_id string — same value stored in attendance_records.student_id
+        const sidEl = card.querySelector('[style*="monospace"]');
+        const sid   = sidEl?.textContent?.toLowerCase() || '';
         if (name.includes(termLower) || sid.includes(termLower)) {
           matched = {
-            studentId: card.dataset.studentId,
-            studentName: card.querySelector('h4')?.textContent || ''
+            studentId: sidEl?.textContent?.trim() || card.dataset.studentId, // ACNHS string
+            studentName: card.querySelector('h4')?.textContent?.trim() || ''
           };
           break;
         }
       }
-      // If no cards loaded yet (no single date set), try matching against currentAttendanceStudents cache
+      // If no cards loaded yet, try matching against currentAttendanceStudents cache
       if (!matched && window._attendanceStudentsCache) {
         for (const s of window._attendanceStudentsCache) {
           const name = (s.full_name || s.name || '').toLowerCase();
           const sid  = (s.student_id || '').toLowerCase();
           if (name.includes(termLower) || sid.includes(termLower)) {
-            matched = { studentId: s.student_id || s.id, studentName: s.full_name || s.name || '' };
+            matched = { studentId: s.student_id, studentName: s.full_name || s.name || '' };
             break;
           }
         }
