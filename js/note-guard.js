@@ -453,19 +453,40 @@
     'suicide-risk-assessment.html':                   'note_psych_20',
     'therapeutic-relationships.html':                 'note_psych_21',
     'therapeutic-relationships-full.html':            'note_psych_22',
+
+    // ── Folder-qualified keys to resolve duplicate basenames ──────────────────
+    // These override the filename-only entries above when the same .html
+    // filename exists in more than one topic folder.
+    'respiratory system/respiratory-medications.html':                          'note_resp_1',
+    'pharmacology/respiratory-medications.html':                                'note_pharm_10',
+    'gastrointestinal & hepatic system/gastrointestinal-medications.html':      'note_gi_5',
+    'pharmacology/gastrointestinal-medications.html':                           'note_pharm_11',
+    'eent/eent-medications.html':                                               'note_eent_2',
+    'pharmacology/eent-medications.html':                                       'note_pharm_12',
+    'pediatrics/pediatric-medications.html':                                    'note_ped_8',
+    'pharmacology/pediatric-medications.html':                                  'note_pharm_13',
+    'endocrine system/endocrine-medications.html':                              'note_endo_7',
+    'pharmacology/endocrine-medications.html':                                  'note_pharm_14',
+    'renal system/renal-urinary-medications.html':                              'note_renal_10',
+    'pharmacology/renal-urinary-medications.html':                              'note_pharm_17',
+    'mentalhealth/mental-health-medications.html':                              'note_psych_13',
+    'pharmacology/mental-health-medications.html':                              'note_pharm_6',
   };
 
   /**
    * Derive the canonical note_id for the current page.
-   * Matches by lower-cased filename only (ignores folder path).
+   * Tries folder/filename first (to disambiguate duplicate basenames across
+   * topic folders), then falls back to filename-only for unique names.
    */
   function resolveNoteId() {
     var path = window.location.pathname;
-    // Decode URL-encoded characters (%20 etc.)
+    // Decode URL-encoded characters (%20, %26, etc.)
     try { path = decodeURIComponent(path); } catch (e) {}
-    // Grab just the filename (everything after the last '/')
-    var filename = path.split('/').pop().toLowerCase();
-    return NOTE_ID_MAP[filename] || null;
+    var parts = path.split('/');
+    var filename = parts[parts.length - 1].toLowerCase();
+    var folder   = parts.length >= 2 ? parts[parts.length - 2].toLowerCase() : '';
+    // Prefer folder/filename match so duplicate basenames resolve correctly
+    return NOTE_ID_MAP[folder + '/' + filename] || NOTE_ID_MAP[filename] || null;
   }
 
   // ─── Main guard logic ────────────────────────────────────────────────────────
