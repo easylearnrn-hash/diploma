@@ -6429,21 +6429,21 @@
       const modal = document.getElementById('courseDetailModal');
       if (!modal) return;
 
-      // ── Show immediately with loading state ──────────────────
+      // ── Show with loading state immediately ────────────
       modal.classList.add('open');
       const heroIcon  = document.getElementById('cdmHeroIcon');
       const heroPills = document.getElementById('cdmHeroPills');
-      const heroName  = document.getElementById('cdmCourseName');
-      const tabbar    = document.getElementById('cdmTabbar');
+      const heroTitle = document.getElementById('cdmCourseName');
+      const nav       = document.getElementById('cdmNav');
       const body      = document.getElementById('cdmBody');
 
-      heroIcon.textContent  = courseCode.substring(0, 3).toUpperCase();
-      heroPills.innerHTML   = `<span class="cdm-hero-pill code">${escapeHtml(courseCode)}</span>`;
-      heroName.textContent  = '…';
-      tabbar.innerHTML      = '';
-      body.innerHTML        = '<div class="cdm-loading"><div class="cdm-spinner"></div><span>Loading course data…</span></div>';
+      heroIcon.textContent = courseCode.substring(0,3).toUpperCase();
+      heroPills.innerHTML  = `<span class="cdm-pill cdm-pill-gold">${escapeHtml(courseCode)}</span>`;
+      heroTitle.textContent = '…';
+      nav.innerHTML  = '';
+      body.innerHTML = '<div class="cdm-loader"><div class="cdm-spin"></div><span>Retrieving course data…</span></div>';
 
-      // ── Data fetch ───────────────────────────────────────────
+      // ── Parallel data fetch ────────────────────────────
       const localCourse = _semesterCoursesCache.find(c => c.code === courseCode) || {};
       let dbCourse = null, studentGradeRow = null;
       await Promise.all([
@@ -6457,64 +6457,67 @@
         })
       ]);
 
-      const courseName    = dbCourse?.name        || localCourse.name        || courseCode;
-      const credits       = dbCourse?.credits     ?? localCourse.credits     ?? '—';
-      const courseType    = dbCourse?.course_type || localCourse.type        || '';
-      const description   = dbCourse?.description || 'No syllabus description has been added for this course yet.';
+      const courseName    = dbCourse?.name           || localCourse.name        || courseCode;
+      const credits       = dbCourse?.credits        ?? localCourse.credits     ?? '—';
+      const courseType    = dbCourse?.course_type    || localCourse.type        || 'Lecture';
+      const description   = dbCourse?.description   || 'No course description has been entered yet. Check with your faculty adviser for a full syllabus.';
       const prerequisites = dbCourse?.prerequisites || 'None listed.';
       let gradeItems = dbCourse?.grade_items || localCourse.gradeItems || [];
       if (typeof gradeItems === 'string') { try { gradeItems = JSON.parse(gradeItems); } catch(_) { gradeItems = []; } }
       const scores = studentGradeRow?.grade_items || {};
 
-      // ── Populate hero ────────────────────────────────────────
-      heroName.textContent = courseName;
-      let pillsHtml = `<span class="cdm-hero-pill code">${escapeHtml(courseCode)}</span>`;
-      if (credits !== '—') pillsHtml += `<span class="cdm-hero-pill info">${credits} Credit${credits !== 1 ? 's' : ''}</span>`;
-      if (courseType)       pillsHtml += `<span class="cdm-hero-pill info">${escapeHtml(courseType)}</span>`;
-      if (gradeItems.length) pillsHtml += `<span class="cdm-hero-pill info">${gradeItems.length} Assessments</span>`;
+      // ── Update hero ────────────────────────────────────
+      heroTitle.textContent = courseName;
+      heroIcon.textContent  = courseCode.substring(0,3).toUpperCase();
+      let pillsHtml = `<span class="cdm-pill cdm-pill-gold">${escapeHtml(courseCode)}</span>`;
+      if (credits !== '—') pillsHtml += `<span class="cdm-pill cdm-pill-blue">${credits} Credit${credits !== 1 ? 's' : ''}</span>`;
+      if (courseType)       pillsHtml += `<span class="cdm-pill cdm-pill-muted">${escapeHtml(courseType)}</span>`;
+      if (gradeItems.length) pillsHtml += `<span class="cdm-pill cdm-pill-muted">${gradeItems.length} Assessment${gradeItems.length !== 1 ? 's' : ''}</span>`;
       heroPills.innerHTML = pillsHtml;
-      heroIcon.textContent = courseCode.substring(0, 3).toUpperCase();
 
-      // ── Resources lookup ─────────────────────────────────────
-      const courseNameLower = courseName.toLowerCase();
+      // ── Resources lookup ───────────────────────────────
       const codeL = courseCode.toLowerCase();
+      const nameL = courseName.toLowerCase();
       const relatedNotes = HARDCODED_NOTES.filter(n => {
-        const cat   = (n.category || '').toLowerCase();
-        const title = (n.title    || '').toLowerCase();
-        return cat.includes(codeL) || title.includes(codeL) ||
-               cat.includes(courseNameLower) || title.includes(courseNameLower);
+        const c = (n.category || '').toLowerCase(), t = (n.title || '').toLowerCase();
+        return c.includes(codeL) || t.includes(codeL) || c.includes(nameL) || t.includes(nameL);
       }).slice(0, 8);
 
-      // ── Helpers ──────────────────────────────────────────────
-      function letterGrade(s) {
-        const v = Number(s);
-        if (v >= 93) return 'A';  if (v >= 90) return 'A−';
-        if (v >= 87) return 'B+'; if (v >= 83) return 'B';
-        if (v >= 80) return 'B−'; if (v >= 77) return 'C+';
-        if (v >= 73) return 'C';  if (v >= 70) return 'C−';
-        if (v >= 67) return 'D+'; if (v >= 60) return 'D';
+      // ── Helpers ────────────────────────────────────────
+      function letterGrade(v) {
+        const s = Number(v);
+        if (s >= 93) return 'A';  if (s >= 90) return 'A−';
+        if (s >= 87) return 'B+'; if (s >= 83) return 'B';
+        if (s >= 80) return 'B−'; if (s >= 77) return 'C+';
+        if (s >= 73) return 'C';  if (s >= 70) return 'C−';
+        if (s >= 67) return 'D+'; if (s >= 60) return 'D';
         return 'F';
       }
+      function barClass(pct) { return pct >= 80 ? 'green' : pct >= 70 ? 'amber' : pct > 0 ? 'red' : 'none'; }
 
-      // ── Tab renderers ────────────────────────────────────────
+      // ── Tab renderers ──────────────────────────────────
       function renderOverview() {
         return `
           <div class="cdm-section">
-            <div class="cdm-info-grid">
-              <div class="cdm-info-card">
-                <div class="cdm-info-label">Credits</div>
-                <div class="cdm-info-value" style="font-size:22px;font-weight:900;color:var(--gold-300)">${escapeHtml(String(credits))}</div>
+            <div class="cdm-kpi-row">
+              <div class="cdm-kpi">
+                <span class="cdm-kpi-val">${escapeHtml(String(credits))}</span>
+                <span class="cdm-kpi-label">Credits</span>
               </div>
-              <div class="cdm-info-card">
-                <div class="cdm-info-label">Type</div>
-                <div class="cdm-info-value" style="font-weight:700">${escapeHtml(courseType || 'Lecture')}</div>
+              <div class="cdm-kpi">
+                <span class="cdm-kpi-val" style="font-size:16px;margin-top:6px">${escapeHtml(courseType)}</span>
+                <span class="cdm-kpi-label">Type</span>
+              </div>
+              <div class="cdm-kpi">
+                <span class="cdm-kpi-val">${gradeItems.length}</span>
+                <span class="cdm-kpi-label">Assessments</span>
               </div>
             </div>
-            <div class="cdm-info-card-full">
-              <div class="cdm-info-label">Course Description / Syllabus</div>
+            <div class="cdm-info-card">
+              <div class="cdm-info-label">Course Description &amp; Syllabus</div>
               <div class="cdm-info-value">${escapeHtml(description)}</div>
             </div>
-            <div class="cdm-info-card-full">
+            <div class="cdm-info-card">
               <div class="cdm-info-label">Prerequisites</div>
               <div class="cdm-info-value">${escapeHtml(prerequisites)}</div>
             </div>
@@ -6523,90 +6526,105 @@
 
       function renderGradeBreakdown() {
         if (!gradeItems.length) {
-          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">📊</div>No grade items have been configured for this course yet.</div></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-glyph">◇</div>No grade items have been configured for this course yet.<br>Check with your faculty for details.</div></div>`;
         }
-        const rows = gradeItems.map((item, idx) => {
-          const rawScore = scores[item.id] ?? scores[item.name] ?? null;
-          const hasScore = rawScore != null && rawScore !== '';
-          const pct      = hasScore ? Math.min(100, Math.round(Number(rawScore))) : 0;
-          const letter   = hasScore ? letterGrade(rawScore) : null;
-          const badgeClass = hasScore ? (pct >= 70 ? 'pass' : 'fail') : 'pend';
-          const barClass   = hasScore ? (pct >= 80 ? 'high' : pct >= 70 ? 'mid' : 'low') : '';
-          const badgeText  = hasScore ? `${pct}  ${letter}` : 'Pending';
+        // Compute weighted average for scored items
+        let weightedSum = 0, weightSum = 0;
+        gradeItems.forEach(item => {
+          const raw = scores[item.id] ?? scores[item.name] ?? null;
+          if (raw != null && raw !== '' && item.weight != null) {
+            weightedSum += Number(raw) * item.weight;
+            weightSum   += item.weight;
+          }
+        });
+        const avg = weightSum > 0 ? Math.round(weightedSum / weightSum) : null;
+        const avgLetter = avg != null ? letterGrade(avg) : '—';
+
+        const rows = gradeItems.map((item, i) => {
+          const raw = scores[item.id] ?? scores[item.name] ?? null;
+          const has = raw != null && raw !== '';
+          const pct = has ? Math.min(100, Math.round(Number(raw))) : 0;
+          const cls = has ? (pct >= 70 ? 'cdm-score-pass' : 'cdm-score-fail') : 'cdm-score-pend';
+          const txt = has ? `${pct} · ${letterGrade(raw)}` : 'Pending';
           return `
             <div class="cdm-grade-item">
-              <div class="cdm-grade-item-top">
-                <div class="cdm-grade-item-left">
-                  <div class="cdm-grade-num">${idx + 1}</div>
-                  <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
-                  ${item.weight != null ? `<span class="cdm-weight-chip">${item.weight}%</span>` : ''}
-                </div>
-                <span class="cdm-score-badge ${badgeClass}">${badgeText}</span>
+              <div class="cdm-grade-num">${i + 1}</div>
+              <div class="cdm-grade-info">
+                <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
+                <span class="cdm-grade-sub">${item.weight != null ? `Weight: ${item.weight}% of final grade` : 'Unweighted'}</span>
               </div>
-              <div class="cdm-grade-bar-track">
-                <div class="cdm-grade-bar-fill ${barClass}" style="width:${pct}%"></div>
+              <div class="cdm-grade-right">
+                ${item.weight != null ? `<span class="cdm-weight-tag">${item.weight}%</span>` : ''}
+                <span class="cdm-score ${cls}">${txt}</span>
               </div>
-            </div>`;
-        });
-        return `<div class="cdm-section">${rows.join('')}</div>`;
+            </div>
+            ${has ? `<div class="cdm-grade-bar-wrap"><div class="cdm-bar-track"><div class="cdm-bar-fill ${barClass(pct)}" style="width:0%" data-w="${pct}%"></div></div></div>` : ''}`;
+        }).join('');
+        return `
+          <div class="cdm-grade-list">${rows}</div>
+          <div class="cdm-grade-footer">
+            <span class="cdm-grade-footer-label">Weighted Average</span>
+            <span class="cdm-grade-footer-val">${avg != null ? `${avg} — ${avgLetter}` : 'No grades posted'}</span>
+          </div>`;
       }
 
       function renderAssignments() {
         if (!gradeItems.length) {
-          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">✏️</div>No assignments have been posted for this course yet.</div></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-glyph">✦</div>No assignments have been posted for this course yet.</div></div>`;
         }
-        const rows = gradeItems.map((item, idx) => {
-          const rawScore  = scores[item.id] ?? scores[item.name] ?? null;
-          const isGraded  = rawScore != null && rawScore !== '';
+        const icons = ['✍️','📋','📝','🖊️','📄','📑','🗒️','✏️'];
+        const rows = gradeItems.map((item, i) => {
+          const raw     = scores[item.id] ?? scores[item.name] ?? null;
+          const graded  = raw != null && raw !== '';
           return `
             <div class="cdm-assign-item">
-              <div class="cdm-assign-num">${idx + 1}</div>
+              <div class="cdm-assign-icon">${icons[i % icons.length]}</div>
               <div class="cdm-assign-info">
                 <span class="cdm-assign-title">${escapeHtml(item.name || item.id)}</span>
-                <span class="cdm-assign-sub">Weight: ${item.weight != null ? item.weight + '%' : '—'} of final grade</span>
+                <span class="cdm-assign-sub">Contributes ${item.weight != null ? item.weight + '%' : '—'} toward final grade</span>
               </div>
-              <span class="cdm-assign-badge ${isGraded ? 'graded' : 'pending'}">${isGraded ? 'Graded' : 'Pending'}</span>
+              <span class="cdm-assign-badge ${graded ? 'graded' : 'pending'}">${graded ? 'Graded' : 'Pending'}</span>
             </div>`;
         });
-        return `<div class="cdm-section">${rows.join('')}</div>`;
+        return `<div class="cdm-section" style="padding:0"><div class="cdm-assign-list">${rows.join('')}</div></div>`;
       }
 
       function renderResources() {
         if (!relatedNotes.length) {
-          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">📚</div>No linked study resources found.<br>Browse the Notes Library for related material.</div></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-glyph">◉</div>No linked study resources were found for this course.<br>Browse the Notes Library for related material.</div></div>`;
         }
         const items = relatedNotes.map(n => `
           <a class="cdm-resource-item" href="${encodeHtmlFile(n.htmlFile)}" target="_blank">
-            <div class="cdm-resource-icon-wrap">📄</div>
+            <div class="cdm-resource-icon">📄</div>
             <div class="cdm-resource-info">
               <span class="cdm-resource-title">${escapeHtml(n.title)}</span>
               <span class="cdm-resource-cat">${escapeHtml(n.category || 'Notes')}</span>
             </div>
             <svg class="cdm-resource-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
-          </a>`);
-        return `<div class="cdm-section"><div class="cdm-resource-grid">${items.join('')}</div></div>`;
+          </a>`).join('');
+        return `<div class="cdm-section"><div class="cdm-resource-list">${items}</div></div>`;
       }
 
-      // ── Build tabs & render ──────────────────────────────────
+      // ── Build tabs ─────────────────────────────────────
       const TABS = [
-        { label: 'Overview',         icon: '◈', render: renderOverview },
-        { label: 'Grade Breakdown',  icon: '◇', render: renderGradeBreakdown },
-        { label: 'Assignments',      icon: '✦', render: renderAssignments },
-        { label: 'Resources',        icon: '◉', render: renderResources },
+        { label: 'Overview',        render: renderOverview },
+        { label: 'Grade Breakdown', render: renderGradeBreakdown },
+        { label: 'Assignments',     render: renderAssignments },
+        { label: 'Resources',       render: renderResources },
       ];
       let activeTab = 0;
 
       function paint() {
-        tabbar.innerHTML = TABS.map((t, i) =>
+        nav.innerHTML = TABS.map((t, i) =>
           `<button class="cdm-tab${i === activeTab ? ' active' : ''}" onclick="cdmSetTab(${i})">${t.label}</button>`
         ).join('');
         body.innerHTML = TABS[activeTab].render();
-        // Animate bars from 0 after paint
+        // Animate grade bars from 0 after paint
         requestAnimationFrame(() => {
-          body.querySelectorAll('.cdm-grade-bar-fill[style]').forEach(el => {
-            const w = el.style.width;
+          body.querySelectorAll('.cdm-bar-fill[data-w]').forEach(el => {
+            const target = el.dataset.w;
             el.style.width = '0%';
-            requestAnimationFrame(() => { el.style.width = w; });
+            requestAnimationFrame(() => { el.style.width = target; });
           });
         });
       }
@@ -6616,8 +6634,8 @@
     }
 
     function closeCourseModal() {
-      const modal = document.getElementById('courseDetailModal');
-      if (modal) modal.classList.remove('open');
+      const m = document.getElementById('courseDetailModal');
+      if (m) m.classList.remove('open');
     }
 
     // ── Collapsible card toggle ──────────────────────────────────────────
@@ -7098,35 +7116,367 @@
 
   <!-- COURSE DETAIL MODAL -->
   <div class="cdm-backdrop" id="courseDetailModal" onclick="if(event.target.id==='courseDetailModal') closeCourseModal()">
-    <div class="cdm-modal" role="dialog" aria-modal="true">
+    <div class="cdm-shell" role="dialog" aria-modal="true">
 
-      <!-- Hero Header -->
+      <!-- ─ Hero ─────────────────────────────────────────── -->
       <div class="cdm-hero">
-        <div class="cdm-hero-left">
+        <div class="cdm-hero-inner">
           <div class="cdm-hero-icon" id="cdmHeroIcon">ENG</div>
-          <div class="cdm-hero-text">
+          <div class="cdm-hero-meta">
             <div class="cdm-hero-pills" id="cdmHeroPills"></div>
-            <div class="cdm-hero-name" id="cdmCourseName">Loading…</div>
+            <div class="cdm-hero-title" id="cdmCourseName">Loading…</div>
           </div>
         </div>
-        <button class="cdm-close-btn" onclick="closeCourseModal()" aria-label="Close">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        <button class="cdm-x" onclick="closeCourseModal()" aria-label="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <!-- Tab Bar -->
-      <div class="cdm-tabbar" id="cdmTabbar"></div>
+      <!-- ─ Tab strip ──────────────────────────────────────── -->
+      <nav class="cdm-nav" id="cdmNav"></nav>
 
-      <!-- Body -->
+      <!-- ─ Scrollable body ───────────────────────────────── -->
       <div class="cdm-body" id="cdmBody">
-        <div class="cdm-loading">
-          <div class="cdm-spinner"></div>
-          <span>Loading course data…</span>
+        <div class="cdm-loader">
+          <div class="cdm-spin"></div>
+          <span>Retrieving course data…</span>
         </div>
       </div>
 
     </div>
   </div>
+
+  <style>
+  /* ══════════════════════════════════════════════════════════
+     COURSE DETAIL MODAL  ·  ACNHS Design System
+  ══════════════════════════════════════════════════════════ */
+
+  /* ── Backdrop ──────────────────────────────────────────── */
+  .cdm-backdrop {
+    position: fixed; inset: 0; z-index: 9999;
+    background: rgba(1,4,14,.75);
+    backdrop-filter: blur(8px) saturate(1.2);
+    display: none; align-items: center; justify-content: center;
+    padding: 20px;
+    animation: cdm-fade-in .18s ease;
+  }
+  .cdm-backdrop.open { display: flex; }
+  @keyframes cdm-fade-in { from { opacity:0; } to { opacity:1; } }
+
+  /* ── Shell ─────────────────────────────────────────────── */
+  .cdm-shell {
+    width: min(700px, 96vw);
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    background: linear-gradient(160deg, rgba(6,16,36,0.99) 0%, rgba(2,8,20,0.99) 100%);
+    border: 1px solid rgba(201,168,76,0.22);
+    box-shadow:
+      0 40px 100px rgba(0,0,0,.75),
+      0 0 0 1px rgba(201,168,76,0.07) inset,
+      0 1px 0 rgba(201,168,76,0.14) inset;
+    animation: cdm-rise .22s cubic-bezier(0.4,0,0.2,1);
+  }
+  @keyframes cdm-rise { from { opacity:0; transform:translateY(16px) scale(.98); } to { opacity:1; transform:none; } }
+
+  /* ── Hero header ───────────────────────────────────────── */
+  .cdm-hero {
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    padding: 20px 22px 18px;
+    background:
+      linear-gradient(160deg, rgba(201,168,76,0.06) 0%, rgba(37,99,235,0.04) 100%),
+      rgba(3,10,24,.60);
+    border-bottom: 1px solid rgba(201,168,76,0.14);
+    position: relative;
+  }
+  .cdm-hero::after {
+    content: '';
+    position: absolute; left: 0; right: 0; top: 0; height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(201,168,76,.40) 40%, rgba(201,168,76,.40) 60%, transparent 100%);
+  }
+  .cdm-hero-inner { display: flex; align-items: center; gap: 16px; min-width: 0; }
+
+  .cdm-hero-icon {
+    width: 52px; height: 52px; flex-shrink: 0; border-radius: 14px;
+    background: linear-gradient(145deg, #2563eb, #1e3a8a);
+    border: 1px solid rgba(255,255,255,.12);
+    box-shadow: 0 8px 28px rgba(37,99,235,.40), inset 0 1px 0 rgba(255,255,255,.15);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 900; letter-spacing: .04em; color: #fff;
+  }
+
+  .cdm-hero-meta { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+
+  .cdm-hero-pills { display: flex; flex-wrap: wrap; gap: 5px; }
+  .cdm-pill {
+    font-size: 9px; font-weight: 900; letter-spacing: 1px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .cdm-pill-gold  { color: var(--gold-400); background: rgba(201,168,76,.12); border: 1px solid rgba(201,168,76,.28); }
+  .cdm-pill-muted { color: var(--text-muted); background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08); }
+  .cdm-pill-blue  { color: #7eb8f7; background: rgba(59,130,246,.10); border: 1px solid rgba(59,130,246,.22); }
+
+  .cdm-hero-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 17px; font-weight: 800; letter-spacing: -.3px; line-height: 1.25;
+    color: var(--gold-200);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .cdm-x {
+    flex-shrink: 0;
+    width: 34px; height: 34px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-gold);
+    background: rgba(4,17,31,.6);
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .cdm-x:hover { border-color: rgba(201,168,76,.5); color: var(--gold-300); background: rgba(201,168,76,.08); }
+
+  /* ── Tab nav ────────────────────────────────────────────── */
+  .cdm-nav {
+    flex-shrink: 0;
+    display: flex;
+    background: rgba(2,8,20,.55);
+    border-bottom: 1px solid rgba(201,168,76,.12);
+  }
+  .cdm-tab {
+    flex: 1; padding: 12px 6px;
+    border: none; background: transparent;
+    color: var(--text-muted); font-size: 10px; font-weight: 900;
+    letter-spacing: .8px; text-transform: uppercase;
+    cursor: pointer; white-space: nowrap;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color .18s, border-color .18s, background .18s;
+  }
+  .cdm-tab + .cdm-tab { border-left: 1px solid rgba(255,255,255,.04); }
+  .cdm-tab:hover  { color: var(--gold-300); background: rgba(201,168,76,.035); }
+  .cdm-tab.active { color: var(--gold-400); border-bottom-color: var(--gold-500); background: rgba(201,168,76,.05); }
+
+  /* ── Body ───────────────────────────────────────────────── */
+  .cdm-body {
+    flex: 1; overflow-y: auto; min-height: 0;
+    overscroll-behavior: contain;
+    scrollbar-width: thin; scrollbar-color: rgba(201,168,76,.18) transparent;
+  }
+  .cdm-body::-webkit-scrollbar { width: 4px; }
+  .cdm-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,.18); border-radius: 4px; }
+
+  /* Loading */
+  .cdm-loader {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; padding: 60px 24px;
+    color: var(--text-muted); font-size: 12.5px; font-weight: 600;
+  }
+  .cdm-spin {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid rgba(201,168,76,.12);
+    border-top-color: var(--gold-500);
+    animation: cdm-rotate .7s linear infinite;
+  }
+  @keyframes cdm-rotate { to { transform: rotate(360deg); } }
+
+  /* ── Section wrapper ───────────────────────────────────── */
+  .cdm-section { padding: 22px 22px 26px; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ── Empty state ───────────────────────────────────────── */
+  .cdm-empty {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; padding: 52px 24px; text-align: center;
+    color: var(--text-muted); font-size: 12.5px; font-weight: 600; line-height: 1.6;
+  }
+  .cdm-empty-glyph { font-size: 30px; opacity: .45; }
+
+  /* ── KPI row (Overview) ────────────────────────────────── */
+  .cdm-kpi-row {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  }
+  .cdm-kpi {
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(201,168,76,.16);
+    background: linear-gradient(145deg, rgba(4,14,32,0.88) 0%, rgba(2,8,20,0.88) 100%);
+    padding: 16px 14px 14px;
+    position: relative; overflow: hidden; text-align: center;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .cdm-kpi:hover { border-color: rgba(201,168,76,.30); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+  .cdm-kpi::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--gold-500), var(--gold-400), transparent);
+    opacity: .80;
+  }
+  .cdm-kpi::after {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201,168,76,.06), transparent 70%);
+    pointer-events: none;
+  }
+  .cdm-kpi-val {
+    display: block; position: relative; z-index: 1;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 24px; font-weight: 900; letter-spacing: -1px;
+    color: var(--gold-200); margin-top: 2px;
+  }
+  .cdm-kpi-label {
+    display: block; position: relative; z-index: 1;
+    margin-top: 8px; font-size: 9px; font-weight: 900;
+    text-transform: uppercase; letter-spacing: .8px;
+    color: var(--text-muted);
+  }
+
+  /* ── Info card (description / prerequisites) ───────────── */
+  .cdm-info-card {
+    border-radius: var(--radius-lg);
+    border: 1px solid rgba(201,168,76,.14);
+    background: linear-gradient(145deg, rgba(5,14,34,.88), rgba(2,8,20,.88));
+    padding: 18px 20px;
+    position: relative; overflow: hidden;
+  }
+  .cdm-info-card::before {
+    content: ''; position: absolute; inset: 0 auto 0 0;
+    width: 3px;
+    background: linear-gradient(180deg, var(--gold-500), var(--gold-400));
+  }
+  .cdm-info-label {
+    font-size: 9px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase;
+    color: var(--gold-500); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px; padding-left: 2px;
+  }
+  .cdm-info-value {
+    font-size: 13px; font-weight: 600;
+    color: var(--text-secondary); line-height: 1.70;
+    padding-left: 2px;
+  }
+
+  /* ── Section title (inside tabs) ───────────────────────── */
+  .cdm-sec-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 13px; font-weight: 700; letter-spacing: -.1px;
+    color: var(--gold-300); margin-bottom: 2px;
+  }
+
+  /* ── Grade items ───────────────────────────────────────── */
+  .cdm-grade-list { display: flex; flex-direction: column; gap: 0; }
+  .cdm-grade-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(201,168,76,.08);
+    transition: background .15s;
+  }
+  .cdm-grade-item:first-child { border-top: 1px solid rgba(201,168,76,.08); }
+  .cdm-grade-item:hover { background: rgba(201,168,76,.025); }
+  .cdm-grade-num {
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 50%;
+    background: rgba(255,255,255,.055); border: 1px solid rgba(255,255,255,.09);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 900; color: var(--text-muted);
+  }
+  .cdm-grade-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .cdm-grade-name {
+    font-size: 13.5px; font-weight: 700; color: var(--text-primary); letter-spacing: -.1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .cdm-grade-sub { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .cdm-grade-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .cdm-weight-tag {
+    font-size: 9px; font-weight: 900; letter-spacing: .6px; text-transform: uppercase;
+    padding: 3px 9px; border-radius: 20px;
+    color: var(--text-muted); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08);
+  }
+  .cdm-score {
+    min-width: 86px; text-align: center;
+    font-size: 12px; font-weight: 900; padding: 5px 12px; border-radius: 20px;
+  }
+  .cdm-score-pass  { color: #4ade80; background: rgba(74,222,128,.10); border: 1px solid rgba(74,222,128,.22); }
+  .cdm-score-fail  { color: #f87171; background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.22); }
+  .cdm-score-pend  { color: var(--text-muted); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.08); }
+
+  /* progress bar beneath each grade item */
+  .cdm-grade-bar-wrap { margin: 0 18px 0 62px; }
+  .cdm-bar-track {
+    height: 4px; background: rgba(255,255,255,.06); border-radius: 99px; overflow: hidden;
+  }
+  .cdm-bar-fill {
+    height: 100%; border-radius: 99px;
+    transition: width .75s cubic-bezier(0.4,0,0.2,1);
+  }
+  .cdm-bar-fill.green { background: linear-gradient(90deg, #16a34a, #4ade80); }
+  .cdm-bar-fill.amber { background: linear-gradient(90deg, #d97706, #fbbf24); }
+  .cdm-bar-fill.red   { background: linear-gradient(90deg, #dc2626, #f87171); }
+  .cdm-bar-fill.none  { background: rgba(255,255,255,.08); }
+
+  /* ── Grade summary footer ──────────────────────────────── */
+  .cdm-grade-footer {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 14px 18px;
+    background: rgba(201,168,76,.04);
+    border-top: 1px solid rgba(201,168,76,.14);
+  }
+  .cdm-grade-footer-label {
+    font-size: 10px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .cdm-grade-footer-val {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 18px; font-weight: 900; color: var(--gold-300);
+  }
+
+  /* ── Assignment rows ───────────────────────────────────── */
+  .cdm-assign-list { display: flex; flex-direction: column; }
+  .cdm-assign-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(201,168,76,.08);
+    transition: background .15s;
+  }
+  .cdm-assign-item:first-child { border-top: 1px solid rgba(201,168,76,.08); }
+  .cdm-assign-item:hover { background: rgba(201,168,76,.025); }
+  .cdm-assign-icon {
+    width: 38px; height: 38px; flex-shrink: 0; border-radius: var(--radius-md);
+    background: rgba(37,99,235,.10); border: 1px solid rgba(37,99,235,.20);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+  }
+  .cdm-assign-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .cdm-assign-title { font-size: 13.5px; font-weight: 700; color: var(--text-primary); letter-spacing: -.1px; }
+  .cdm-assign-sub   { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .cdm-assign-badge {
+    font-size: 9px; font-weight: 900; letter-spacing: .8px; text-transform: uppercase;
+    padding: 4px 12px; border-radius: 20px; flex-shrink: 0;
+  }
+  .cdm-assign-badge.graded  { color: #4ade80; background: rgba(74,222,128,.10);  border: 1px solid rgba(74,222,128,.22); }
+  .cdm-assign-badge.pending { color: var(--text-muted); background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08); }
+
+  /* ── Resource rows ─────────────────────────────────────── */
+  .cdm-resource-list { display: flex; flex-direction: column; gap: 8px; }
+  .cdm-resource-item {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 16px; border-radius: var(--radius-lg);
+    background: rgba(4,14,32,.70); border: 1px solid rgba(201,168,76,.13);
+    text-decoration: none;
+    box-shadow: var(--shadow-card);
+    transition: border-color .18s, background .18s, transform .15s, box-shadow .18s;
+  }
+  .cdm-resource-item:hover {
+    border-color: rgba(201,168,76,.34); background: rgba(4,14,32,.85);
+    transform: translateX(3px);
+    box-shadow: 0 8px 28px rgba(0,0,0,.36);
+  }
+  .cdm-resource-icon {
+    width: 40px; height: 40px; flex-shrink: 0; border-radius: var(--radius-md);
+    background: rgba(201,168,76,.09); border: 1px solid rgba(201,168,76,.22);
+    display: flex; align-items: center; justify-content: center; font-size: 18px;
+  }
+  .cdm-resource-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .cdm-resource-title { font-size: 13px; font-weight: 700; color: var(--text-primary); letter-spacing: -.1px; }
+  .cdm-resource-cat { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .cdm-resource-arrow { color: rgba(201,168,76,.35); flex-shrink: 0; transition: color .15s, transform .15s; }
+  .cdm-resource-item:hover .cdm-resource-arrow { color: var(--gold-400); transform: translateX(2px); }
+  </style>
 
   <style>
     /* ════════════════════════════════════════════════════════════
