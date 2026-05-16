@@ -6445,7 +6445,7 @@
 
       // ── Parallel data fetch ────────────────────────────
       const localCourse = _semesterCoursesCache.find(c => c.code === courseCode) || {};
-      let dbCourse = null, studentGradeRow = null, gradeItemRows = [];
+      let dbCourse = null, studentGradeRow = null, gradeItemRows = [], attendanceRows = [];
       await Promise.all([
         db.from('courses').select('*').eq('code', courseCode).maybeSingle()
           .then(({ data }) => { dbCourse = data; }).catch(() => {}),
@@ -6459,7 +6459,12 @@
           const p2 = db.from('student_grades').select('*')
             .eq('student_id', uid).eq('course_code', courseCode).maybeSingle()
             .then(({ data }) => { studentGradeRow = data; }).catch(() => {});
-          return Promise.all([p1, p2]);
+          // Attendance: single source of truth from admin attendance system
+          const p3 = db.from('attendance_records')
+            .select('session_date,status,session_type')
+            .eq('student_id', uid).eq('course_code', courseCode)
+            .then(({ data }) => { attendanceRows = data || []; }).catch(() => {});
+          return Promise.all([p1, p2, p3]);
         })
       ]);
 
@@ -6483,8 +6488,30 @@
           scores['__row__' + r.grade_item_id] = r;
         });
       } else {
-        // Legacy fallback: flat {itemId: score} JSONB
-        scores = studentGradeRow?.grade_items || {};
+        // Legacy fallback: flat {itemId: score} JSONB saved by admin grade calculator
+        const legacyMap = studentGradeRow?.grade_items || {};
+        // grade_items may be stored as a JSON string
+        scores = typeof legacyMap === 'string' ? (() => { try { return JSON.parse(legacyMap); } catch(_) { return {}; } })() : legacyMap;
+      }
+
+      // ── Live attendance override (single source of truth = admin attendance) ──
+      // Compute attendance % from attendance_records and inject it for any
+      // grade item whose name/id mentions "attendance" or "participation".
+      if (attendanceRows.length) {
+        const totalSessions = attendanceRows.length;
+        const presentCount  = attendanceRows.filter(r => r.status === 'present' || r.status === 'late').length;
+        const absentCount   = attendanceRows.filter(r => r.status === 'absent').length;
+        const excusedCount  = attendanceRows.filter(r => r.status === 'excused').length;
+        const attPct        = Math.round((presentCount / totalSessions) * 100);
+        gradeItems.forEach(item => {
+          const nm = (item.name || item.id || '').toLowerCase();
+          if (/attendance|participation/.test(nm)) {
+            scores[item.id]   = attPct;
+            scores[item.name] = attPct;
+            // Store detail for rich sub-text in the renderer
+            scores['__att__' + item.id] = { total: totalSessions, present: presentCount, absent: absentCount, excused: excusedCount, pct: attPct };
+          }
+        });
       }
 
       // ── Update hero ────────────────────────────────────
@@ -6578,13 +6605,18 @@
                      : status === 'excused' ? 'Excused'
                      : has ? `${pct} · ${letterGrade(raw)}` : 'Pending';
           const sub2 = row?.graded_by ? ` • Graded by ${escapeHtml(row.graded_by)}` : '';
-          const note = row?.notes     ? `<span class="cdm-grade-note">${escapeHtml(row.notes)}</span>` : '';
+          // Attendance item: show session counts from live attendance data
+          const attDetail = scores['__att__' + item.id];
+          const sub3 = attDetail
+            ? ` • ${attDetail.present}/${attDetail.total} sessions attended${attDetail.absent ? ` (${attDetail.absent} absent)` : ''}`
+            : sub2;
+          const note = row?.notes ? `<span class="cdm-grade-note">${escapeHtml(row.notes)}</span>` : '';
           return `
             <div class="cdm-grade-item">
               <div class="cdm-grade-num">${i + 1}</div>
               <div class="cdm-grade-info">
                 <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
-                <span class="cdm-grade-sub">${item.weight != null ? `Weight: ${item.weight}% of final grade` : 'Unweighted'}${sub2}</span>
+                <span class="cdm-grade-sub">${item.weight != null ? `Weight: ${item.weight}% of final grade` : 'Unweighted'}${sub3}</span>
                 ${note}
               </div>
               <div class="cdm-grade-right">
