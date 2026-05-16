@@ -1427,7 +1427,10 @@
                       />
                     </div>
                   </div>
-                  <div id="attendanceRangeHint" style="margin-top:7px;font-size:10px;color:var(--text-muted);text-align:center">Search a student above to view their attendance history</div>
+                  <div id="attendanceRangeHint" style="margin-top:9px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+                    <span id="attendanceRangeHintText" style="font-size:10px;color:var(--text-muted)">Search a student above to view their attendance history</span>
+                    <button onclick="onAttendanceRangeSearchBtn()" style="padding:5px 12px;border-radius:16px;border:1px solid rgba(201,168,76,0.4);background:rgba(201,168,76,0.12);color:var(--gold-400);font-size:10px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;white-space:nowrap" onmouseover="this.style.background='rgba(201,168,76,0.22)'" onmouseout="this.style.background='rgba(201,168,76,0.12)'">Search</button>
+                  </div>
                 </div>
               </div>
 
@@ -7410,62 +7413,76 @@
 
     // Filter attendance table by search
     // ── Attendance Date-Range Helpers ─────────────────────────────────────────
-    let attendanceRangeMode = false;
+    // Store dates in JS vars on change — avoids stale DOM reads
+    let _rangeDateFrom = '';
+    let _rangeDateTo   = '';
+
+    function isRangeModeActive() {
+      const el = document.getElementById('attendanceRangeDateWrap');
+      return el && el.style.display !== 'none';
+    }
 
     function toggleAttendanceRangeMode() {
-      attendanceRangeMode = !attendanceRangeMode;
-      const singleWrap = document.getElementById('attendanceSingleDateWrap');
       const rangeWrap  = document.getElementById('attendanceRangeDateWrap');
+      const singleWrap = document.getElementById('attendanceSingleDateWrap');
       const btn        = document.getElementById('attendanceRangeToggle');
-      singleWrap.style.display = attendanceRangeMode ? 'none' : 'block';
-      rangeWrap.style.display  = attendanceRangeMode ? 'block' : 'none';
-      if (attendanceRangeMode) {
-        btn.style.background    = 'rgba(201,168,76,0.22)';
-        btn.style.borderColor   = 'rgba(201,168,76,0.6)';
-        btn.style.color         = '#f1d78f';
+      const goingRange = rangeWrap.style.display === 'none' || rangeWrap.style.display === '';
+
+      rangeWrap.style.display  = goingRange ? 'block' : 'none';
+      singleWrap.style.display = goingRange ? 'none'  : 'block';
+
+      if (goingRange) {
+        btn.style.background  = 'rgba(201,168,76,0.22)';
+        btn.style.borderColor = 'rgba(201,168,76,0.6)';
+        btn.style.color       = '#f1d78f';
       } else {
         btn.style.background  = 'rgba(201,168,76,0.08)';
         btn.style.borderColor = 'rgba(201,168,76,0.35)';
         btn.style.color       = 'var(--gold-400)';
-        // clear search + reload recording grid when switching back
-        const input = document.getElementById('attendanceSearchInput');
-        if (input) input.value = '';
+        _rangeDateFrom = '';
+        _rangeDateTo   = '';
+        const srch = document.getElementById('attendanceSearchInput');
+        if (srch) srch.value = '';
         loadAttendanceForCourse();
       }
     }
 
-    function onAttendanceDateRangeChange() {
-      // When range changes, if a search term exists re-run history
-      const from = document.getElementById('attendanceDateFrom').value;
-      const to   = document.getElementById('attendanceDateTo').value;
+    function setRangeHint(msg) {
+      const el = document.getElementById('attendanceRangeHintText');
+      if (el) el.textContent = msg;
+    }
+
+    function onAttendanceRangeSearchBtn() {
       const term = (document.getElementById('attendanceSearchInput')?.value || '').trim();
-      if (from && to && term) {
-        searchAndShowHistory(term, from, to);
+      if (!_rangeDateFrom || !_rangeDateTo) { setRangeHint('Set a date range first'); return; }
+      if (!term) { setRangeHint('Type a student name or ID in Search →'); return; }
+      searchAndShowHistory(term, _rangeDateFrom, _rangeDateTo);
+    }
+
+    function onAttendanceDateRangeChange() {
+      _rangeDateFrom = document.getElementById('attendanceDateFrom').value;
+      _rangeDateTo   = document.getElementById('attendanceDateTo').value;
+      if (_rangeDateFrom && _rangeDateTo) {
+        setRangeHint('Type a student name or ID in Search →');
       } else {
-        const hist = document.getElementById('attendanceHistoryPanel');
-        if (hist) hist.remove();
-        const hint = document.getElementById('attendanceRangeHint');
-        if (hint) hint.textContent = 'Search a student above to view their attendance history';
+        setRangeHint('Search a student above to view their attendance history');
       }
     }
 
     function onAttendanceSearch() {
-      if (attendanceRangeMode) {
+      if (isRangeModeActive()) {
         const term = (document.getElementById('attendanceSearchInput')?.value || '').trim();
-        const from = document.getElementById('attendanceDateFrom').value;
-        const to   = document.getElementById('attendanceDateTo').value;
         if (!term) {
-          // Restore recording grid when search is cleared
           loadAttendanceForCourse();
-          const hint = document.getElementById('attendanceRangeHint');
-          if (hint) hint.textContent = 'Search a student above to view their attendance history';
+          setRangeHint(_rangeDateFrom && _rangeDateTo
+            ? 'Type a student name or ID in Search →'
+            : 'Search a student above to view their attendance history');
           return;
         }
-        if (from && to) {
-          searchAndShowHistory(term, from, to);
+        if (_rangeDateFrom && _rangeDateTo) {
+          searchAndShowHistory(term, _rangeDateFrom, _rangeDateTo);
         } else {
-          const hint = document.getElementById('attendanceRangeHint');
-          if (hint) hint.textContent = 'Set a date range above, then search';
+          setRangeHint('Set a date range above, then search');
         }
       } else {
         filterAttendanceTable();
@@ -7502,12 +7519,10 @@
         }
       }
       if (matched) {
-        const hint = document.getElementById('attendanceRangeHint');
-        if (hint) hint.textContent = `Loading history for ${matched.studentName}…`;
+        setRangeHint(`Loading history for ${matched.studentName}…`);
         showStudentAttendanceHistory(matched.studentId, matched.studentName, currentSelectedCourse, from, to);
       } else {
-        const hint = document.getElementById('attendanceRangeHint');
-        if (hint) hint.textContent = 'No matching student found in this course';
+        setRangeHint('No matching student found in this course');
       }
     }
 
