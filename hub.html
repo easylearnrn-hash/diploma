@@ -6429,103 +6429,123 @@
       const modal = document.getElementById('courseDetailModal');
       if (!modal) return;
 
-      // Show modal immediately with a loading state
+      // ── Show immediately with loading state ──────────────────
       modal.classList.add('open');
-      document.getElementById('cdmCourseCode').textContent = courseCode;
-      document.getElementById('cdmCourseName').textContent = '…';
-      document.getElementById('cdmBody').innerHTML = '<div style="padding:40px;text-align:center;color:var(--text-secondary)">Loading…</div>';
+      const heroIcon  = document.getElementById('cdmHeroIcon');
+      const heroPills = document.getElementById('cdmHeroPills');
+      const heroName  = document.getElementById('cdmCourseName');
+      const tabbar    = document.getElementById('cdmTabbar');
+      const body      = document.getElementById('cdmBody');
 
-      // Get local catalog entry for immediate display
+      heroIcon.textContent  = courseCode.substring(0, 3).toUpperCase();
+      heroPills.innerHTML   = `<span class="cdm-hero-pill code">${escapeHtml(courseCode)}</span>`;
+      heroName.textContent  = '…';
+      tabbar.innerHTML      = '';
+      body.innerHTML        = '<div class="cdm-loading"><div class="cdm-spinner"></div><span>Loading course data…</span></div>';
+
+      // ── Data fetch ───────────────────────────────────────────
       const localCourse = _semesterCoursesCache.find(c => c.code === courseCode) || {};
+      let dbCourse = null, studentGradeRow = null;
+      await Promise.all([
+        db.from('courses').select('*').eq('code', courseCode).maybeSingle()
+          .then(({ data }) => { dbCourse = data; }).catch(() => {}),
+        resolveStudentId().then(uid => {
+          if (!uid) return;
+          return db.from('student_grades').select('*')
+            .eq('student_id', uid).eq('course_code', courseCode).maybeSingle()
+            .then(({ data }) => { studentGradeRow = data; }).catch(() => {});
+        })
+      ]);
 
-      // Fetch from Supabase
-      let dbCourse = null;
-      let studentGradeRow = null;
-      try {
-        const { data: cd } = await db.from('courses').select('*').eq('code', courseCode).maybeSingle();
-        dbCourse = cd;
-      } catch(_) {}
-      try {
-        const studentUUID = await resolveStudentId();
-        if (studentUUID) {
-          const { data: sg } = await db.from('student_grades').select('*')
-            .eq('student_id', studentUUID).eq('course_code', courseCode).maybeSingle();
-          studentGradeRow = sg;
-        }
-      } catch(_) {}
-
-      const courseName  = dbCourse?.name || localCourse.name || courseCode;
-      const credits     = dbCourse?.credits ?? localCourse.credits ?? '—';
-      const courseType  = dbCourse?.course_type || localCourse.type || '';
-      const description = dbCourse?.description || 'No syllabus description available.';
-      const prerequisites = dbCourse?.prerequisites || 'None';
-      let gradeItems    = dbCourse?.grade_items || localCourse.gradeItems || [];
+      const courseName    = dbCourse?.name        || localCourse.name        || courseCode;
+      const credits       = dbCourse?.credits     ?? localCourse.credits     ?? '—';
+      const courseType    = dbCourse?.course_type || localCourse.type        || '';
+      const description   = dbCourse?.description || 'No syllabus description has been added for this course yet.';
+      const prerequisites = dbCourse?.prerequisites || 'None listed.';
+      let gradeItems = dbCourse?.grade_items || localCourse.gradeItems || [];
       if (typeof gradeItems === 'string') { try { gradeItems = JSON.parse(gradeItems); } catch(_) { gradeItems = []; } }
-      const studentScores = studentGradeRow?.grade_items || {};
+      const scores = studentGradeRow?.grade_items || {};
 
-      // Resolve notes for Resources tab
+      // ── Populate hero ────────────────────────────────────────
+      heroName.textContent = courseName;
+      let pillsHtml = `<span class="cdm-hero-pill code">${escapeHtml(courseCode)}</span>`;
+      if (credits !== '—') pillsHtml += `<span class="cdm-hero-pill info">${credits} Credit${credits !== 1 ? 's' : ''}</span>`;
+      if (courseType)       pillsHtml += `<span class="cdm-hero-pill info">${escapeHtml(courseType)}</span>`;
+      if (gradeItems.length) pillsHtml += `<span class="cdm-hero-pill info">${gradeItems.length} Assessments</span>`;
+      heroPills.innerHTML = pillsHtml;
+      heroIcon.textContent = courseCode.substring(0, 3).toUpperCase();
+
+      // ── Resources lookup ─────────────────────────────────────
+      const courseNameLower = courseName.toLowerCase();
+      const codeL = courseCode.toLowerCase();
       const relatedNotes = HARDCODED_NOTES.filter(n => {
-        const cat = (n.category || '').toLowerCase();
-        const title = (n.title || '').toLowerCase();
-        const codeL = courseCode.toLowerCase();
+        const cat   = (n.category || '').toLowerCase();
+        const title = (n.title    || '').toLowerCase();
         return cat.includes(codeL) || title.includes(codeL) ||
-          cat.includes(courseName.toLowerCase()) || title.includes(courseName.toLowerCase());
+               cat.includes(courseNameLower) || title.includes(courseNameLower);
       }).slice(0, 8);
 
-      document.getElementById('cdmCourseName').textContent = courseName;
-
-      // ── Render tabs ───────────────────────────────────────────────────
-      function letterGrade(score) {
-        if (score == null || score === '') return '—';
-        const s = Number(score);
-        if (s >= 93) return 'A';
-        if (s >= 90) return 'A−';
-        if (s >= 87) return 'B+';
-        if (s >= 83) return 'B';
-        if (s >= 80) return 'B−';
-        if (s >= 77) return 'C+';
-        if (s >= 73) return 'C';
-        if (s >= 70) return 'C−';
-        if (s >= 67) return 'D+';
-        if (s >= 60) return 'D';
+      // ── Helpers ──────────────────────────────────────────────
+      function letterGrade(s) {
+        const v = Number(s);
+        if (v >= 93) return 'A';  if (v >= 90) return 'A−';
+        if (v >= 87) return 'B+'; if (v >= 83) return 'B';
+        if (v >= 80) return 'B−'; if (v >= 77) return 'C+';
+        if (v >= 73) return 'C';  if (v >= 70) return 'C−';
+        if (v >= 67) return 'D+'; if (v >= 60) return 'D';
         return 'F';
       }
 
+      // ── Tab renderers ────────────────────────────────────────
       function renderOverview() {
         return `
           <div class="cdm-section">
-            <div class="cdm-meta-row">
-              <span class="cdm-meta-pill">${escapeHtml(courseCode)}</span>
-              <span class="cdm-meta-pill">${credits} Credit${credits !== 1 ? 's' : ''}</span>
-              ${courseType ? `<span class="cdm-meta-pill">${escapeHtml(courseType)}</span>` : ''}
+            <div class="cdm-info-grid">
+              <div class="cdm-info-card">
+                <div class="cdm-info-label">Credits</div>
+                <div class="cdm-info-value" style="font-size:22px;font-weight:900;color:var(--gold-300)">${escapeHtml(String(credits))}</div>
+              </div>
+              <div class="cdm-info-card">
+                <div class="cdm-info-label">Type</div>
+                <div class="cdm-info-value" style="font-weight:700">${escapeHtml(courseType || 'Lecture')}</div>
+              </div>
             </div>
-            <h4 class="cdm-section-title">Course Description</h4>
-            <p class="cdm-text">${escapeHtml(description)}</p>
-            <h4 class="cdm-section-title">Prerequisites</h4>
-            <p class="cdm-text">${escapeHtml(prerequisites)}</p>
+            <div class="cdm-info-card-full">
+              <div class="cdm-info-label">Course Description / Syllabus</div>
+              <div class="cdm-info-value">${escapeHtml(description)}</div>
+            </div>
+            <div class="cdm-info-card-full">
+              <div class="cdm-info-label">Prerequisites</div>
+              <div class="cdm-info-value">${escapeHtml(prerequisites)}</div>
+            </div>
           </div>`;
       }
 
       function renderGradeBreakdown() {
         if (!gradeItems.length) {
-          return `<div class="cdm-section"><p class="cdm-text" style="opacity:.6">No grade items have been set up for this course yet.</p></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">📊</div>No grade items have been configured for this course yet.</div></div>`;
         }
-        const rows = gradeItems.map(item => {
-          const score = studentScores[item.id] ?? studentScores[item.name] ?? null;
-          const hasScore = score != null && score !== '';
-          const pct = hasScore ? Math.min(100, Math.round(Number(score))) : 0;
+        const rows = gradeItems.map((item, idx) => {
+          const rawScore = scores[item.id] ?? scores[item.name] ?? null;
+          const hasScore = rawScore != null && rawScore !== '';
+          const pct      = hasScore ? Math.min(100, Math.round(Number(rawScore))) : 0;
+          const letter   = hasScore ? letterGrade(rawScore) : null;
+          const badgeClass = hasScore ? (pct >= 70 ? 'pass' : 'fail') : 'pend';
+          const barClass   = hasScore ? (pct >= 80 ? 'high' : pct >= 70 ? 'mid' : 'low') : '';
+          const badgeText  = hasScore ? `${pct}  ${letter}` : 'Pending';
           return `
-            <div class="cdm-grade-row">
-              <div class="cdm-grade-info">
-                <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
-                <span class="cdm-grade-weight">${item.weight != null ? item.weight + '%' : ''}</span>
+            <div class="cdm-grade-item">
+              <div class="cdm-grade-item-top">
+                <div class="cdm-grade-item-left">
+                  <div class="cdm-grade-num">${idx + 1}</div>
+                  <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
+                  ${item.weight != null ? `<span class="cdm-weight-chip">${item.weight}%</span>` : ''}
+                </div>
+                <span class="cdm-score-badge ${badgeClass}">${badgeText}</span>
               </div>
-              <div class="cdm-grade-bar-wrap">
-                <div class="cdm-grade-bar" style="width:${pct}%"></div>
+              <div class="cdm-grade-bar-track">
+                <div class="cdm-grade-bar-fill ${barClass}" style="width:${pct}%"></div>
               </div>
-              <span class="cdm-grade-score ${hasScore ? (pct >= 70 ? 'pass' : 'fail') : 'pending'}">
-                ${hasScore ? `${pct} — ${letterGrade(score)}` : 'Pending'}
-              </span>
             </div>`;
         });
         return `<div class="cdm-section">${rows.join('')}</div>`;
@@ -6533,20 +6553,19 @@
 
       function renderAssignments() {
         if (!gradeItems.length) {
-          return `<div class="cdm-section"><p class="cdm-text" style="opacity:.6">No assignments have been posted yet.</p></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">✏️</div>No assignments have been posted for this course yet.</div></div>`;
         }
-        const rows = gradeItems.map(item => {
-          const score = studentScores[item.id] ?? studentScores[item.name] ?? null;
-          const status = score != null && score !== '' ? 'Graded' : 'Not yet graded';
-          const statusClass = score != null && score !== '' ? 'graded' : 'pending';
+        const rows = gradeItems.map((item, idx) => {
+          const rawScore  = scores[item.id] ?? scores[item.name] ?? null;
+          const isGraded  = rawScore != null && rawScore !== '';
           return `
-            <div class="cdm-assignment-row">
-              <div class="cdm-assignment-icon">✏️</div>
-              <div class="cdm-assignment-info">
-                <span class="cdm-assignment-title">${escapeHtml(item.name || item.id)}</span>
-                <span class="cdm-assignment-sub">Weight: ${item.weight != null ? item.weight + '%' : '—'}</span>
+            <div class="cdm-assign-item">
+              <div class="cdm-assign-num">${idx + 1}</div>
+              <div class="cdm-assign-info">
+                <span class="cdm-assign-title">${escapeHtml(item.name || item.id)}</span>
+                <span class="cdm-assign-sub">Weight: ${item.weight != null ? item.weight + '%' : '—'} of final grade</span>
               </div>
-              <span class="cdm-status-badge ${statusClass}">${status}</span>
+              <span class="cdm-assign-badge ${isGraded ? 'graded' : 'pending'}">${isGraded ? 'Graded' : 'Pending'}</span>
             </div>`;
         });
         return `<div class="cdm-section">${rows.join('')}</div>`;
@@ -6554,39 +6573,46 @@
 
       function renderResources() {
         if (!relatedNotes.length) {
-          return `<div class="cdm-section"><p class="cdm-text" style="opacity:.6">No linked resources found. Browse the Notes Library for related material.</p></div>`;
+          return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-icon">📚</div>No linked study resources found.<br>Browse the Notes Library for related material.</div></div>`;
         }
-        const rows = relatedNotes.map(n => `
-          <a class="cdm-resource-row" href="${encodeHtmlFile(n.htmlFile)}" target="_blank">
-            <span class="cdm-resource-icon">📄</span>
+        const items = relatedNotes.map(n => `
+          <a class="cdm-resource-item" href="${encodeHtmlFile(n.htmlFile)}" target="_blank">
+            <div class="cdm-resource-icon-wrap">📄</div>
             <div class="cdm-resource-info">
               <span class="cdm-resource-title">${escapeHtml(n.title)}</span>
               <span class="cdm-resource-cat">${escapeHtml(n.category || 'Notes')}</span>
             </div>
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+            <svg class="cdm-resource-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg>
           </a>`);
-        return `<div class="cdm-section">${rows.join('')}</div>`;
+        return `<div class="cdm-section"><div class="cdm-resource-grid">${items.join('')}</div></div>`;
       }
 
-      const tabs = ['Overview', 'Grade Breakdown', 'Assignments', 'Resources'];
-      const renderers = [renderOverview, renderGradeBreakdown, renderAssignments, renderResources];
+      // ── Build tabs & render ──────────────────────────────────
+      const TABS = [
+        { label: 'Overview',         icon: '◈', render: renderOverview },
+        { label: 'Grade Breakdown',  icon: '◇', render: renderGradeBreakdown },
+        { label: 'Assignments',      icon: '✦', render: renderAssignments },
+        { label: 'Resources',        icon: '◉', render: renderResources },
+      ];
       let activeTab = 0;
 
-      function renderModal() {
-        const tabBtns = tabs.map((t, i) =>
-          `<button class="cdm-tab${i === activeTab ? ' active' : ''}" onclick="cdmSetTab(${i})">${t}</button>`
+      function paint() {
+        tabbar.innerHTML = TABS.map((t, i) =>
+          `<button class="cdm-tab${i === activeTab ? ' active' : ''}" onclick="cdmSetTab(${i})">${t.label}</button>`
         ).join('');
-        document.getElementById('cdmBody').innerHTML = `
-          <div class="cdm-tabs">${tabBtns}</div>
-          <div class="cdm-tab-content" id="cdmTabContent">${renderers[activeTab]()}</div>`;
+        body.innerHTML = TABS[activeTab].render();
+        // Animate bars from 0 after paint
+        requestAnimationFrame(() => {
+          body.querySelectorAll('.cdm-grade-bar-fill[style]').forEach(el => {
+            const w = el.style.width;
+            el.style.width = '0%';
+            requestAnimationFrame(() => { el.style.width = w; });
+          });
+        });
       }
 
-      window.cdmSetTab = function(i) {
-        activeTab = i;
-        renderModal();
-      };
-
-      renderModal();
+      window.cdmSetTab = function(i) { activeTab = i; paint(); };
+      paint();
     }
 
     function closeCourseModal() {
@@ -7071,105 +7097,290 @@
   <script src="js/cookie-consent.js"></script>
 
   <!-- COURSE DETAIL MODAL -->
-  <div class="modal" id="courseDetailModal" onclick="if(event.target.id==='courseDetailModal') closeCourseModal()">
-    <div class="modal-card" role="dialog" aria-modal="true" style="max-width:660px;">
-      <div class="modal-head">
-        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-          <span id="cdmCourseCode" style="font-size:11px;font-weight:900;letter-spacing:.08em;color:var(--gold-400);text-transform:uppercase;background:rgba(201,168,76,.12);padding:4px 10px;border-radius:20px;border:1px solid rgba(201,168,76,.22);white-space:nowrap;"></span>
-          <strong id="cdmCourseName" style="font-size:15px;font-weight:800;color:var(--gold-200);font-family:'Playfair Display',serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></strong>
+  <div class="cdm-backdrop" id="courseDetailModal" onclick="if(event.target.id==='courseDetailModal') closeCourseModal()">
+    <div class="cdm-modal" role="dialog" aria-modal="true">
+
+      <!-- Hero Header -->
+      <div class="cdm-hero">
+        <div class="cdm-hero-left">
+          <div class="cdm-hero-icon" id="cdmHeroIcon">ENG</div>
+          <div class="cdm-hero-text">
+            <div class="cdm-hero-pills" id="cdmHeroPills"></div>
+            <div class="cdm-hero-name" id="cdmCourseName">Loading…</div>
+          </div>
         </div>
-        <button class="close" onclick="closeCourseModal()">Close</button>
+        <button class="cdm-close-btn" onclick="closeCourseModal()" aria-label="Close">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
       </div>
-      <div class="modal-body" id="cdmBody" style="padding:0;overflow-y:auto;max-height:72vh;"></div>
+
+      <!-- Tab Bar -->
+      <div class="cdm-tabbar" id="cdmTabbar"></div>
+
+      <!-- Body -->
+      <div class="cdm-body" id="cdmBody">
+        <div class="cdm-loading">
+          <div class="cdm-spinner"></div>
+          <span>Loading course data…</span>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <style>
-    /* ── Course Detail Modal ─────────────────────────────────── */
-    .cdm-tabs {
-      display: flex; gap: 4px; padding: 14px 16px 0;
-      border-bottom: 1px solid rgba(201,168,76,.10);
-      overflow-x: auto; scrollbar-width: none;
+    /* ════════════════════════════════════════════════════════════
+       COURSE DETAIL MODAL  –  Professional Layout
+    ════════════════════════════════════════════════════════════ */
+
+    /* Backdrop */
+    .cdm-backdrop {
+      position: fixed; inset: 0;
+      background: rgba(1, 4, 14, .72);
+      backdrop-filter: blur(6px);
+      display: none; align-items: center; justify-content: center;
+      padding: 20px; z-index: 9999;
     }
-    .cdm-tabs::-webkit-scrollbar { display: none; }
+    .cdm-backdrop.open { display: flex; }
+
+    /* Modal shell */
+    .cdm-modal {
+      width: min(720px, 96vw);
+      max-height: 88vh;
+      display: flex; flex-direction: column;
+      border-radius: 20px; overflow: hidden;
+      background: linear-gradient(170deg, #071828 0%, #030d18 100%);
+      border: 1px solid rgba(201,168,76,.22);
+      box-shadow: 0 40px 100px rgba(0,0,0,.70), 0 0 0 1px rgba(201,168,76,.06) inset;
+    }
+
+    /* ── Hero Header ───────────────────────────────────────────── */
+    .cdm-hero {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 16px; padding: 22px 24px 20px;
+      background: linear-gradient(135deg, rgba(201,168,76,.08) 0%, rgba(37,99,235,.06) 100%);
+      border-bottom: 1px solid rgba(201,168,76,.14);
+      flex-shrink: 0;
+    }
+    .cdm-hero-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+    .cdm-hero-icon {
+      width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0;
+      background: linear-gradient(145deg, #2563eb, #1e3a8a);
+      box-shadow: 0 8px 24px rgba(37,99,235,.40);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 900; letter-spacing: .04em;
+      color: #fff; font-family: 'Inter', sans-serif;
+    }
+    .cdm-hero-text { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+    .cdm-hero-pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .cdm-hero-pill {
+      font-size: 10px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+      padding: 3px 9px; border-radius: 20px;
+    }
+    .cdm-hero-pill.code {
+      color: var(--gold-400); background: rgba(201,168,76,.12);
+      border: 1px solid rgba(201,168,76,.25);
+    }
+    .cdm-hero-pill.info {
+      color: rgba(148,163,184,.8); background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+    .cdm-hero-name {
+      font-size: 16px; font-weight: 800; font-family: 'Playfair Display', serif;
+      color: var(--gold-200); line-height: 1.3;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cdm-close-btn {
+      width: 36px; height: 36px; flex-shrink: 0; border-radius: 10px;
+      border: 1px solid rgba(201,168,76,.18); background: rgba(2,8,20,.50);
+      color: rgba(148,163,184,.7); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .15s, color .15s, background .15s;
+    }
+    .cdm-close-btn:hover {
+      border-color: rgba(201,168,76,.45); color: var(--gold-300);
+      background: rgba(201,168,76,.08);
+    }
+
+    /* ── Tab Bar ──────────────────────────────────────────────── */
+    .cdm-tabbar {
+      display: flex; flex-shrink: 0;
+      border-bottom: 1px solid rgba(201,168,76,.12);
+      background: rgba(2,8,20,.40);
+    }
     .cdm-tab {
-      padding: 8px 16px; border-radius: 10px 10px 0 0;
+      flex: 1; padding: 13px 8px;
       border: none; background: transparent;
-      color: var(--text-secondary); font-size: 12px; font-weight: 700;
+      color: rgba(148,163,184,.65); font-size: 11px; font-weight: 800;
+      letter-spacing: .06em; text-transform: uppercase;
       cursor: pointer; white-space: nowrap;
       border-bottom: 2px solid transparent;
-      transition: color .15s, border-color .15s;
+      transition: color .15s, border-color .15s, background .15s;
+      position: relative;
     }
-    .cdm-tab:hover { color: var(--gold-300); }
-    .cdm-tab.active { color: var(--gold-400); border-bottom-color: var(--gold-400); }
-    .cdm-tab-content { padding: 0; }
-    .cdm-section { padding: 20px 20px 24px; display: flex; flex-direction: column; gap: 12px; }
-    .cdm-meta-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 4px; }
-    .cdm-meta-pill {
-      font-size: 11px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
-      color: var(--gold-300); background: rgba(201,168,76,.1);
-      padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(201,168,76,.18);
+    .cdm-tab + .cdm-tab { border-left: 1px solid rgba(255,255,255,.04); }
+    .cdm-tab:hover { color: var(--gold-300); background: rgba(201,168,76,.04); }
+    .cdm-tab.active {
+      color: var(--gold-400); border-bottom-color: var(--gold-400);
+      background: rgba(201,168,76,.06);
     }
-    .cdm-section-title {
-      font-size: 11px; font-weight: 900; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--gold-400); margin: 8px 0 4px;
-    }
-    .cdm-text { font-size: 13px; color: var(--text-secondary); line-height: 1.65; margin: 0; }
 
-    /* Grade breakdown */
-    .cdm-grade-row {
-      display: grid; grid-template-columns: 1fr 120px 80px;
-      align-items: center; gap: 12px;
-      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+    /* ── Body ─────────────────────────────────────────────────── */
+    .cdm-body {
+      flex: 1; overflow-y: auto; overscroll-behavior: contain;
     }
-    .cdm-grade-row:last-child { border-bottom: none; }
-    .cdm-grade-info { display: flex; flex-direction: column; gap: 2px; }
-    .cdm-grade-name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    .cdm-grade-weight { font-size: 11px; color: var(--text-secondary); }
-    .cdm-grade-bar-wrap {
-      height: 6px; background: rgba(255,255,255,.07); border-radius: 99px; overflow: hidden;
-    }
-    .cdm-grade-bar {
-      height: 100%; background: linear-gradient(90deg, #3b82f6, #60a5fa);
-      border-radius: 99px; transition: width .6s cubic-bezier(.4,0,.2,1);
-    }
-    .cdm-grade-score {
-      font-size: 12px; font-weight: 800; text-align: right;
-      padding: 3px 8px; border-radius: 8px;
-    }
-    .cdm-grade-score.pass { color: #4ade80; background: rgba(74,222,128,.1); }
-    .cdm-grade-score.fail { color: #f87171; background: rgba(248,113,113,.1); }
-    .cdm-grade-score.pending { color: var(--text-secondary); background: rgba(255,255,255,.06); }
+    .cdm-body::-webkit-scrollbar { width: 4px; }
+    .cdm-body::-webkit-scrollbar-thumb { background: rgba(201,168,76,.18); border-radius: 4px; }
 
-    /* Assignments */
-    .cdm-assignment-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+    /* Loading */
+    .cdm-loading {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 14px; padding: 56px 24px;
+      color: rgba(148,163,184,.5); font-size: 13px;
     }
-    .cdm-assignment-row:last-child { border-bottom: none; }
-    .cdm-assignment-icon { font-size: 20px; flex-shrink: 0; }
-    .cdm-assignment-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .cdm-assignment-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    .cdm-assignment-sub { font-size: 11px; color: var(--text-secondary); }
-    .cdm-status-badge {
-      font-size: 11px; font-weight: 800; padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+    .cdm-spinner {
+      width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid rgba(201,168,76,.15);
+      border-top-color: var(--gold-400);
+      animation: cdm-spin .7s linear infinite;
     }
-    .cdm-status-badge.graded { color: #4ade80; background: rgba(74,222,128,.1); border: 1px solid rgba(74,222,128,.2); }
-    .cdm-status-badge.pending { color: var(--text-secondary); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); }
+    @keyframes cdm-spin { to { transform: rotate(360deg); } }
 
-    /* Resources */
-    .cdm-resource-row {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 12px; border-radius: 12px;
-      background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.06);
-      text-decoration: none; transition: background .15s, border-color .15s;
+    /* Section wrapper */
+    .cdm-section { padding: 24px 24px 28px; display: flex; flex-direction: column; gap: 0; }
+
+    /* Empty state */
+    .cdm-empty {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      padding: 48px 24px; color: rgba(148,163,184,.45); font-size: 13px; text-align: center;
     }
-    .cdm-resource-row:hover { background: rgba(201,168,76,.07); border-color: rgba(201,168,76,.2); }
-    .cdm-resource-icon { font-size: 20px; flex-shrink: 0; }
-    .cdm-resource-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-    .cdm-resource-title { font-size: 13px; font-weight: 700; color: var(--text-primary); }
-    .cdm-resource-cat { font-size: 11px; color: var(--text-secondary); }
-    .cdm-resource-row svg { color: var(--text-secondary); flex-shrink: 0; }
+    .cdm-empty-icon { font-size: 32px; opacity: .5; }
+
+    /* ── Overview Tab ─────────────────────────────────────────── */
+    .cdm-info-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+    }
+    @media (max-width: 520px) { .cdm-info-grid { grid-template-columns: 1fr; } }
+    .cdm-info-card {
+      padding: 18px 20px; border-radius: 14px;
+      background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+    }
+    .cdm-info-card-full {
+      padding: 18px 20px; border-radius: 14px; margin-top: 14px;
+      background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.07);
+    }
+    .cdm-info-label {
+      font-size: 9px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--gold-400); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;
+    }
+    .cdm-info-label::before {
+      content: ''; display: block; width: 3px; height: 12px;
+      background: var(--gold-400); border-radius: 2px;
+    }
+    .cdm-info-value {
+      font-size: 13px; color: rgba(203,213,225,.85); line-height: 1.65;
+    }
+
+    /* ── Grade Breakdown Tab ──────────────────────────────────── */
+    .cdm-grade-header {
+      display: grid; grid-template-columns: 1fr 80px;
+      padding: 0 0 10px; margin-bottom: 4px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .cdm-grade-header-label {
+      font-size: 9px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+      color: rgba(148,163,184,.45);
+    }
+    .cdm-grade-header-label.right { text-align: right; }
+    .cdm-grade-item {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 16px 0;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .cdm-grade-item:last-child { border-bottom: none; }
+    .cdm-grade-item-top {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .cdm-grade-item-left { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .cdm-grade-num {
+      width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 900; color: rgba(148,163,184,.6);
+    }
+    .cdm-grade-name {
+      font-size: 14px; font-weight: 700; color: rgba(226,232,240,.9);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .cdm-weight-chip {
+      font-size: 10px; font-weight: 800; letter-spacing: .04em;
+      padding: 3px 8px; border-radius: 20px;
+      color: rgba(148,163,184,.7); background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.08); flex-shrink: 0;
+    }
+    .cdm-score-badge {
+      font-size: 12px; font-weight: 900; padding: 4px 12px;
+      border-radius: 20px; flex-shrink: 0; min-width: 80px; text-align: center;
+    }
+    .cdm-score-badge.pass  { color: #4ade80; background: rgba(74,222,128,.10); border: 1px solid rgba(74,222,128,.22); }
+    .cdm-score-badge.fail  { color: #f87171; background: rgba(248,113,113,.10); border: 1px solid rgba(248,113,113,.22); }
+    .cdm-score-badge.pend  { color: rgba(148,163,184,.6); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); }
+    .cdm-grade-bar-track {
+      height: 7px; width: 100%; background: rgba(255,255,255,.06);
+      border-radius: 99px; overflow: hidden;
+    }
+    .cdm-grade-bar-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 100%);
+      transition: width .7s cubic-bezier(.4,0,.2,1);
+    }
+    .cdm-grade-bar-fill.high  { background: linear-gradient(90deg, #22c55e, #4ade80); }
+    .cdm-grade-bar-fill.low   { background: linear-gradient(90deg, #ef4444, #f87171); }
+    .cdm-grade-bar-fill.mid   { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+
+    /* ── Assignments Tab ──────────────────────────────────────── */
+    .cdm-assign-item {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+    .cdm-assign-item:last-child { border-bottom: none; }
+    .cdm-assign-num {
+      width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+      background: rgba(37,99,235,.12); border: 1px solid rgba(37,99,235,.22);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 900; color: #60a5fa;
+    }
+    .cdm-assign-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .cdm-assign-title { font-size: 14px; font-weight: 700; color: rgba(226,232,240,.9); }
+    .cdm-assign-sub   { font-size: 11px; color: rgba(148,163,184,.6); }
+    .cdm-assign-badge {
+      font-size: 11px; font-weight: 800; padding: 4px 12px;
+      border-radius: 20px; flex-shrink: 0; white-space: nowrap;
+    }
+    .cdm-assign-badge.graded  { color: #4ade80; background: rgba(74,222,128,.10); border: 1px solid rgba(74,222,128,.22); }
+    .cdm-assign-badge.pending { color: rgba(148,163,184,.6); background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.09); }
+
+    /* ── Resources Tab ────────────────────────────────────────── */
+    .cdm-resource-grid { display: flex; flex-direction: column; gap: 8px; }
+    .cdm-resource-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px; border-radius: 12px;
+      background: rgba(255,255,255,.025); border: 1px solid rgba(255,255,255,.07);
+      text-decoration: none; transition: background .15s, border-color .15s, transform .12s;
+    }
+    .cdm-resource-item:hover {
+      background: rgba(201,168,76,.06); border-color: rgba(201,168,76,.22);
+      transform: translateX(2px);
+    }
+    .cdm-resource-icon-wrap {
+      width: 38px; height: 38px; border-radius: 10px; flex-shrink: 0;
+      background: rgba(201,168,76,.10); border: 1px solid rgba(201,168,76,.18);
+      display: flex; align-items: center; justify-content: center; font-size: 17px;
+    }
+    .cdm-resource-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .cdm-resource-title { font-size: 13px; font-weight: 700; color: rgba(226,232,240,.9); }
+    .cdm-resource-cat   { font-size: 11px; color: rgba(148,163,184,.55); }
+    .cdm-resource-arrow { color: rgba(148,163,184,.35); flex-shrink: 0; }
   </style>
 
   <!-- LOGOUT CONFIRMATION MODAL -->
