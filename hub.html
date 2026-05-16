@@ -6445,15 +6445,21 @@
 
       // ── Parallel data fetch ────────────────────────────
       const localCourse = _semesterCoursesCache.find(c => c.code === courseCode) || {};
-      let dbCourse = null, studentGradeRow = null;
+      let dbCourse = null, studentGradeRow = null, gradeItemRows = [];
       await Promise.all([
         db.from('courses').select('*').eq('code', courseCode).maybeSingle()
           .then(({ data }) => { dbCourse = data; }).catch(() => {}),
         resolveStudentId().then(uid => {
           if (!uid) return;
-          return db.from('student_grades').select('*')
+          // Primary: fetch normalized per-item rows
+          const p1 = db.from('student_grade_items').select('*')
+            .eq('student_id', uid).eq('course_code', courseCode)
+            .then(({ data }) => { gradeItemRows = data || []; }).catch(() => {});
+          // Fallback: also fetch old JSONB row if new table is empty
+          const p2 = db.from('student_grades').select('*')
             .eq('student_id', uid).eq('course_code', courseCode).maybeSingle()
             .then(({ data }) => { studentGradeRow = data; }).catch(() => {});
+          return Promise.all([p1, p2]);
         })
       ]);
 
@@ -6464,7 +6470,22 @@
       const prerequisites = dbCourse?.prerequisites || 'None listed.';
       let gradeItems = dbCourse?.grade_items || localCourse.gradeItems || [];
       if (typeof gradeItems === 'string') { try { gradeItems = JSON.parse(gradeItems); } catch(_) { gradeItems = []; } }
-      const scores = studentGradeRow?.grade_items || {};
+
+      // Build scores map: prefer normalized student_grade_items rows;
+      // fall back to old JSONB student_grades.grade_items for backwards compat.
+      let scores = {};
+      if (gradeItemRows.length) {
+        // Normalized table – keyed by grade_item_id; expose score (null if pending)
+        gradeItemRows.forEach(r => {
+          scores[r.grade_item_id] = r.status === 'graded' ? r.score : null;
+          scores[r.grade_item_name] = r.status === 'graded' ? r.score : null; // name alias
+          // Expose full row for richer rendering
+          scores['__row__' + r.grade_item_id] = r;
+        });
+      } else {
+        // Legacy fallback: flat {itemId: score} JSONB
+        scores = studentGradeRow?.grade_items || {};
+      }
 
       // ── Update hero ────────────────────────────────────
       heroTitle.textContent = courseName;
@@ -6528,10 +6549,12 @@
         if (!gradeItems.length) {
           return `<div class="cdm-section"><div class="cdm-empty"><div class="cdm-empty-glyph">◇</div>No grade items have been configured for this course yet.<br>Check with your faculty for details.</div></div>`;
         }
-        // Compute weighted average for scored items
+        // Compute weighted average for graded items
         let weightedSum = 0, weightSum = 0;
         gradeItems.forEach(item => {
-          const raw = scores[item.id] ?? scores[item.name] ?? null;
+          const row = scores['__row__' + item.id];
+          const raw = row ? (row.status === 'graded' ? row.score : null)
+                          : (scores[item.id] ?? scores[item.name] ?? null);
           if (raw != null && raw !== '' && item.weight != null) {
             weightedSum += Number(raw) * item.weight;
             weightSum   += item.weight;
@@ -6541,17 +6564,28 @@
         const avgLetter = avg != null ? letterGrade(avg) : '—';
 
         const rows = gradeItems.map((item, i) => {
-          const raw = scores[item.id] ?? scores[item.name] ?? null;
-          const has = raw != null && raw !== '';
-          const pct = has ? Math.min(100, Math.round(Number(raw))) : 0;
-          const cls = has ? (pct >= 70 ? 'cdm-score-pass' : 'cdm-score-fail') : 'cdm-score-pend';
-          const txt = has ? `${pct} · ${letterGrade(raw)}` : 'Pending';
+          const row = scores['__row__' + item.id]; // normalized row if available
+          const raw = row ? (row.status === 'graded' ? row.score : null)
+                          : (scores[item.id] ?? scores[item.name] ?? null);
+          const status = row?.status || (raw != null && raw !== '' ? 'graded' : 'pending');
+          const has  = status === 'graded' && raw != null;
+          const pct  = has ? Math.min(100, Math.round(Number(raw))) : 0;
+          const cls  = status === 'absent'  ? 'cdm-score-fail'
+                     : status === 'excused' ? 'cdm-score-pend'
+                     : has ? (pct >= 70 ? 'cdm-score-pass' : 'cdm-score-fail')
+                           : 'cdm-score-pend';
+          const txt  = status === 'absent'  ? 'Absent'
+                     : status === 'excused' ? 'Excused'
+                     : has ? `${pct} · ${letterGrade(raw)}` : 'Pending';
+          const sub2 = row?.graded_by ? ` • Graded by ${escapeHtml(row.graded_by)}` : '';
+          const note = row?.notes     ? `<span class="cdm-grade-note">${escapeHtml(row.notes)}</span>` : '';
           return `
             <div class="cdm-grade-item">
               <div class="cdm-grade-num">${i + 1}</div>
               <div class="cdm-grade-info">
                 <span class="cdm-grade-name">${escapeHtml(item.name || item.id)}</span>
-                <span class="cdm-grade-sub">${item.weight != null ? `Weight: ${item.weight}% of final grade` : 'Unweighted'}</span>
+                <span class="cdm-grade-sub">${item.weight != null ? `Weight: ${item.weight}% of final grade` : 'Unweighted'}${sub2}</span>
+                ${note}
               </div>
               <div class="cdm-grade-right">
                 ${item.weight != null ? `<span class="cdm-weight-tag">${item.weight}%</span>` : ''}
@@ -7381,6 +7415,11 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .cdm-grade-sub { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+  .cdm-grade-note {
+    display: block; margin-top: 3px;
+    font-size: 11px; font-style: italic; color: var(--gold-400);
+    opacity: .75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .cdm-grade-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
   .cdm-weight-tag {
     font-size: 9px; font-weight: 900; letter-spacing: .6px; text-transform: uppercase;
