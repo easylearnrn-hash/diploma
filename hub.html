@@ -6476,23 +6476,32 @@
       let gradeItems = dbCourse?.grade_items || localCourse.gradeItems || [];
       if (typeof gradeItems === 'string') { try { gradeItems = JSON.parse(gradeItems); } catch(_) { gradeItems = []; } }
 
-      // Build scores map: prefer normalized student_grade_items rows;
-      // fall back to old JSONB student_grades.grade_items for backwards compat.
+      // Build scores map.
+      // Layer 1 – normalized student_grade_items rows (most trusted; set by admin per-item)
+      // Layer 2 – legacy student_grades.grade_items JSONB (admin grade calculator bulk save)
+      // Layer 3 – attendance_records computed live (applied further below)
       let scores = {};
-      if (gradeItemRows.length) {
-        // Normalized table – keyed by grade_item_id; expose score (null if pending)
-        gradeItemRows.forEach(r => {
-          scores[r.grade_item_id] = r.status === 'graded' ? r.score : null;
-          scores[r.grade_item_name] = r.status === 'graded' ? r.score : null; // name alias
-          // Expose full row for richer rendering
-          scores['__row__' + r.grade_item_id] = r;
-        });
-      } else {
-        // Legacy fallback: flat {itemId: score} JSONB saved by admin grade calculator
-        const legacyMap = studentGradeRow?.grade_items || {};
-        // grade_items may be stored as a JSON string
-        scores = typeof legacyMap === 'string' ? (() => { try { return JSON.parse(legacyMap); } catch(_) { return {}; } })() : legacyMap;
-      }
+
+      // Parse legacy JSONB blob regardless – used as fallback for any still-pending items
+      const legacyRaw = studentGradeRow?.grade_items || {};
+      const legacyMap = typeof legacyRaw === 'string'
+        ? (() => { try { return JSON.parse(legacyRaw); } catch(_) { return {}; } })()
+        : legacyRaw;
+
+      // Layer 1 – normalized rows
+      gradeItemRows.forEach(r => {
+        scores[r.grade_item_id]   = r.status === 'graded' ? r.score : null;
+        scores[r.grade_item_name] = r.status === 'graded' ? r.score : null;
+        scores['__row__' + r.grade_item_id] = r;
+      });
+
+      // Layer 2 – fill in any item that is still null from the legacy JSONB
+      // (covers all courses where admin saved grades via the grade calculator)
+      Object.entries(legacyMap).forEach(([k, v]) => {
+        if (v != null && v !== '' && (scores[k] == null)) {
+          scores[k] = v;
+        }
+      });
 
       // ── Live attendance override (single source of truth = admin attendance) ──
       // Compute attendance % from attendance_records and inject it for any
