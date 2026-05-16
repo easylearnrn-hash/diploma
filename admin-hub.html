@@ -7490,24 +7490,26 @@
     }
 
     // Find best matching student from currently loaded student cards, then show history
-    function searchAndShowHistory(term, from, to) {
-      const cards = [...document.querySelectorAll('.attendance-student-card')];
+    async function searchAndShowHistory(term, from, to) {
       const termLower = term.toLowerCase();
       let matched = null;
+
+      // 1. Try DOM cards (loaded when a single date is also set)
+      const cards = [...document.querySelectorAll('.attendance-student-card')];
       for (const card of cards) {
         const name = card.querySelector('h4')?.textContent?.toLowerCase() || '';
-        // The monospace element shows the ACNHS student_id string — same value stored in attendance_records.student_id
         const sidEl = card.querySelector('[style*="monospace"]');
         const sid   = sidEl?.textContent?.toLowerCase() || '';
         if (name.includes(termLower) || sid.includes(termLower)) {
           matched = {
-            studentId: sidEl?.textContent?.trim() || card.dataset.studentId, // ACNHS string
+            studentId: sidEl?.textContent?.trim() || '',
             studentName: card.querySelector('h4')?.textContent?.trim() || ''
           };
           break;
         }
       }
-      // If no cards loaded yet, try matching against currentAttendanceStudents cache
+
+      // 2. Try in-memory student cache
       if (!matched && window._attendanceStudentsCache) {
         for (const s of window._attendanceStudentsCache) {
           const name = (s.full_name || s.name || '').toLowerCase();
@@ -7518,11 +7520,25 @@
           }
         }
       }
+
+      // 3. Fall back: query students table in DB directly
+      if (!matched) {
+        setRangeHint('Searching students…');
+        const { data: dbStudents } = await db
+          .from('students')
+          .select('student_id, full_name')
+          .or(`full_name.ilike.%${term}%,student_id.ilike.%${term}%`)
+          .limit(5);
+        if (dbStudents && dbStudents.length > 0) {
+          matched = { studentId: dbStudents[0].student_id, studentName: dbStudents[0].full_name };
+        }
+      }
+
       if (matched) {
         setRangeHint(`Loading history for ${matched.studentName}…`);
         showStudentAttendanceHistory(matched.studentId, matched.studentName, currentSelectedCourse, from, to);
       } else {
-        setRangeHint('No matching student found in this course');
+        setRangeHint('No matching student found — try their full name or ACNHS ID');
       }
     }
 
