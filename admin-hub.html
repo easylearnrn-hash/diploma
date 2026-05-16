@@ -8115,7 +8115,7 @@
       _arSearchTimeout = setTimeout(async () => {
         const { data, error } = await db
           .from('students')
-          .select('student_id, full_name, program')
+          .select('id, student_id, full_name, program')
           .or(`full_name.ilike.%${term}%,student_id.ilike.%${term}%`)
           .limit(8);
         if (error || !data || !data.length) {
@@ -8123,7 +8123,7 @@
           dd.style.display = 'block'; return;
         }
         dd.innerHTML = data.map(s => `
-          <div onclick="arSelectStudent('${s.student_id}','${(s.full_name||'').replace(/'/g,"\\'")}','${(s.program||'').replace(/'/g,"\\'")}'); this.closest('#arStudentDropdown').style.display='none'"
+          <div onclick="arSelectStudent(${s.id},'${s.student_id}','${(s.full_name||'').replace(/'/g,"\\'")}','${(s.program||'').replace(/'/g,"\\'")}'); this.closest('#arStudentDropdown').style.display='none'"
             style="padding:11px 16px;cursor:pointer;border-bottom:1px solid rgba(201,168,76,0.07);display:flex;align-items:center;gap:12px"
             onmouseover="this.style.background='rgba(201,168,76,0.07)'" onmouseout="this.style.background=''">
             <div style="width:34px;height:34px;border-radius:8px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.2);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--gold-400);flex-shrink:0">${(s.full_name||'?').charAt(0).toUpperCase()}</div>
@@ -8136,8 +8136,8 @@
       }, 280);
     }
 
-    function arSelectStudent(id, name, program) {
-      _arSelectedStudent = { id, name, program };
+    function arSelectStudent(numericId, acnhsId, name, program) {
+      _arSelectedStudent = { id: String(numericId), acnhsId, name, program };
       document.getElementById('arStudentSearch').value = name;
       document.getElementById('arStudentDropdown').style.display = 'none';
     }
@@ -8154,16 +8154,16 @@
 
       body.innerHTML = `<div style="text-align:center;padding:60px 20px;color:var(--text-secondary)"><div style="font-size:36px;margin-bottom:12px">⏳</div><p style="margin:0;font-size:13px">Loading report…</p></div>`;
 
-      // Resolve student
+      // Resolve student — attendance_records.student_id stores numeric students.id (PK)
       let student = _arSelectedStudent;
       if (!student) {
-        const { data: found } = await db.from('students').select('student_id,full_name,program')
+        const { data: found } = await db.from('students').select('id,student_id,full_name,program')
           .or(`full_name.ilike.%${term}%,student_id.ilike.%${term}%`).limit(1);
         if (!found || !found.length) { body.innerHTML = `<div style="padding:32px;text-align:center;color:#f87171;font-size:13px">Student not found: "${term}"</div>`; return; }
-        student = { id: found[0].student_id, name: found[0].full_name, program: found[0].program };
+        student = { id: String(found[0].id), acnhsId: found[0].student_id, name: found[0].full_name, program: found[0].program };
       }
 
-      // Query attendance_records
+      // Query attendance_records using numeric PK stored in student_id column
       let q = db.from('attendance_records').select('course_code,session_date,session_type,status,notes,recorded_by')
         .eq('student_id', student.id).gte('session_date', from).lte('session_date', to).order('session_date');
       if (course) q = q.eq('course_code', course);
@@ -8229,7 +8229,7 @@
           <div style="width:52px;height:52px;border-radius:12px;background:rgba(201,168,76,0.14);border:1px solid rgba(201,168,76,0.3);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:var(--gold-400);flex-shrink:0">${(student.name||'?').charAt(0)}</div>
           <div style="flex:1">
             <div style="font-size:18px;font-weight:700;color:#f1f5f9;font-family:'Playfair Display',Georgia,serif">${student.name}</div>
-            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">${student.id} ${student.program?'· '+student.program:''}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:2px;font-family:monospace">${student.acnhsId||student.id} ${student.program?'· '+student.program:''}</div>
           </div>
           <div style="text-align:right">
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:3px">${fmt(from)} → ${fmt(to)}</div>
