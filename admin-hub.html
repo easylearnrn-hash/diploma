@@ -7427,9 +7427,9 @@
         btn.style.background  = 'rgba(201,168,76,0.08)';
         btn.style.borderColor = 'rgba(201,168,76,0.35)';
         btn.style.color       = 'var(--gold-400)';
-        // clear history view if switching back
-        const hist = document.getElementById('attendanceHistoryPanel');
-        if (hist) hist.remove();
+        // clear search + reload recording grid when switching back
+        const input = document.getElementById('attendanceSearchInput');
+        if (input) input.value = '';
         loadAttendanceForCourse();
       }
     }
@@ -7454,9 +7454,9 @@
         const term = (document.getElementById('attendanceSearchInput')?.value || '').trim();
         const from = document.getElementById('attendanceDateFrom').value;
         const to   = document.getElementById('attendanceDateTo').value;
-        const hist = document.getElementById('attendanceHistoryPanel');
         if (!term) {
-          if (hist) hist.remove();
+          // Restore recording grid when search is cleared
+          loadAttendanceForCourse();
           const hint = document.getElementById('attendanceRangeHint');
           if (hint) hint.textContent = 'Search a student above to view their attendance history';
           return;
@@ -7512,23 +7512,15 @@
     async function showStudentAttendanceHistory(studentId, studentName, courseCode, fromDate, toDate) {
       if (!studentId || !courseCode) return;
 
-      // Remove any existing panel
-      const existingPanel = document.getElementById('attendanceHistoryPanel');
-      if (existingPanel) existingPanel.remove();
-
-      // Insert history panel below the attendance table container
+      // Render directly INTO the container — replaces the recording grid
       const container = document.getElementById('attendanceTableContainer');
       if (!container) return;
 
-      // Loading state
-      const panel = document.createElement('div');
-      panel.id = 'attendanceHistoryPanel';
-      panel.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--text-secondary)">
-        <div style="font-size:32px;margin-bottom:10px">⏳</div>
-        <p style="margin:0;font-size:13px">Loading attendance history…</p>
-      </div>`;
-      panel.style.cssText = 'margin-top:20px;background:rgba(7,27,48,0.85);border:1px solid var(--border-gold);border-radius:14px;overflow:hidden';
-      container.after(panel);
+      container.innerHTML = `
+        <div style="text-align:center;padding:48px 20px;color:var(--text-secondary)">
+          <div style="font-size:36px;margin-bottom:12px">⏳</div>
+          <p style="margin:0;font-size:13px">Loading attendance history for <strong style="color:var(--text-primary)">${studentName}</strong>…</p>
+        </div>`;
 
       const { data: rows, error } = await db
         .from('attendance_records')
@@ -7540,7 +7532,7 @@
         .order('session_date', { ascending: true });
 
       if (error) {
-        panel.innerHTML = `<div style="text-align:center;padding:32px;color:#f87171;font-size:13px">Error loading records: ${error.message}</div>`;
+        container.innerHTML = `<div style="text-align:center;padding:32px;color:#f87171;font-size:13px">Error loading records: ${error.message}</div>`;
         return;
       }
 
@@ -7575,22 +7567,22 @@
           <td style="padding:11px 16px;font-size:11px;color:var(--text-muted)">${r.recorded_by || '—'}</td>
         </tr>`).join('') : `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-secondary);font-size:13px">No attendance records found for this range</td></tr>`;
 
-      panel.innerHTML = `
+      container.innerHTML = `
         <!-- Header -->
-        <div style="padding:16px 20px;border-bottom:1px solid rgba(201,168,76,0.15);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div style="padding:16px 20px;border-bottom:1px solid rgba(201,168,76,0.15);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:rgba(7,27,48,0.6);border-radius:14px 14px 0 0">
           <div>
             <div style="font-size:11px;font-weight:900;letter-spacing:0.08em;text-transform:uppercase;color:var(--gold-400);margin-bottom:4px">Attendance History</div>
-            <div style="font-size:15px;font-weight:700;color:var(--text-primary);font-family:'Playfair Display',Georgia,serif">${studentName}</div>
+            <div style="font-size:16px;font-weight:700;color:var(--text-primary);font-family:'Playfair Display',Georgia,serif">${studentName}</div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${courseCode} · ${fmtDate(fromDate)} – ${fmtDate(toDate)}</div>
           </div>
-          <button onclick="document.getElementById('attendanceHistoryPanel').remove()" 
-            style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:20px;border:1px solid rgba(201,168,76,0.3);background:rgba(201,168,76,0.08);color:var(--gold-400);font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;transition:all 0.2s"
+          <button onclick="closeAttendanceHistory()"
+            style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:20px;border:1px solid rgba(201,168,76,0.3);background:rgba(201,168,76,0.08);color:var(--gold-400);font-size:11px;font-weight:800;letter-spacing:0.06em;text-transform:uppercase;cursor:pointer;transition:all 0.2s"
             onmouseover="this.style.background='rgba(201,168,76,0.18)'" onmouseout="this.style.background='rgba(201,168,76,0.08)'">
-            ✕ Close
+            ← Back to Recording
           </button>
         </div>
         <!-- Summary pills -->
-        <div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid rgba(201,168,76,0.1)">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;padding:14px 20px;border-bottom:1px solid rgba(201,168,76,0.1);background:rgba(201,168,76,0.03)">
           <div style="display:flex;align-items:center;gap:8px;padding:7px 14px;border-radius:20px;background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.2)">
             <span style="width:9px;height:9px;border-radius:50%;background:#22c55e;display:inline-block"></span>
             <span style="font-size:12px;font-weight:700;color:#22c55e">Present&nbsp;${tally.present}</span>
@@ -7627,6 +7619,13 @@
           </table>
         </div>
       `;
+    }
+
+    function closeAttendanceHistory() {
+      const input = document.getElementById('attendanceSearchInput');
+      if (input) input.value = '';
+      // Restore the recording grid if we have a course+date, else show placeholder
+      loadAttendanceForCourse();
     }
 
     function filterAttendanceTable() {
