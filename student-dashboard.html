@@ -914,8 +914,8 @@ body {
     <a href="test.html" style="display:inline-block;margin-top:20px;padding:12px 28px;border-radius:10px;background:linear-gradient(135deg,var(--gold-primary),var(--gold-light));color:#0f172a;font-weight:800;font-size:14px;text-decoration:none">Start a Test →</a>
   </div>
 
-  <!-- JOIN CLASS — always-visible shortcut banner -->
-  <a href="Videocall.html" target="_blank" rel="noopener noreferrer" class="join-class-banner" id="joinClassCard">
+  <!-- JOIN CLASS — shown only when an active link exists in class_join_links -->
+  <a href="#" target="_blank" rel="noopener noreferrer" class="join-class-banner" id="joinClassCard" style="display:none">
     <div class="jcb-icon">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>
@@ -2274,7 +2274,41 @@ async function loadCertificates(sdb, fullName, studentDbId) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', loadDashboard);
+async function checkJoinClassLink() {
+  const card = document.getElementById('joinClassCard');
+  if (!card) return;
+
+  // Hide by default — only show when an active link is confirmed
+  card.style.display = 'none';
+
+  try {
+    const db = initSupabase();
+    const { data, error } = await db
+      .from('class_join_links')
+      .select('url, group_id, is_active, ended_at')
+      .is('ended_at', null)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error || !data || data.length === 0) return;
+
+    // Match student's group or links open to all
+    const studentGroup = sessionStorage.getItem('userGroup') || localStorage.getItem('userGroup') || null;
+    const match = data.find(l => l.group_id === 'all' || !l.group_id || (studentGroup && l.group_id === studentGroup));
+    if (!match) return;
+
+    card.href = match.url;
+    card.style.display = 'flex';
+  } catch (e) {
+    console.warn('Join class link check failed:', e.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadDashboard();
+  checkJoinClassLink();
+});
 </script>
 </body>
 </html>
