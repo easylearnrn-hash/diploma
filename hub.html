@@ -3992,13 +3992,6 @@
       return `${h12}:${mStr} ${ampm}`;
     }
 
-    // Returns both {armenia, la} for a recurring class time (uses today as DST reference date)
-    function _fmtTimeBothTZ(timeStr) {
-      if (!timeStr) return null;
-      const today = new Date().toISOString().split('T')[0];
-      return _fmtBothTZ(today, timeStr);
-    }
-
     function _todayDayKey() {
       return ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
     }
@@ -4042,15 +4035,7 @@
         el.innerHTML = data.map(s => {
           const days = _SCHED_DAY_ORDER.filter(d => s[d]).map(d => _SCHED_DAY_FULL[d]).join(' · ');
           const isToday = s[today];
-          const tzStart = s.start_time ? _fmtTimeBothTZ(s.start_time) : null;
-          const tzEnd   = s.end_time   ? _fmtTimeBothTZ(s.end_time)   : null;
-          const hasTime = !!(tzStart && tzEnd);
-          const timesHtml = hasTime
-            ? `<span class="cs-time" style="display:inline-flex;flex-direction:column;gap:1px;">`
-              + `<span>Armenia Time: <strong>${tzStart.armenia} – ${tzEnd.armenia}</strong></span>`
-              + `<span style="opacity:.7;">Los Angeles Time: <strong>${tzStart.la} – ${tzEnd.la}</strong></span>`
-              + `</span>`
-            : '';
+          const timeStr = (s.start_time && s.end_time) ? `${_fmtTime(s.start_time)} – ${_fmtTime(s.end_time)}` : '';
 
           return `
             <div class="cs-row${isToday ? ' cs-today' : ''}">
@@ -4063,9 +4048,9 @@
                 </div>
                 <div class="cs-meta">
                   ${days ? `<span class="cs-day-badge">${days}</span>` : ''}
-                  ${days && hasTime ? `<span class="cs-dot"></span>` : ''}
-                  ${timesHtml}
-                  ${!days && !hasTime ? `<span class="cs-time" style="color:var(--text-muted);font-style:italic">Schedule TBA</span>` : ''}
+                  ${days && timeStr ? `<span class="cs-dot"></span>` : ''}
+                  ${timeStr ? `<span class="cs-time">${timeStr}</span>` : ''}
+                  ${!days && !timeStr ? `<span class="cs-time" style="color:var(--text-muted);font-style:italic">Schedule TBA</span>` : ''}
                 </div>
               </div>
             </div>`;
@@ -4097,7 +4082,7 @@
             bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             if (examTime && bannerTime) {
               const { la, armenia } = _fmtBothTZ(examDate, examTime);
-              bannerTime.innerHTML = `<div style="font-size:12px;color:rgba(240,217,138,0.85);font-weight:700;line-height:1.8;">Armenia Time: <strong>${armenia}</strong></div><div style="font-size:12px;color:rgba(240,217,138,0.85);font-weight:700;line-height:1.8;">Los Angeles Time: <strong>${la}</strong></div>`;
+              bannerTime.innerHTML = `<div style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;margin-bottom:2px;">🇦🇲 Armenia Time: <span style="color:#f0d98a;font-weight:900;">${armenia}</span></div><div style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;">🇺🇸 Los Angeles Time: <span style="color:#f0d98a;font-weight:900;">${la}</span></div>`;
               bannerTime.style.display = 'block';
             } else if (bannerTime) {
               bannerTime.style.display = 'none';
@@ -4201,8 +4186,6 @@
                   s[d] ? `<span class="sched-pill${d === day ? ' active' : ''}">${_SCHED_DAY_SHORT[d]}</span>` : ''
                 ).join('');
                 const hasTimeSlot = s.start_time && s.end_time;
-                const calTzS = s.start_time ? _fmtTimeBothTZ(s.start_time) : null;
-                const calTzE = s.end_time   ? _fmtTimeBothTZ(s.end_time)   : null;
                 return `
                   <div class="sched-course-row">
                     ${hasTimeSlot ? `
@@ -4210,7 +4193,6 @@
                       <span class="t-start">${_fmtTime(s.start_time)}</span>
                       <div class="t-dot"></div>
                       <span class="t-end">${_fmtTime(s.end_time)}</span>
-                      ${calTzS && calTzE ? `<span style="font-size:9px;color:rgba(148,163,184,0.55);margin-top:4px;line-height:1.5;">LA: ${calTzS.la}–${calTzE.la}</span>` : ''}
                     </div>` : ''}
                     <div class="sched-info-col">
                       <div class="sched-code">${s.course_code}</div>
@@ -4245,11 +4227,7 @@
             <tbody>
               ${data.map(s => {
                 const days = _SCHED_DAY_ORDER.filter(d => s[d]).map(d => _SCHED_DAY_SHORT[d]).join(' · ');
-                const tblTzS = s.start_time ? _fmtTimeBothTZ(s.start_time) : null;
-                const tblTzE = s.end_time   ? _fmtTimeBothTZ(s.end_time)   : null;
-                const time = (tblTzS && tblTzE)
-                  ? `<span style="display:block;">Armenia: ${tblTzS.armenia} – ${tblTzE.armenia}</span><span style="display:block;font-size:11px;color:rgba(148,163,184,0.65);margin-top:2px;">Los Angeles: ${tblTzS.la} – ${tblTzE.la}</span>`
-                  : '—';
+                const time = (s.start_time && s.end_time) ? `${_fmtTime(s.start_time)} – ${_fmtTime(s.end_time)}` : '—';
                 return `
                   <tr>
                     <td>
