@@ -3119,6 +3119,7 @@
                   <div id="finalExamDateBanner" onclick="openFinalExamPopup()" style="display:none;margin-top:16px;padding:16px 14px;background:linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.08));border:1px solid rgba(201,168,76,0.55);border-radius:10px;cursor:pointer;transition:border-color 0.2s,background 0.2s;text-align:center;" onmouseover="this.style.borderColor='rgba(201,168,76,0.85)';this.style.background='linear-gradient(135deg,rgba(201,168,76,0.26),rgba(201,168,76,0.13))'" onmouseout="this.style.borderColor='rgba(201,168,76,0.55)';this.style.background='linear-gradient(135deg,rgba(201,168,76,0.18),rgba(201,168,76,0.08))'">
                     <div style="font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.14em;color:var(--gold-400);margin-bottom:8px;">Final Exam Date</div>
                     <div id="finalExamDateValue" style="font-size:22px;font-weight:900;color:#f0d98a;letter-spacing:-0.02em;line-height:1.2;">—</div>
+                    <div id="finalExamTimeValue" style="display:none;margin-top:6px;"></div>
                     <div style="font-size:9px;font-weight:700;color:rgba(201,168,76,0.55);letter-spacing:.05em;margin-top:8px;">TAP TO VIEW DETAILS</div>
                   </div>
                 </div>
@@ -3708,6 +3709,18 @@
 
     // ==================== FINAL EXAM POPUP ====================
     let _finalExamDateRaw = null; // stored when DB fetch succeeds
+    let _finalExamTimeRaw = null; // stored alongside date (Armenia Time HH:MM)
+
+    // Shared timezone formatter: input is Armenia Time (UTC+4), outputs both TZs
+    function _fmtBothTZ(dateStr, timeStr) {
+      const [h, m] = timeStr.split(':').map(Number);
+      const [y, mo, day] = dateStr.split('-').map(Number);
+      const utcMs = Date.UTC(y, mo - 1, day, h - 4, m, 0);
+      const dt = new Date(utcMs);
+      const laFmt  = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit', hour12: true });
+      const armFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Yerevan',         hour: 'numeric', minute: '2-digit', hour12: true });
+      return { la: laFmt.format(dt), armenia: armFmt.format(dt) };
+    }
 
     function openFinalExamPopup() {
       if (!_finalExamDateRaw) return;
@@ -3719,6 +3732,24 @@
       const dayName  = d.toLocaleDateString('en-US', { weekday:'long' });
       const monthDay = d.toLocaleDateString('en-US', { month:'long', day:'numeric' });
       const year     = d.getFullYear();
+
+      // --- time display ---
+      let timeHtml = '';
+      if (_finalExamTimeRaw) {
+        const { la, armenia } = _fmtBothTZ(_finalExamDateRaw, _finalExamTimeRaw);
+        timeHtml = `
+          <div style="display:flex;flex-direction:column;gap:5px;margin-top:10px;margin-bottom:4px;padding:10px 14px;background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.2);border-radius:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,168,76,0.6);">🇦🇲 Armenia Time</span>
+              <span style="font-size:14px;font-weight:800;color:#f0d98a;">${armenia}</span>
+            </div>
+            <div style="height:1px;background:rgba(201,168,76,0.15);"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:rgba(201,168,76,0.6);">🇺🇸 Los Angeles Time</span>
+              <span style="font-size:14px;font-weight:800;color:#f0d98a;">${la}</span>
+            </div>
+          </div>`;
+      }
 
       // --- logo ---
       const logoSrc = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL)
@@ -3779,7 +3810,8 @@
               <span style="font-size:36px;font-weight:900;color:#f0d98a;letter-spacing:-1px;line-height:1;">${monthDay}</span>
               <span style="font-size:22px;font-weight:700;color:rgba(240,217,138,0.45);">${year}</span>
             </div>
-            <div style="font-size:13px;font-weight:600;color:rgba(201,168,76,0.6);margin-bottom:15px;">${dayName}</div>
+            <div style="font-size:13px;font-weight:600;color:rgba(201,168,76,0.6);margin-bottom:${_finalExamTimeRaw ? '4px' : '15px'};">${dayName}</div>
+            ${timeHtml}
             <div style="display:flex;align-items:center;padding-top:14px;border-top:1px solid rgba(201,168,76,0.13);">
               <div>
                 <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(148,163,184,0.45);margin-bottom:3px;">Registered Student</div>
@@ -4034,17 +4066,27 @@
         const studentDbId = studentData && (studentData.id || studentData.studentDbId);
         const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
         if (db && (studentDbId || studentIdCode)) {
-          let query = db.from('students').select('final_exam_date');
+          let query = db.from('students').select('final_exam_date, final_exam_time');
           if (studentDbId) query = query.eq('id', studentDbId);
           else             query = query.eq('student_id', studentIdCode);
           const { data: row } = await query.maybeSingle();
           const examDate = row && row.final_exam_date;
+          const examTime = row && row.final_exam_time;
           const banner   = document.getElementById('finalExamDateBanner');
           const bannerVal = document.getElementById('finalExamDateValue');
+          const bannerTime = document.getElementById('finalExamTimeValue');
           if (examDate && banner && bannerVal) {
             _finalExamDateRaw = examDate;
+            _finalExamTimeRaw = examTime || null;
             const d = new Date(examDate + 'T00:00:00');
             bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            if (examTime && bannerTime) {
+              const { la, armenia } = _fmtBothTZ(examDate, examTime);
+              bannerTime.innerHTML = `<span style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;">${armenia} <span style="opacity:.55;">Armenia</span></span><span style="font-size:11px;color:rgba(240,217,138,0.45);margin:0 5px;">·</span><span style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;">${la} <span style="opacity:.55;">Los Angeles</span></span>`;
+              bannerTime.style.display = 'block';
+            } else if (bannerTime) {
+              bannerTime.style.display = 'none';
+            }
             banner.style.display = 'block';
           }
         }
