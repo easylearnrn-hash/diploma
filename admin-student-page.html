@@ -4145,11 +4145,29 @@
       btn.textContent = 'Saving…';
       btn.disabled = true;
       try {
-        const { error } = await sbClient
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentStudent.id || '');
+        let matchField = isUUID ? 'id' : 'student_id';
+        let matchValue = isUUID ? currentStudent.id : (currentStudent.student_id || currentStudent.id);
+
+        const { data: updated, error } = await sbClient
           .from(studentTableName)
           .update({ final_exam_date: dateValue, final_exam_time: timeValue })
-          .eq('id', currentStudent.id);
+          .eq(matchField, matchValue)
+          .select('id, final_exam_date, final_exam_time');
         if (error) throw error;
+
+        // If 0 rows matched by UUID, retry by student_id
+        if ((!updated || updated.length === 0) && isUUID && currentStudent.student_id) {
+          const { data: retried, error: retryErr } = await sbClient
+            .from(studentTableName)
+            .update({ final_exam_date: dateValue, final_exam_time: timeValue })
+            .eq('student_id', currentStudent.student_id)
+            .select('id, final_exam_date, final_exam_time');
+          if (retryErr) throw retryErr;
+          if (!retried || retried.length === 0) throw new Error('Student record not found in database — 0 rows updated.');
+        } else if (!updated || updated.length === 0) {
+          throw new Error('Student record not found in database — 0 rows updated.');
+        }
         currentStudent.final_exam_date = dateValue;
         currentStudent.final_exam_time = timeValue;
         const formattedDate = new Date(dateValue).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -4496,12 +4514,16 @@
       btn.textContent = 'Removing…';
       btn.disabled = true;
       try {
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentStudent.id || '');
+        const matchField = isUUID ? 'id' : 'student_id';
+        const matchValue = isUUID ? currentStudent.id : (currentStudent.student_id || currentStudent.id);
         const { error } = await sbClient
           .from(studentTableName)
-          .update({ final_exam_date: null })
-          .eq('id', currentStudent.id);
+          .update({ final_exam_date: null, final_exam_time: null })
+          .eq(matchField, matchValue);
         if (error) throw error;
         currentStudent.final_exam_date = null;
+        currentStudent.final_exam_time = null;
         setOverviewValue('finalExamDate', 'Set Date');
         closeFinalExamDateModal();
         showCustomAlert('Final exam date removed.', 'success');
