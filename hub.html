@@ -3664,6 +3664,10 @@
       // Load class schedule for this student's group
       loadClassSchedule();
 
+      // Load final exam banner independently from class schedule.
+      // Some students may not have group/schedule rows, but should still see exam date/time.
+      loadFinalExamBanner();
+
       // Refresh Progress Overview KPIs with live DB values (non-blocking)
       refreshProgressOverview();
     })();
@@ -4010,6 +4014,82 @@
       return ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'][new Date().getDay()];
     }
 
+    async function loadFinalExamBanner() {
+      const banner = document.getElementById('finalExamDateBanner');
+      const bannerVal = document.getElementById('finalExamDateValue');
+      const bannerTime = document.getElementById('finalExamTimeValue');
+      if (!db || !banner || !bannerVal) return;
+
+      // Prevent stale values when switching sessions/students.
+      _finalExamDateRaw = null;
+      _finalExamTimeRaw = null;
+      banner.style.display = 'none';
+      if (bannerTime) {
+        bannerTime.style.display = 'none';
+        bannerTime.innerHTML = '';
+      }
+
+      try {
+        const studentUuid = await resolveStudentId();
+        const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
+
+        let row = null;
+
+        // Primary lookup by UUID.
+        if (studentUuid) {
+          const { data, error } = await db
+            .from('students')
+            .select('final_exam_date, final_exam_time')
+            .eq('id', studentUuid)
+            .maybeSingle();
+          if (!error && data) row = data;
+        }
+
+        // Fallback when UUID is missing/stale.
+        if (!row && studentIdCode) {
+          const { data, error } = await db
+            .from('students')
+            .select('final_exam_date, final_exam_time')
+            .eq('student_id', studentIdCode)
+            .maybeSingle();
+          if (!error && data) row = data;
+        }
+
+        const examDate = row && row.final_exam_date;
+        const examTime = row && row.final_exam_time;
+        if (!examDate) return;
+
+        _finalExamDateRaw = examDate;
+        _finalExamTimeRaw = examTime || null;
+
+        const d = new Date(examDate + 'T00:00:00');
+        bannerVal.textContent = d.toLocaleDateString('en-US', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+
+        if (examTime && bannerTime) {
+          const { la, armenia } = _fmtBothTZ(examDate, examTime);
+          bannerTime.innerHTML = `
+            <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:5px 12px;">
+              <span style="font-size:11px;font-weight:700;color:rgba(240,217,138,0.6);">🇦🇲</span>
+              <span style="font-size:12px;font-weight:900;color:#f0d98a;">${armenia}</span>
+              <span style="width:1px;height:12px;background:rgba(201,168,76,0.3);display:inline-block;"></span>
+              <span style="font-size:11px;font-weight:700;color:rgba(240,217,138,0.6);">🇺🇸</span>
+              <span style="font-size:12px;font-weight:900;color:#f0d98a;">${la}</span>
+            </div>
+          `;
+          bannerTime.style.display = 'block';
+        }
+
+        banner.style.display = 'block';
+      } catch (examErr) {
+        console.warn('Could not fetch final exam date:', examErr);
+      }
+    }
+
     async function loadClassSchedule() {
       const el = document.getElementById('classScheduleList');
       if (!el) return;
@@ -4075,46 +4155,6 @@
         el.innerHTML = '<div style="color:#f87171;font-size:13px">Failed to load schedule.</div>';
       }
 
-      // Always fetch final_exam_date live from DB (not from cached session)
-      try {
-        const studentDbId = studentData && (studentData.id || studentData.studentDbId);
-        const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
-        if (db && (studentDbId || studentIdCode)) {
-          let query = db.from('students').select('final_exam_date, final_exam_time');
-          if (studentDbId) query = query.eq('id', studentDbId);
-          else             query = query.eq('student_id', studentIdCode);
-          const { data: row } = await query.maybeSingle();
-          const examDate = row && row.final_exam_date;
-          const examTime = row && row.final_exam_time;
-          const banner   = document.getElementById('finalExamDateBanner');
-          const bannerVal = document.getElementById('finalExamDateValue');
-          const bannerTime = document.getElementById('finalExamTimeValue');
-          if (examDate && banner && bannerVal) {
-            _finalExamDateRaw = examDate;
-            _finalExamTimeRaw = examTime || null;
-            const d = new Date(examDate + 'T00:00:00');
-            bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-            if (examTime && bannerTime) {
-              const { la, armenia } = _fmtBothTZ(examDate, examTime);
-              bannerTime.innerHTML = `
-                <div style="display:inline-flex;align-items:center;gap:6px;margin-top:8px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:5px 12px;">
-                  <span style="font-size:11px;font-weight:700;color:rgba(240,217,138,0.6);">🇦🇲</span>
-                  <span style="font-size:12px;font-weight:900;color:#f0d98a;">${armenia}</span>
-                  <span style="width:1px;height:12px;background:rgba(201,168,76,0.3);display:inline-block;"></span>
-                  <span style="font-size:11px;font-weight:700;color:rgba(240,217,138,0.6);">🇺🇸</span>
-                  <span style="font-size:12px;font-weight:900;color:#f0d98a;">${la}</span>
-                </div>
-              `;
-              bannerTime.style.display = 'block';
-            } else if (bannerTime) {
-              bannerTime.style.display = 'none';
-            }
-            banner.style.display = 'block';
-          }
-        }
-      } catch (examErr) {
-        console.warn('Could not fetch final exam date:', examErr);
-      }
     }
 
     // ==================== CALENDAR VIEW ====================
