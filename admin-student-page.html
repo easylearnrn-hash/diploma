@@ -3634,60 +3634,26 @@
 
     // Custom notification function (matches ACNHS design system)
     function showCustomAlert(message, type = 'info') {
-      const notification = document.createElement('div');
-      
       const colors = {
-        success: { bg: 'rgba(20, 184, 166, 0.95)', icon: '✓' },
-        error: { bg: 'rgba(239, 68, 68, 0.95)', icon: '✕' },
-        warning: { bg: 'rgba(245, 158, 11, 0.95)', icon: '⚠' },
-        info: { bg: 'rgba(59, 130, 246, 0.95)', icon: 'ℹ' }
+        success: { border: 'rgba(201,168,76,0.45)', text: '#e2cc92', icon: '✓' },
+        error:   { border: 'rgba(239,68,68,0.45)',  text: '#fca5a5', icon: '✕' },
+        warning: { border: 'rgba(245,158,11,0.45)', text: '#fcd34d', icon: '⚠' },
+        info:    { border: 'rgba(201,168,76,0.35)', text: '#e2cc92', icon: 'ℹ' }
       };
-      
-      const style = colors[type] || colors.info;
-      
-      notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: ${style.bg};
-        color: white;
-        padding: 16px 20px;
-        border-radius: 8px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        z-index: 10001;
-        font-size: 14px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        min-width: 250px;
-        animation: slideIn 0.3s ease-out;
-      `;
-      
-      notification.innerHTML = `<span style="font-size: 18px;">${style.icon}</span><span>${message}</span>`;
+      const c = colors[type] || colors.info;
+      const notification = document.createElement('div');
+      notification.style.cssText = `position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(70px);background:#0c1a32;border:1px solid ${c.border};color:${c.text};padding:13px 22px;border-radius:12px;font-size:13px;font-weight:600;font-family:'Inter',sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:10002;display:flex;align-items:center;gap:10px;white-space:nowrap;opacity:0;transition:transform 0.28s ease,opacity 0.28s ease;pointer-events:none;`;
+      notification.innerHTML = `<span style="font-size:16px;">${c.icon}</span><span>${message}</span>`;
       document.body.appendChild(notification);
-      
+      requestAnimationFrame(() => {
+        notification.style.transform = 'translateX(-50%) translateY(0)';
+        notification.style.opacity = '1';
+      });
       setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease-in';
+        notification.style.transform = 'translateX(-50%) translateY(70px)';
+        notification.style.opacity = '0';
         setTimeout(() => notification.remove(), 300);
       }, 3500);
-    }
-    
-    // Add animation styles if not already present
-    if (!document.getElementById('notificationStyles')) {
-      const styleSheet = document.createElement('style');
-      styleSheet.id = 'notificationStyles';
-      styleSheet.textContent = `
-        @keyframes slideIn {
-          from { transform: translateX(400px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideOut {
-          from { transform: translateX(0); opacity: 1; }
-          to { transform: translateX(400px); opacity: 0; }
-        }
-      `;
-      document.head.appendChild(styleSheet);
     }
 
     // Allow Enter key to submit in modal
@@ -4725,8 +4691,8 @@
 
         // Show loading
         const loadingToast = document.createElement('div');
-        loadingToast.style.cssText = 'position:fixed;top:20px;right:20px;background:rgba(45,212,191,0.95);color:#0a2540;padding:16px 24px;border-radius:8px;z-index:10001;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-        loadingToast.textContent = '📧 Resending email...';
+        loadingToast.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(0);background:#0c1a32;border:1px solid rgba(201,168,76,0.45);color:#e2cc92;padding:13px 22px;border-radius:12px;font-size:13px;font-weight:600;font-family:Inter,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:10002;display:flex;align-items:center;gap:10px;white-space:nowrap;';
+        loadingToast.innerHTML = '<span style="font-size:16px;">⏳</span><span>Resending email...</span>';
         document.body.appendChild(loadingToast);
 
         // Send via edge function (will automatically fix attachments)
@@ -4752,22 +4718,11 @@
         }
 
         // Success notification
-        const successToast = document.createElement('div');
-        successToast.style.cssText = 'position:fixed;top:20px;right:20px;background:rgba(34,197,94,0.95);color:#fff;padding:16px 24px;border-radius:8px;z-index:10001;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-        successToast.textContent = '✅ Email resent successfully!';
-        document.body.appendChild(successToast);
-        
-        setTimeout(() => successToast.remove(), 3000);
+        showCustomAlert('Email resent successfully!', 'success');
 
       } catch (error) {
         console.error('Error resending email:', error);
-        
-        const errorToast = document.createElement('div');
-        errorToast.style.cssText = 'position:fixed;top:20px;right:20px;background:rgba(239,68,68,0.95);color:#fff;padding:16px 24px;border-radius:8px;z-index:10001;font-weight:600;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
-        errorToast.textContent = '❌ Failed to resend email';
-        document.body.appendChild(errorToast);
-        
-        setTimeout(() => errorToast.remove(), 3000);
+        showCustomAlert('Failed to resend email', 'error');
       }
     }
 
