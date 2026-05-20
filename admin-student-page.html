@@ -4134,14 +4134,7 @@
         const formattedDate = new Date(dateValue).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         setOverviewValue('finalExamDate', formattedDate);
         closeFinalExamDateModal();
-
-        // Open email preview so admin can review and confirm before sending
-        const program = currentStudent.program || 'your program';
-        showEmailEditor({
-          title: 'Final Exam Date Notification',
-          subject: `Your Final Exam Date Has Been Set – ACNHS`,
-          body: `We are writing to inform you that your final examination date has been officially set.\n\nFinal Exam Date: ${formattedDate}\nProgram: ${program}\n\nPlease ensure you are fully prepared by that date. If you have any questions or require accommodations, do not hesitate to contact our office.\n\nContact Information:\n📞 Phone: +374 93 798879 (WhatsApp)\n📧 Email: admissions@acnhs.am\n\nWe wish you the best of luck on your final examination.`
-        });
+        showFinalExamEmailPreview(dateValue, formattedDate);
       } catch (err) {
         console.error('saveFinalExamDate error:', err);
         showCustomAlert('Failed to save final exam date: ' + (err.message || err), 'error');
@@ -4149,6 +4142,276 @@
         btn.textContent = 'Save Date';
         btn.disabled = false;
       }
+    }
+
+    function buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, logoUrl }) {
+      const year = new Date().getFullYear();
+      const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+      return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Final Diploma Examination – ACNHS</title></head>
+<body style="margin:0;padding:0;background:#f0f4f8;font-family:Inter,Arial,sans-serif;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f0f4f8;">
+<tr><td align="center" style="padding:28px 10px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:600px;max-width:600px;">
+
+<!-- HEADER -->
+<tr><td style="background:#0a2540;border-radius:14px 14px 0 0;padding:22px 28px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+    <td width="60" valign="middle"><img src="${logoUrl}" width="52" height="52" alt="ACNHS" style="border-radius:999px;background:rgba(255,255,255,0.1);padding:5px;display:block;"></td>
+    <td valign="middle" style="padding-left:14px;">
+      <div style="font-size:15px;color:#fff;font-weight:800;">Armenian College of Nursing</div>
+      <div style="font-size:14px;color:#fff;font-weight:700;opacity:.95;">&amp; Health Sciences</div>
+      <div style="font-size:11px;color:#94a3b8;font-weight:600;margin-top:5px;">Yerevan, Armenia &nbsp;•&nbsp; acnhs.am</div>
+    </td>
+    <td valign="top" align="right">
+      <div style="font-size:10px;color:#94a3b8;font-weight:700;letter-spacing:.5px;">STUDENT ID</div>
+      <div style="font-size:13px;color:#2dd4bf;font-weight:800;margin-top:3px;">${esc(studentId)}</div>
+    </td>
+  </tr></table>
+  <div style="height:1px;background:rgba(255,255,255,.1);margin:16px 0;"></div>
+  <div style="font-size:22px;color:#fff;font-weight:900;letter-spacing:-.3px;">Final Diploma Examination</div>
+  <div style="font-size:13px;color:#94a3b8;font-weight:600;margin-top:5px;">Official Notification &nbsp;—&nbsp; ${dateStr}</div>
+</td></tr>
+
+<!-- EXAM DATE HIGHLIGHT -->
+<tr><td style="background:#fff8e1;border-left:4px solid #c9a84c;border-right:1px solid #e2c97a;padding:18px 28px;">
+  <div style="font-size:10px;color:#7a6010;font-weight:800;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;">Your Final Exam Date</div>
+  <div style="font-size:30px;color:#4a3800;font-weight:900;letter-spacing:-.5px;">${esc(formattedDate)}</div>
+  <div style="font-size:13px;color:#7a6010;margin-top:6px;font-weight:600;">${esc(program)}</div>
+</td></tr>
+
+<!-- GREETING -->
+<tr><td style="background:#fff;border-left:1px solid rgba(2,6,23,.08);border-right:1px solid rgba(2,6,23,.08);padding:28px 28px 0;">
+  <div style="font-size:17px;color:#0f172a;font-weight:800;">Dear ${esc(studentName)},</div>
+  <div style="font-size:14px;line-height:22px;color:#334155;margin-top:10px;">We are writing to officially inform you that your <strong>Final Diploma Examination</strong> has been scheduled. Please review all requirements below carefully. Compliance is <strong>mandatory</strong>.</div>
+  <div style="height:2px;background:linear-gradient(90deg,#c9a84c,transparent);margin:24px 0 0;"></div>
+</td></tr>
+
+<!-- REQUIREMENTS -->
+<tr><td style="background:#fff;border-left:1px solid rgba(2,6,23,.08);border-right:1px solid rgba(2,6,23,.08);padding:20px 28px;">
+
+  <!-- S1 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 1</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Purpose of the Final Examination</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;">The Final Diploma Examination is the official comprehensive assessment required to complete the program and receive your diploma. It confirms that you have achieved the required academic knowledge, clinical judgment, professional communication skills, and readiness.</div>
+    <div style="background:#fef2f2;border-left:3px solid #ef4444;padding:10px 14px;border-radius:0 6px 6px 0;margin-top:10px;font-size:13px;color:#7f1d1d;font-weight:700;line-height:20px;">Passing is mandatory. No diploma will be issued to any student who does not successfully complete all required components.</div>
+  </div>
+
+  <!-- S2 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 2</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Examination Format</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;margin-bottom:10px;">Conducted <strong>online</strong> under strict academic, professional, and disciplinary standards. The examination consists of two required parts:</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:8px;">
+      <div style="font-size:13px;color:#0f172a;font-weight:800;margin-bottom:6px;">Part I — Written Testing Component</div>
+      <div style="font-size:12px;line-height:20px;color:#475569;">Comprehensive test questions covering all previously taught course content, including:</div>
+      <ul style="margin:6px 0 0;padding-left:18px;font-size:12px;line-height:22px;color:#475569;">
+        <li>Multiple-choice and select-all-that-apply questions</li>
+        <li>Priority, delegation, and clinical judgment questions</li>
+        <li>Case-based nursing scenarios</li>
+        <li>Medication and safety-related questions</li>
+        <li>Questions from all major nursing subjects previously covered in class</li>
+      </ul>
+    </div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;">
+      <div style="font-size:13px;color:#0f172a;font-weight:800;margin-bottom:6px;">Part II — Oral Instructor Questioning Component</div>
+      <div style="font-size:12px;line-height:20px;color:#475569;">Each instructor will ask two questions from their own class material. This evaluates:</div>
+      <ul style="margin:6px 0 0;padding-left:18px;font-size:12px;line-height:22px;color:#475569;">
+        <li>Understanding of taught material and clinical reasoning</li>
+        <li>Professional communication and confidence</li>
+        <li>Ability to answer without notes or outside support</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- S3 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 3</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Passing Requirements</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;margin-bottom:6px;">To successfully pass, you must meet <strong>all</strong> of the following:</div>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:25px;color:#475569;">
+      <li>Achieve a minimum score of <strong>75%</strong> on the written testing component</li>
+      <li>Receive a satisfactory evaluation on the oral questioning component</li>
+      <li>Attend on time and remain present for the full duration</li>
+      <li>Follow all examination rules and academic integrity requirements</li>
+      <li>Demonstrate professional behavior throughout</li>
+    </ul>
+  </div>
+
+  <!-- S4 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 4</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Strict Online Examination Rules</div>
+    <div style="font-size:13px;color:#0a2540;font-weight:700;margin-bottom:4px;">Camera &amp; Microphone</div>
+    <ul style="margin:0 0 10px;padding-left:18px;font-size:12px;line-height:22px;color:#475569;">
+      <li>Camera must remain ON — face clearly visible at all times</li>
+      <li>Microphone must be available and on when requested</li>
+      <li>Turning off the camera without permission may result in disqualification</li>
+    </ul>
+    <div style="font-size:13px;color:#0a2540;font-weight:700;margin-bottom:4px;">Environment Requirements</div>
+    <ul style="margin:0 0 10px;padding-left:18px;font-size:12px;line-height:22px;color:#475569;">
+      <li>Must be alone in a quiet room — no other person present</li>
+      <li>Area must be free of books, notes, phones, tablets, smartwatches, or any unauthorized materials</li>
+      <li>You may be asked to show your room and desk before or during the exam</li>
+    </ul>
+    <div style="font-size:13px;color:#0a2540;font-weight:700;margin-bottom:4px;">Academic Integrity — Strictly Prohibited</div>
+    <ul style="margin:0 0 10px;padding-left:18px;font-size:12px;line-height:22px;color:#475569;">
+      <li>Using books, notes, websites, AI tools, phones, or any outside materials</li>
+      <li>Receiving help from or communicating with another person</li>
+      <li>Copying, recording, photographing, or sharing exam questions</li>
+      <li>Opening other browser tabs, applications, or devices</li>
+      <li>Wearing headphones unless specifically approved</li>
+    </ul>
+    <div style="background:#fef2f2;border-left:3px solid #ef4444;padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:#7f1d1d;line-height:20px;">Any cheating, dishonesty, or suspicious behavior may result in: immediate removal, a grade of zero, failure of the examination, and referral to academic administration for disciplinary review.</div>
+  </div>
+
+  <!-- S5 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 5</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Attendance &amp; Punctuality</div>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:25px;color:#475569;">
+      <li>Join at the <strong>scheduled time</strong> — late arrival may result in loss of time or denial of entry</li>
+      <li>Absence without prior written approval = marked absent and ineligible for diploma until completed</li>
+      <li>Emergency rescheduling only with valid documentation and administrative approval</li>
+    </ul>
+  </div>
+
+  <!-- S6 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 6</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Professional Conduct</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;">Students are expected to behave with professionalism throughout. Disrespect toward instructors, inappropriate language, or disruptive conduct may result in failure or disciplinary action. This is a formal academic requirement and must be treated with the highest level of seriousness.</div>
+  </div>
+
+  <!-- S7 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 7</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Grading &amp; Final Decision</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;font-size:13px;color:#475569;line-height:22px;">
+      <div><strong>Written Component:</strong> Minimum passing score of 75%</div>
+      <div style="margin-top:6px;"><strong>Oral Component:</strong> Must be evaluated as satisfactory by instructors and academic administration</div>
+      <div style="margin-top:8px;font-size:12px;color:#64748b;">A passing written score alone does not automatically guarantee diploma approval if the student fails to demonstrate acceptable professional knowledge or conduct during the oral portion.</div>
+    </div>
+  </div>
+
+  <!-- S8 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 8</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Retake Policy</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;">Students who fail may be allowed one retake subject to administrative approval. Remediation or additional preparation may be required. A student who fails to appear for the retake, violates exam rules, or fails the retake may be denied diploma issuance pending further academic review.</div>
+  </div>
+
+  <!-- S9 -->
+  <div style="margin-bottom:22px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 9</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Diploma Eligibility</div>
+    <div style="font-size:13px;line-height:21px;color:#475569;margin-bottom:6px;">A student will be eligible to receive the diploma only after:</div>
+    <ul style="margin:0;padding-left:18px;font-size:13px;line-height:25px;color:#475569;">
+      <li>Completing all required coursework and clinical obligations</li>
+      <li>Passing the Final Diploma Examination</li>
+      <li>Meeting all financial, administrative, and documentation requirements</li>
+      <li>Receiving final academic clearance from the institution</li>
+    </ul>
+    <div style="background:#fef2f2;border-left:3px solid #ef4444;padding:10px 14px;border-radius:0 6px 6px 0;margin-top:10px;font-size:12px;color:#7f1d1d;font-weight:700;">No diploma will be released before all requirements are fully satisfied.</div>
+  </div>
+
+  <!-- S10 -->
+  <div style="margin-bottom:28px;">
+    <div style="font-size:10px;color:#c9a84c;font-weight:800;letter-spacing:.12em;text-transform:uppercase;margin-bottom:3px;">Section 10</div>
+    <div style="font-size:15px;color:#0f172a;font-weight:800;margin-bottom:8px;">Student Acknowledgment</div>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;font-size:13px;line-height:21px;color:#475569;">By participating in the Final Diploma Examination, the student confirms they understand and agree to follow all examination rules, academic integrity standards, passing requirements, and institutional policies. Failure to comply may result in failure of the examination and delay or denial of diploma issuance.</div>
+  </div>
+
+  <div style="height:2px;background:linear-gradient(90deg,#c9a84c,transparent);margin-bottom:24px;"></div>
+
+  <div style="font-size:14px;color:#0f172a;font-weight:800;">Respectfully,</div>
+  <div style="margin-top:10px;">
+    <div style="font-size:14px;color:#0f172a;font-weight:900;">ACNHS Academic Administration</div>
+    <div style="font-size:13px;color:#475569;font-weight:600;">Armenian College of Nursing &amp; Health Sciences</div>
+    <div style="font-size:12px;color:#64748b;margin-top:5px;">+374 93 798879 (WhatsApp) &nbsp;•&nbsp; admissions@acnhs.am</div>
+  </div>
+</td></tr>
+
+<!-- FOOTER -->
+<tr><td style="background:#020617;border-radius:0 0 14px 14px;padding:16px 28px;">
+  <div style="font-size:12px;color:#64748b;">&copy; ${year} Armenian College of Nursing &amp; Health Sciences &nbsp;•&nbsp; acnhs.am</div>
+  <div style="font-size:11px;color:#475569;margin-top:4px;">This is an official communication. Please do not reply directly to this email.</div>
+</td></tr>
+
+</table></td></tr></table>
+</body></html>`;
+    }
+
+    function showFinalExamEmailPreview(dateValue, formattedDate) {
+      const studentName    = currentStudent.full_name   || 'Student';
+      const studentId      = currentStudent.student_id  || 'N/A';
+      const program        = currentStudent.program     || 'Nursing Program';
+      const recipientEmail = currentStudent.email       || '';
+      const subject        = 'Final Diploma Examination – Requirements & Exam Date | ACNHS';
+      const logoUrl        = window.ACNHS_LOGO_DATA_URL
+                          || window.ACNHS_LOGO_EMAIL_URL
+                          || (window.ACNHS_LOGO_BASE64 ? `data:image/png;base64,${window.ACNHS_LOGO_BASE64}` : '');
+
+      const html = buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, logoUrl });
+
+      // ── Overlay ────────────────────────────────────────────────────────────
+      const overlay = document.createElement('div');
+      overlay.id = 'fedPreviewOverlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.93);z-index:10003;display:flex;flex-direction:column;';
+      overlay.innerHTML = `
+        <div style="background:rgba(7,27,48,0.99);border-bottom:1px solid rgba(201,168,76,0.35);padding:14px 24px;display:flex;align-items:center;gap:14px;flex-shrink:0;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:9px;letter-spacing:0.18em;text-transform:uppercase;color:rgba(201,168,76,0.7);font-weight:700;margin-bottom:3px;">EXACT HTML BEING SENT — EMAIL PREVIEW</div>
+            <div style="font-size:15px;font-weight:800;color:#e8d5a3;font-family:'Playfair Display',Georgia,serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Final Diploma Examination Notification</div>
+            <div style="font-size:12px;color:rgba(148,163,184,0.75);margin-top:2px;">To: <span style="color:#dfc97a;font-weight:600;">${recipientEmail}</span></div>
+          </div>
+          <button id="fedCancelBtn" style="padding:9px 20px;background:transparent;border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(148,163,184,0.85);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;" onmouseover="this.style.borderColor='rgba(255,255,255,0.3)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.15)'">Cancel</button>
+          <button id="fedConfirmBtn" style="padding:9px 24px;background:linear-gradient(135deg,rgba(201,168,76,0.9),rgba(175,140,50,0.9));border:none;border-radius:8px;color:#04111f;font-size:13px;font-weight:900;letter-spacing:0.07em;text-transform:uppercase;cursor:pointer;white-space:nowrap;flex-shrink:0;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.85'" onmouseout="this.style.opacity='1'">Confirm &amp; Send</button>
+        </div>
+        <div style="flex:1;overflow:hidden;padding:12px 16px;">
+          <iframe id="fedPreviewFrame" style="width:100%;height:100%;border:none;border-radius:10px;background:#f0f4f8;" sandbox="allow-same-origin"></iframe>
+        </div>`;
+
+      document.body.appendChild(overlay);
+      overlay.querySelector('#fedPreviewFrame').srcdoc = html;
+
+      overlay.querySelector('#fedCancelBtn').onclick = () => overlay.remove();
+
+      overlay.querySelector('#fedConfirmBtn').onclick = async () => {
+        const btn = overlay.querySelector('#fedConfirmBtn');
+        btn.textContent = 'Sending…';
+        btn.disabled = true;
+        btn.style.opacity = '0.6';
+        try {
+          const response = await fetch('https://eyhksbiceueoiamwnqpr.supabase.co/functions/v1/send-email', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8'
+            },
+            body: JSON.stringify({ to: recipientEmail, subject, html, from: 'admissions@acnhs.am' })
+          });
+          if (!response.ok) throw new Error('Send failed (' + response.status + ')');
+          await sbClient.from('email_history').insert([{
+            recipient: recipientEmail,
+            subject,
+            body: html,
+            status: 'sent',
+            sent_at: new Date().toISOString()
+          }]);
+          overlay.remove();
+          showCustomAlert('Email sent successfully!', 'success');
+        } catch (err) {
+          console.error('Final exam email error:', err);
+          btn.textContent = 'Confirm & Send';
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          showCustomAlert('Failed to send email: ' + (err.message || err), 'error');
+        }
+      };
     }
 
     async function unenrollStudent() {
