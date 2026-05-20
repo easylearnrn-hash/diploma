@@ -4030,27 +4030,29 @@
       }
 
       try {
-        const studentUuid = await resolveStudentId();
+        // Use student_id (ACNHS-XXXXXXX) as primary lookup — always present in
+        // hubStudentData and never stale between sessions unlike UUID caches.
         const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
+        const studentUuid   = studentData && studentData.id;
 
         let row = null;
 
-        // Primary lookup by UUID.
-        if (studentUuid) {
-          const { data, error } = await db
-            .from('students')
-            .select('final_exam_date, final_exam_time')
-            .eq('id', studentUuid)
-            .maybeSingle();
-          if (!error && data) row = data;
-        }
-
-        // Fallback when UUID is missing/stale.
-        if (!row && studentIdCode) {
+        // Primary: query by student_id text (most reliable cross-session).
+        if (studentIdCode) {
           const { data, error } = await db
             .from('students')
             .select('final_exam_date, final_exam_time')
             .eq('student_id', studentIdCode)
+            .maybeSingle();
+          if (!error && data) row = data;
+        }
+
+        // Fallback: query by UUID if student_id lookup found nothing.
+        if (!row && studentUuid) {
+          const { data, error } = await db
+            .from('students')
+            .select('final_exam_date, final_exam_time')
+            .eq('id', studentUuid)
             .maybeSingle();
           if (!error && data) row = data;
         }

@@ -4145,29 +4145,42 @@
       btn.textContent = 'Saving…';
       btn.disabled = true;
       try {
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentStudent.id || '');
-        let matchField = isUUID ? 'id' : 'student_id';
-        let matchValue = isUUID ? currentStudent.id : (currentStudent.student_id || currentStudent.id);
+        // Use direct fetch to REST API (Supabase JS client can have auth-header
+        // interference in certain browser contexts, but fetch with explicit
+        // anon key is guaranteed to work — confirmed via curl test).
+        const _url  = SUPABASE_CONFIG.url;
+        const _key  = SUPABASE_CONFIG.anonKey;
+        const _hdrs = {
+          'Content-Type':  'application/json',
+          'Prefer':        'return=representation',
+          'apikey':        _key,
+          'Authorization': 'Bearer ' + _key
+        };
+        const _body = JSON.stringify({ final_exam_date: dateValue, final_exam_time: timeValue });
 
-        const { data: updated, error } = await sbClient
-          .from(studentTableName)
-          .update({ final_exam_date: dateValue, final_exam_time: timeValue })
-          .eq(matchField, matchValue)
-          .select('id, final_exam_date, final_exam_time');
-        if (error) throw error;
+        // Try by UUID first
+        let savedRows = null;
+        const resp = await fetch(
+          `${_url}/rest/v1/students?id=eq.${encodeURIComponent(currentStudent.id)}&select=id`,
+          { method: 'PATCH', headers: _hdrs, body: _body }
+        );
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
+        savedRows = await resp.json();
 
-        // If 0 rows matched by UUID, retry by student_id
-        if ((!updated || updated.length === 0) && isUUID && currentStudent.student_id) {
-          const { data: retried, error: retryErr } = await sbClient
-            .from(studentTableName)
-            .update({ final_exam_date: dateValue, final_exam_time: timeValue })
-            .eq('student_id', currentStudent.student_id)
-            .select('id, final_exam_date, final_exam_time');
-          if (retryErr) throw retryErr;
-          if (!retried || retried.length === 0) throw new Error('Student record not found in database — 0 rows updated.');
-        } else if (!updated || updated.length === 0) {
-          throw new Error('Student record not found in database — 0 rows updated.');
+        // Fallback by student_id if UUID matched nothing
+        if ((!savedRows || savedRows.length === 0) && currentStudent.student_id) {
+          const resp2 = await fetch(
+            `${_url}/rest/v1/students?student_id=eq.${encodeURIComponent(currentStudent.student_id)}&select=id`,
+            { method: 'PATCH', headers: _hdrs, body: _body }
+          );
+          if (!resp2.ok) throw new Error(`HTTP ${resp2.status}: ${await resp2.text()}`);
+          savedRows = await resp2.json();
         }
+
+        if (!savedRows || savedRows.length === 0) {
+          throw new Error('No rows updated — student UUID and student_id both matched nothing.');
+        }
+
         currentStudent.final_exam_date = dateValue;
         currentStudent.final_exam_time = timeValue;
         const formattedDate = new Date(dateValue).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
@@ -4514,14 +4527,20 @@
       btn.textContent = 'Removing…';
       btn.disabled = true;
       try {
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(currentStudent.id || '');
-        const matchField = isUUID ? 'id' : 'student_id';
-        const matchValue = isUUID ? currentStudent.id : (currentStudent.student_id || currentStudent.id);
-        const { error } = await sbClient
-          .from(studentTableName)
-          .update({ final_exam_date: null, final_exam_time: null })
-          .eq(matchField, matchValue);
-        if (error) throw error;
+        const _url  = SUPABASE_CONFIG.url;
+        const _key  = SUPABASE_CONFIG.anonKey;
+        const _hdrs = {
+          'Content-Type':  'application/json',
+          'Prefer':        'return=minimal',
+          'apikey':        _key,
+          'Authorization': 'Bearer ' + _key
+        };
+        const _body = JSON.stringify({ final_exam_date: null, final_exam_time: null });
+        const resp = await fetch(
+          `${_url}/rest/v1/students?id=eq.${encodeURIComponent(currentStudent.id)}`,
+          { method: 'PATCH', headers: _hdrs, body: _body }
+        );
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}: ${await resp.text()}`);
         currentStudent.final_exam_date = null;
         currentStudent.final_exam_time = null;
         setOverviewValue('finalExamDate', 'Set Date');
