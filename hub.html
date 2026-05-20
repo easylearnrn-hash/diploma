@@ -3783,14 +3783,26 @@
         el.innerHTML = '<div style="color:#f87171;font-size:13px">Failed to load schedule.</div>';
       }
 
-      // Show final exam date banner if set
-      const examDate = studentData && studentData.finalExamDate;
-      const banner = document.getElementById('finalExamDateBanner');
-      const bannerVal = document.getElementById('finalExamDateValue');
-      if (examDate && banner && bannerVal) {
-        const d = new Date(examDate + 'T00:00:00');
-        bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-        banner.style.display = 'block';
+      // Always fetch final_exam_date live from DB (not from cached session)
+      try {
+        const studentDbId = studentData && (studentData.id || studentData.studentDbId);
+        const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
+        if (db && (studentDbId || studentIdCode)) {
+          let query = db.from('students').select('final_exam_date');
+          if (studentDbId) query = query.eq('id', studentDbId);
+          else             query = query.eq('student_id', studentIdCode);
+          const { data: row } = await query.maybeSingle();
+          const examDate = row && row.final_exam_date;
+          const banner   = document.getElementById('finalExamDateBanner');
+          const bannerVal = document.getElementById('finalExamDateValue');
+          if (examDate && banner && bannerVal) {
+            const d = new Date(examDate + 'T00:00:00');
+            bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            banner.style.display = 'block';
+          }
+        }
+      } catch (examErr) {
+        console.warn('Could not fetch final exam date:', examErr);
       }
     }
 
