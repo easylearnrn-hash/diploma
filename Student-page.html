@@ -2481,6 +2481,8 @@ document.addEventListener('click', (e) => {
     </article>
 
     <article class="portal-panel" id="exams" role="tabpanel" aria-labelledby="tab-exams">
+      <!-- Final Examination Date Card -->
+      <div id="finalExamCard"></div>
       <div class="table-wrap assessment-table" id="examsTable"></div>
     </article>
 
@@ -4750,6 +4752,50 @@ function renderAttendancePanels(attendance = {}) {
 }
 
 function renderExamsTable(exams = []) {
+  // ── Final Examination Card ─────────────────────────────────────────────
+  const finalCard = document.getElementById('finalExamCard');
+  if (finalCard) {
+    const profile = portalState && portalState.profile;
+    const examDate = profile && profile.final_exam_date;
+    const examTime = profile && profile.final_exam_time;
+    if (examDate) {
+      const d = new Date(examDate + 'T00:00:00');
+      const formattedDate = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      let timeHtml = '';
+      if (examTime) {
+        // Convert Armenia Time (UTC+4) → Los Angeles (UTC-7 PDT / UTC-8 PST)
+        try {
+          const [hh, mm] = examTime.split(':').map(Number);
+          const base = new Date(examDate + 'T00:00:00Z');
+          base.setUTCHours(hh - 4, mm); // Armenia is UTC+4 → convert to UTC
+          const laStr = base.toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit', hour12: true });
+          const amStr = base.toLocaleTimeString('en-US', { timeZone: 'Asia/Yerevan', hour: 'numeric', minute: '2-digit', hour12: true });
+          timeHtml = `
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+              <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:6px 14px;">
+                <span style="font-size:13px;">🇦🇲</span>
+                <span style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;">Armenia</span>
+                <span style="font-size:13px;font-weight:900;color:#f0d98a;">${amStr}</span>
+              </div>
+              <div style="display:inline-flex;align-items:center;gap:7px;background:rgba(201,168,76,0.1);border:1px solid rgba(201,168,76,0.3);border-radius:20px;padding:6px 14px;">
+                <span style="font-size:13px;">🇺🇸</span>
+                <span style="font-size:12px;font-weight:700;color:var(--text-muted);letter-spacing:.05em;">Los Angeles</span>
+                <span style="font-size:13px;font-weight:900;color:#f0d98a;">${laStr}</span>
+              </div>
+            </div>`;
+        } catch (_) {}
+      }
+      finalCard.innerHTML = `
+        <div style="background:linear-gradient(135deg,rgba(201,168,76,0.12),rgba(201,168,76,0.05));border:1px solid rgba(201,168,76,0.45);border-left:3px solid #c9a84c;border-radius:12px;padding:20px 22px;margin-bottom:20px;">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(201,168,76,0.65);margin-bottom:6px;">Final Examination</div>
+          <div style="font-size:18px;font-weight:800;color:#e8d5a3;letter-spacing:-0.01em;">${formattedDate}</div>
+          ${timeHtml}
+        </div>`;
+    } else {
+      finalCard.innerHTML = '';
+    }
+  }
+  // ── Assessment History Table ───────────────────────────────────────────
   const tableWrap = document.getElementById('examsTable');
   if (!tableWrap) return;
   if (!Array.isArray(exams) || !exams.length) {
