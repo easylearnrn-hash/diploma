@@ -4167,7 +4167,7 @@
       }
     }
 
-    function buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, formattedTime, logoUrl }) {
+    function buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, armeniaTime, laTime, logoUrl }) {
       const year = new Date().getFullYear();
       const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
       function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -4216,8 +4216,19 @@
 <tr><td style="background:#fff8e1;border-left:4px solid #c9a84c;border-right:1px solid #e2c97a;padding:18px 28px;">
   <div style="font-size:10px;color:#7a6010;font-weight:800;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;">Your Final Exam Date</div>
   <div style="font-size:30px;color:#4a3800;font-weight:900;letter-spacing:-.5px;">${esc(formattedDate)}</div>
-  ${formattedTime ? `<div style="font-size:13px;color:#5a4800;font-weight:700;margin-top:8px;line-height:20px;">${formattedTime}</div>` : ''}
-  <div style="font-size:13px;color:#7a6010;margin-top:6px;font-weight:600;">${esc(program)}</div>
+  ${(armeniaTime && laTime) ? `
+  <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:10px;width:100%;border:1px solid rgba(180,140,50,0.3);border-radius:8px;background:#fffbe6;overflow:hidden;">
+    <tr>
+      <td style="padding:8px 12px 6px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a6010;">&#127462;&#127474; Armenia Time</td>
+      <td style="padding:8px 12px 6px;font-size:15px;font-weight:900;color:#4a3800;text-align:right;">${armeniaTime}</td>
+    </tr>
+    <tr><td colspan="2" style="height:1px;background:rgba(180,140,50,0.25);font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr>
+      <td style="padding:6px 12px 8px;font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#7a6010;">&#127482;&#127480; Los Angeles Time</td>
+      <td style="padding:6px 12px 8px;font-size:15px;font-weight:900;color:#4a3800;text-align:right;">${laTime}</td>
+    </tr>
+  </table>` : ''}
+  <div style="font-size:13px;color:#7a6010;margin-top:8px;font-weight:600;">${esc(program)}</div>
 </td></tr>
 
 <!-- GREETING -->
@@ -4406,13 +4417,15 @@
                           || window.ACNHS_LOGO_EMAIL_URL
                           || (window.ACNHS_LOGO_BASE64 ? `data:image/png;base64,${window.ACNHS_LOGO_BASE64}` : '');
 
-      let formattedTime = '';
+      let armeniaTime = '';
+      let laTime = '';
       if (timeValue) {
         const { la, armenia } = _fmtBothTimezones(dateValue, timeValue);
-        formattedTime = `${armenia} Armenia Time &nbsp;·&nbsp; ${la} Los Angeles Time`;
+        armeniaTime = armenia;
+        laTime = la;
       }
 
-      const html = buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, formattedTime, logoUrl });
+      const html = buildFinalExamEmailHtml({ studentName, studentId, program, formattedDate, armeniaTime, laTime, logoUrl });
 
       // ── Popup modal ────────────────────────────────────────────────────────
       const overlay = document.createElement('div');

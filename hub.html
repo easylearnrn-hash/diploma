@@ -4066,10 +4066,15 @@
         const studentDbId = studentData && (studentData.id || studentData.studentDbId);
         const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
         if (db && (studentDbId || studentIdCode)) {
-          let query = db.from('students').select('final_exam_date, final_exam_time');
-          if (studentDbId) query = query.eq('id', studentDbId);
-          else             query = query.eq('student_id', studentIdCode);
-          const { data: row } = await query.maybeSingle();
+          // Try 'students' first, fall back to 'acnhs_students'
+          let row = null;
+          for (const tbl of ['students', 'acnhs_students']) {
+            let q = db.from(tbl).select('final_exam_date, final_exam_time');
+            if (studentDbId) q = q.eq('id', studentDbId);
+            else             q = q.eq('student_id', studentIdCode);
+            const { data } = await q.maybeSingle();
+            if (data && data.final_exam_date) { row = data; break; }
+          }
           const examDate = row && row.final_exam_date;
           const examTime = row && row.final_exam_time;
           const banner   = document.getElementById('finalExamDateBanner');
@@ -4082,7 +4087,16 @@
             bannerVal.textContent = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
             if (examTime && bannerTime) {
               const { la, armenia } = _fmtBothTZ(examDate, examTime);
-              bannerTime.innerHTML = `<span style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;">${armenia} <span style="opacity:.55;">Armenia</span></span><span style="font-size:11px;color:rgba(240,217,138,0.45);margin:0 5px;">·</span><span style="font-size:11px;color:rgba(240,217,138,0.75);font-weight:700;">${la} <span style="opacity:.55;">Los Angeles</span></span>`;
+              bannerTime.innerHTML =
+                `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:3px;">` +
+                  `<span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,217,138,0.55);">🇦🇲 Armenia Time</span>` +
+                  `<span style="font-size:13px;font-weight:800;color:#f0d98a;">${armenia}</span>` +
+                `</div>` +
+                `<div style="height:1px;background:rgba(240,217,138,0.15);margin-bottom:3px;"></div>` +
+                `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">` +
+                  `<span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:rgba(240,217,138,0.55);">🇺🇸 Los Angeles Time</span>` +
+                  `<span style="font-size:13px;font-weight:800;color:#f0d98a;">${la}</span>` +
+                `</div>`;
               bannerTime.style.display = 'block';
             } else if (bannerTime) {
               bannerTime.style.display = 'none';
