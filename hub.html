@@ -3265,6 +3265,18 @@
               </div>
             </section>
 
+            <!-- VIEW 3: Search results across all categories -->
+            <section class="hub-view" id="hubSearchView" hidden>
+              <div class="notes-topline">
+                <div class="crumb-title">
+                  <p class="big">Search Results</p>
+                  <p class="small" id="searchResultsSub"></p>
+                </div>
+              </div>
+              <div class="notes-list" id="searchResultsList"></div>
+              <div class="notes-empty" id="searchEmpty" style="display:none;margin-top:12px;">No notes found matching your search.</div>
+            </section>
+
             <!-- VIEW 2: Notes in selected category -->
             <section class="hub-view" id="hubNotesView" hidden>
               <div class="notes-topline">
@@ -5755,6 +5767,10 @@
     const hubSearchInput = document.getElementById('hubSearchInput');
     const categoriesView = document.getElementById('hubCategoriesView');
     const notesView = document.getElementById('hubNotesView');
+    const searchView = document.getElementById('hubSearchView');
+    const searchResultsList = document.getElementById('searchResultsList');
+    const searchEmpty = document.getElementById('searchEmpty');
+    const searchResultsSub = document.getElementById('searchResultsSub');
     const selectedCategoryTitle = document.getElementById('selectedCategoryTitle');
     const selectedCategorySub = document.getElementById('selectedCategorySub');
     const notesList = document.getElementById('notesList');
@@ -6812,14 +6828,16 @@
 
     // Back to categories
     function backToCategories() {
-      if (!categoriesView || !notesView) return;
-      
-      notesView.hidden = true;
+      if (!categoriesView) return;
+
+      if (notesView) notesView.hidden = true;
+      if (searchView) searchView.hidden = true;
       categoriesView.hidden = false;
-      
+
       if (notesList) notesList.innerHTML = '';
       if (notesEmpty) notesEmpty.style.display = 'none';
-      
+      // Clear search so categories show fully
+      if (hubSearchInput) hubSearchInput.value = '';
       filterCurrentView();
     }
 
@@ -6916,33 +6934,76 @@
     // Search filter
     function filterCurrentView() {
       if (!hubSearchInput) return;
-      
+
       const q = (hubSearchInput.value || '').toLowerCase().trim();
 
-      if (categoriesView && !categoriesView.hidden) {
-        // Filter categories
-        let visible = 0;
-        document.querySelectorAll('.cat-card').forEach(card => {
-          const name = (card.querySelector('.cat-name')?.textContent || '').toLowerCase();
-          const desc = (card.querySelector('.cat-desc')?.textContent || '').toLowerCase();
-          const show = !q || name.includes(q) || desc.includes(q);
-          card.style.display = show ? '' : 'none';
-          if (show) visible++;
-        });
-        if (catsEmpty) catsEmpty.style.display = visible ? 'none' : '';
+      // ── No query: restore categories view ────────────────────────────────
+      if (!q) {
+        if (searchView && !searchView.hidden) {
+          searchView.hidden = true;
+          if (notesView) notesView.hidden = true;
+          if (categoriesView) categoriesView.hidden = false;
+        }
+        // Reset any hidden cat-cards
+        document.querySelectorAll('.cat-card').forEach(c => c.style.display = '');
+        if (catsEmpty) catsEmpty.style.display = 'none';
         return;
       }
 
+      // ── Query present on categories view → switch to search results ──────
+      if (categoriesView && !categoriesView.hidden) {
+        categoriesView.hidden = true;
+        if (notesView) notesView.hidden = true;
+        if (searchView) searchView.hidden = false;
+      }
+
+      // ── Render search results across all published notes ──────────────────
+      if (searchView && !searchView.hidden && searchResultsList) {
+        const allNotes = getAllNotesWithCategories();
+        const pubSet = new Set(isAdmin ? allNotes.map(n => n.id) : (_hubPublishedCache || []));
+        const matches = allNotes.filter(n =>
+          pubSet.has(n.id) &&
+          (cleanNoteTitle(n.title).toLowerCase().includes(q) || n.category.toLowerCase().includes(q))
+        );
+
+        if (searchResultsSub) searchResultsSub.textContent =
+          matches.length ? `${matches.length} note${matches.length !== 1 ? 's' : ''} found` : '';
+
+        searchResultsList.innerHTML = matches.map((note, idx) => `
+          <a class="note-item" href="${encodeHtmlFile(note.htmlFile)}" target="_blank" rel="noopener noreferrer"
+            data-title="${escapeAttr(cleanNoteTitle(note.title))}"
+            onclick="bridgeHubNote()">
+            <div class="ni-num">${String(idx + 1).padStart(2, '0')}</div>
+            <div class="ni-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div class="ni-body">
+              <div class="ni-title">${escapeHtml(cleanNoteTitle(note.title))}</div>
+              <div class="ni-sub">${escapeHtml(note.category)}</div>
+            </div>
+            <div class="ni-arrow">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </a>
+        `).join('');
+        if (searchEmpty) searchEmpty.style.display = matches.length ? 'none' : '';
+        return;
+      }
+
+      // ── Query on notes view → filter existing items ───────────────────────
       if (notesView && !notesView.hidden && notesList) {
-        // Filter notes
         let visibleNotes = 0;
         document.querySelectorAll('#notesList .note-item').forEach(item => {
           const title = (item.getAttribute('data-title') || '').toLowerCase();
-          const show = !q || title.includes(q);
+          const show = title.includes(q);
           item.style.display = show ? '' : 'none';
           if (show) visibleNotes++;
         });
-
         if (visibleNotesCount) visibleNotesCount.textContent = String(visibleNotes);
         if (notesEmpty) notesEmpty.style.display = visibleNotes ? 'none' : '';
       }
