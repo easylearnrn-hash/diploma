@@ -602,6 +602,13 @@
       font-size:10px;font-weight:600;color:rgba(201,168,76,0.5);
       margin-top:5px;letter-spacing:.02em;
     }
+    .np-count{
+      display:inline-block;font-size:10px;font-weight:700;
+      background:rgba(201,168,76,0.18);color:#c9a84c;
+      border:1px solid rgba(201,168,76,0.35);border-radius:10px;
+      padding:1px 6px;margin-left:5px;vertical-align:middle;
+      letter-spacing:0;
+    }
     .np-empty{
       padding:48px 24px;text-align:center;color:var(--text-muted);
     }
@@ -8417,7 +8424,7 @@
         } catch(_) {}
       }
 
-      // Sort: newest first; null ts goes to end
+      // Sort all items newest first; null ts goes to end
       all.sort((a,b) => {
         if (!a.ts && !b.ts) return 0;
         if (!a.ts) return 1;
@@ -8425,17 +8432,57 @@
         return new Date(b.ts) - new Date(a.ts);
       });
 
-      return all;
+      // Group same-type notifications together (combined)
+      const TYPE_LABELS = {
+        exam:      'exam results published',
+        form:      'service requests',
+        profile:   'profile updates',
+        alert:     'announcements',
+        note:      'study notes published',
+        exam_date: 'final exam dates'
+      };
+      const typeOrder = [];
+      const typeMap   = {};
+      all.forEach(n => {
+        if (!typeMap[n.type]) { typeMap[n.type] = []; typeOrder.push(n.type); }
+        typeMap[n.type].push(n);
+      });
+      const grouped = typeOrder.map(type => {
+        const items = typeMap[type];
+        if (items.length === 1) return items[0];
+        const latest = items[0]; // already sorted newest first
+        return {
+          id:       items.map(i => i.id).join('|'),
+          groupIds: items.map(i => i.id),
+          type,
+          title:    `${items.length} ${TYPE_LABELS[type] || 'notifications'}`,
+          body:     latest.body,
+          ts:       latest.ts,
+          count:    items.length
+        };
+      });
+
+      // Sort groups by their most recent timestamp (newest group on top)
+      grouped.sort((a,b) => {
+        if (!a.ts && !b.ts) return 0;
+        if (!a.ts) return 1;
+        if (!b.ts) return -1;
+        return new Date(b.ts) - new Date(a.ts);
+      });
+
+      return grouped;
     }
 
     function renderNotifItem(n, seen) {
-      const unseen = !seen.has(n.id);
+      const allIds = n.groupIds || [n.id];
+      const unseen = allIds.some(id => !seen.has(id));
+      const idsAttr = allIds.join('|');
       return `
-        <div class="np-item${unseen ? ' unseen' : ''}" data-id="${n.id}" onclick="markNotifSeen('${n.id}',this)">
+        <div class="np-item${unseen ? ' unseen' : ''}" data-id="${idsAttr}" onclick="markNotifSeen('${idsAttr}',this)">
           ${unseen ? '<div class="np-dot"></div>' : ''}
           <div class="np-icon">${notifIconFor(n.type)}</div>
           <div class="np-body">
-            <div class="np-item-title">${n.title}</div>
+            <div class="np-item-title">${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}</div>
             ${n.body ? `<div class="np-item-desc">${n.body}</div>` : ''}
             ${n.ts ? `<div class="np-item-time">${notifTimeAgo(n.ts)}</div>` : ''}
           </div>
@@ -8444,7 +8491,12 @@
 
     function updateNotifBadge(notifications) {
       const seen = getSeenIds();
-      const count = notifications.filter(n => !seen.has(n.id)).length;
+      // Count total unseen individual items across all groups
+      let count = 0;
+      notifications.forEach(n => {
+        const ids = n.groupIds || [n.id];
+        count += ids.filter(id => !seen.has(id)).length;
+      });
       const badge = document.getElementById('notifBadge');
       if (!badge) return;
       if (count > 0) {
@@ -8495,9 +8547,10 @@
       setTimeout(() => { overlay.style.display = 'none'; }, 280);
     }
 
-    function markNotifSeen(id, el) {
+    function markNotifSeen(idStr, el) {
       const seen = getSeenIds();
-      seen.add(id);
+      // idStr may be pipe-separated for grouped notifications
+      idStr.split('|').forEach(id => seen.add(id));
       saveSeenIds(seen);
       if (el) {
         el.classList.remove('unseen');
@@ -8506,8 +8559,13 @@
       }
       if (_cachedNotifications) updateNotifBadge(_cachedNotifications);
       // Update count line
-      const unseenCount = _cachedNotifications
-        ? _cachedNotifications.filter(n => !seen.has(n.id)).length : 0;
+      let unseenCount = 0;
+      if (_cachedNotifications) {
+        _cachedNotifications.forEach(n => {
+          const ids = n.groupIds || [n.id];
+          if (ids.some(id => !seen.has(id))) unseenCount++;
+        });
+      }
       const countEl = document.getElementById('npCount');
       if (countEl && _cachedNotifications) {
         const total = _cachedNotifications.length;
@@ -8518,7 +8576,10 @@
     function markAllNotifsSeen() {
       if (!_cachedNotifications) return;
       const seen = getSeenIds();
-      _cachedNotifications.forEach(n => seen.add(n.id));
+      _cachedNotifications.forEach(n => {
+        const ids = n.groupIds || [n.id];
+        ids.forEach(id => seen.add(id));
+      });
       saveSeenIds(seen);
       updateNotifBadge(_cachedNotifications);
       // Re-render items without unseen styling
