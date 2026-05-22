@@ -722,7 +722,7 @@
     }
     #emailViewerClose:hover{background:rgba(255,255,255,0.12);color:var(--text-primary);}
     #emailViewerFrame{
-      flex:1;width:100%;border:none;background:#fff;
+      flex:1;min-height:0;width:100%;border:none;background:#fff;overflow-y:auto;
     }
     .np-email-open{color:rgba(201,168,76,0.5);font-size:14px;flex-shrink:0;transition:color .15s;}
     .np-item:hover .np-email-open{color:var(--gold-300);}
@@ -8751,8 +8751,22 @@
     function _applyEmailToFrame(html) {
       const frame = document.getElementById('emailViewerFrame');
       if (!frame) return;
-      const heightFix = '<style>html,body{height:auto!important;min-height:0!important;overflow:auto!important;}</style>';
+      // Comprehensive override: targets html, body, AND common email wrapper tables/divs
+      // that use height:100% to constrain visible area
+      const heightFix = `<style>
+        html { height:auto!important; overflow-y:auto!important; }
+        body { height:auto!important; min-height:0!important; overflow-y:auto!important; }
+        body > table, body > center > table, body > div {
+          height:auto!important; min-height:0!important;
+        }
+        table { height:auto!important; }
+        * { max-height:none!important; }
+      </style>`;
       let fixedHtml = html;
+      // Also strip inline height:100% from <body> tag itself
+      fixedHtml = fixedHtml.replace(/<body([^>]*)>/i, (m, attrs) =>
+        '<body' + attrs.replace(/height\s*:\s*100%/gi, 'height:auto') + '>'
+      );
       if (/<\/head>/i.test(fixedHtml)) {
         fixedHtml = fixedHtml.replace(/<\/head>/i, heightFix + '</head>');
       } else if (/<body[\s>]/i.test(fixedHtml)) {
