@@ -8762,7 +8762,17 @@
       if (dateEl && notif && notif.ts) {
         dateEl.textContent = new Date(notif.ts).toLocaleDateString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
       } else if (dateEl) { dateEl.textContent = ''; }
-      frame.srcdoc = html || '<div style="font-family:sans-serif;padding:40px;color:#555;text-align:center">No email content available.</div>';
+      // Override height:100% on html/body so full email renders (not clipped to iframe viewport)
+      const heightFix = '<style>html,body{height:auto!important;min-height:0!important;overflow:auto!important;}</style>';
+      let fixedHtml = html;
+      if (/<\/head>/i.test(fixedHtml)) {
+        fixedHtml = fixedHtml.replace(/<\/head>/i, heightFix + '</head>');
+      } else if (/<body[\s>]/i.test(fixedHtml)) {
+        fixedHtml = fixedHtml.replace(/<body([\s>])/i, '<body$1' + heightFix);
+      } else {
+        fixedHtml = heightFix + fixedHtml;
+      }
+      frame.srcdoc = fixedHtml || '<div style="font-family:sans-serif;padding:40px;color:#555;text-align:center">No email content available.</div>';
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
     }
