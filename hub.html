@@ -8491,7 +8491,7 @@
       const studentEmail = studentData.email || studentData.institutionalEmail || '';
       if (studentEmail) {
         q.emails = db.from('email_history')
-          .select('id,subject,sent_at,html_body,body,status')
+          .select('id,subject,sent_at,status')
           .eq('recipient', studentEmail)
           .order('sent_at',{ascending:false}).limit(30);
       }
@@ -8594,10 +8594,10 @@
         });
       }
 
-      // 7. Emails from email_history
+      // 7. Emails from email_history (bodies lazy-loaded on click)
       if (res.emails) {
         res.emails.forEach(r => {
-          _emailBodies[r.id] = r.html_body || r.body || '';
+          // html_body not fetched here — loaded on demand in openEmailModal
           all.push({
             id:      'email_' + r.id,
             type:    'email',
@@ -8748,9 +8748,23 @@
       if (link) window.open(link, '_blank', 'noopener,noreferrer');
     }
 
-    function openEmailModal(emailId, idsAttr, el) {
+    function _applyEmailToFrame(html) {
+      const frame = document.getElementById('emailViewerFrame');
+      if (!frame) return;
+      const heightFix = '<style>html,body{height:auto!important;min-height:0!important;overflow:auto!important;}</style>';
+      let fixedHtml = html;
+      if (/<\/head>/i.test(fixedHtml)) {
+        fixedHtml = fixedHtml.replace(/<\/head>/i, heightFix + '</head>');
+      } else if (/<body[\s>]/i.test(fixedHtml)) {
+        fixedHtml = fixedHtml.replace(/<body([\s>])/i, '<body$1' + heightFix);
+      } else {
+        fixedHtml = heightFix + fixedHtml;
+      }
+      frame.srcdoc = fixedHtml || '<div style="font-family:sans-serif;padding:40px;color:#555;text-align:center">No email content available.</div>';
+    }
+
+    async function openEmailModal(emailId, idsAttr, el) {
       markNotifSeen(idsAttr, el);
-      const html = _emailBodies[emailId] || '';
       const modal = document.getElementById('emailViewerModal');
       const frame = document.getElementById('emailViewerFrame');
       const subjectEl = document.getElementById('emailViewerSubject');
@@ -8762,19 +8776,25 @@
       if (dateEl && notif && notif.ts) {
         dateEl.textContent = new Date(notif.ts).toLocaleDateString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
       } else if (dateEl) { dateEl.textContent = ''; }
-      // Override height:100% on html/body so full email renders (not clipped to iframe viewport)
-      const heightFix = '<style>html,body{height:auto!important;min-height:0!important;overflow:auto!important;}</style>';
-      let fixedHtml = html;
-      if (/<\/head>/i.test(fixedHtml)) {
-        fixedHtml = fixedHtml.replace(/<\/head>/i, heightFix + '</head>');
-      } else if (/<body[\s>]/i.test(fixedHtml)) {
-        fixedHtml = fixedHtml.replace(/<body([\s>])/i, '<body$1' + heightFix);
-      } else {
-        fixedHtml = heightFix + fixedHtml;
-      }
-      frame.srcdoc = fixedHtml || '<div style="font-family:sans-serif;padding:40px;color:#555;text-align:center">No email content available.</div>';
       modal.classList.add('open');
       document.body.style.overflow = 'hidden';
+      // Use cached body if already fetched, otherwise lazy-load
+      if (_emailBodies[emailId]) {
+        _applyEmailToFrame(_emailBodies[emailId]);
+      } else {
+        frame.srcdoc = '<div style="font-family:sans-serif;padding:40px;color:#999;text-align:center">Loading email…</div>';
+        try {
+          const db = initSupabase();
+          const { data, error } = await db.from('email_history')
+            .select('html_body,body').eq('id', emailId).single();
+          if (error) throw error;
+          const html = data.html_body || data.body || '';
+          _emailBodies[emailId] = html;
+          _applyEmailToFrame(html);
+        } catch(e) {
+          frame.srcdoc = '<div style="font-family:sans-serif;padding:40px;color:#c00;text-align:center">Could not load email content.</div>';
+        }
+      }
     }
 
     function closeEmailModal() {
