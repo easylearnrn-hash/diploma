@@ -642,6 +642,33 @@
       padding:1px 6px;margin-left:5px;vertical-align:middle;
       letter-spacing:0;
     }
+    .np-group{cursor:pointer;}
+    .np-chevron{
+      font-size:20px;color:rgba(201,168,76,0.35);flex-shrink:0;
+      transition:transform 0.22s;align-self:center;margin-left:4px;
+      line-height:1;
+    }
+    .np-chevron.rotated{transform:rotate(90deg);color:rgba(201,168,76,0.7);}
+    .np-children{
+      display:none;background:rgba(0,0,0,0.18);
+      border-bottom:1px solid rgba(255,255,255,0.04);
+    }
+    .np-children.open{display:block;}
+    .np-child{
+      display:flex;align-items:center;gap:9px;
+      padding:9px 18px 9px 68px;
+      font-size:12px;color:var(--text-secondary);
+      cursor:pointer;transition:background .15s;
+      text-decoration:none;border-top:1px solid rgba(255,255,255,0.03);
+    }
+    .np-child:hover{background:rgba(201,168,76,0.07);}
+    .np-child-icon{flex-shrink:0;font-size:13px;opacity:.7;}
+    .np-child-label{flex:1;min-width:0;line-height:1.45;}
+    .np-child-arrow{color:var(--gold-400);flex-shrink:0;font-size:13px;}
+    .np-child-note .np-child-label{color:var(--gold-300);font-weight:600;}
+    .np-child-note:hover .np-child-label{text-decoration:underline;}
+    .np-note-link{color:inherit;text-decoration:none;}
+    .np-note-link:hover{color:var(--gold-300);text-decoration:underline;}
     .np-empty{
       padding:48px 24px;text-align:center;color:var(--text-muted);
     }
@@ -8443,17 +8470,29 @@
       if (studentUuid) {
         try {
           const { data } = await db.from('published_notes')
-            .select('id,published_at,published_by')
+            .select('id,note_id,published_at,published_by')
             .eq('student_id', studentUuid)
             .order('published_at',{ascending:false})
-            .limit(10);
-          (data||[]).forEach(r => all.push({
-            id: 'note_' + r.id,
-            type: 'note',
-            title: 'Study notes published',
-            body: `New notes have been published to your library${r.published_by ? ' by ' + r.published_by : ''}.`,
-            ts: r.published_at
-          }));
+            .limit(20);
+          // Build note lookup map from hub's local note registry
+          const noteMap = {};
+          try { getAllNotesWithCategories().forEach(n => { noteMap[n.id] = n; }); } catch(_) {}
+          (data||[]).forEach(r => {
+            const noteInfo = noteMap[r.note_id] || {};
+            const noteTitle = noteInfo.title || r.note_id || 'Study Note';
+            const noteUrl   = noteInfo.htmlFile
+              ? noteInfo.htmlFile.split('/').map(encodeURIComponent).join('/')
+              : null;
+            all.push({
+              id: 'note_' + r.id,
+              type: 'note',
+              title: noteTitle + ' published',
+              body:  `New study note added to your library${r.published_by ? ' by ' + r.published_by : ''}.`,
+              ts:    r.published_at,
+              noteTitle,
+              noteUrl
+            });
+          });
         } catch(_) {}
       }
 
@@ -8487,6 +8526,7 @@
         return {
           id:       items.map(i => i.id).join('|'),
           groupIds: items.map(i => i.id),
+          items,
           type,
           title:    `${items.length} ${TYPE_LABELS[type] || 'notifications'}`,
           body:     latest.body,
@@ -8507,19 +8547,65 @@
     }
 
     function renderNotifItem(n, seen) {
-      const allIds = n.groupIds || [n.id];
-      const unseen = allIds.some(id => !seen.has(id));
+      const allIds  = n.groupIds || [n.id];
+      const unseen  = allIds.some(id => !seen.has(id));
       const idsAttr = allIds.join('|');
+      const isGroup = !!(n.items && n.items.length > 1);
+
+      // Build child list for expanded groups
+      let childrenHtml = '';
+      if (isGroup) {
+        const childRows = n.items.map(item => {
+          const isNote = item.type === 'note' && item.noteUrl;
+          if (isNote) {
+            return `<a class="np-child np-child-note" href="${item.noteUrl}" target="_blank" rel="noopener noreferrer"
+                onclick="event.stopPropagation();markNotifSeen('${item.id}',null);closeNotificationsPanel()">
+              <span class="np-child-icon">📄</span>
+              <span class="np-child-label">${item.noteTitle || item.title}</span>
+              <span class="np-child-arrow">↗</span>
+            </a>`;
+          }
+          // Generic child item (exam, form, profile, alert)
+          const childLabel = item.body || item.title || '';
+          return `<div class="np-child" onclick="event.stopPropagation();markNotifSeen('${item.id}',null)">
+            <span class="np-child-icon">${notifIconFor(item.type)}</span>
+            <span class="np-child-label">${childLabel}</span>
+          </div>`;
+        }).join('');
+        childrenHtml = `<div class="np-children" id="npch_${n.type}">${childRows}</div>`;
+      }
+
+      // Single note item — make title a clickable link
+      const isSingleNote = !isGroup && n.type === 'note' && n.noteUrl;
+      const titleContent = isSingleNote
+        ? `<a class="np-note-link" href="${n.noteUrl}" target="_blank" rel="noopener noreferrer"
+            onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>`
+        : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}`;
+
+      const clickHandler = isGroup
+        ? `toggleNotifGroup('${n.type}',this)`
+        : `markNotifSeen('${idsAttr}',this)`;
+
       return `
-        <div class="np-item${unseen ? ' unseen' : ''}" data-id="${idsAttr}" onclick="markNotifSeen('${idsAttr}',this)">
+        <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
           ${unseen ? '<div class="np-dot"></div>' : ''}
           <div class="np-icon">${notifIconFor(n.type)}</div>
           <div class="np-body">
-            <div class="np-item-title">${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}</div>
-            ${n.body ? `<div class="np-item-desc">${n.body}</div>` : ''}
+            <div class="np-item-title">${titleContent}</div>
+            ${n.body && !isGroup ? `<div class="np-item-desc">${n.body}</div>` : ''}
             ${n.ts ? `<div class="np-item-time">${notifTimeAgo(n.ts)}</div>` : ''}
           </div>
-        </div>`;
+          ${isGroup ? '<span class="np-chevron">&#8250;</span>' : ''}
+        </div>
+        ${childrenHtml}`;
+    }
+
+    function toggleNotifGroup(type, el) {
+      const children = document.getElementById('npch_' + type);
+      if (!children) return;
+      const isOpen = children.classList.toggle('open');
+      const chevron = el ? el.querySelector('.np-chevron') : null;
+      if (chevron) chevron.classList.toggle('rotated', isOpen);
     }
 
     function updateNotifBadge(notifications) {
