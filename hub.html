@@ -8597,13 +8597,12 @@
       // 7. Emails from email_history
       if (res.emails) {
         res.emails.forEach(r => {
-          const plain = (r.html_body || r.body || '').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100);
           _emailBodies[r.id] = r.html_body || r.body || '';
           all.push({
             id:      'email_' + r.id,
             type:    'email',
             title:   r.subject || 'Email from ACNHS',
-            body:    plain || 'Click to read email',
+            body:    r.subject || 'Email from ACNHS',
             ts:      r.sent_at,
             emailId: r.id
           });
@@ -8625,7 +8624,8 @@
         profile:   'profile updates',
         alert:     'announcements',
         note:      'study notes published',
-        exam_date: 'final exam dates'
+        exam_date: 'final exam dates',
+        email:     'emails'
       };
       const typeOrder = [];
       const typeMap   = {};
@@ -8679,8 +8679,15 @@
               <span class="np-child-arrow">↗</span>
             </a>`;
           }
-          // Generic child item (exam, form, profile, alert) — navigate if link present
-          const childLabel = item.body || item.title || '';
+          // Generic child item — email opens modal; others navigate if link present
+          const childLabel = item.title || item.body || '';
+          if (item.type === 'email' && item.emailId) {
+            return `<div class="np-child np-child-nav" onclick="event.stopPropagation();openEmailModal('${item.emailId}','${item.id}',null)">
+              <span class="np-child-icon">✉️</span>
+              <span class="np-child-label">${childLabel}</span>
+              <span class="np-child-arrow">→</span>
+            </div>`;
+          }
           const hasLink = !!(item.link);
           return `<div class="np-child${hasLink ? ' np-child-nav' : ''}" onclick="event.stopPropagation();notifChildNav('${item.id}','${item.link||''}')">
             <span class="np-child-icon">${notifIconFor(item.type)}</span>
