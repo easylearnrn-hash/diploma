@@ -593,11 +593,17 @@
       display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
     }
     .np-count{font-size:11px;color:var(--text-muted);}
+    .np-actions-right{display:flex;align-items:center;gap:12px;}
     .np-mark-all{
       font-size:11px;font-weight:700;color:var(--gold-400);cursor:pointer;
       background:none;border:none;padding:0;transition:color .15s;
     }
     .np-mark-all:hover{color:var(--gold-200);}
+    .np-clear-all{
+      font-size:11px;font-weight:700;color:rgba(239,68,68,0.6);cursor:pointer;
+      background:none;border:none;padding:0;transition:color .15s;
+    }
+    .np-clear-all:hover{color:rgba(239,68,68,0.9);}
     .np-list{
       flex:1;overflow-y:auto;padding:8px 0;
     }
@@ -8460,7 +8466,10 @@
     </div>
     <div class="np-actions">
       <span class="np-count" id="npCount">Loading…</span>
-      <button class="np-mark-all" onclick="markAllNotifsSeen()">Mark all as read</button>
+      <div class="np-actions-right">
+        <button class="np-mark-all" onclick="markAllNotifsSeen()">Mark all read</button>
+        <button class="np-clear-all" onclick="clearAllNotifs()">Clear all</button>
+      </div>
     </div>
     <div class="np-list" id="npList"><div class="np-loading">Loading notifications…</div></div>
   </div>
@@ -9014,7 +9023,13 @@
 
       // First open: show loader, fetch, render
       list.innerHTML = '<div class="np-loading">Loading notifications…</div>';
-      const notifications = await fetchNotifications();
+      const rawNotifications = await fetchNotifications();
+      // Filter out any notifications the user has cleared
+      const CLEAR_KEY = 'notif_cleared_' + (studentData?.studentId || 'student');
+      const cleared = new Set(JSON.parse(localStorage.getItem(CLEAR_KEY) || '[]'));
+      const notifications = cleared.size
+        ? rawNotifications.filter(n => { const ids = n.groupIds || [n.id]; return !ids.every(id => cleared.has(id)); })
+        : rawNotifications;
       _cachedNotifications = notifications;
       _renderNotifPanel(notifications);
     }
@@ -9050,6 +9065,31 @@
         const total = _cachedNotifications.length;
         countEl.textContent = `${total} notification${total !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
       }
+    }
+
+    function clearAllNotifs() {
+      if (!_cachedNotifications) return;
+      // Mark all seen first
+      const seen = getSeenIds();
+      _cachedNotifications.forEach(n => {
+        const ids = n.groupIds || [n.id];
+        ids.forEach(id => seen.add(id));
+      });
+      saveSeenIds(seen);
+      // Store cleared IDs so they stay hidden until next hard reload
+      const CLEAR_KEY = 'notif_cleared_' + (studentData?.studentId || 'student');
+      const cleared = new Set(JSON.parse(localStorage.getItem(CLEAR_KEY) || '[]'));
+      _cachedNotifications.forEach(n => {
+        const ids = n.groupIds || [n.id];
+        ids.forEach(id => cleared.add(id));
+      });
+      localStorage.setItem(CLEAR_KEY, JSON.stringify([...cleared]));
+      _cachedNotifications = [];
+      updateNotifBadge([]);
+      const list = document.getElementById('npList');
+      if (list) list.innerHTML = '<div class="np-empty">No notifications</div>';
+      const countEl = document.getElementById('npCount');
+      if (countEl) countEl.textContent = '0 notifications';
     }
 
     function markAllNotifsSeen() {
