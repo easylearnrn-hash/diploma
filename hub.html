@@ -622,7 +622,46 @@
       width:36px;height:36px;border-radius:10px;flex-shrink:0;
       display:flex;align-items:center;justify-content:center;font-size:17px;
       background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.15);
+      color:rgba(201,168,76,0.75);
     }
+    .np-icon svg{display:block;}
+    /* Exam modal */
+    #examModal{
+      display:none;position:fixed;inset:0;z-index:9600;
+      background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);
+      align-items:center;justify-content:center;padding:20px;
+    }
+    #examModal.open{display:flex;}
+    #examModalContainer{
+      width:100%;max-width:480px;background:#0c1624;
+      border:1px solid rgba(201,168,76,0.28);border-radius:16px;overflow:hidden;
+      box-shadow:0 24px 64px rgba(0,0,0,0.6);
+    }
+    #examModalHeader{
+      display:flex;align-items:center;gap:14px;padding:18px 20px;
+      border-bottom:1px solid rgba(201,168,76,0.12);
+      background:linear-gradient(135deg,rgba(12,28,56,0.98),rgba(7,18,40,0.98));
+    }
+    #examModalMeta{flex:1;min-width:0;}
+    #examModalTitle{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(201,168,76,0.6);margin-bottom:4px;}
+    #examModalSubject{font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--text-primary);line-height:1.3;}
+    #examModalClose{
+      background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);
+      color:var(--text-muted);border-radius:8px;width:32px;height:32px;cursor:pointer;
+      font-size:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+      transition:background .15s,color .15s;
+    }
+    #examModalClose:hover{background:rgba(255,255,255,0.12);color:var(--text-primary);}
+    #examModalBody{padding:20px;}
+    .exam-modal-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);}
+    .exam-modal-row:last-of-type{border-bottom:none;}
+    .exam-modal-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:rgba(201,168,76,0.55);width:56px;flex-shrink:0;}
+    .exam-modal-value{font-size:13px;color:var(--text-primary);font-weight:500;}
+    .exam-status-badge{font-size:11px;font-weight:700;background:rgba(34,197,94,0.15);color:#4ade80;border:1px solid rgba(34,197,94,0.35);border-radius:20px;padding:2px 10px;}
+    .exam-modal-grade-row{display:flex;gap:12px;margin-top:16px;}
+    .exam-modal-grade-card{flex:1;background:rgba(201,168,76,0.07);border:1px solid rgba(201,168,76,0.15);border-radius:10px;padding:14px;text-align:center;}
+    .exam-modal-grade-label{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(201,168,76,0.5);margin-bottom:6px;}
+    .exam-modal-grade-value{font-size:28px;font-weight:800;color:#c9a84c;font-family:'Playfair Display',serif;}
     .np-body{flex:1;min-width:0;}
     .np-item-title{
       font-size:12.5px;font-weight:700;color:var(--text-primary);
@@ -8449,12 +8488,24 @@
       return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
     }
 
-    function notifIconFor(type) {
-      const map = {
-        exam:'🎓', form:'📋', profile:'👤', alert:'📢',
-        note:'📝', exam_date:'📅', grade:'📊', document:'📄', email:'✉️'
-      };
-      return map[type] || '🔔';
+    const _NI = {
+      exam:      `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><circle cx="10" cy="10" r="8"/><path d="M7 10l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      exam_date: `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><rect x="3" y="4" width="14" height="14" rx="2"/><path d="M3 9h14M7 2v4M13 2v4" stroke-linecap="round"/></svg>`,
+      form:      `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><rect x="4" y="2" width="12" height="16" rx="2"/><path d="M7 7h6M7 11h6M7 15h4" stroke-linecap="round"/></svg>`,
+      profile:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><circle cx="10" cy="7" r="3.5"/><path d="M3 18c0-3.866 3.134-7 7-7s7 3.134 7 7" stroke-linecap="round"/></svg>`,
+      alert:     `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><path d="M10 3a7 7 0 100 14A7 7 0 0010 3z"/><path d="M10 8v4M10 13.5v.5" stroke-linecap="round"/></svg>`,
+      note:      `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><path d="M4 3h12v10l-4 4H4z" stroke-linejoin="round"/><path d="M12 13v4M12 13h4" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 8h6M7 11h4" stroke-linecap="round"/></svg>`,
+      email:     `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><rect x="2" y="5" width="16" height="12" rx="2"/><path d="M2 8l8 5 8-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+      default:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><path d="M10 2a6 6 0 016 6c0 3.5 2 5 2 5H2s2-1.5 2-5a6 6 0 016-6z" stroke-linejoin="round"/><path d="M8.5 17a1.5 1.5 0 003 0" stroke-linecap="round"/></svg>`
+    };
+    function notifIconFor(type) { return _NI[type] || _NI.default; }
+    function annSeverityIcon(sev) {
+      return {
+        danger:  `<svg viewBox="0 0 20 20" fill="none" stroke="#ef4444" stroke-width="1.6" width="18" height="18"><path d="M10 3L2 17h16L10 3z" stroke-linejoin="round"/><path d="M10 9v4M10 14.5v.5" stroke-linecap="round"/></svg>`,
+        warning: `<svg viewBox="0 0 20 20" fill="none" stroke="#eab308" stroke-width="1.6" width="18" height="18"><circle cx="10" cy="10" r="8"/><path d="M10 7v4M10 12.5v.5" stroke-linecap="round"/></svg>`,
+        info:    `<svg viewBox="0 0 20 20" fill="none" stroke="#3b82f6" stroke-width="1.6" width="18" height="18"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 7v.5" stroke-linecap="round" stroke-width="2"/></svg>`,
+        success: `<svg viewBox="0 0 20 20" fill="none" stroke="#22c55e" stroke-width="1.6" width="18" height="18"><circle cx="10" cy="10" r="8"/><path d="M6.5 10l2.5 2.5 4.5-5" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+      }[sev] || _NI.alert;
     }
 
     async function fetchNotifications() {
@@ -8504,14 +8555,17 @@
       });
 
       // 1. Certificates
-      (res.certs || []).forEach(r => all.push({
-        id:    'cert_' + r.id,
-        type:  'exam',
-        title: 'Exam result published',
-        body:  `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
-        ts:    r.created_at,
-        link:  'Student-page.html?tab=exams'
-      }));
+      (res.certs || []).forEach(r => {
+        _certData[r.id] = { exam_title: r.exam_title, grade: r.grade, score: r.score, ts: r.created_at };
+        all.push({
+          id:     'cert_' + r.id,
+          type:   'exam',
+          title:  'Exam result published',
+          body:   `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
+          ts:     r.created_at,
+          certId: r.id
+        });
+      });
 
       // 2. Form submissions
       (res.forms || []).forEach(r => {
@@ -8575,7 +8629,7 @@
           } catch(_) { timeNote = ` at ${examTime}`; }
         }
         all.push({ id:'examdate_'+examDate, type:'exam_date',
-          title:'Final Examination date confirmed', body:fmtDate+timeNote, ts: examDate + 'T00:00:00', link:'Student-page.html?tab=exams' });
+          title:'Final Examination date confirmed', body:fmtDate+timeNote, ts: examDate + 'T00:00:00' });
       }
 
       // 6. Published notes
@@ -8705,14 +8759,18 @@
             onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>`
         : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}`;
 
-      // For non-group items: email opens modal; navigable items navigate; else mark seen
+      // For non-group items: dispatch by type or link
       const clickHandler = isGroup
         ? `toggleNotifGroup('${n.type}',this)`
         : (n.type === 'email' && n.emailId)
           ? `openEmailModal('${n.emailId}','${idsAttr}',this)`
-          : (n.link && !isSingleNote)
-            ? `openNotifLink('${idsAttr}','${n.link}',this)`
-            : `markNotifSeen('${idsAttr}',this)`;
+          : (n.type === 'exam_date')
+            ? `openExamDateModal('${idsAttr}',this)`
+            : (n.type === 'exam' && n.certId)
+              ? `openExamResultModal('${n.certId}','${idsAttr}',this)`
+              : (n.link && !isSingleNote)
+                ? `openNotifLink('${idsAttr}','${n.link}',this)`
+                : `markNotifSeen('${idsAttr}',this)`;
 
       return `
         <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
@@ -8744,8 +8802,71 @@
 
     function notifChildNav(id, link) {
       markNotifSeen(id, null);
+      // Exam date / exam result child items → open local modal
+      const notif = (_cachedNotifications || []).flatMap(n => n.items || [n]).find(n => n.id === id);
+      if (notif) {
+        if (notif.type === 'exam_date') { closeNotificationsPanel(); openExamDateModal(id, null); return; }
+        if (notif.type === 'exam' && notif.certId) { closeNotificationsPanel(); openExamResultModal(notif.certId, id, null); return; }
+      }
       closeNotificationsPanel();
       if (link) window.open(link, '_blank', 'noopener,noreferrer');
+    }
+
+    function openExamDateModal(idsAttr, el) {
+      markNotifSeen(idsAttr, el);
+      closeNotificationsPanel();
+      const sd = studentData || {};
+      const examDate = sd.finalExamDate || '';
+      const examTime = sd.finalExamTime || '';
+      const d = examDate ? new Date(examDate + 'T00:00:00') : null;
+      const fmtDate = d ? d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) : 'Date TBA';
+      let timeNote = examTime ? examTime + ' (Armenia Time)' : '';
+      if (examTime) {
+        try {
+          const [hh,mm] = examTime.split(':').map(Number);
+          const base = new Date((examDate||'2000-01-01') + 'T00:00:00Z');
+          base.setUTCHours(hh-4,mm);
+          const la = base.toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',hour12:true});
+          timeNote = examTime + ' (Armenia)  ·  ' + la + ' (Los Angeles)';
+        } catch(_){}
+      }
+      document.getElementById('examModalTitle').textContent   = 'Final Examination';
+      document.getElementById('examModalSubject').textContent = sd.finalExamSubject || 'Final Exam';
+      document.getElementById('examModalDate').textContent    = fmtDate;
+      document.getElementById('examModalTime').textContent    = timeNote || '—';
+      document.getElementById('examModalGrade').style.display = 'none';
+      document.getElementById('examModalScore').style.display = 'none';
+      document.getElementById('examModalStatusRow').style.display = 'none';
+      document.getElementById('examModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function openExamResultModal(certId, idsAttr, el) {
+      markNotifSeen(idsAttr, el);
+      closeNotificationsPanel();
+      const c = _certData[certId] || {};
+      const fmtDate = c.ts ? new Date(c.ts).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) : '';
+      document.getElementById('examModalTitle').textContent   = 'Exam Result';
+      document.getElementById('examModalSubject').textContent = c.exam_title || 'Exam';
+      document.getElementById('examModalDate').textContent    = fmtDate || '—';
+      document.getElementById('examModalTime').textContent    = '';
+      const gradeEl = document.getElementById('examModalGrade');
+      const scoreEl = document.getElementById('examModalScore');
+      const statusRow = document.getElementById('examModalStatusRow');
+      gradeEl.style.display  = c.grade ? '' : 'none';
+      gradeEl.textContent    = c.grade || '';
+      scoreEl.style.display  = c.score != null ? '' : 'none';
+      scoreEl.textContent    = c.score != null ? c.score + '%' : '';
+      statusRow.style.display = 'flex';
+      document.getElementById('examModalStatusBadge').textContent = 'Published';
+      document.getElementById('examModal').classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeExamModal() {
+      const m = document.getElementById('examModal');
+      if (m) m.classList.remove('open');
+      document.body.style.overflow = '';
     }
 
     function _applyEmailToFrame(html) {
@@ -8838,7 +8959,8 @@
     }
 
     let _cachedNotifications = null;
-    const _emailBodies = {};  // emailId → html_body, populated during fetchNotifications
+    const _emailBodies = {};  // emailId → html_body, lazy-loaded on click
+    const _certData    = {};  // certId  → {exam_title,grade,score,ts}
 
     function _renderNotifPanel(notifications) {
       const seen = getSeenIds();
@@ -8950,6 +9072,43 @@
     })();
   </script>
 
+  <!-- EXAM INFO MODAL -->
+  <div id="examModal" onclick="if(event.target===this)closeExamModal()">
+    <div id="examModalContainer">
+      <div id="examModalHeader">
+        <div id="examModalMeta">
+          <div id="examModalTitle"></div>
+          <div id="examModalSubject"></div>
+        </div>
+        <button id="examModalClose" onclick="closeExamModal()">&#10005;</button>
+      </div>
+      <div id="examModalBody">
+        <div class="exam-modal-row">
+          <span class="exam-modal-label">Date</span>
+          <span id="examModalDate" class="exam-modal-value"></span>
+        </div>
+        <div class="exam-modal-row" id="examTimeRow">
+          <span class="exam-modal-label">Time</span>
+          <span id="examModalTime" class="exam-modal-value"></span>
+        </div>
+        <div class="exam-modal-row" id="examModalStatusRow">
+          <span class="exam-modal-label">Status</span>
+          <span id="examModalStatusBadge" class="exam-status-badge"></span>
+        </div>
+        <div class="exam-modal-grade-row">
+          <div class="exam-modal-grade-card">
+            <div class="exam-modal-grade-label">Grade</div>
+            <div id="examModalGrade" class="exam-modal-grade-value"></div>
+          </div>
+          <div class="exam-modal-grade-card">
+            <div class="exam-modal-grade-label">Score</div>
+            <div id="examModalScore" class="exam-modal-grade-value"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- EMAIL VIEWER MODAL -->
   <div id="emailViewerModal" onclick="if(event.target===this)closeEmailModal()">
     <div id="emailViewerContainer">
@@ -9000,9 +9159,7 @@
       try { localStorage.setItem(ANN_SEEN_KEY(), JSON.stringify([...set])); } catch(_) {}
     }
 
-    function annSeverityIcon(severity) {
-      return {danger:'🚨', warning:'⚠️', info:'ℹ️', success:'✅'}[severity] || '📢';
-    }
+    // annSeverityIcon defined above inside notifIconFor block
     function annSeverityLabel(severity) {
       return {danger:'Urgent', warning:'Warning', info:'Info', success:'Update'}[severity] || 'Announcement';
     }
