@@ -735,10 +735,20 @@ body {
   border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color .2s, box-shadow .2s;
+  scroll-margin-top: 80px;
 }
 .tracker-card:hover {
   border-color: rgba(201,168,76,0.26);
   box-shadow: 0 6px 24px rgba(0,0,0,0.28);
+}
+.tracker-card.notif-highlight {
+  border-color: rgba(201,168,76,0.70);
+  box-shadow: 0 0 0 3px rgba(201,168,76,0.20), 0 8px 32px rgba(0,0,0,0.40);
+  animation: notifPulse 2s ease-out forwards;
+}
+@keyframes notifPulse {
+  0%   { box-shadow: 0 0 0 6px rgba(201,168,76,0.35), 0 8px 32px rgba(0,0,0,0.40); }
+  100% { box-shadow: 0 0 0 3px rgba(201,168,76,0.20), 0 8px 32px rgba(0,0,0,0.40); }
 }
 .tracker-card-header {
   display: flex;
@@ -2774,7 +2784,7 @@ function renderTracker() {
       </div>` : '';
 
     return `
-      <div class="tracker-card" role="article" aria-label="Submission: ${escHtml(s.title)}">
+      <div class="tracker-card" id="subcard-${s.dbId || ''}" role="article" aria-label="Submission: ${escHtml(s.title)}">
         <div class="tracker-card-header">
           <div class="tracker-card-title-wrap">
             <span class="tracker-card-form-name">${escHtml(s.title)}</span>
@@ -2936,6 +2946,19 @@ async function initTracker() {
     console.warn('Tracker fetch failed, using cached data:', e);
   }
   renderTracker();
+
+  // Deep-link: ?submission=UUID — scroll to and highlight that card
+  const _subParam = new URLSearchParams(location.search).get('submission');
+  if (_subParam) {
+    const _target = document.getElementById('subcard-' + _subParam);
+    if (_target) {
+      setTimeout(() => {
+        _target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        _target.classList.add('notif-highlight');
+        setTimeout(() => _target.classList.remove('notif-highlight'), 4000);
+      }, 400);
+    }
+  }
 }
 initTracker();
 

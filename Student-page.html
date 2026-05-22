@@ -3969,7 +3969,7 @@ async function fetchStudentProfile() {
   if (studentRecordId) {
     const { data: byId, error: idError } = await supabase
       .from('students')
-      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time, final_exam_status')
       .eq('id', studentRecordId)
       .maybeSingle();
 
@@ -3983,7 +3983,7 @@ async function fetchStudentProfile() {
   if (studentId && studentId.startsWith('ACNHS-')) {
     const { data: byStudentId, error: studentIdError } = await supabase
       .from('students')
-      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time, final_exam_status')
       .eq('student_id', studentId)
       .maybeSingle();
 
@@ -4001,7 +4001,7 @@ async function fetchStudentProfile() {
     const normalizedEmail = email.toLowerCase().trim();
     const { data: byEmail, error: emailError } = await supabase
       .from('students')
-      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time')
+      .select('id, student_id, application_id, full_name, email, phone, date_of_birth, gender, nationality, program, start_term, status, emergency_contact_name, emergency_contact_relation, emergency_contact_phone, metadata, invoice_url, enrollment_date, group, final_exam_date, final_exam_time, final_exam_status')
       .eq('email', normalizedEmail)
       .maybeSingle();
 
@@ -4751,6 +4751,290 @@ function renderAttendancePanels(attendance = {}) {
   }
 }
 
+function openFinalExamPopup() {
+  const profile  = portalState && portalState.profile;
+  const examDate = profile && profile.final_exam_date;
+  if (!examDate) return;
+
+  const studentName  = profile.full_name  || 'Student';
+  const studentIdVal = profile.student_id || 'N/A';
+  const program      = profile.program    || 'Nursing Program';
+
+  const d       = new Date(examDate + 'T00:00:00');
+  const dayName  = d.toLocaleDateString('en-US', { weekday:'long' });
+  const monthDay = d.toLocaleDateString('en-US', { month:'long', day:'numeric' });
+  const year     = d.getFullYear();
+  const examTime = profile.final_exam_time || null;
+
+  function _spFmtBothTZ(dateStr, timeStr) {
+    const [hStr, mStr] = timeStr.split(':');
+    const h = parseInt(hStr, 10);
+    const m = parseInt(mStr, 10);
+    const [y, mo, day] = dateStr.split('-').map(Number);
+    const utcMs = Date.UTC(y, mo - 1, day, h - 4, m, 0);
+    const dt    = new Date(utcMs);
+    const laFmt  = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit', hour12: true });
+    const armFmt = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Yerevan',        hour: 'numeric', minute: '2-digit', hour12: true });
+    return { la: laFmt.format(dt), armenia: armFmt.format(dt) };
+  }
+
+  let timeHtml = '';
+  if (examTime) {
+    try {
+      const { la, armenia } = _spFmtBothTZ(examDate, examTime);
+      timeHtml = `
+        <div style="display:inline-flex;align-items:stretch;border:1px solid rgba(201,168,76,0.25);border-radius:10px;overflow:hidden;margin:10px 0 6px;">
+          <div style="display:flex;flex-direction:column;justify-content:center;padding:10px 18px;background:rgba(201,168,76,0.07);">
+            <span style="font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:3px;">Armenia</span>
+            <span style="font-size:17px;font-weight:900;color:#f0d98a;letter-spacing:-.02em;line-height:1;">${armenia}</span>
+          </div>
+          <div style="width:1px;background:rgba(201,168,76,0.2);align-self:stretch;"></div>
+          <div style="display:flex;flex-direction:column;justify-content:center;padding:10px 18px;background:rgba(201,168,76,0.04);">
+            <span style="font-size:8.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:3px;">Los Angeles</span>
+            <span style="font-size:17px;font-weight:900;color:#f0d98a;letter-spacing:-.02em;line-height:1;">${la}</span>
+          </div>
+        </div>`;
+    } catch (_) {}
+  }
+
+  const logoSrc = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL)
+               || 'https://acnhs.am/wp-content/uploads/2023/01/ACNHS-Logo-2.png';
+
+  const P  = `style="font-size:13px;line-height:22px;color:rgba(203,213,225,0.85);margin-bottom:10px;"`;
+  const PW = `style="font-size:13px;line-height:22px;color:rgba(203,213,225,0.85);margin-bottom:0;"`;
+
+  function sec(num, title, body) {
+    return `<div style="margin-bottom:28px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(201,168,76,0.14);">
+            <div style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#c9a84c,#a07830);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#04111f;flex-shrink:0;">${num}</div>
+            <div style="font-size:14px;font-weight:800;color:#e2cc92;letter-spacing:.02em;">${title}</div>
+          </div>
+          <div style="padding-left:36px;">${body}</div>
+        </div>`;
+  }
+  function bullet(txt) {
+    return `<div style="display:flex;align-items:flex-start;gap:9px;margin-bottom:7px;">
+          <div style="width:5px;height:5px;border-radius:50%;background:#c9a84c;margin-top:7px;flex-shrink:0;"></div>
+          <div style="font-size:13px;line-height:20px;color:rgba(203,213,225,0.85);">${txt}</div>
+        </div>`;
+  }
+  function sub(label) {
+    return `<div style="font-size:12px;font-weight:800;color:#d4b56a;letter-spacing:.04em;text-transform:uppercase;margin:13px 0 8px;">${label}</div>`;
+  }
+  function warn(txt) {
+    return `<div style="background:rgba(239,68,68,0.1);border-left:3px solid #ef4444;border-radius:0 7px 7px 0;padding:10px 14px;font-size:12px;line-height:19px;color:#fca5a5;font-weight:700;margin-top:9px;">${txt}</div>`;
+  }
+  function note(txt) {
+    return `<div style="background:rgba(201,168,76,0.09);border-left:3px solid #c9a84c;border-radius:0 7px 7px 0;padding:10px 14px;font-size:12px;line-height:19px;color:rgba(226,204,146,0.9);font-weight:600;margin-top:9px;">${txt}</div>`;
+  }
+
+  const _fepId = 'spfep_' + Date.now();
+  const overlay = document.createElement('div');
+  overlay.id = _fepId;
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(2,6,23,0.95);backdrop-filter:blur(10px);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;font-family:Inter,system-ui,sans-serif;';
+  overlay.innerHTML = `
+        <div style="background:#050f1f;border:1px solid rgba(201,168,76,0.32);border-radius:20px;width:100%;max-width:640px;max-height:93vh;display:flex;flex-direction:column;box-shadow:0 60px 160px rgba(0,0,0,0.9),0 0 0 1px rgba(201,168,76,0.07);overflow:hidden;">
+
+          <div style="height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#f0d98a 50%,#c9a84c 60%,transparent);flex-shrink:0;"></div>
+
+          <!-- Modal header -->
+          <div style="padding:20px 24px 17px;border-bottom:1px solid rgba(201,168,76,0.14);flex-shrink:0;display:flex;align-items:center;gap:14px;">
+            <img src="${logoSrc}" width="52" height="52" alt="ACNHS" style="border-radius:50%;object-fit:cover;border:2px solid rgba(201,168,76,0.4);flex-shrink:0;background:rgba(201,168,76,0.08);">
+            <div>
+              <div style="font-size:9px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:#c9a84c;margin-bottom:4px;">Armenian College of Nursing &amp; Health Sciences</div>
+              <div style="font-size:21px;font-weight:900;color:#f0e3bc;letter-spacing:-.4px;line-height:1.15;">Final Examination</div>
+              <div style="font-size:12px;color:rgba(148,163,184,0.6);margin-top:4px;font-weight:500;">Official Requirements &amp; Student Guidelines</div>
+            </div>
+          </div>
+
+          <!-- Date + student hero -->
+          <div style="flex-shrink:0;padding:20px 24px;background:linear-gradient(150deg,rgba(201,168,76,0.12),rgba(201,168,76,0.03));border-bottom:1px solid rgba(201,168,76,0.14);">
+            <div style="font-size:10px;font-weight:800;letter-spacing:.2em;text-transform:uppercase;color:rgba(201,168,76,0.6);margin-bottom:9px;">Scheduled Examination Date</div>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:4px;">
+              <div style="display:flex;align-items:baseline;gap:10px;">
+                <span style="font-size:36px;font-weight:900;color:#f0d98a;letter-spacing:-1px;line-height:1;">${monthDay}</span>
+                <span style="font-size:22px;font-weight:700;color:rgba(240,217,138,0.45);">${year}</span>
+              </div>
+              ${timeHtml}
+            </div>
+            <div style="font-size:13px;font-weight:600;color:rgba(201,168,76,0.6);margin-bottom:15px;">${dayName}</div>
+            <div style="display:flex;align-items:center;padding-top:14px;border-top:1px solid rgba(201,168,76,0.13);">
+              <div>
+                <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(148,163,184,0.45);margin-bottom:3px;">Registered Student</div>
+                <div style="font-size:15px;font-weight:800;color:#e2e8f0;">${studentName}</div>
+              </div>
+              <div style="margin-left:auto;text-align:right;">
+                <div style="font-size:9px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:rgba(148,163,184,0.45);margin-bottom:3px;">Student ID</div>
+                <div style="font-size:14px;font-weight:800;color:#2dd4bf;letter-spacing:.05em;">${studentIdVal}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Scrollable content -->
+          <div style="flex:1;overflow-y:auto;min-height:0;padding:24px 24px 30px;">
+
+            ${sec(1,'Purpose of the Final Examination',`
+              <p ${P}>The Final Examination is the official comprehensive assessment required for students to successfully complete the program and receive their diploma from the Armenian College of Nursing &amp; Health Sciences.</p>
+              <p ${P}>This examination is designed to confirm that each student has achieved the required academic knowledge, clinical judgment, professional communication skills, and readiness expected at the completion of the program.</p>
+              ${warn('Passing the Final Examination is mandatory. No diploma will be issued to any student who does not successfully complete and pass all required components of the final examination.')}
+            `)}
+
+            ${sec(2,'Examination Format',`
+              <p ${P}>The Final Examination will be conducted <strong style="color:#e2e8f0;">online</strong>, based on the student&#39;s request. Although the examination is online, it will be administered under strict academic, professional, and disciplinary standards.</p>
+              <p ${P}>The examination will consist of two required parts:</p>
+
+              <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:13px 15px;margin-bottom:10px;">
+                ${sub('Part I — Written Testing Component')}
+                <p ${P}>This section will include comprehensive test questions covering previously taught course content. Questions may include, but are not limited to:</p>
+                ${bullet('Multiple-choice questions')}
+                ${bullet('Select-all-that-apply questions')}
+                ${bullet('Priority and delegation questions')}
+                ${bullet('Clinical judgment questions')}
+                ${bullet('Case-based nursing scenarios')}
+                ${bullet('Medication and safety-related questions')}
+                ${bullet('Questions from major nursing subjects previously covered in class')}
+                <p style="font-size:12px;line-height:19px;color:rgba(203,213,225,0.7);margin:10px 0 0;">The purpose of this section is to assess the student&#39;s theoretical knowledge, critical thinking, nursing judgment, and ability to apply learned material in clinical situations.</p>
+              </div>
+
+              <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.2);border-radius:10px;padding:13px 15px;">
+                ${sub('Part II — Oral Instructor Questioning Component')}
+                ${bullet('Each instructor will participate in the oral portion of the final examination.')}
+                ${bullet('Each instructor will ask two questions from the material previously taught in their own classes.')}
+                ${bullet('Students are expected to answer professionally, clearly, and accurately.')}
+                <p style="font-size:12px;line-height:19px;color:rgba(203,213,225,0.7);margin:10px 0 6px;">The oral component will evaluate:</p>
+                ${bullet('Understanding of previously taught material')}
+                ${bullet('Ability to explain nursing concepts clearly')}
+                ${bullet('Clinical reasoning')}
+                ${bullet('Professional communication')}
+                ${bullet('Confidence and readiness')}
+                ${bullet('Ability to answer without assistance, notes, or outside support')}
+                ${warn('Failure to answer instructor questions at an acceptable professional level may affect the student\'s final result, even if the written testing score is passing.')}
+              </div>
+            `)}
+
+            ${sec(3,'Passing Requirement',`
+              <p ${P}>To successfully pass the Final Examination, the student must meet <strong style="color:#e2e8f0;">all</strong> of the following requirements:</p>
+              ${bullet('Achieve a minimum score of <strong style="color:#e2e8f0;">75%</strong> on the written testing component.')}
+              ${bullet('Receive a satisfactory evaluation on the oral instructor questioning component.')}
+              ${bullet('Attend the examination on time and remain present for the full duration.')}
+              ${bullet('Follow all online examination rules and academic integrity requirements.')}
+              ${bullet('Demonstrate professional behavior throughout the examination.')}
+              ${note('A student who scores below 75% on the written testing component will not pass the final examination.')}
+              ${note('A student who performs poorly during the oral instructor questioning component may be required to repeat the oral section, complete remediation, or retake the final examination, depending on the decision of the academic administration.')}
+            `)}
+
+            ${sec(4,'Strict Online Examination Rules',`
+              <p ${P}>Because the examination is being conducted online, the following rules will be strictly enforced:</p>
+
+              ${sub('Camera and Microphone')}
+              ${bullet('The student must keep the camera <strong style="color:#e2e8f0;">on</strong> for the entire examination.')}
+              ${bullet('The student\'s face must be clearly visible at all times.')}
+              ${bullet('The microphone must remain available and turned on when requested by instructors or examination supervisors.')}
+              ${warn('Turning off the camera without permission may result in disqualification from the examination.')}
+
+              ${sub('Environment Requirements')}
+              ${bullet('The student must be alone in a quiet room.')}
+              ${bullet('No other person may be present in the room during the examination.')}
+              ${bullet('The examination area must be clean and free of books, notes, papers, phones, tablets, smartwatches, or any unauthorized materials.')}
+              ${bullet('The student may be asked to show the room, desk, and surrounding area before or during the examination.')}
+              ${warn('Refusal to show the examination environment may result in immediate termination of the examination.')}
+
+              ${sub('Device and Internet Requirements')}
+              <p ${P}>The student is responsible for having:</p>
+              ${bullet('A working computer or approved device')}
+              ${bullet('Stable internet connection')}
+              ${bullet('Working camera and microphone')}
+              ${bullet('Sufficient battery or charger connected')}
+              ${bullet('Access to the examination platform before the scheduled start time')}
+              ${note('Technical problems caused by the student\'s device, internet, or failure to prepare may not excuse poor performance or absence.')}
+
+              ${sub('Academic Integrity')}
+              <p ${P}>The following actions are strictly prohibited:</p>
+              ${bullet('Using books, notes, screenshots, websites, AI tools, phones, or outside materials')}
+              ${bullet('Receiving help from another person')}
+              ${bullet('Communicating with anyone during the examination')}
+              ${bullet('Copying, recording, photographing, or sharing exam questions')}
+              ${bullet('Leaving the screen without permission')}
+              ${bullet('Looking repeatedly away from the screen in a suspicious manner')}
+              ${bullet('Wearing headphones unless specifically approved')}
+              ${bullet('Opening other browser tabs, applications, or devices during the exam')}
+              ${bullet('Attempting to manipulate the online testing system')}
+              <p style="font-size:12px;line-height:19px;color:rgba(203,213,225,0.7);margin:10px 0 6px;">Any form of cheating, dishonesty, unauthorized assistance, or suspicious behavior may result in:</p>
+              ${bullet('Immediate removal from the examination')}
+              ${bullet('A grade of zero')}
+              ${bullet('Failure of the Final Examination')}
+              ${bullet('Delay or denial of diploma issuance')}
+              ${bullet('Referral to the academic administration for disciplinary review')}
+            `)}
+
+            ${sec(5,'Attendance and Punctuality',`
+              ${bullet('Students must join the online examination at the scheduled time.')}
+              ${bullet('Late arrival may result in loss of examination time or denial of entry.')}
+              ${bullet('A student who does not attend the examination without prior written approval will be marked as absent and will not be eligible to receive a diploma until the examination requirement is completed.')}
+              ${note('Emergency rescheduling may be considered only with valid documentation and administrative approval.')}
+            `)}
+
+            ${sec(6,'Professional Conduct',`
+              <p ${P}>Students are expected to behave with professionalism throughout the examination.</p>
+              ${warn('Unprofessional behavior, disrespect toward instructors, arguing, refusal to follow instructions, inappropriate language, or disruptive conduct may result in failure of the examination or disciplinary action.')}
+              ${note('The Final Examination is a formal academic requirement and must be treated with the highest level of seriousness.')}
+            `)}
+
+            ${sec(7,'Grading and Final Decision',`
+              <p ${P}>The final examination result will be determined based on both components:</p>
+              <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.18);border-radius:9px;padding:11px 14px;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:800;color:#e2cc92;margin-bottom:5px;">Written Testing Component</div>
+                <div style="font-size:13px;color:rgba(203,213,225,0.75);">Minimum passing score: <strong style="color:#f0d98a;">75%</strong></div>
+              </div>
+              <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(201,168,76,0.18);border-radius:9px;padding:11px 14px;margin-bottom:8px;">
+                <div style="font-size:11px;font-weight:800;color:#e2cc92;margin-bottom:5px;">Oral Instructor Questioning Component</div>
+                <div style="font-size:13px;color:rgba(203,213,225,0.75);">Must be evaluated as satisfactory by the instructors and academic administration.</div>
+              </div>
+              ${note('The final decision regarding pass, fail, remediation, or retake will be made by the academic administration after reviewing the student\'s full performance.')}
+              ${warn('A passing written score alone does not automatically guarantee diploma approval if the student fails to demonstrate acceptable professional knowledge, communication, or conduct during the oral portion.')}
+            `)}
+
+            ${sec(8,'Retake Policy',`
+              ${bullet('Students who fail the Final Examination may be allowed one retake, subject to administrative approval.')}
+              ${bullet('Before a retake is approved, the student may be required to complete remediation, additional review, or instructor-assigned preparation.')}
+              ${warn('A student who fails to appear for the retake, violates exam rules, or fails the retake may be denied diploma issuance until further academic review.')}
+            `)}
+
+            ${sec(9,'Diploma Eligibility',`
+              <p ${P}>A student will be eligible to receive the diploma only after:</p>
+              ${bullet('Completing all required coursework.')}
+              ${bullet('Completing all required clinical and academic obligations.')}
+              ${bullet('Passing the Final Examination.')}
+              ${bullet('Meeting all financial, administrative, and documentation requirements.')}
+              ${bullet('Receiving final academic clearance from the institution.')}
+              ${warn('No diploma will be released before all requirements are fully satisfied.')}
+            `)}
+
+            ${sec(10,'Student Acknowledgment',`
+              <p ${PW}>By participating in the Final Examination, the student confirms that they understand and agree to follow all examination rules, academic integrity standards, passing requirements, and institutional policies.</p>
+              ${warn('Failure to comply with these requirements may result in failure of the examination and delay or denial of diploma issuance.')}
+            `)}
+
+          </div>
+
+          <!-- Footer -->
+          <div style="flex-shrink:0;padding:13px 24px;border-top:1px solid rgba(201,168,76,0.14);display:flex;align-items:center;justify-content:space-between;background:rgba(4,17,31,0.7);">
+            <div style="font-size:10px;color:rgba(148,163,184,0.38);font-weight:600;letter-spacing:.04em;">© ${new Date().getFullYear()} ACNHS · Yerevan, Armenia</div>
+            <button onclick="document.getElementById('${_fepId}').remove();document.body.style.overflow='';" style="background:linear-gradient(135deg,rgba(201,168,76,0.2),rgba(201,168,76,0.09));border:1px solid rgba(201,168,76,0.42);border-radius:8px;color:#d4b56a;font-size:12px;font-weight:700;padding:7px 20px;cursor:pointer;letter-spacing:.03em;" onmouseover="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.33),rgba(201,168,76,0.16))'" onmouseout="this.style.background='linear-gradient(135deg,rgba(201,168,76,0.2),rgba(201,168,76,0.09))'">Dismiss</button>
+          </div>
+          <div style="height:2px;background:linear-gradient(90deg,transparent,#c9a84c 40%,#f0d98a 50%,#c9a84c 60%,transparent);flex-shrink:0;"></div>
+        </div>`;
+
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) {
+      overlay.remove();
+      document.body.style.overflow = '';
+    }
+  });
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(overlay);
+}
+
 function renderExamsTable(exams = []) {
   // ── Final Examination Card ─────────────────────────────────────────────
   const finalCard = document.getElementById('finalExamCard');
@@ -4758,7 +5042,89 @@ function renderExamsTable(exams = []) {
     const profile = portalState && portalState.profile;
     const examDate = profile && profile.final_exam_date;
     const examTime = profile && profile.final_exam_time;
+    const examStatus = profile && profile.final_exam_status; // 'pending' | 'pass' | 'fail' | null
+
+    // Determine whether the exam date+time has passed
+    let examHasPassed = false;
     if (examDate) {
+      const timeStr = examTime || '23:59';
+      const [hh, mm] = timeStr.split(':').map(Number);
+      // Armenia is UTC+4
+      const examDateUTC = Date.UTC(...examDate.split('-').map(Number).map((v,i)=>i===1?v-1:v), hh - 4, mm);
+      examHasPassed = Date.now() > examDateUTC;
+    }
+
+    // --- PASS banner ---
+    if (examStatus === 'pass') {
+      finalCard.innerHTML = `
+        <div style="position:relative;background:linear-gradient(145deg,rgba(4,38,24,0.97),rgba(5,46,28,0.99));border:1px solid rgba(52,211,153,0.45);border-radius:16px;padding:0;margin-bottom:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+          <div style="height:2px;background:linear-gradient(90deg,transparent,#34d399 30%,#6ee7b7 50%,#34d399 70%,transparent);"></div>
+          <div style="padding:20px 24px 22px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="width:18px;height:1px;background:rgba(52,211,153,0.5);"></div>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(52,211,153,0.65);">Final Examination</span>
+              <div style="flex:1;height:1px;background:rgba(52,211,153,0.2);"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:rgba(52,211,153,0.15);border:1.5px solid rgba(52,211,153,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </div>
+              <div>
+                <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#6ee7b7;line-height:1.1;">Pass</div>
+                <div style="font-size:11px;color:rgba(110,231,183,0.6);margin-top:3px;">Final Examination — Result Confirmed</div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+    // --- FAIL banner ---
+    } else if (examStatus === 'fail') {
+      finalCard.innerHTML = `
+        <div style="position:relative;background:linear-gradient(145deg,rgba(38,4,4,0.97),rgba(46,5,5,0.99));border:1px solid rgba(248,113,113,0.45);border-radius:16px;padding:0;margin-bottom:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+          <div style="height:2px;background:linear-gradient(90deg,transparent,#f87171 30%,#fca5a5 50%,#f87171 70%,transparent);"></div>
+          <div style="padding:20px 24px 22px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="width:18px;height:1px;background:rgba(248,113,113,0.5);"></div>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(248,113,113,0.65);">Final Examination</span>
+              <div style="flex:1;height:1px;background:rgba(248,113,113,0.2);"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:rgba(248,113,113,0.12);border:1.5px solid rgba(248,113,113,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </div>
+              <div>
+                <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#fca5a5;line-height:1.1;">Failed</div>
+                <div style="font-size:11px;color:rgba(252,165,165,0.6);margin-top:3px;">Final Examination — Result Confirmed</div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+    // --- PENDING banner (date passed, no result yet) ---
+    } else if (examDate && examHasPassed) {
+      finalCard.innerHTML = `
+        <div style="position:relative;background:linear-gradient(145deg,rgba(23,23,7,0.97),rgba(30,28,5,0.99));border:1px solid rgba(251,191,36,0.35);border-radius:16px;padding:0;margin-bottom:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
+          <div style="height:2px;background:linear-gradient(90deg,transparent,#fbbf24 30%,#fde68a 50%,#fbbf24 70%,transparent);"></div>
+          <div style="padding:20px 24px 22px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="width:18px;height:1px;background:rgba(251,191,36,0.5);"></div>
+              <span style="font-size:9.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(251,191,36,0.6);">Final Examination</span>
+              <div style="flex:1;height:1px;background:rgba(251,191,36,0.15);"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <div style="width:44px;height:44px;border-radius:50%;background:rgba(251,191,36,0.1);border:1.5px solid rgba(251,191,36,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px;height:22px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+              </div>
+              <div>
+                <div style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#fde68a;line-height:1.1;">Pending</div>
+                <div style="font-size:11px;color:rgba(253,230,138,0.55);margin-top:3px;">Awaiting official result</div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+    // --- SCHEDULED banner (date is in the future — original gold date card) ---
+    } else if (examDate) {
       const d = new Date(examDate + 'T00:00:00');
       const formattedDate = d.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
       let timeHtml = '';
@@ -4789,7 +5155,7 @@ function renderExamsTable(exams = []) {
         } catch (_) {}
       }
       finalCard.innerHTML = `
-        <div style="position:relative;background:linear-gradient(145deg,rgba(12,36,68,0.95) 0%,rgba(7,23,46,0.98) 100%);border:1px solid rgba(201,168,76,0.32);border-radius:16px;padding:0;margin-bottom:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.45),inset 0 1px 0 rgba(201,168,76,0.06);">
+        <div onclick="openFinalExamPopup()" style="cursor:pointer;position:relative;background:linear-gradient(145deg,rgba(12,36,68,0.95) 0%,rgba(7,23,46,0.98) 100%);border:1px solid rgba(201,168,76,0.32);border-radius:16px;padding:0;margin-bottom:24px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.45),inset 0 1px 0 rgba(201,168,76,0.06);transition:border-color .2s,box-shadow .2s;" onmouseover="this.style.borderColor='rgba(201,168,76,0.55)';this.style.boxShadow='0 12px 40px rgba(0,0,0,0.55),inset 0 1px 0 rgba(201,168,76,0.1)'" onmouseout="this.style.borderColor='rgba(201,168,76,0.32)';this.style.boxShadow='0 8px 32px rgba(0,0,0,0.45),inset 0 1px 0 rgba(201,168,76,0.06)'">
           <!-- Gold top accent line -->
           <div style="height:2px;background:linear-gradient(90deg,transparent,#c9a84c 30%,#f0e3bc 50%,#c9a84c 70%,transparent);"></div>
           <div style="padding:20px 24px 22px;">
@@ -4804,6 +5170,8 @@ function renderExamsTable(exams = []) {
             ${timeHtml}
           </div>
         </div>`;
+
+    // --- No date set ---
     } else {
       finalCard.innerHTML = '';
     }
@@ -5320,7 +5688,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   portalState.dataset.transcript.hash = verificationCodes.standard;
   renderTranscriptMeta(portalState.dataset.transcript, verificationCodes);
 
-  showTab('dashboard');
+  // Deep-link: ?tab=NAME navigates to that tab on load (used by notifications)
+  const _tabParam = new URLSearchParams(location.search).get('tab');
+  showTab(_tabParam || 'dashboard');
 
   // Check if this month's tuition is outstanding and show banner
   _finCheckTuitionBanner();

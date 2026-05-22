@@ -667,6 +667,10 @@
     .np-child-arrow{color:var(--gold-400);flex-shrink:0;font-size:13px;}
     .np-child-note .np-child-label{color:var(--gold-300);font-weight:600;}
     .np-child-note:hover .np-child-label{text-decoration:underline;}
+    .np-child-nav .np-child-label{color:var(--gold-200);}
+    .np-child-nav:hover .np-child-label{text-decoration:underline;}
+    .np-nav-arrow{color:rgba(201,168,76,0.5);font-size:16px;flex-shrink:0;margin-left:auto;transition:color .15s,transform .15s;}
+    .np-item:hover .np-nav-arrow{color:var(--gold-300);transform:translateX(2px);}
     .np-note-link{color:inherit;text-decoration:none;}
     .np-note-link:hover{color:var(--gold-300);text-decoration:underline;}
     .np-empty{
@@ -8392,7 +8396,8 @@
         type:  'exam',
         title: 'Exam result published',
         body:  `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
-        ts:    r.created_at
+        ts:    r.created_at,
+        link:  'Student-page.html?tab=exams'
       }));
 
       // 2. Form submissions
@@ -8407,7 +8412,9 @@
           body: isFinal
             ? `Your "${r.form_title||'request'}" has been ${r.status}.`
             : `Your "${r.form_title||'request'}" is under review.`,
-          ts: r.reviewed_at || r.updated_at || r.submitted_at
+          ts:     r.reviewed_at || r.updated_at || r.submitted_at,
+          link:   'forms.html?submission=' + r.id,
+          formId: r.id
         });
       });
 
@@ -8421,7 +8428,8 @@
           body:  isFinal
             ? `Your ${r.update_type||'profile'} update has been ${r.status}.`
             : `Your ${r.update_type||'profile'} update is under review.`,
-          ts: r.reviewed_at || r.updated_at || r.submitted_at
+          ts:   r.reviewed_at || r.updated_at || r.submitted_at,
+          link: 'Student-page.html?tab=profile'
         });
       });
 
@@ -8434,7 +8442,7 @@
           || (ids && typeof ids === 'object' && !Array.isArray(ids));
         if (!targeted) return;
         const plain = (r.message_html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
-        all.push({ id:'alert_'+r.id, type:'alert', title:r.title||'Announcement', body:plain, ts:r.created_at });
+        all.push({ id:'alert_'+r.id, type:'alert', title:r.title||'Announcement', body:plain, ts:r.created_at, link:'Student-page.html?tab=announcements' });
       });
 
       // 5. Final exam date (localStorage — instant)
@@ -8454,7 +8462,7 @@
           } catch(_) { timeNote = ` at ${examTime}`; }
         }
         all.push({ id:'examdate_'+examDate, type:'exam_date',
-          title:'Final Examination date confirmed', body:fmtDate+timeNote, ts:null });
+          title:'Final Examination date confirmed', body:fmtDate+timeNote, ts:null, link:'Student-page.html?tab=exams' });
       }
 
       // 6. Published notes
@@ -8542,11 +8550,13 @@
               <span class="np-child-arrow">↗</span>
             </a>`;
           }
-          // Generic child item (exam, form, profile, alert)
+          // Generic child item (exam, form, profile, alert) — navigate if link present
           const childLabel = item.body || item.title || '';
-          return `<div class="np-child" onclick="event.stopPropagation();markNotifSeen('${item.id}',null)">
+          const hasLink = !!(item.link);
+          return `<div class="np-child${hasLink ? ' np-child-nav' : ''}" onclick="event.stopPropagation();notifChildNav('${item.id}','${item.link||''}')">
             <span class="np-child-icon">${notifIconFor(item.type)}</span>
             <span class="np-child-label">${childLabel}</span>
+            ${hasLink ? '<span class="np-child-arrow">→</span>' : ''}
           </div>`;
         }).join('');
         childrenHtml = `<div class="np-children" id="npch_${n.type}">${childRows}</div>`;
@@ -8559,9 +8569,12 @@
             onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>`
         : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}`;
 
+      // For non-group items: navigate if they have a link, otherwise just mark seen
       const clickHandler = isGroup
         ? `toggleNotifGroup('${n.type}',this)`
-        : `markNotifSeen('${idsAttr}',this)`;
+        : (n.link && !isSingleNote)
+          ? `openNotifLink('${idsAttr}','${n.link}',this)`
+          : `markNotifSeen('${idsAttr}',this)`;
 
       return `
         <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
@@ -8572,7 +8585,7 @@
             ${n.body && !isGroup ? `<div class="np-item-desc">${n.body}</div>` : ''}
             ${n.ts ? `<div class="np-item-time">${notifTimeAgo(n.ts)}</div>` : ''}
           </div>
-          ${isGroup ? '<span class="np-chevron">&#8250;</span>' : ''}
+          ${isGroup ? '<span class="np-chevron">&#8250;</span>' : (n.link && !isSingleNote ? '<span class="np-nav-arrow">&#8594;</span>' : '')}
         </div>
         ${childrenHtml}`;
     }
@@ -8583,6 +8596,18 @@
       const isOpen = children.classList.toggle('open');
       const chevron = el ? el.querySelector('.np-chevron') : null;
       if (chevron) chevron.classList.toggle('rotated', isOpen);
+    }
+
+    function openNotifLink(idsAttr, link, el) {
+      markNotifSeen(idsAttr, el);
+      closeNotificationsPanel();
+      if (link) window.open(link, '_blank', 'noopener,noreferrer');
+    }
+
+    function notifChildNav(id, link) {
+      markNotifSeen(id, null);
+      closeNotificationsPanel();
+      if (link) window.open(link, '_blank', 'noopener,noreferrer');
     }
 
     function updateNotifBadge(notifications) {
