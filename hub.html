@@ -520,6 +520,98 @@
       border-color:rgba(201,168,76,.55);
     }
 
+    /* ── Notifications Panel ─────────────────────────────────────── */
+    #notifOverlay{
+      display:none;position:fixed;inset:0;z-index:9500;
+      background:rgba(2,8,20,0.55);backdrop-filter:blur(4px);
+    }
+    #notifPanel{
+      position:fixed;top:0;right:0;bottom:0;width:min(420px,96vw);
+      background:linear-gradient(180deg,#071b30 0%,#04111f 100%);
+      border-left:1px solid rgba(201,168,76,0.22);
+      box-shadow:-12px 0 48px rgba(0,0,0,0.55);
+      display:flex;flex-direction:column;
+      transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
+      z-index:9501;
+    }
+    #notifPanel.open{transform:translateX(0);}
+    .np-header{
+      padding:22px 20px 16px;
+      border-bottom:1px solid rgba(201,168,76,0.12);
+      display:flex;align-items:center;justify-content:space-between;
+      flex-shrink:0;
+    }
+    .np-title{
+      font-size:15px;font-weight:900;letter-spacing:-0.02em;color:var(--text-primary);
+    }
+    .np-sub{
+      font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+      color:var(--gold-500);margin-bottom:2px;
+    }
+    .np-close{
+      width:30px;height:30px;border-radius:8px;border:1px solid rgba(201,168,76,0.2);
+      background:rgba(201,168,76,0.07);color:var(--text-muted);font-size:18px;
+      cursor:pointer;display:flex;align-items:center;justify-content:center;
+      transition:all .2s;flex-shrink:0;
+    }
+    .np-close:hover{background:rgba(201,168,76,0.16);color:var(--text-primary);}
+    .np-actions{
+      padding:10px 20px;border-bottom:1px solid rgba(255,255,255,0.05);
+      display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+    }
+    .np-count{font-size:11px;color:var(--text-muted);}
+    .np-mark-all{
+      font-size:11px;font-weight:700;color:var(--gold-400);cursor:pointer;
+      background:none;border:none;padding:0;transition:color .15s;
+    }
+    .np-mark-all:hover{color:var(--gold-200);}
+    .np-list{
+      flex:1;overflow-y:auto;padding:8px 0;
+    }
+    .np-list::-webkit-scrollbar{width:4px;}
+    .np-list::-webkit-scrollbar-track{background:transparent;}
+    .np-list::-webkit-scrollbar-thumb{background:rgba(201,168,76,0.2);border-radius:4px;}
+    .np-item{
+      display:flex;align-items:flex-start;gap:12px;
+      padding:14px 20px;cursor:pointer;
+      border-bottom:1px solid rgba(255,255,255,0.04);
+      transition:background .15s;
+      position:relative;
+    }
+    .np-item:hover{background:rgba(201,168,76,0.05);}
+    .np-item.unseen{background:rgba(201,168,76,0.07);}
+    .np-item.unseen:hover{background:rgba(201,168,76,0.11);}
+    .np-dot{
+      position:absolute;top:18px;left:8px;width:5px;height:5px;
+      border-radius:50%;background:#c9a84c;
+    }
+    .np-icon{
+      width:36px;height:36px;border-radius:10px;flex-shrink:0;
+      display:flex;align-items:center;justify-content:center;font-size:17px;
+      background:rgba(201,168,76,0.08);border:1px solid rgba(201,168,76,0.15);
+    }
+    .np-body{flex:1;min-width:0;}
+    .np-item-title{
+      font-size:12.5px;font-weight:700;color:var(--text-primary);
+      letter-spacing:-0.01em;line-height:1.35;margin-bottom:3px;
+    }
+    .np-item-desc{
+      font-size:11.5px;color:var(--text-muted);line-height:1.45;
+    }
+    .np-item-time{
+      font-size:10px;font-weight:600;color:rgba(201,168,76,0.5);
+      margin-top:5px;letter-spacing:.02em;
+    }
+    .np-empty{
+      padding:48px 24px;text-align:center;color:var(--text-muted);
+    }
+    .np-empty-icon{font-size:36px;margin-bottom:12px;opacity:.5;}
+    .np-empty-text{font-size:13px;}
+    .np-loading{
+      padding:32px 20px;text-align:center;
+      color:var(--text-muted);font-size:12px;
+    }
+
     /* ── Content layout ─────────────────────────────────────────── */
     .content{
       padding:18px;
@@ -2698,7 +2790,7 @@
             <div id="searchDropdown"></div>
           </div>
           <button class="pill primary" onclick="alert('Open announcements (connect later)')">Announcements</button>
-          <button class="pill" onclick="alert('Open notifications (connect later)')">Notifications</button>
+          <button class="pill" id="notifBtn" onclick="openNotificationsPanel()" style="position:relative;">Notifications<span id="notifBadge" style="display:none;position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 2px 6px rgba(239,68,68,0.55);"></span></button>
         </div>
       </div>
 
@@ -8133,6 +8225,320 @@
   .cdm-resource-arrow { color: rgba(201,168,76,.35); flex-shrink: 0; transition: color .15s, transform .15s; }
   .cdm-resource-item:hover .cdm-resource-arrow { color: var(--gold-400); transform: translateX(2px); }
   </style>
+
+  <!-- NOTIFICATIONS PANEL -->
+  <div id="notifOverlay" onclick="closeNotificationsPanel()"></div>
+  <div id="notifPanel">
+    <div class="np-header">
+      <div>
+        <div class="np-sub">Armenian College of Nursing</div>
+        <div class="np-title">Notifications</div>
+      </div>
+      <button class="np-close" onclick="closeNotificationsPanel()">×</button>
+    </div>
+    <div class="np-actions">
+      <span class="np-count" id="npCount">Loading…</span>
+      <button class="np-mark-all" onclick="markAllNotifsSeen()">Mark all as read</button>
+    </div>
+    <div class="np-list" id="npList"><div class="np-loading">Loading notifications…</div></div>
+  </div>
+
+  <script>
+    // ==================== NOTIFICATIONS ====================
+    const NOTIF_SEEN_KEY = () => 'notif_seen_' + (studentData?.studentId || 'student');
+
+    function getSeenIds() {
+      try { return new Set(JSON.parse(localStorage.getItem(NOTIF_SEEN_KEY()) || '[]')); }
+      catch(_) { return new Set(); }
+    }
+    function saveSeenIds(set) {
+      try { localStorage.setItem(NOTIF_SEEN_KEY(), JSON.stringify([...set])); } catch(_) {}
+    }
+
+    function notifTimeAgo(ts) {
+      if (!ts) return '';
+      const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+      if (diff < 60) return 'Just now';
+      if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+      if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+      if (diff < 2592000) return Math.floor(diff/86400) + 'd ago';
+      return new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    }
+
+    function notifIconFor(type) {
+      const map = {
+        exam:'🎓', form:'📋', profile:'👤', alert:'📢',
+        note:'📝', exam_date:'📅', grade:'📊', document:'📄'
+      };
+      return map[type] || '🔔';
+    }
+
+    async function fetchNotifications() {
+      if (!db || !studentData) return [];
+      const studentIdCode = studentData.studentId || studentData.student_id || '';
+      const studentUuid   = studentData.id || '';
+      const studentName   = (studentData.fullName || '').toLowerCase();
+      const all = [];
+
+      // 1. Certificates (exam results)
+      if (studentIdCode) {
+        try {
+          const { data } = await db.from('certificates')
+            .select('id,exam_title,score,grade,issue_date,created_at,status')
+            .eq('student_id', studentIdCode)
+            .eq('status','valid')
+            .order('created_at',{ascending:false})
+            .limit(20);
+          (data||[]).forEach(r => all.push({
+            id: 'cert_' + r.id,
+            type: 'exam',
+            title: 'Exam result published',
+            body: `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
+            ts: r.created_at
+          }));
+        } catch(_) {}
+      }
+
+      // 2. Student form submissions (student services)
+      if (studentIdCode) {
+        try {
+          const { data } = await db.from('student_form_submissions')
+            .select('id,form_title,status,submitted_at,reviewed_at,updated_at')
+            .eq('student_id', studentIdCode)
+            .order('updated_at',{ascending:false})
+            .limit(20);
+          (data||[]).forEach(r => {
+            const isFinal = r.status && r.status !== 'pending';
+            all.push({
+              id: 'form_' + r.id,
+              type: 'form',
+              title: isFinal
+                ? `Service request ${r.status}: ${r.form_title||'Request'}`
+                : `Service request submitted: ${r.form_title||'Request'}`,
+              body: isFinal
+                ? `Your "${r.form_title||'request'}" has been ${r.status}.`
+                : `Your "${r.form_title||'request'}" is under review.`,
+              ts: r.reviewed_at || r.updated_at || r.submitted_at
+            });
+          });
+        } catch(_) {}
+      }
+
+      // 3. Profile update requests
+      if (studentIdCode) {
+        try {
+          const { data } = await db.from('profile_update_requests')
+            .select('id,update_type,status,submitted_at,reviewed_at,updated_at')
+            .eq('student_id', studentIdCode)
+            .order('updated_at',{ascending:false})
+            .limit(10);
+          (data||[]).forEach(r => {
+            const isFinal = r.status && r.status !== 'pending';
+            all.push({
+              id: 'prof_' + r.id,
+              type: 'profile',
+              title: isFinal
+                ? `Profile update ${r.status}`
+                : 'Profile update request received',
+              body: isFinal
+                ? `Your ${r.update_type||'profile'} update has been ${r.status}.`
+                : `Your ${r.update_type||'profile'} update is under review.`,
+              ts: r.reviewed_at || r.updated_at || r.submitted_at
+            });
+          });
+        } catch(_) {}
+      }
+
+      // 4. Portal alerts targeted to this student or all students
+      try {
+        const { data } = await db.from('portal_alerts')
+          .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
+          .eq('is_active', true)
+          .order('created_at',{ascending:false})
+          .limit(20);
+        (data||[]).forEach(r => {
+          const isAll = !r.target_type || r.target_type === 'all';
+          const ids = r.target_student_ids;
+          const targeted = isAll
+            || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
+            || (ids && typeof ids === 'object' && !Array.isArray(ids));
+          if (!targeted) return;
+          const plain = (r.message_html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+          all.push({
+            id: 'alert_' + r.id,
+            type: 'alert',
+            title: r.title || 'Announcement',
+            body: plain,
+            ts: r.created_at
+          });
+        });
+      } catch(_) {}
+
+      // 5. Final exam date set (from hubStudentData)
+      const examDate = studentData.finalExamDate;
+      if (examDate) {
+        const d = new Date(examDate + 'T00:00:00');
+        const fmtDate = d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+        const examTime = studentData.finalExamTime;
+        let timeNote = '';
+        if (examTime) {
+          try {
+            const [hh,mm] = examTime.split(':').map(Number);
+            const base = new Date(examDate + 'T00:00:00Z');
+            base.setUTCHours(hh - 4, mm);
+            const la = base.toLocaleTimeString('en-US',{timeZone:'America/Los_Angeles',hour:'numeric',minute:'2-digit',hour12:true});
+            timeNote = ` at ${examTime} (Armenia) / ${la} (LA)`;
+          } catch(_) { timeNote = ` at ${examTime}`; }
+        }
+        all.push({
+          id: 'examdate_' + examDate,
+          type: 'exam_date',
+          title: 'Final Examination date confirmed',
+          body: fmtDate + timeNote,
+          ts: null   // no exact timestamp; sort last by placing ts as old date
+        });
+      }
+
+      // 6. Published notes
+      if (studentUuid) {
+        try {
+          const { data } = await db.from('published_notes')
+            .select('id,published_at,published_by')
+            .eq('student_id', studentUuid)
+            .order('published_at',{ascending:false})
+            .limit(10);
+          (data||[]).forEach(r => all.push({
+            id: 'note_' + r.id,
+            type: 'note',
+            title: 'Study notes published',
+            body: `New notes have been published to your library${r.published_by ? ' by ' + r.published_by : ''}.`,
+            ts: r.published_at
+          }));
+        } catch(_) {}
+      }
+
+      // Sort: newest first; null ts goes to end
+      all.sort((a,b) => {
+        if (!a.ts && !b.ts) return 0;
+        if (!a.ts) return 1;
+        if (!b.ts) return -1;
+        return new Date(b.ts) - new Date(a.ts);
+      });
+
+      return all;
+    }
+
+    function renderNotifItem(n, seen) {
+      const unseen = !seen.has(n.id);
+      return `
+        <div class="np-item${unseen ? ' unseen' : ''}" data-id="${n.id}" onclick="markNotifSeen('${n.id}',this)">
+          ${unseen ? '<div class="np-dot"></div>' : ''}
+          <div class="np-icon">${notifIconFor(n.type)}</div>
+          <div class="np-body">
+            <div class="np-item-title">${n.title}</div>
+            ${n.body ? `<div class="np-item-desc">${n.body}</div>` : ''}
+            ${n.ts ? `<div class="np-item-time">${notifTimeAgo(n.ts)}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    function updateNotifBadge(notifications) {
+      const seen = getSeenIds();
+      const count = notifications.filter(n => !seen.has(n.id)).length;
+      const badge = document.getElementById('notifBadge');
+      if (!badge) return;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    let _cachedNotifications = null;
+
+    async function openNotificationsPanel() {
+      const overlay = document.getElementById('notifOverlay');
+      const panel   = document.getElementById('notifPanel');
+      const list    = document.getElementById('npList');
+      overlay.style.display = 'block';
+      requestAnimationFrame(() => panel.classList.add('open'));
+
+      // Show loader while fetching
+      list.innerHTML = '<div class="np-loading">Loading notifications…</div>';
+
+      const notifications = await fetchNotifications();
+      _cachedNotifications = notifications;
+      const seen = getSeenIds();
+
+      const unseenCount = notifications.filter(n => !seen.has(n.id)).length;
+      document.getElementById('npCount').textContent =
+        notifications.length === 0
+          ? 'No notifications'
+          : `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
+
+      if (notifications.length === 0) {
+        list.innerHTML = `
+          <div class="np-empty">
+            <div class="np-empty-icon">🔔</div>
+            <div class="np-empty-text">No notifications yet.<br>Activity on your profile will appear here.</div>
+          </div>`;
+      } else {
+        list.innerHTML = notifications.map(n => renderNotifItem(n, seen)).join('');
+      }
+    }
+
+    function closeNotificationsPanel() {
+      const panel = document.getElementById('notifPanel');
+      const overlay = document.getElementById('notifOverlay');
+      panel.classList.remove('open');
+      setTimeout(() => { overlay.style.display = 'none'; }, 280);
+    }
+
+    function markNotifSeen(id, el) {
+      const seen = getSeenIds();
+      seen.add(id);
+      saveSeenIds(seen);
+      if (el) {
+        el.classList.remove('unseen');
+        const dot = el.querySelector('.np-dot');
+        if (dot) dot.remove();
+      }
+      if (_cachedNotifications) updateNotifBadge(_cachedNotifications);
+      // Update count line
+      const unseenCount = _cachedNotifications
+        ? _cachedNotifications.filter(n => !seen.has(n.id)).length : 0;
+      const countEl = document.getElementById('npCount');
+      if (countEl && _cachedNotifications) {
+        const total = _cachedNotifications.length;
+        countEl.textContent = `${total} notification${total !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
+      }
+    }
+
+    function markAllNotifsSeen() {
+      if (!_cachedNotifications) return;
+      const seen = getSeenIds();
+      _cachedNotifications.forEach(n => seen.add(n.id));
+      saveSeenIds(seen);
+      updateNotifBadge(_cachedNotifications);
+      // Re-render items without unseen styling
+      const list = document.getElementById('npList');
+      if (list) list.innerHTML = _cachedNotifications.map(n => renderNotifItem(n, seen)).join('');
+      const total = _cachedNotifications.length;
+      const countEl = document.getElementById('npCount');
+      if (countEl) countEl.textContent = `${total} notification${total !== 1 ? 's' : ''}`;
+    }
+
+    // Load badge count on startup (non-blocking)
+    (async function initNotifBadge() {
+      try {
+        if (!db || !studentData) return;
+        const notifs = await fetchNotifications();
+        _cachedNotifications = notifs;
+        updateNotifBadge(notifs);
+      } catch(_) {}
+    })();
+  </script>
 
   <!-- LOGOUT CONFIRMATION MODAL -->
   <div id="logoutModal" style="display:none; position:fixed; inset:0; background:rgba(2,8,20,0.78); z-index:10000; align-items:center; justify-content:center; backdrop-filter:blur(8px);">
