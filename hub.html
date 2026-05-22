@@ -534,7 +534,40 @@
       transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
       z-index:9501;
     }
+    #annOverlay{
+      display:none;position:fixed;inset:0;z-index:9500;
+      background:rgba(2,8,20,0.55);backdrop-filter:blur(4px);
+    }
+    #annPanel{
+      position:fixed;top:0;right:0;bottom:0;width:min(480px,96vw);
+      background:linear-gradient(180deg,#071b30 0%,#04111f 100%);
+      border-left:1px solid rgba(201,168,76,0.22);
+      box-shadow:-12px 0 48px rgba(0,0,0,0.55);
+      display:flex;flex-direction:column;
+      transform:translateX(100%);transition:transform 0.28s cubic-bezier(0.32,0.72,0,1);
+      z-index:9502;
+    }
+    #annPanel.open{transform:translateX(0);}
+    .ann-severity-danger  .np-icon{background:rgba(239,68,68,0.12);border-color:rgba(239,68,68,0.30);}
+    .ann-severity-warning .np-icon{background:rgba(234,179,8,0.12);border-color:rgba(234,179,8,0.30);}
+    .ann-severity-info    .np-icon{background:rgba(59,130,246,0.12);border-color:rgba(59,130,246,0.30);}
+    .ann-severity-success .np-icon{background:rgba(34,197,94,0.12);border-color:rgba(34,197,94,0.30);}
+    .ann-badge{
+      display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;
+      padding:2px 7px;border-radius:8px;margin-bottom:5px;text-transform:uppercase;
+    }
+    .ann-badge.danger {background:rgba(239,68,68,0.18);color:#f87171;border:1px solid rgba(239,68,68,0.30);}
+    .ann-badge.warning{background:rgba(234,179,8,0.18);color:#facc15;border:1px solid rgba(234,179,8,0.30);}
+    .ann-badge.info   {background:rgba(59,130,246,0.18);color:#60a5fa;border:1px solid rgba(59,130,246,0.30);}
+    .ann-badge.success{background:rgba(34,197,94,0.18);color:#4ade80;border:1px solid rgba(34,197,94,0.30);}
+    .ann-msg{font-size:12.5px;color:var(--text-secondary);line-height:1.6;margin-top:6px;}
+    .ann-msg p{margin:0 0 4px;}
+    .ann-msg strong,.ann-msg b{color:var(--text-primary);}
+    .ann-msg a{color:var(--gold-400);text-decoration:underline;}
+
+    /* keep notif panel below ann panel */
     #notifPanel.open{transform:translateX(0);}
+
     .np-header{
       padding:22px 20px 16px;
       border-bottom:1px solid rgba(201,168,76,0.12);
@@ -2796,7 +2829,7 @@
             <input id="searchInput" placeholder="Search notes, videos, modules, topics…" autocomplete="off" />
             <div id="searchDropdown"></div>
           </div>
-          <button class="pill primary" onclick="alert('Open announcements (connect later)')">Announcements</button>
+          <button class="pill primary" id="annBtn" onclick="openAnnouncementsPanel()" style="position:relative;">Announcements<span id="annBadge" style="display:none;position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 2px 6px rgba(239,68,68,0.55);"></span></button>
           <button class="pill" id="notifBtn" onclick="openNotificationsPanel()" style="position:relative;">Notifications<span id="notifBadge" style="display:none;position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#ef4444;color:#fff;font-size:10px;font-weight:900;line-height:18px;text-align:center;box-shadow:0 2px 6px rgba(239,68,68,0.55);"></span></button>
         </div>
       </div>
@@ -8597,6 +8630,175 @@
         const notifs = await fetchNotifications();
         _cachedNotifications = notifs;
         updateNotifBadge(notifs);
+      } catch(_) {}
+    })();
+  </script>
+
+  <!-- ANNOUNCEMENTS PANEL -->
+  <div id="annOverlay" onclick="closeAnnouncementsPanel()"></div>
+  <div id="annPanel">
+    <div class="np-header">
+      <div>
+        <div class="np-sub">Armenian College of Nursing</div>
+        <div class="np-title">Announcements</div>
+      </div>
+      <button class="np-close" onclick="closeAnnouncementsPanel()">&#x2715;</button>
+    </div>
+    <div class="np-actions">
+      <span class="np-count" id="annCount">Loading&hellip;</span>
+      <button class="np-mark-all" onclick="markAllAnnsSeen()">Mark all as read</button>
+    </div>
+    <div class="np-list" id="annList"><div class="np-loading">Loading announcements&hellip;</div></div>
+  </div>
+
+  <script>
+    // ==================== ANNOUNCEMENTS ====================
+    const ANN_SEEN_KEY = () => 'ann_seen_' + (studentData?.studentId || 'student');
+
+    function getSeenAnnIds() {
+      try { return new Set(JSON.parse(localStorage.getItem(ANN_SEEN_KEY()) || '[]')); }
+      catch(_) { return new Set(); }
+    }
+    function saveSeenAnnIds(set) {
+      try { localStorage.setItem(ANN_SEEN_KEY(), JSON.stringify([...set])); } catch(_) {}
+    }
+
+    function annSeverityIcon(severity) {
+      return {danger:'🚨', warning:'⚠️', info:'ℹ️', success:'✅'}[severity] || '📢';
+    }
+    function annSeverityLabel(severity) {
+      return {danger:'Urgent', warning:'Warning', info:'Info', success:'Update'}[severity] || 'Announcement';
+    }
+
+    async function fetchAnnouncements() {
+      if (!db || !studentData) return [];
+      const studentIdCode = studentData.studentId || studentData.student_id || '';
+      const studentUuid   = studentData.id || '';
+      try {
+        const { data } = await db.from('portal_alerts')
+          .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
+          .eq('is_active', true)
+          .order('created_at', {ascending: false})
+          .limit(50);
+        return (data || []).filter(r => {
+          const isAll = !r.target_type || r.target_type === 'all';
+          const ids   = r.target_student_ids;
+          return isAll
+            || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
+            || (ids && typeof ids === 'object' && !Array.isArray(ids));
+        });
+      } catch(_) { return []; }
+    }
+
+    function renderAnnItem(a, seen) {
+      const unseen = !seen.has(String(a.id));
+      const sev = a.severity || 'info';
+      const date = a.created_at
+        ? new Date(a.created_at).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})
+        : '';
+      return `
+        <div class="np-item ann-severity-${sev}${unseen ? ' unseen' : ''}" data-id="${a.id}" onclick="markAnnSeen('${a.id}',this)">
+          ${unseen ? '<div class="np-dot"></div>' : ''}
+          <div class="np-icon">${annSeverityIcon(sev)}</div>
+          <div class="np-body">
+            <span class="ann-badge ${sev}">${annSeverityLabel(sev)}</span>
+            <div class="np-item-title">${a.title || 'Announcement'}</div>
+            ${a.message_html ? `<div class="ann-msg">${a.message_html}</div>` : ''}
+            ${date ? `<div class="np-item-time">${date}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
+    function updateAnnBadge(anns) {
+      const seen  = getSeenAnnIds();
+      const count = (anns || []).filter(a => !seen.has(String(a.id))).length;
+      const badge = document.getElementById('annBadge');
+      if (!badge) return;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count;
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    let _cachedAnnouncements = null;
+
+    async function openAnnouncementsPanel() {
+      const overlay = document.getElementById('annOverlay');
+      const panel   = document.getElementById('annPanel');
+      const list    = document.getElementById('annList');
+      overlay.style.display = 'block';
+      requestAnimationFrame(() => panel.classList.add('open'));
+      list.innerHTML = '<div class="np-loading">Loading announcements&hellip;</div>';
+
+      const anns = await fetchAnnouncements();
+      _cachedAnnouncements = anns;
+      const seen = getSeenAnnIds();
+
+      const unseenCount = anns.filter(a => !seen.has(String(a.id))).length;
+      document.getElementById('annCount').textContent =
+        anns.length === 0
+          ? 'No announcements'
+          : `${anns.length} announcement${anns.length !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
+
+      if (anns.length === 0) {
+        list.innerHTML = `
+          <div class="np-empty">
+            <div class="np-empty-icon">📢</div>
+            <div class="np-empty-text">No announcements right now.<br>Check back later for updates from your college.</div>
+          </div>`;
+      } else {
+        list.innerHTML = anns.map(a => renderAnnItem(a, seen)).join('');
+      }
+    }
+
+    function closeAnnouncementsPanel() {
+      const panel   = document.getElementById('annPanel');
+      const overlay = document.getElementById('annOverlay');
+      panel.classList.remove('open');
+      setTimeout(() => { overlay.style.display = 'none'; }, 280);
+    }
+
+    function markAnnSeen(id, el) {
+      const seen = getSeenAnnIds();
+      seen.add(String(id));
+      saveSeenAnnIds(seen);
+      if (el) {
+        el.classList.remove('unseen');
+        const dot = el.querySelector('.np-dot');
+        if (dot) dot.remove();
+      }
+      if (_cachedAnnouncements) updateAnnBadge(_cachedAnnouncements);
+      const unseenCount = _cachedAnnouncements
+        ? _cachedAnnouncements.filter(a => !seen.has(String(a.id))).length : 0;
+      const countEl = document.getElementById('annCount');
+      if (countEl && _cachedAnnouncements) {
+        const total = _cachedAnnouncements.length;
+        countEl.textContent = `${total} announcement${total !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
+      }
+    }
+
+    function markAllAnnsSeen() {
+      if (!_cachedAnnouncements) return;
+      const seen = getSeenAnnIds();
+      _cachedAnnouncements.forEach(a => seen.add(String(a.id)));
+      saveSeenAnnIds(seen);
+      updateAnnBadge(_cachedAnnouncements);
+      const list = document.getElementById('annList');
+      if (list) list.innerHTML = _cachedAnnouncements.map(a => renderAnnItem(a, seen)).join('');
+      const total = _cachedAnnouncements.length;
+      const countEl = document.getElementById('annCount');
+      if (countEl) countEl.textContent = `${total} announcement${total !== 1 ? 's' : ''}`;
+    }
+
+    // Load badge count on startup (non-blocking)
+    (async function initAnnBadge() {
+      try {
+        if (!db || !studentData) return;
+        const anns = await fetchAnnouncements();
+        _cachedAnnouncements = anns;
+        updateAnnBadge(anns);
       } catch(_) {}
     })();
   </script>
