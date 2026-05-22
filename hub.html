@@ -604,6 +604,8 @@
       background:none;border:none;padding:0;transition:color .15s;
     }
     .np-clear-all:hover{color:rgba(239,68,68,0.9);}
+    .np-item.np-pinned{border-left:3px solid rgba(245,158,11,0.55);}
+    .np-pin-badge{display:inline-flex;align-items:center;font-size:10px;color:#d97706;font-weight:700;background:rgba(245,158,11,0.12);border-radius:3px;padding:1px 5px;margin-left:5px;vertical-align:middle;letter-spacing:0.02em;}
     .np-list{
       flex:1;overflow-y:auto;padding:8px 0;
     }
@@ -8763,10 +8765,11 @@
 
       // Single note item — make title a clickable link
       const isSingleNote = !isGroup && n.type === 'note' && n.noteUrl;
+      const pinBadge = _isPinned(n) ? '<span class="np-pin-badge">Pinned</span>' : '';
       const titleContent = isSingleNote
         ? `<a class="np-note-link" href="${n.noteUrl}" target="_blank" rel="noopener noreferrer"
-            onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>`
-        : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}`;
+            onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>${pinBadge}`
+        : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}${pinBadge}`;
 
       // For non-group items: dispatch by type or link
       const clickHandler = isGroup
@@ -8782,7 +8785,7 @@
                 : `markNotifSeen('${idsAttr}',this)`;
 
       return `
-        <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
+        <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}${_isPinned(n) ? ' np-pinned' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
           ${unseen ? '<div class="np-dot"></div>' : ''}
           <div class="np-icon">${notifIconFor(n.type)}</div>
           <div class="np-body">
@@ -9065,27 +9068,34 @@
 
     function clearAllNotifs() {
       if (!_cachedNotifications) return;
-      // Mark all seen first
+      // Separate pinned (must remain) from clearable notifications
+      const remaining = _cachedNotifications.filter(n => _isPinned(n));
+      const clearable = _cachedNotifications.filter(n => !_isPinned(n));
+      // Mark clearable as seen
       const seen = getSeenIds();
-      _cachedNotifications.forEach(n => {
-        const ids = n.groupIds || [n.id];
-        ids.forEach(id => seen.add(id));
-      });
+      clearable.forEach(n => { const ids = n.groupIds || [n.id]; ids.forEach(id => seen.add(id)); });
       saveSeenIds(seen);
-      // Store cleared IDs so they stay hidden permanently
+      // Persist cleared IDs so they stay hidden permanently
       const CLEAR_KEY = 'notif_cleared_' + (studentData?.studentId || 'student');
       const cleared = _getClearedIds();
-      _cachedNotifications.forEach(n => {
-        const ids = n.groupIds || [n.id];
-        ids.forEach(id => cleared.add(id));
-      });
+      clearable.forEach(n => { const ids = n.groupIds || [n.id]; ids.forEach(id => cleared.add(id)); });
       localStorage.setItem(CLEAR_KEY, JSON.stringify([...cleared]));
-      _cachedNotifications = [];
-      updateNotifBadge([]);
+      _cachedNotifications = remaining;
+      updateNotifBadge(remaining);
       const list = document.getElementById('npList');
-      if (list) list.innerHTML = '<div class="np-empty">No notifications</div>';
+      if (list) {
+        if (remaining.length) {
+          const seenSet = getSeenIds();
+          list.innerHTML = remaining.map(n => renderNotifItem(n, seenSet)).join('');
+        } else {
+          list.innerHTML = '<div class="np-empty">No notifications</div>';
+        }
+      }
       const countEl = document.getElementById('npCount');
-      if (countEl) countEl.textContent = '0 notifications';
+      if (countEl) {
+        const total = remaining.length;
+        countEl.textContent = total ? `${total} notification${total !== 1 ? 's' : ''}` : '0 notifications';
+      }
     }
 
     function markAllNotifsSeen() {
@@ -9105,6 +9115,15 @@
       if (countEl) countEl.textContent = `${total} notification${total !== 1 ? 's' : ''}`;
     }
 
+    // Returns true if the notification is pinned and cannot be cleared by the user
+    // (exam_date notifications stay visible until the scheduled exam date has passed)
+    function _isPinned(n) {
+      if (n.type !== 'exam_date') return false;
+      const match = String(n.id).match(/^examdate_(\d{4}-\d{2}-\d{2})$/);
+      if (!match) return false;
+      // Pinned while today's UTC date is on or before the exam date
+      return match[1] >= new Date().toISOString().slice(0, 10);
+    }
     // Returns the cleared-notification ID set for the current student
     function _getClearedIds() {
       const key = 'notif_cleared_' + (studentData?.studentId || 'student');
@@ -9115,6 +9134,7 @@
       const cleared = _getClearedIds();
       if (!cleared.size) return notifications;
       return notifications.filter(n => {
+        if (_isPinned(n)) return true; // pinned notifications survive clear
         const ids = n.groupIds || [n.id];
         return !ids.every(id => cleared.has(id));
       });
