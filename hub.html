@@ -683,6 +683,50 @@
       color:var(--text-muted);font-size:12px;
     }
 
+    /* ── Email Viewer Modal ──────────────────────────────────────── */
+    #emailViewerModal{
+      display:none;position:fixed;inset:0;z-index:9600;
+      background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);
+      align-items:center;justify-content:center;padding:20px;
+    }
+    #emailViewerModal.open{display:flex;}
+    #emailViewerContainer{
+      width:100%;max-width:720px;height:min(88vh,820px);
+      background:#0c1624;border:1px solid rgba(201,168,76,0.28);
+      border-radius:16px;overflow:hidden;
+      display:flex;flex-direction:column;
+      box-shadow:0 24px 64px rgba(0,0,0,0.6);
+    }
+    #emailViewerHeader{
+      display:flex;align-items:center;gap:14px;
+      padding:16px 20px;border-bottom:1px solid rgba(201,168,76,0.12);
+      background:linear-gradient(135deg,rgba(12,28,56,0.98),rgba(7,18,40,0.98));
+      flex-shrink:0;
+    }
+    #emailViewerMeta{flex:1;min-width:0;}
+    #emailViewerSubject{
+      font-family:'Playfair Display',serif;font-size:15px;font-weight:700;
+      color:var(--text-primary);line-height:1.3;white-space:nowrap;
+      overflow:hidden;text-overflow:ellipsis;
+    }
+    #emailViewerDate{
+      font-size:11px;color:rgba(201,168,76,0.6);margin-top:3px;
+      font-weight:600;letter-spacing:.02em;
+    }
+    #emailViewerClose{
+      background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.10);
+      color:var(--text-muted);border-radius:8px;width:32px;height:32px;
+      cursor:pointer;font-size:14px;flex-shrink:0;
+      display:flex;align-items:center;justify-content:center;
+      transition:background .15s,color .15s;
+    }
+    #emailViewerClose:hover{background:rgba(255,255,255,0.12);color:var(--text-primary);}
+    #emailViewerFrame{
+      flex:1;width:100%;border:none;background:#fff;
+    }
+    .np-email-open{color:rgba(201,168,76,0.5);font-size:14px;flex-shrink:0;transition:color .15s;}
+    .np-item:hover .np-email-open{color:var(--gold-300);}
+
     /* ── Content layout ─────────────────────────────────────────── */
     .content{
       padding:18px;
@@ -8347,7 +8391,7 @@
     function notifIconFor(type) {
       const map = {
         exam:'🎓', form:'📋', profile:'👤', alert:'📢',
-        note:'📝', exam_date:'📅', grade:'📊', document:'📄'
+        note:'📝', exam_date:'📅', grade:'📊', document:'📄', email:'✉️'
       };
       return map[type] || '🔔';
     }
@@ -8382,6 +8426,13 @@
           .select('id,note_id,published_at,published_by')
           .eq('student_id', studentUuid)
           .order('published_at',{ascending:false}).limit(20);
+      }
+      const studentEmail = studentData.email || studentData.institutionalEmail || '';
+      if (studentEmail) {
+        q.emails = db.from('email_history')
+          .select('id,subject,sent_at,html_body,body,status')
+          .eq('recipient', studentEmail)
+          .order('sent_at',{ascending:false}).limit(30);
       }
 
       const keys    = Object.keys(q);
@@ -8482,6 +8533,22 @@
         });
       }
 
+      // 7. Emails from email_history
+      if (res.emails) {
+        res.emails.forEach(r => {
+          const plain = (r.html_body || r.body || '').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,100);
+          _emailBodies[r.id] = r.html_body || r.body || '';
+          all.push({
+            id:      'email_' + r.id,
+            type:    'email',
+            title:   r.subject || 'Email from ACNHS',
+            body:    plain || 'Click to read email',
+            ts:      r.sent_at,
+            emailId: r.id
+          });
+        });
+      }
+
       // Sort all items newest first; null ts goes to end
       all.sort((a,b) => {
         if (!a.ts && !b.ts) return 0;
@@ -8570,12 +8637,14 @@
             onclick="event.stopPropagation();closeNotificationsPanel()">${n.title}</a>`
         : `${n.title}${n.count && n.count > 1 ? `<span class="np-count">&times;${n.count}</span>` : ''}`;
 
-      // For non-group items: navigate if they have a link, otherwise just mark seen
+      // For non-group items: email opens modal; navigable items navigate; else mark seen
       const clickHandler = isGroup
         ? `toggleNotifGroup('${n.type}',this)`
-        : (n.link && !isSingleNote)
-          ? `openNotifLink('${idsAttr}','${n.link}',this)`
-          : `markNotifSeen('${idsAttr}',this)`;
+        : (n.type === 'email' && n.emailId)
+          ? `openEmailModal('${n.emailId}','${idsAttr}',this)`
+          : (n.link && !isSingleNote)
+            ? `openNotifLink('${idsAttr}','${n.link}',this)`
+            : `markNotifSeen('${idsAttr}',this)`;
 
       return `
         <div class="np-item${unseen ? ' unseen' : ''}${isGroup ? ' np-group' : ''}" data-id="${idsAttr}" onclick="${clickHandler}">
@@ -8586,7 +8655,7 @@
             ${n.body && !isGroup ? `<div class="np-item-desc">${n.body}</div>` : ''}
             ${n.ts ? `<div class="np-item-time">${notifTimeAgo(n.ts)}</div>` : ''}
           </div>
-          ${isGroup ? '<span class="np-chevron">&#8250;</span>' : (n.link && !isSingleNote ? '<span class="np-nav-arrow">&#8594;</span>' : '')}
+          ${isGroup ? '<span class="np-chevron">&#8250;</span>' : (n.type === 'email' ? '<span class="np-email-open">&#128233;</span>' : (n.link && !isSingleNote ? '<span class="np-nav-arrow">&#8594;</span>' : ''))}
         </div>
         ${childrenHtml}`;
     }
@@ -8611,6 +8680,33 @@
       if (link) window.open(link, '_blank', 'noopener,noreferrer');
     }
 
+    function openEmailModal(emailId, idsAttr, el) {
+      markNotifSeen(idsAttr, el);
+      const html = _emailBodies[emailId] || '';
+      const modal = document.getElementById('emailViewerModal');
+      const frame = document.getElementById('emailViewerFrame');
+      const subjectEl = document.getElementById('emailViewerSubject');
+      const dateEl = document.getElementById('emailViewerDate');
+      if (!modal || !frame) return;
+      // Find the notification to get subject + ts
+      const notif = (_cachedNotifications || []).flatMap(n => n.items || [n]).find(n => n.emailId === emailId);
+      if (subjectEl) subjectEl.textContent = notif ? notif.title : 'Email';
+      if (dateEl && notif && notif.ts) {
+        dateEl.textContent = new Date(notif.ts).toLocaleDateString('en-US',{weekday:'short',year:'numeric',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+      } else if (dateEl) { dateEl.textContent = ''; }
+      frame.srcdoc = html || '<div style="font-family:sans-serif;padding:40px;color:#555;text-align:center">No email content available.</div>';
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeEmailModal() {
+      const modal = document.getElementById('emailViewerModal');
+      if (modal) modal.classList.remove('open');
+      document.body.style.overflow = '';
+      const frame = document.getElementById('emailViewerFrame');
+      if (frame) frame.srcdoc = '';
+    }
+
     function updateNotifBadge(notifications) {
       const seen = getSeenIds();
       // Count total unseen individual items across all groups
@@ -8630,6 +8726,7 @@
     }
 
     let _cachedNotifications = null;
+    const _emailBodies = {};  // emailId → html_body, populated during fetchNotifications
 
     function _renderNotifPanel(notifications) {
       const seen = getSeenIds();
@@ -8740,6 +8837,20 @@
       } catch(_) {}
     })();
   </script>
+
+  <!-- EMAIL VIEWER MODAL -->
+  <div id="emailViewerModal" onclick="if(event.target===this)closeEmailModal()">
+    <div id="emailViewerContainer">
+      <div id="emailViewerHeader">
+        <div id="emailViewerMeta">
+          <div id="emailViewerSubject"></div>
+          <div id="emailViewerDate"></div>
+        </div>
+        <button id="emailViewerClose" onclick="closeEmailModal()" aria-label="Close">&#x2715;</button>
+      </div>
+      <iframe id="emailViewerFrame" sandbox="allow-popups allow-same-origin" title="Email content"></iframe>
+    </div>
+  </div>
 
   <!-- ANNOUNCEMENTS PANEL -->
   <div id="annOverlay" onclick="closeAnnouncementsPanel()"></div>
