@@ -1067,6 +1067,24 @@
         if (countEl) countEl.textContent = total + ' student' + (total !== 1 ? 's' : '');
       }
 
+      const EXAM_DATE_PALETTES = [
+        { color:'#60a5fa', bg:'rgba(96,165,250,0.13)',  border:'rgba(96,165,250,0.38)'  }, // blue
+        { color:'#34d399', bg:'rgba(52,211,153,0.13)',  border:'rgba(52,211,153,0.38)'  }, // green
+        { color:'#f472b6', bg:'rgba(244,114,182,0.13)', border:'rgba(244,114,182,0.38)' }, // pink
+        { color:'#fb923c', bg:'rgba(251,146,60,0.13)',  border:'rgba(251,146,60,0.38)'  }, // orange
+        { color:'#a78bfa', bg:'rgba(167,139,250,0.13)', border:'rgba(167,139,250,0.38)' }, // purple
+        { color:'#2dd4bf', bg:'rgba(45,212,191,0.13)',  border:'rgba(45,212,191,0.38)'  }, // teal
+        { color:'#f87171', bg:'rgba(248,113,113,0.13)', border:'rgba(248,113,113,0.38)' }, // red
+        { color:'#c9a84c', bg:'rgba(201,168,76,0.13)',  border:'rgba(201,168,76,0.38)'  }, // gold
+      ];
+      // Always return the date's own unique color — full indicator is shown separately
+      function getExamDatePalette(dateStr) {
+        if (!dateStr) return EXAM_DATE_PALETTES[0];
+        let h = 0;
+        for (let i = 0; i < dateStr.length; i++) h += dateStr.charCodeAt(i);
+        return EXAM_DATE_PALETTES[h % EXAM_DATE_PALETTES.length];
+      }
+
       function renderStudents(students) {
         const tbody = document.getElementById('studentsTableBody');
         const countEl = document.getElementById('tableCount');
@@ -1086,6 +1104,10 @@
           `;
           return;
         }
+
+        // Count how many students share each exam date
+        const _examDateCounts = {};
+        students.forEach(s => { if (s.final_exam_date) _examDateCounts[s.final_exam_date] = (_examDateCounts[s.final_exam_date] || 0) + 1; });
 
         tbody.innerHTML = students.map(student => {
           const statusValue = deriveStatus(student);
@@ -1131,7 +1153,8 @@
               <td>
                 <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                   <span class="status-badge status-${statusValue}">${statusValue.charAt(0).toUpperCase() + statusValue.slice(1)}</span>
-                  ${student.final_exam_date ? `<span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:#c9a84c;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.35);border-radius:5px;padding:2px 6px;white-space:nowrap;">${new Date(student.final_exam_date + 'T00:00:00').toLocaleDateString('en-US',{day:'numeric',month:'short'}).toUpperCase()}</span>` : ''}
+                  ${student.final_exam_date ? (()=>{ const _p=getExamDatePalette(student.final_exam_date); const _cnt=_examDateCounts[student.final_exam_date]||0; const _lbl=new Date(student.final_exam_date+'T00:00:00').toLocaleDateString('en-US',{day:'numeric',month:'short'}).toUpperCase(); const _lock=_cnt>=5?`<span style="position:absolute;top:-5px;left:-5px;font-size:9px;line-height:1;color:#c9a84c;text-shadow:0 0 4px rgba(201,168,76,0.7);" title="Full">🔒</span>`:''; return `<span style="position:relative;display:inline-block;font-size:10px;font-weight:800;letter-spacing:0.04em;color:${_p.color};background:${_p.bg};border:1px solid ${_p.border};border-radius:5px;padding:2px 6px;white-space:nowrap;">${_lock}${_lbl}</span>`; })() : ''}
+                  ${student.final_exam_status === 'pass' ? `<span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:#34d399;background:rgba(52,211,153,0.12);border:1px solid rgba(52,211,153,0.35);border-radius:5px;padding:2px 6px;white-space:nowrap;">PASS</span>` : student.final_exam_status === 'fail' ? `<span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:#f87171;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.35);border-radius:5px;padding:2px 6px;white-space:nowrap;">FAILED</span>` : student.final_exam_status === 'pending' ? `<span style="font-size:10px;font-weight:800;letter-spacing:0.04em;color:#fbbf24;background:rgba(251,191,36,0.1);border:1px solid rgba(251,191,36,0.3);border-radius:5px;padding:2px 6px;white-space:nowrap;">PENDING</span>` : ''}
                 </div>
               </td>
               <td onclick="event.stopPropagation()">

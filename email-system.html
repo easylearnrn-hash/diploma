@@ -4494,17 +4494,29 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           iframeHtmlContent = htmlContent;
           bodyHtml = buildIframePlaceholder(800);
         } else {
-          // Fallback: reconstruct from body text (for old emails without html_body)
-          let html = EMAIL_HTML_TEMPLATE
-            .replace(/{{SUBJECT}}/g, selectedEmail.subject)
-            .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
-            .replace(/{{DATE}}/g, dateStr)
-            .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
-            .replace(/{{BODY_CONTENT}}/g, plainBody.replace(/\n/g, '<br>'))
-            .replace(/{{YEAR}}/g, now.getFullYear())
-            .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_DATA_URL);
-          
-          bodyHtml = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+          // If body already contains full HTML (old emails stored in wrong column), use directly
+          const bodyTrimmed = plainBody.trimStart();
+          if (bodyTrimmed.startsWith('<!doctype') || bodyTrimmed.startsWith('<html') || bodyTrimmed.startsWith('<!DOCTYPE')) {
+            let htmlContent = plainBody;
+            if (htmlContent.includes('{{ACNHS_SEAL_BASE64}}') && typeof ACNHS_LOGO_DATA_URL !== 'undefined') {
+              htmlContent = htmlContent.replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, ACNHS_LOGO_DATA_URL);
+            }
+            iframeHtmlContent = htmlContent;
+            bodyHtml = buildIframePlaceholder(800);
+          } else {
+            // Fallback: reconstruct from plain text body
+            let html = EMAIL_HTML_TEMPLATE
+              .replace(/{{SUBJECT}}/g, selectedEmail.subject)
+              .replace(/{{EMAIL_TITLE}}/g, selectedEmail.subject)
+              .replace(/{{DATE}}/g, dateStr)
+              .replace(/{{APPLICANT_NAME}}/g, 'Recipient')
+              .replace(/{{BODY_CONTENT}}/g, plainBody.replace(/\n/g, '<br>'))
+              .replace(/{{YEAR}}/g, now.getFullYear())
+              .replace(/{{STUDENT_INFO}}/g, '')
+              .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_DATA_URL);
+            
+            bodyHtml = `<iframe srcdoc="${html.replace(/"/g, '&quot;')}" style="width: 100%; min-height: 800px; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 12px; background: white;"></iframe>`;
+          }
         }
       }
 
