@@ -8872,6 +8872,8 @@
     function _applyEmailToFrame(html) {
       const frame = document.getElementById('emailViewerFrame');
       if (!frame) return;
+      // Substitute unresolved template placeholders that were never replaced when email was stored
+      const logoB64 = (typeof ACNHS_LOGO_DATA_URL !== 'undefined' && ACNHS_LOGO_DATA_URL) || '';
       // Comprehensive override: targets html, body, AND common email wrapper tables/divs
       // that use height:100% to constrain visible area
       const heightFix = `<style>
@@ -8884,6 +8886,12 @@
         * { max-height:none!important; }
       </style>`;
       let fixedHtml = html;
+      if (logoB64) {
+        fixedHtml = fixedHtml
+          .replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, logoB64)
+          .replace(/\{\{ACNHS_LOGO_BASE64\}\}/g, logoB64)
+          .replace(/\{\{LOGO_URL\}\}/g, logoB64);
+      }
       // Also strip inline height:100% from <body> tag itself
       fixedHtml = fixedHtml.replace(/<body([^>]*)>/i, (m, attrs) =>
         '<body' + attrs.replace(/height\s*:\s*100%/gi, 'height:auto') + '>'
