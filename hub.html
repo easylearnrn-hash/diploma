@@ -9015,8 +9015,8 @@
         _renderNotifPanel(_cachedNotifications);
         // Silently refresh in background for next open
         fetchNotifications().then(fresh => {
-          _cachedNotifications = fresh;
-          updateNotifBadge(fresh);
+          _cachedNotifications = _applyCleared(fresh);
+          updateNotifBadge(_cachedNotifications);
         }).catch(() => {});
         return;
       }
@@ -9025,11 +9025,7 @@
       list.innerHTML = '<div class="np-loading">Loading notifications…</div>';
       const rawNotifications = await fetchNotifications();
       // Filter out any notifications the user has cleared
-      const CLEAR_KEY = 'notif_cleared_' + (studentData?.studentId || 'student');
-      const cleared = new Set(JSON.parse(localStorage.getItem(CLEAR_KEY) || '[]'));
-      const notifications = cleared.size
-        ? rawNotifications.filter(n => { const ids = n.groupIds || [n.id]; return !ids.every(id => cleared.has(id)); })
-        : rawNotifications;
+      const notifications = _applyCleared(rawNotifications);
       _cachedNotifications = notifications;
       _renderNotifPanel(notifications);
     }
@@ -9076,9 +9072,9 @@
         ids.forEach(id => seen.add(id));
       });
       saveSeenIds(seen);
-      // Store cleared IDs so they stay hidden until next hard reload
+      // Store cleared IDs so they stay hidden permanently
       const CLEAR_KEY = 'notif_cleared_' + (studentData?.studentId || 'student');
-      const cleared = new Set(JSON.parse(localStorage.getItem(CLEAR_KEY) || '[]'));
+      const cleared = _getClearedIds();
       _cachedNotifications.forEach(n => {
         const ids = n.groupIds || [n.id];
         ids.forEach(id => cleared.add(id));
@@ -9109,11 +9105,27 @@
       if (countEl) countEl.textContent = `${total} notification${total !== 1 ? 's' : ''}`;
     }
 
+    // Returns the cleared-notification ID set for the current student
+    function _getClearedIds() {
+      const key = 'notif_cleared_' + (studentData?.studentId || 'student');
+      return new Set(JSON.parse(localStorage.getItem(key) || '[]'));
+    }
+    // Removes any notifications whose IDs are all in the cleared set
+    function _applyCleared(notifications) {
+      const cleared = _getClearedIds();
+      if (!cleared.size) return notifications;
+      return notifications.filter(n => {
+        const ids = n.groupIds || [n.id];
+        return !ids.every(id => cleared.has(id));
+      });
+    }
+
     // Load badge count on startup (non-blocking)
     (async function initNotifBadge() {
       try {
         if (!db || !studentData) return;
-        const notifs = await fetchNotifications();
+        const raw = await fetchNotifications();
+        const notifs = _applyCleared(raw);
         _cachedNotifications = notifs;
         updateNotifBadge(notifs);
       } catch(_) {}
