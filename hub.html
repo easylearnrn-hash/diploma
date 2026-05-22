@@ -8351,104 +8351,93 @@
       if (!db || !studentData) return [];
       const studentIdCode = studentData.studentId || studentData.student_id || '';
       const studentUuid   = studentData.id || '';
-      const studentName   = (studentData.fullName || '').toLowerCase();
       const all = [];
 
-      // 1. Certificates (exam results)
+      // ── Fire all DB queries in parallel (Promise.allSettled) ─────────────
+      const q = {};
       if (studentIdCode) {
-        try {
-          const { data } = await db.from('certificates')
-            .select('id,exam_title,score,grade,issue_date,created_at,status')
-            .eq('student_id', studentIdCode)
-            .eq('status','valid')
-            .order('created_at',{ascending:false})
-            .limit(20);
-          (data||[]).forEach(r => all.push({
-            id: 'cert_' + r.id,
-            type: 'exam',
-            title: 'Exam result published',
-            body: `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
-            ts: r.created_at
-          }));
-        } catch(_) {}
+        q.certs   = db.from('certificates')
+          .select('id,exam_title,score,grade,created_at,status')
+          .eq('student_id', studentIdCode).eq('status','valid')
+          .order('created_at',{ascending:false}).limit(20);
+        q.forms   = db.from('student_form_submissions')
+          .select('id,form_title,status,submitted_at,reviewed_at,updated_at')
+          .eq('student_id', studentIdCode)
+          .order('updated_at',{ascending:false}).limit(20);
+        q.profile = db.from('profile_update_requests')
+          .select('id,update_type,status,submitted_at,reviewed_at,updated_at')
+          .eq('student_id', studentIdCode)
+          .order('updated_at',{ascending:false}).limit(10);
+      }
+      q.alerts = db.from('portal_alerts')
+        .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
+        .eq('is_active', true).order('created_at',{ascending:false}).limit(20);
+      if (studentUuid) {
+        q.notes = db.from('published_notes')
+          .select('id,note_id,published_at,published_by')
+          .eq('student_id', studentUuid)
+          .order('published_at',{ascending:false}).limit(20);
       }
 
-      // 2. Student form submissions (student services)
-      if (studentIdCode) {
-        try {
-          const { data } = await db.from('student_form_submissions')
-            .select('id,form_title,status,submitted_at,reviewed_at,updated_at')
-            .eq('student_id', studentIdCode)
-            .order('updated_at',{ascending:false})
-            .limit(20);
-          (data||[]).forEach(r => {
-            const isFinal = r.status && r.status !== 'pending';
-            all.push({
-              id: 'form_' + r.id,
-              type: 'form',
-              title: isFinal
-                ? `Service request ${r.status}: ${r.form_title||'Request'}`
-                : `Service request submitted: ${r.form_title||'Request'}`,
-              body: isFinal
-                ? `Your "${r.form_title||'request'}" has been ${r.status}.`
-                : `Your "${r.form_title||'request'}" is under review.`,
-              ts: r.reviewed_at || r.updated_at || r.submitted_at
-            });
-          });
-        } catch(_) {}
-      }
+      const keys    = Object.keys(q);
+      const results = await Promise.allSettled(keys.map(k => q[k]));
+      const res     = {};
+      keys.forEach((k, i) => {
+        res[k] = results[i].status === 'fulfilled' ? (results[i].value.data || []) : [];
+      });
 
-      // 3. Profile update requests
-      if (studentIdCode) {
-        try {
-          const { data } = await db.from('profile_update_requests')
-            .select('id,update_type,status,submitted_at,reviewed_at,updated_at')
-            .eq('student_id', studentIdCode)
-            .order('updated_at',{ascending:false})
-            .limit(10);
-          (data||[]).forEach(r => {
-            const isFinal = r.status && r.status !== 'pending';
-            all.push({
-              id: 'prof_' + r.id,
-              type: 'profile',
-              title: isFinal
-                ? `Profile update ${r.status}`
-                : 'Profile update request received',
-              body: isFinal
-                ? `Your ${r.update_type||'profile'} update has been ${r.status}.`
-                : `Your ${r.update_type||'profile'} update is under review.`,
-              ts: r.reviewed_at || r.updated_at || r.submitted_at
-            });
-          });
-        } catch(_) {}
-      }
+      // 1. Certificates
+      (res.certs || []).forEach(r => all.push({
+        id:    'cert_' + r.id,
+        type:  'exam',
+        title: 'Exam result published',
+        body:  `${r.exam_title} — ${r.grade}${r.score ? ' ('+r.score+'%)' : ''}`,
+        ts:    r.created_at
+      }));
 
-      // 4. Portal alerts targeted to this student or all students
-      try {
-        const { data } = await db.from('portal_alerts')
-          .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
-          .eq('is_active', true)
-          .order('created_at',{ascending:false})
-          .limit(20);
-        (data||[]).forEach(r => {
-          const isAll = !r.target_type || r.target_type === 'all';
-          const ids = r.target_student_ids;
-          const targeted = isAll
-            || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
-            || (ids && typeof ids === 'object' && !Array.isArray(ids));
-          if (!targeted) return;
-          const plain = (r.message_html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
-          all.push({
-            id: 'alert_' + r.id,
-            type: 'alert',
-            title: r.title || 'Announcement',
-            body: plain,
-            ts: r.created_at
-          });
+      // 2. Form submissions
+      (res.forms || []).forEach(r => {
+        const isFinal = r.status && r.status !== 'pending';
+        all.push({
+          id:    'form_' + r.id,
+          type:  'form',
+          title: isFinal
+            ? `Service request ${r.status}: ${r.form_title||'Request'}`
+            : `Service request submitted: ${r.form_title||'Request'}`,
+          body: isFinal
+            ? `Your "${r.form_title||'request'}" has been ${r.status}.`
+            : `Your "${r.form_title||'request'}" is under review.`,
+          ts: r.reviewed_at || r.updated_at || r.submitted_at
         });
-      } catch(_) {}
+      });
 
-      // 5. Final exam date set (from hubStudentData)
+      // 3. Profile updates
+      (res.profile || []).forEach(r => {
+        const isFinal = r.status && r.status !== 'pending';
+        all.push({
+          id:    'prof_' + r.id,
+          type:  'profile',
+          title: isFinal ? `Profile update ${r.status}` : 'Profile update request received',
+          body:  isFinal
+            ? `Your ${r.update_type||'profile'} update has been ${r.status}.`
+            : `Your ${r.update_type||'profile'} update is under review.`,
+          ts: r.reviewed_at || r.updated_at || r.submitted_at
+        });
+      });
+
+      // 4. Portal alerts
+      (res.alerts || []).forEach(r => {
+        const isAll    = !r.target_type || r.target_type === 'all';
+        const ids      = r.target_student_ids;
+        const targeted = isAll
+          || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
+          || (ids && typeof ids === 'object' && !Array.isArray(ids));
+        if (!targeted) return;
+        const plain = (r.message_html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
+        all.push({ id:'alert_'+r.id, type:'alert', title:r.title||'Announcement', body:plain, ts:r.created_at });
+      });
+
+      // 5. Final exam date (localStorage — instant)
       const examDate = studentData.finalExamDate;
       if (examDate) {
         const d = new Date(examDate + 'T00:00:00');
@@ -8464,43 +8453,24 @@
             timeNote = ` at ${examTime} (Armenia) / ${la} (LA)`;
           } catch(_) { timeNote = ` at ${examTime}`; }
         }
-        all.push({
-          id: 'examdate_' + examDate,
-          type: 'exam_date',
-          title: 'Final Examination date confirmed',
-          body: fmtDate + timeNote,
-          ts: null   // no exact timestamp; sort last by placing ts as old date
-        });
+        all.push({ id:'examdate_'+examDate, type:'exam_date',
+          title:'Final Examination date confirmed', body:fmtDate+timeNote, ts:null });
       }
 
       // 6. Published notes
-      if (studentUuid) {
-        try {
-          const { data } = await db.from('published_notes')
-            .select('id,note_id,published_at,published_by')
-            .eq('student_id', studentUuid)
-            .order('published_at',{ascending:false})
-            .limit(20);
-          // Build note lookup map from hub's local note registry
-          const noteMap = {};
-          try { getAllNotesWithCategories().forEach(n => { noteMap[n.id] = n; }); } catch(_) {}
-          (data||[]).forEach(r => {
-            const noteInfo = noteMap[r.note_id] || {};
-            const noteTitle = noteInfo.title || r.note_id || 'Study Note';
-            const noteUrl   = noteInfo.htmlFile
-              ? noteInfo.htmlFile.split('/').map(encodeURIComponent).join('/')
-              : null;
-            all.push({
-              id: 'note_' + r.id,
-              type: 'note',
-              title: noteTitle + ' published',
-              body:  `New study note added to your library${r.published_by ? ' by ' + r.published_by : ''}.`,
-              ts:    r.published_at,
-              noteTitle,
-              noteUrl
-            });
-          });
-        } catch(_) {}
+      if (res.notes) {
+        const noteMap = {};
+        try { getAllNotesWithCategories().forEach(n => { noteMap[n.id] = n; }); } catch(_) {}
+        res.notes.forEach(r => {
+          const noteInfo  = noteMap[r.note_id] || {};
+          const noteTitle = noteInfo.title || r.note_id || 'Study Note';
+          const noteUrl   = noteInfo.htmlFile
+            ? noteInfo.htmlFile.split('/').map(encodeURIComponent).join('/')
+            : null;
+          all.push({ id:'note_'+r.id, type:'note', title:noteTitle+' published',
+            body:`New study note added to your library${r.published_by?' by '+r.published_by:''}.`,
+            ts:r.published_at, noteTitle, noteUrl });
+        });
       }
 
       // Sort all items newest first; null ts goes to end
@@ -8635,26 +8605,19 @@
 
     let _cachedNotifications = null;
 
-    async function openNotificationsPanel() {
-      const overlay = document.getElementById('notifOverlay');
-      const panel   = document.getElementById('notifPanel');
-      const list    = document.getElementById('npList');
-      overlay.style.display = 'block';
-      requestAnimationFrame(() => panel.classList.add('open'));
-
-      // Show loader while fetching
-      list.innerHTML = '<div class="np-loading">Loading notifications…</div>';
-
-      const notifications = await fetchNotifications();
-      _cachedNotifications = notifications;
+    function _renderNotifPanel(notifications) {
       const seen = getSeenIds();
-
-      const unseenCount = notifications.filter(n => !seen.has(n.id)).length;
+      let unseenCount = 0;
+      notifications.forEach(n => {
+        const ids = n.groupIds || [n.id];
+        if (ids.some(id => !seen.has(id))) unseenCount++;
+      });
       document.getElementById('npCount').textContent =
         notifications.length === 0
           ? 'No notifications'
           : `${notifications.length} notification${notifications.length !== 1 ? 's' : ''}${unseenCount > 0 ? ' · ' + unseenCount + ' new' : ''}`;
-
+      const list = document.getElementById('npList');
+      if (!list) return;
       if (notifications.length === 0) {
         list.innerHTML = `
           <div class="np-empty">
@@ -8664,6 +8627,31 @@
       } else {
         list.innerHTML = notifications.map(n => renderNotifItem(n, seen)).join('');
       }
+    }
+
+    async function openNotificationsPanel() {
+      const overlay = document.getElementById('notifOverlay');
+      const panel   = document.getElementById('notifPanel');
+      const list    = document.getElementById('npList');
+      overlay.style.display = 'block';
+      requestAnimationFrame(() => panel.classList.add('open'));
+
+      // If cache is ready, render instantly — no loader flash
+      if (_cachedNotifications) {
+        _renderNotifPanel(_cachedNotifications);
+        // Silently refresh in background for next open
+        fetchNotifications().then(fresh => {
+          _cachedNotifications = fresh;
+          updateNotifBadge(fresh);
+        }).catch(() => {});
+        return;
+      }
+
+      // First open: show loader, fetch, render
+      list.innerHTML = '<div class="np-loading">Loading notifications…</div>';
+      const notifications = await fetchNotifications();
+      _cachedNotifications = notifications;
+      _renderNotifPanel(notifications);
     }
 
     function closeNotificationsPanel() {
