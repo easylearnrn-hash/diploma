@@ -4452,10 +4452,15 @@
         return;
       }
 
+      // Render from cache immediately so the widget appears without lag
+      const cacheKey = 'sched_html_' + groupName;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) el.innerHTML = cached;
+
       // Resolve group UUID (group_course_schedule uses UUID, not name)
       const groupUUID = await getHubStudentGroupUUID();
       if (!groupUUID) {
-        el.innerHTML = `<div style="color:var(--text-muted);font-size:13px;font-style:italic">Group "${groupName}" not found in schedule database yet.</div>`;
+        if (!cached) el.innerHTML = `<div style="color:var(--text-muted);font-size:13px;font-style:italic">Group "${groupName}" not found in schedule database yet.</div>`;
         return;
       }
 
@@ -4497,6 +4502,8 @@
               </div>
             </div>`;
         }).join('');
+        // Cache the rendered HTML for instant display on next load
+        try { sessionStorage.setItem(cacheKey, el.innerHTML); } catch(_) {}
 
       } catch (err) {
         console.error('Error loading class schedule:', err);
