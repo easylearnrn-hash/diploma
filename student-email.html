@@ -818,7 +818,7 @@
       try {
         const { data, error } = await db
           .from('email_history')
-          .select('id, sender, recipient, subject, status, sent_at, resend_id, error, body, html_body')
+          .select('id, sender, recipient, subject, status, sent_at, resend_id, error')
           .or(`sender.eq.${currentStudent.institutional_email},recipient.eq.${currentStudent.institutional_email}`)
           .order('sent_at', { ascending: false })
           .limit(50);
@@ -1018,7 +1018,7 @@
       }
     }
 
-    function showEmailDetail(emailId) {
+    async function showEmailDetail(emailId) {
       const email = allEmails.find(e => e.id === emailId);
       if (!email) return;
 
@@ -1053,17 +1053,37 @@
       document.getElementById('detailFrom').textContent = email.sender;
       document.getElementById('detailTo').textContent = email.recipient;
       document.getElementById('detailDate').textContent = formatDate(email.sent_at);
-      document.getElementById('detailBody').innerHTML = email.html_body || escapeHtml(email.body || '');
-      if (email.body && !emailPreviewCache.has(email.id)) {
-        emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
-      }
 
-  fetchEmailBodyIfMissing(email);
-
+      // Show the detail view immediately so the user sees the header
       document.getElementById('emailListView').style.display = 'none';
       document.getElementById('emailDetailView').classList.add('show');
       document.body.classList.add('detail-open');
       window.scrollTo(0, 0);
+
+      // Lazy-load body only the first time this email is opened (body excluded from list query)
+      if (!email._bodyLoaded) {
+        document.getElementById('detailBody').innerHTML = '<div class="loading">Loading message…</div>';
+        try {
+          const { data: bodyData } = await db
+            .from('email_history')
+            .select('body, html_body')
+            .eq('id', emailId)
+            .single();
+          if (bodyData) {
+            email.body      = bodyData.body;
+            email.html_body = bodyData.html_body;
+            if (bodyData.body && !emailPreviewCache.has(email.id)) {
+              emailPreviewCache.set(email.id, stripHtml(bodyData.body).substring(0, 120));
+            }
+          }
+        } catch (e) {
+          console.error('Error fetching email body:', e);
+        }
+        email._bodyLoaded = true;
+      }
+
+      document.getElementById('detailBody').innerHTML = email.html_body || escapeHtml(email.body || '(No content)');
+      fetchEmailBodyIfMissing(email);
     }
 
     function showEmailList() {
