@@ -3752,24 +3752,21 @@ async function refreshLiveGpaMetrics() {
   if (!profile || !profile.id) return;
 
   try {
-    const supabase = initSupabase();
-    if (!supabase) return;
+    let grades, transfers;
 
-    // Fetch official course grades (student_id is UUID FK)
-    const { data: sgData } = await supabase
-      .from('student_grades')
-      .select('credits, grade_points, grade')
-      .eq('student_id', profile.id);
-
-    // Fetch approved transfer credits (student_id is ACNHS text ID)
-    const { data: tcData } = await supabase
-      .from('transfer_credits')
-      .select('credits, grade_points')
-      .eq('student_id', profile.student_id)
-      .eq('status', 'approved');
-
-    const grades    = sgData  || [];
-    const transfers = tcData  || [];
+    if (portalState._gradesCache) {
+      // Reuse data already loaded by loadTransferCreditsForStudent — no extra round-trips
+      ({ grades, transfers } = portalState._gradesCache);
+    } else {
+      const supabase = initSupabase();
+      if (!supabase) return;
+      const [sgRes, tcRes] = await Promise.all([
+        supabase.from('student_grades').select('credits, grade_points, grade').eq('student_id', profile.id),
+        supabase.from('transfer_credits').select('credits, grade_points').eq('student_id', profile.student_id).eq('status', 'approved')
+      ]);
+      grades    = sgRes.data || [];
+      transfers = tcRes.data || [];
+    }
 
     // Nothing in DB yet — leave whatever defaults are already rendered
     if (!grades.length && !transfers.length) return;
@@ -4074,30 +4071,25 @@ async function loadTransferCreditsForStudent(studentProfile) {
   if (!supabase) return;
   
   try {
-    // Load transfer credits (uses TEXT student_id like 'ACNHS-7022395')
-    const { data: transferCredits, error: transferError } = await supabase
-      .from('transfer_credits')
-      .select('*')
-      .eq('student_id', studentProfile.student_id)
-      .eq('status', 'approved');
-    
-    if (transferError) {
-      console.error('Error loading transfer credits:', transferError);
-    }
-    
-    // Load ACNHS grades (uses UUID student_id)
-    // Need to use the UUID id from studentProfile, not the TEXT student_id
-    const { data: acnhsGrades, error: gradesError } = await supabase
-      .from('student_grades')
-      .select('*')
-      .eq('student_id', studentProfile.id); // Use UUID id instead of TEXT student_id
-    
-    if (gradesError) {
-      console.error('Error loading ACNHS grades:', gradesError);
-    }
-    
+    // Parallel fetch: all three tables are independent — run together to cut round-trips
+    const [
+      { data: transferCredits, error: transferError },
+      { data: acnhsGrades,    error: gradesError },
+      { data: certsInitial }
+    ] = await Promise.all([
+      supabase.from('transfer_credits').select('*').eq('student_id', studentProfile.student_id).eq('status', 'approved'),
+      supabase.from('student_grades').select('*').eq('student_id', studentProfile.id),
+      supabase.from('certificates').select('*').eq('student_id', studentProfile.student_id).eq('status', 'valid')
+    ]);
+
+    if (transferError) console.error('Error loading transfer credits:', transferError);
+    if (gradesError)   console.error('Error loading ACNHS grades:', gradesError);
+
     const transfers = transferCredits || [];
-    const grades = acnhsGrades || [];
+    const grades    = acnhsGrades    || [];
+
+    // Cache fetched data so refreshLiveGpaMetrics can reuse it without re-fetching
+    portalState._gradesCache = { grades, transfers };
     
     if (transfers.length === 0 && grades.length === 0) {
       console.log('No grades or transfer credits found');
@@ -4317,8 +4309,8 @@ async function loadTransferCreditsForStudent(studentProfile) {
     // Inject Certificates into Exams
     let certificates = [];
     try {
-      const { data: certs } = await supabase.from('certificates').select('*').eq('student_id', studentProfile.student_id).eq('status', 'valid');
-      if (certs?.length) certificates = certs;
+      // certsInitial was already fetched in the parallel batch above
+      if (certsInitial?.length) certificates = certsInitial;
       else if (studentProfile.full_name) {
         const { data: allCerts } = await supabase.from('certificates').select('*').eq('status', 'valid');
         if (allCerts) certificates = allCerts.filter(c => (c.student_name || '').toLowerCase() === studentProfile.full_name.toLowerCase());
