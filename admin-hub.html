@@ -3384,7 +3384,8 @@
       dbCourses:         [],   // all courses from Supabase
       customItems:       {},   // course_code → [{id, name, weight}] user-added items
       attendancePct:     {},   // course_code → attendance % (0-100) auto-fetched from attendance_records
-      gradedItems:       {}    // course_code → { itemKey: score } from student_grade_items
+      gradedItems:       {},   // course_code → { itemKey: score } from student_grade_items
+      midtermCertScore:  null  // numeric score from certificates table (exam_title ILIKE '%midterm%')
     };
 
     function _gmLetterGrade(pct) {
@@ -3554,6 +3555,22 @@
             });
           }
         } catch (_) {} // table may not exist yet
+        // Fetch midterm score from certificates (exam_title ILIKE '%midterm%', status='valid')
+        gmState.midtermCertScore = null;
+        try {
+          const { data: certRows } = await db
+            .from('certificates')
+            .select('score')
+            .eq('student_id', student.student_id)
+            .ilike('exam_title', '%midterm%')
+            .eq('status', 'valid')
+            .order('issue_date', { ascending: false })
+            .limit(1);
+          if (certRows && certRows.length) {
+            const raw = parseFloat(certRows[0].score);
+            if (!isNaN(raw)) gmState.midtermCertScore = raw;
+          }
+        } catch (_) {}
         gmRenderEditor(student);
       } catch (e) {
         editorEl.innerHTML = `<div style="padding:20px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;color:#f87171">${e.message}</div>`;
@@ -3623,6 +3640,7 @@
 
       let catalogHtml = (course.gradeItems || []).map(item => {
         const key     = item.id || item.name;
+        const isMidterm = /midterm/i.test(item.name);
         const isAtt   = /attendance|participation/i.test(item.name);
         const attPct  = isAtt ? gmState.attendancePct[course.code] : null;
         // Check student_grade_items for any pre-scored item (midterm, final, quizzes, etc.)
@@ -3630,10 +3648,12 @@
                      ?? gmState.gradedItems[course.code]?.[item.name]
                      ?? gmState.gradedItems[course.code]?.[item.id]
                      ?? null;
-        // Priority: 1) saved grade  2) student_grade_items score  3) attendance auto-fill
+        const certScore = isMidterm ? gmState.midtermCertScore : null;
+        // Priority: 1) saved grade  2) student_grade_items score  3) cert score  4) attendance
         let val = items[key] ?? '';
-        if (val === '' && giScore  !== null) val = giScore;
-        else if (val === '' && attPct !== null) val = attPct;
+        if (val === '' && giScore    !== null) val = giScore;
+        else if (val === '' && certScore  !== null) val = certScore;
+        else if (val === '' && attPct    !== null) val = attPct;
         const score   = parseFloat(val);
         const cid     = _gmSafeId(String(key));
         const contrib = !isNaN(score) && val !== '' ? `${((score / 100) * item.weight).toFixed(1)} / ${item.weight} pts` : '';
@@ -3643,6 +3663,8 @@
         let syncBadge = '';
         if (isAtt && attPct !== null)
           syncBadge = `<button class="gm-att-sync" title="Re-sync from attendance records" onclick="gmSyncAttendance('${course.code}','${key}')">&#8635; ${attPct}% attendance</button>`;
+        else if (isMidterm && certScore !== null && giScore === null)
+          syncBadge = `<button class="gm-att-sync" title="Re-sync from certificate" onclick="gmSyncGradeItem('${course.code}','${key}',${certScore})">&#8635; ${certScore}% certificate</button>`;
         else if (!isAtt && giScore !== null)
           syncBadge = `<button class="gm-att-sync" title="Re-sync from graded records" onclick="gmSyncGradeItem('${course.code}','${key}',${giScore})">&#8635; ${giScore}% on record</button>`;
         return `<div class="gm-item">
