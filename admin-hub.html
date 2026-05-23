@@ -3483,15 +3483,28 @@
       try {
         const student = gmState.students.find(s => s.id === studentId);
         if (!student) throw new Error('Student not found');
-        const { data: dbGrades } = await db.from('student_grades').select('*').eq('student_id', studentId);
+
+        // Fire all 4 DB calls in parallel — one network wait instead of four
+        const [gradesRes, attRes, giRes, certRes] = await Promise.all([
+          db.from('student_grades').select('*').eq('student_id', studentId),
+          db.from('attendance_records').select('course_code,status').eq('student_id', studentId),
+          db.from('student_grade_items').select('course_code,grade_item_id,grade_item_name,score,status')
+            .eq('student_id', studentId).eq('status', 'graded'),
+          db.from('certificates').select('score')
+            .eq('student_id', student.student_id).ilike('exam_title', '%midterm%')
+            .eq('status', 'valid').order('issue_date', { ascending: false }).limit(1)
+        ]);
+
+        // Process grades
         gmState.studentGrades = {};
-        (dbGrades || []).forEach(g => {
+        (gradesRes.data || []).forEach(g => {
           let items = {};
           if (g.grade_items) {
             try { items = typeof g.grade_items === 'string' ? JSON.parse(g.grade_items) : g.grade_items; } catch (_) {}
           }
           gmState.studentGrades[g.course_code] = { ...g, items };
         });
+
         const sem = student.metadata?.current_semester || student.current_semester || 'Semester 1';
         const catalogCourses = (COURSE_CATALOG[sem] || []).map(c => {
           const dbMatch = gmState.dbCourses.find(d => d.code === c.code);
@@ -3514,63 +3527,41 @@
             return { code, name: g.course_name || code, credits: g.credits || 3, semester: g.semester || sem, gradeItems: gi };
           });
         gmState.courses = [...catalogCourses, ...extraCourses];
-        // Restore any saved custom item definitions from grade_items.__customDefs
+
+        // Restore custom item definitions
         gmState.customItems = {};
         Object.entries(gmState.studentGrades).forEach(([code, g]) => {
           const defs = g.items?.__customDefs;
           if (Array.isArray(defs) && defs.length) gmState.customItems[code] = defs;
         });
-        // Fetch attendance records for this student and compute per-course %
+
+        // Process attendance
         gmState.attendancePct = {};
-        try {
-          const { data: attRows } = await db
-            .from('attendance_records')
-            .select('course_code,status')
-            .eq('student_id', studentId);
-          if (attRows && attRows.length) {
-            const byCourse = {};
-            attRows.forEach(r => {
-              if (!byCourse[r.course_code]) byCourse[r.course_code] = { total: 0, present: 0 };
-              byCourse[r.course_code].total++;
-              if (r.status === 'present' || r.status === 'late') byCourse[r.course_code].present++;
-            });
-            Object.entries(byCourse).forEach(([code, { total, present }]) => {
-              gmState.attendancePct[code] = total > 0 ? parseFloat(((present / total) * 100).toFixed(1)) : null;
-            });
-          }
-        } catch (_) {}
-        // Fetch student_grade_items (per-item scores saved by admin)
+        const byCourse = {};
+        (attRes.data || []).forEach(r => {
+          if (!byCourse[r.course_code]) byCourse[r.course_code] = { total: 0, present: 0 };
+          byCourse[r.course_code].total++;
+          if (r.status === 'present' || r.status === 'late') byCourse[r.course_code].present++;
+        });
+        Object.entries(byCourse).forEach(([code, { total, present }]) => {
+          gmState.attendancePct[code] = total > 0 ? parseFloat(((present / total) * 100).toFixed(1)) : null;
+        });
+
+        // Process student_grade_items
         gmState.gradedItems = {};
-        try {
-          const { data: giRows } = await db
-            .from('student_grade_items')
-            .select('course_code,grade_item_id,grade_item_name,score,status')
-            .eq('student_id', studentId)
-            .eq('status', 'graded');
-          if (giRows && giRows.length) {
-            giRows.forEach(r => {
-              if (!gmState.gradedItems[r.course_code]) gmState.gradedItems[r.course_code] = {};
-              if (r.grade_item_id)   gmState.gradedItems[r.course_code][r.grade_item_id]   = r.score;
-              if (r.grade_item_name) gmState.gradedItems[r.course_code][r.grade_item_name] = r.score;
-            });
-          }
-        } catch (_) {} // table may not exist yet
-        // Fetch midterm score from certificates (exam_title ILIKE '%midterm%', status='valid')
+        (giRes.data || []).forEach(r => {
+          if (!gmState.gradedItems[r.course_code]) gmState.gradedItems[r.course_code] = {};
+          if (r.grade_item_id)   gmState.gradedItems[r.course_code][r.grade_item_id]   = r.score;
+          if (r.grade_item_name) gmState.gradedItems[r.course_code][r.grade_item_name] = r.score;
+        });
+
+        // Process midterm certificate score
         gmState.midtermCertScore = null;
-        try {
-          const { data: certRows } = await db
-            .from('certificates')
-            .select('score')
-            .eq('student_id', student.student_id)
-            .ilike('exam_title', '%midterm%')
-            .eq('status', 'valid')
-            .order('issue_date', { ascending: false })
-            .limit(1);
-          if (certRows && certRows.length) {
-            const raw = parseFloat(certRows[0].score);
-            if (!isNaN(raw)) gmState.midtermCertScore = raw;
-          }
-        } catch (_) {}
+        if (certRes.data && certRes.data.length) {
+          const raw = parseFloat(certRes.data[0].score);
+          if (!isNaN(raw)) gmState.midtermCertScore = raw;
+        }
+
         gmRenderEditor(student);
       } catch (e) {
         editorEl.innerHTML = `<div style="padding:20px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;color:#f87171">${e.message}</div>`;
