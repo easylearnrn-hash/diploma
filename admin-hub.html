@@ -11085,6 +11085,7 @@
 
     let activeLinkData = null;
     let countdownInterval = null;
+    let _classLinkPublishing = false;   // guard against double-submit
 
     // Initialize Join Class Link system
     async function initializeJoinClassLink() {
@@ -11202,7 +11203,8 @@
         
         const groupSelect = document.getElementById('classLinkGroup');
         if (groupSelect && uniqueGroups.length > 0) {
-          // Keep "All Students" option
+          // Clear any previously appended options (keep only the first "All Students" option)
+          while (groupSelect.options.length > 1) groupSelect.remove(1);
           uniqueGroups.sort().forEach(group => {
             const option = document.createElement('option');
             option.value = group;
@@ -11271,6 +11273,11 @@
     }
 
     async function publishClassLink() {
+      if (_classLinkPublishing) return;  // prevent double-submit
+      _classLinkPublishing = true;
+      const publishBtn = document.querySelector('[onclick="publishClassLink()"]');
+      if (publishBtn) { publishBtn.disabled = true; publishBtn.textContent = '⏳ Sending Emails…'; }
+
       const urlInput = document.getElementById('classLinkUrl');
       const groupSelect = document.getElementById('classLinkGroup');
       const url = urlInput.value.trim();
@@ -11325,7 +11332,9 @@
         activeLinkData = data[0];
         
         // Fire emails in the background — don't await so modal closes instantly
-        sendClassLinkEmail(url, selectedGroup).catch(err => console.error('Background email error:', err));
+        sendClassLinkEmail(url, selectedGroup)
+          .catch(err => console.error('Background email error:', err))
+          .finally(() => { _classLinkPublishing = false; });
         
         // Show success message immediately
         showCustomAlert(
@@ -11342,6 +11351,8 @@
         await checkActiveLink();
         closeJoinClassModal();
       } catch (error) {
+        _classLinkPublishing = false;
+        if (publishBtn) { publishBtn.disabled = false; publishBtn.textContent = '📤 Post Link & Send Emails'; }
         console.error('Error publishing class link:', error);
         showCustomAlert(
           '❌ Failed to publish class link',
