@@ -3389,7 +3389,7 @@
       listEl.innerHTML = '<div class="gm-loading"><div class="spinner"></div><p>Loading…</p></div>';
       try {
         const { data: students } = await db.from('students')
-          .select('id,student_id,full_name,email,program,status,current_semester,enrollment_date,metadata')
+          .select('id,student_id,full_name,email,program,enrollment_status,metadata')
           .order('full_name', { ascending: true });
         gmState.students = students || [];
         gmState.filteredStudents = [...gmState.students];
@@ -3464,7 +3464,7 @@
           }
           gmState.studentGrades[g.course_code] = { ...g, items };
         });
-        const sem = student.current_semester || 'Semester 1';
+        const sem = student.metadata?.current_semester || student.current_semester || 'Semester 1';
         const catalogCourses = (COURSE_CATALOG[sem] || []).map(c => {
           const dbMatch = gmState.dbCourses.find(d => d.code === c.code);
           let gi = c.gradeItems || [];
@@ -3504,7 +3504,7 @@
           <div class="gm-banner-avatar">${initials}</div>
           <div class="gm-banner-info">
             <h3 class="gm-banner-name">${student.full_name}</h3>
-            <p class="gm-banner-sub">${student.student_id || '—'} &nbsp;·&nbsp; ${formatProgram(student.program)} &nbsp;·&nbsp; ${student.current_semester || '—'}</p>
+            <p class="gm-banner-sub">${student.student_id || '—'} &nbsp;·&nbsp; ${formatProgram(student.program)} &nbsp;·&nbsp; ${student.metadata?.current_semester || student.current_semester || '—'}</p>
           </div>
           <div class="gm-kpis">
             <div class="gm-kpi"><span class="gm-kpi-val" id="gmLiveGpa" style="color:${gc}">${gpa > 0 ? gpa.toFixed(2) : '—'}</span><span class="gm-kpi-lbl">GPA</span></div>
@@ -3646,7 +3646,7 @@
         });
         if (!Object.keys(items).length) { showToast('Enter at least one score before saving.', 'warn'); return; }
         const lg  = _gmLetterGrade(total);
-        const sem = course.semester || student.current_semester || 'Semester 1';
+        const sem = course.semester || student.metadata?.current_semester || student.current_semester || 'Semester 1';
         const row = {
           student_id:   student.id,
           course_code:  courseCode,
