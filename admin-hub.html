@@ -822,6 +822,9 @@
     .gm-btn-save:disabled{opacity:0.5;cursor:not-allowed}
     .gm-btn-add-item{padding:7px 14px;background:rgba(255,255,255,0.04);border:1px dashed rgba(201,168,76,0.35);border-radius:7px;color:var(--gold-400);font-size:12px;font-weight:700;cursor:pointer;transition:background 0.15s}
     .gm-btn-add-item:hover{background:rgba(201,168,76,0.10);border-style:solid}
+    /* Attendance auto-fill sync button */
+    .gm-att-sync{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;background:rgba(99,179,237,0.08);border:1px solid rgba(99,179,237,0.25);border-radius:5px;color:#63b3ed;font-size:10px;font-weight:600;cursor:pointer;margin-bottom:4px;transition:background 0.15s}
+    .gm-att-sync:hover{background:rgba(99,179,237,0.16)}
     /* Score input wrapper */
     .gm-item-score-wrap{display:flex;align-items:center;gap:6px;margin-top:6px}
     .gm-item-score-wrap .gm-item-input{flex:1;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(201,168,76,0.25);border-radius:8px;color:var(--text-primary);font-size:14px;font-weight:600;text-align:center;transition:border-color 0.15s;-moz-appearance:textfield}
@@ -3379,7 +3382,8 @@
       courses:           [],   // courses for selected student's semester
       expanded:          {},   // course_code → bool
       dbCourses:         [],   // all courses from Supabase
-      customItems:       {}    // course_code → [{id, name, weight}] user-added items
+      customItems:       {},   // course_code → [{id, name, weight}] user-added items
+      attendancePct:     {}    // course_code → attendance % (0-100) auto-fetched from attendance_records
     };
 
     function _gmLetterGrade(pct) {
@@ -3514,6 +3518,25 @@
           const defs = g.items?.__customDefs;
           if (Array.isArray(defs) && defs.length) gmState.customItems[code] = defs;
         });
+        // Fetch attendance records for this student and compute per-course %
+        gmState.attendancePct = {};
+        try {
+          const { data: attRows } = await db
+            .from('attendance_records')
+            .select('course_code,status')
+            .eq('student_id', studentId);
+          if (attRows && attRows.length) {
+            const byCourse = {};
+            attRows.forEach(r => {
+              if (!byCourse[r.course_code]) byCourse[r.course_code] = { total: 0, present: 0 };
+              byCourse[r.course_code].total++;
+              if (r.status === 'present' || r.status === 'late') byCourse[r.course_code].present++;
+            });
+            Object.entries(byCourse).forEach(([code, { total, present }]) => {
+              gmState.attendancePct[code] = total > 0 ? parseFloat(((present / total) * 100).toFixed(1)) : null;
+            });
+          }
+        } catch (_) {}
         gmRenderEditor(student);
       } catch (e) {
         editorEl.innerHTML = `<div style="padding:20px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;color:#f87171">${e.message}</div>`;
@@ -3582,16 +3605,25 @@
         : `<span class="gm-t-empty">Enter scores above to calculate</span>`;
 
       let catalogHtml = (course.gradeItems || []).map(item => {
-        const key    = item.id || item.name;
-        const val    = items[key] ?? '';
-        const score  = parseFloat(val);
-        const cid    = _gmSafeId(String(key));
+        const key     = item.id || item.name;
+        const isAtt   = /attendance|participation/i.test(item.name);
+        const attPct  = isAtt ? gmState.attendancePct[course.code] : null;
+        // Use saved grade first; fall back to auto-calculated attendance %
+        let val = items[key] ?? '';
+        const autoFilled = val === '' && attPct !== null;
+        if (autoFilled) val = attPct;
+        const score   = parseFloat(val);
+        const cid     = _gmSafeId(String(key));
         const contrib = !isNaN(score) && val !== '' ? `${((score / 100) * item.weight).toFixed(1)} / ${item.weight} pts` : '';
         const pct     = !isNaN(score) && val !== '' ? score : null;
         const barW    = pct !== null ? Math.min(100, pct) : 0;
         const barC    = pct === null ? 'transparent' : pct >= 80 ? '#c9a84c' : pct >= 60 ? '#d4b56a' : '#ef4444';
+        const attBadge = isAtt && attPct !== null
+          ? `<button class="gm-att-sync" title="Re-sync from attendance records" onclick="gmSyncAttendance('${course.code}','${key}')">&#8635; ${attPct}% attendance</button>`
+          : '';
         return `<div class="gm-item">
             <div class="gm-item-hdr"><span class="gm-item-nm">${item.name}</span><span class="gm-item-wt">${item.weight}%</span></div>
+            ${attBadge}
             <div class="gm-item-score-wrap">
               <input class="gm-item-input" type="number" min="0" max="100" step="0.1"
                 value="${val}" placeholder="0 – 100"
@@ -3708,6 +3740,14 @@
       } else {
         ci[field] = rawValue;
       }
+    }
+
+    // Sync an attendance/participation input to the calculated attendance %
+    function gmSyncAttendance(courseCode, itemKey) {
+      const pct = gmState.attendancePct[courseCode];
+      if (pct == null) return;
+      const input = document.querySelector(`input.gm-item-input[data-course="${courseCode}"][data-item="${itemKey}"]`);
+      if (input) { input.value = pct; gmLiveCalc(courseCode); }
     }
 
     function gmToggleCourse(courseCode) {
