@@ -500,15 +500,14 @@
     .detail-meta strong { color: #475569; font-weight: 600; }
 
     .detail-body {
-      color: #334155;
-      line-height: 1.8;
-      padding: 22px;
-      background: #ffffff;
-      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      width: 100%;
+      display: block;
+      border: none;
       border: 1px solid rgba(226, 232, 240, 0.7);
       border-top: none;
-      font-size: 14px;
-      min-height: 180px;
+      border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+      min-height: 200px;
+      background: #ffffff;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     }
 
@@ -655,7 +654,7 @@
               <span><strong>Date:</strong> <span id="detailDate"></span></span>
             </div>
           </div>
-          <div class="detail-body" id="detailBody"></div>
+          <iframe id="detailBody" class="detail-body" sandbox="allow-popups" frameborder="0" scrolling="no" title="Email message content"></iframe>
         </div>
       </div>
     </div>
@@ -1018,7 +1017,7 @@
             showNotification(`Body fetch failed: ${errorMessage}`, 'error');
           }
           email.body = email.body || '(Body unavailable)';
-          document.getElementById('detailBody').innerHTML = escapeHtml(email.body);
+          setDetailBody(escapeHtml(email.body));
           emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
           return;
         }
@@ -1027,7 +1026,7 @@
         email.body = result.body || email.body;
         email.html_body = result.html_body || email.html_body;
         const _sealB64a = typeof ACNHS_SEAL_BASE64 !== 'undefined' ? ACNHS_SEAL_BASE64 : '';
-        document.getElementById('detailBody').innerHTML = (email.html_body || escapeHtml(email.body || '')).replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, _sealB64a);
+        setDetailBody((email.html_body || escapeHtml(email.body || '')).replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, _sealB64a));
         if (email.body && !hadBody) {
           emailPreviewCache.set(email.id, stripHtml(email.body).substring(0, 120));
           renderEmailList(); // only re-render if we gained a new preview
@@ -1035,6 +1034,27 @@
       } catch (error) {
         console.error('❌ Error fetching email body:', error);
       }
+    }
+
+    // Render email content in a sandboxed iframe so the email's own CSS
+    // is fully isolated from this page (prevents injected <style> overriding body scroll).
+    function setDetailBody(content) {
+      const frame = document.getElementById('detailBody');
+      const sealB64 = typeof ACNHS_SEAL_BASE64 !== 'undefined' ? ACNHS_SEAL_BASE64 : '';
+      const html = content.replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, sealB64);
+      // If content is a full HTML document, use it as-is; otherwise wrap in minimal doc
+      const isFullDoc = /^\s*<!doctype|^\s*<html/i.test(html);
+      frame.srcdoc = isFullDoc ? html :
+        `<!doctype html><html><head><meta charset="utf-8">
+         <style>body{font-family:Arial,sans-serif;font-size:14px;line-height:1.7;color:#334155;padding:22px;margin:0;word-break:break-word}</style>
+         </head><body>${html}</body></html>`;
+      frame.style.height = '300px'; // placeholder until load fires
+      frame.onload = () => {
+        try {
+          const h = frame.contentDocument.documentElement.scrollHeight;
+          frame.style.height = Math.max(200, h + 20) + 'px';
+        } catch(e) {}
+      };
     }
 
     async function showEmailDetail(emailId) {
@@ -1081,7 +1101,7 @@
 
       // Lazy-load body only the first time this email is opened (body excluded from list query)
       if (!email._bodyLoaded) {
-        document.getElementById('detailBody').innerHTML = '<div class="loading">Loading message…</div>';
+        setDetailBody('<div style="display:flex;align-items:center;justify-content:center;height:200px;color:#64748b;font-family:Arial,sans-serif;font-size:14px;">Loading message…</div>');
         try {
           const { data: bodyData } = await db
             .from('email_history')
@@ -1102,7 +1122,7 @@
       }
 
       const _sealB64b = typeof ACNHS_SEAL_BASE64 !== 'undefined' ? ACNHS_SEAL_BASE64 : '';
-      document.getElementById('detailBody').innerHTML = (email.html_body || escapeHtml(email.body || '(No content)')).replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, _sealB64b);
+      setDetailBody((email.html_body || escapeHtml(email.body || '(No content)')).replace(/\{\{ACNHS_SEAL_BASE64\}\}/g, _sealB64b));
       fetchEmailBodyIfMissing(email);
     }
 
