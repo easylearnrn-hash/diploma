@@ -820,6 +820,27 @@
     .gm-btn-save{padding:7px 18px;background:rgba(201,168,76,0.12);border:1px solid rgba(201,168,76,0.32);border-radius:7px;color:var(--gold-300);font-size:12px;font-weight:800;cursor:pointer;transition:background 0.15s}
     .gm-btn-save:hover{background:rgba(201,168,76,0.20)}
     .gm-btn-save:disabled{opacity:0.5;cursor:not-allowed}
+    .gm-btn-add-item{padding:7px 14px;background:rgba(255,255,255,0.04);border:1px dashed rgba(201,168,76,0.35);border-radius:7px;color:var(--gold-400);font-size:12px;font-weight:700;cursor:pointer;transition:background 0.15s}
+    .gm-btn-add-item:hover{background:rgba(201,168,76,0.10);border-style:solid}
+    /* Score input wrapper */
+    .gm-item-score-wrap{display:flex;align-items:center;gap:6px;margin-top:6px}
+    .gm-item-score-wrap .gm-item-input{flex:1;padding:8px 10px;background:rgba(255,255,255,0.06);border:1px solid rgba(201,168,76,0.25);border-radius:8px;color:var(--text-primary);font-size:14px;font-weight:600;text-align:center;transition:border-color 0.15s;-moz-appearance:textfield}
+    .gm-item-score-wrap .gm-item-input::-webkit-outer-spin-button,
+    .gm-item-score-wrap .gm-item-input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .gm-item-score-wrap .gm-item-input:focus{outline:none;border-color:var(--gold-500)}
+    .gm-item-unit{font-size:11px;color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+    /* Score bar */
+    .gm-item-bar{height:3px;background:rgba(255,255,255,0.07);border-radius:2px;margin-top:5px;overflow:hidden}
+    .gm-item-bar-fill{height:100%;border-radius:2px;transition:width 0.25s,background 0.25s}
+    /* Custom item overrides */
+    .gm-item--custom .gm-item-hdr{flex-direction:column;align-items:stretch;gap:6px}
+    .gm-ci-name{flex:1;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.22);border-radius:6px;color:var(--text-primary);font-size:12px;font-weight:600;padding:5px 8px;width:100%}
+    .gm-ci-name:focus{outline:none;border-color:var(--gold-400)}
+    .gm-ci-wt-row{display:flex;align-items:center;gap:6px}
+    .gm-ci-wt{width:48px;background:rgba(255,255,255,0.05);border:1px solid rgba(201,168,76,0.22);border-radius:6px;color:var(--gold-300);font-size:12px;font-weight:700;padding:4px 6px;text-align:center;-moz-appearance:textfield}
+    .gm-ci-wt::-webkit-outer-spin-button,.gm-ci-wt::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+    .gm-ci-del{margin-left:auto;background:none;border:none;color:#ef4444;font-size:16px;line-height:1;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0.7;transition:opacity 0.15s}
+    .gm-ci-del:hover{opacity:1;background:rgba(239,68,68,0.1)}
     .gm-no-items{font-size:12px;color:var(--text-muted);padding:12px 0 2px}
     .gm-no-items a{color:var(--gold-400)}
     .gm-loading{display:flex;flex-direction:column;align-items:center;padding:40px;gap:10px;color:var(--text-muted)}
@@ -3357,7 +3378,8 @@
       studentGrades:     {},   // course_code → { ...grade row, items: { key: score } }
       courses:           [],   // courses for selected student's semester
       expanded:          {},   // course_code → bool
-      dbCourses:         []    // all courses from Supabase
+      dbCourses:         [],   // all courses from Supabase
+      customItems:       {}    // course_code → [{id, name, weight}] user-added items
     };
 
     function _gmLetterGrade(pct) {
@@ -3486,6 +3508,12 @@
             return { code, name: g.course_name || code, credits: g.credits || 3, semester: g.semester || sem, gradeItems: gi };
           });
         gmState.courses = [...catalogCourses, ...extraCourses];
+        // Restore any saved custom item definitions from grade_items.__customDefs
+        gmState.customItems = {};
+        Object.entries(gmState.studentGrades).forEach(([code, g]) => {
+          const defs = g.items?.__customDefs;
+          if (Array.isArray(defs) && defs.length) gmState.customItems[code] = defs;
+        });
         gmRenderEditor(student);
       } catch (e) {
         editorEl.innerHTML = `<div style="padding:20px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.2);border-radius:12px;color:#f87171">${e.message}</div>`;
@@ -3521,13 +3549,24 @@
 
     function _gmSafeId(code) { return (code || '').replace(/[^a-zA-Z0-9]/g, '_'); }
 
+    // Returns all grade items (catalog + custom) for a course
+    function _gmAllItems(course) {
+      const customs = gmState.customItems[course.code] || [];
+      return [
+        ...(course.gradeItems || []).map(i => ({ ...i, isCustom: false })),
+        ...customs.map(ci => ({ ...ci, isCustom: true }))
+      ];
+    }
+
     function gmRenderCourseCard(course) {
-      const saved  = gmState.studentGrades[course.code];
-      const items  = saved?.items || {};
-      const isOpen = !!gmState.expanded[course.code];
-      const sid    = _gmSafeId(course.code);
+      const saved   = gmState.studentGrades[course.code];
+      const items   = saved?.items || {};
+      const isOpen  = !!gmState.expanded[course.code];
+      const sid     = _gmSafeId(course.code);
+      const allItems = _gmAllItems(course);
+
       let totalScore = 0, totalWeight = 0;
-      (course.gradeItems || []).forEach(item => {
+      allItems.forEach(item => {
         const key = item.id || item.name;
         const v   = parseFloat(items[key] ?? '');
         if (!isNaN(v) && v >= 0) { totalScore += (v / 100) * item.weight; totalWeight += item.weight; }
@@ -3541,34 +3580,72 @@
       const totHtml  = lg
         ? `<span class="gm-t-pct" style="color:${lg.color}">${totalScore.toFixed(1)}% final</span><span class="gm-t-ltr" style="color:${lg.color}">${lg.letter} (${lg.pts.toFixed(1)} pts)</span>`
         : `<span class="gm-t-empty">Enter scores above to calculate</span>`;
-      let itemsHtml = '';
-      if ((course.gradeItems || []).length) {
-        itemsHtml = (course.gradeItems || []).map(item => {
-          const key     = item.id || item.name;
-          const val     = items[key] ?? '';
-          const contrib = val !== '' && !isNaN(parseFloat(val))
-            ? `${((parseFloat(val) / 100) * item.weight).toFixed(1)}/${item.weight}pts` : '';
-          const cid = _gmSafeId(String(key));
-          return `<div class="gm-item">
-            <div class="gm-item-hdr">
-              <span class="gm-item-nm">${item.name}</span>
-              <span class="gm-item-wt">${item.weight}%</span>
+
+      let catalogHtml = (course.gradeItems || []).map(item => {
+        const key    = item.id || item.name;
+        const val    = items[key] ?? '';
+        const score  = parseFloat(val);
+        const cid    = _gmSafeId(String(key));
+        const contrib = !isNaN(score) && val !== '' ? `${((score / 100) * item.weight).toFixed(1)} / ${item.weight} pts` : '';
+        const pct     = !isNaN(score) && val !== '' ? score : null;
+        const barW    = pct !== null ? Math.min(100, pct) : 0;
+        const barC    = pct === null ? 'transparent' : pct >= 80 ? '#c9a84c' : pct >= 60 ? '#d4b56a' : '#ef4444';
+        return `<div class="gm-item">
+            <div class="gm-item-hdr"><span class="gm-item-nm">${item.name}</span><span class="gm-item-wt">${item.weight}%</span></div>
+            <div class="gm-item-score-wrap">
+              <input class="gm-item-input" type="number" min="0" max="100" step="0.1"
+                value="${val}" placeholder="0 – 100"
+                data-course="${course.code}" data-item="${key}" data-weight="${item.weight}"
+                oninput="gmLiveCalc('${course.code}')"/>
+              <span class="gm-item-unit">/ 100</span>
             </div>
-            <input class="gm-item-input" type="number" min="0" max="100" step="0.1"
-              value="${val}" placeholder="—"
-              data-course="${course.code}" data-item="${key}"
-              oninput="gmLiveCalc('${course.code}')"/>
+            <div class="gm-item-bar"><div class="gm-item-bar-fill" id="gm-bar-${sid}-${cid}" style="width:${barW}%;background:${barC}"></div></div>
             <div class="gm-item-contrib" id="gm-ct-${sid}-${cid}">${contrib}</div>
           </div>`;
-        }).join('');
-      }
-      const bodyHtml = !(course.gradeItems || []).length
+      }).join('');
+
+      const customs = gmState.customItems[course.code] || [];
+      const customHtml = customs.map(ci => {
+        const val    = items[ci.id] ?? '';
+        const score  = parseFloat(val);
+        const cid    = _gmSafeId(ci.id);
+        const contrib = !isNaN(score) && val !== '' ? `${((score / 100) * ci.weight).toFixed(1)} / ${ci.weight} pts` : '';
+        const barW    = !isNaN(score) && val !== '' ? Math.min(100, score) : 0;
+        const barC    = !isNaN(score) && val !== '' ? (score >= 80 ? '#c9a84c' : score >= 60 ? '#d4b56a' : '#ef4444') : 'transparent';
+        return `<div class="gm-item gm-item--custom">
+            <div class="gm-item-hdr">
+              <input class="gm-ci-name" type="text" placeholder="Grade item name" value="${ci.name.replace(/"/g, '&quot;')}"
+                data-course="${course.code}" data-ci-id="${ci.id}"
+                oninput="gmUpdateCustomItem('${course.code}','${ci.id}','name',this.value)"/>
+              <div class="gm-ci-wt-row">
+                <input class="gm-ci-wt" type="number" min="1" max="100" step="1" value="${ci.weight}"
+                  data-course="${course.code}" data-ci-id="${ci.id}"
+                  oninput="gmUpdateCustomItem('${course.code}','${ci.id}','weight',this.value); gmLiveCalc('${course.code}')"/>
+                <span class="gm-item-wt">%</span>
+                <button class="gm-ci-del" onclick="gmRemoveCustomItem('${course.code}','${ci.id}')" title="Remove item">&times;</button>
+              </div>
+            </div>
+            <div class="gm-item-score-wrap">
+              <input class="gm-item-input" type="number" min="0" max="100" step="0.1"
+                value="${val}" placeholder="0 – 100"
+                data-course="${course.code}" data-item="${ci.id}" data-weight="${ci.weight}"
+                oninput="gmLiveCalc('${course.code}')"/>
+              <span class="gm-item-unit">/ 100</span>
+            </div>
+            <div class="gm-item-bar"><div class="gm-item-bar-fill" id="gm-bar-${sid}-${cid}" style="width:${barW}%;background:${barC}"></div></div>
+            <div class="gm-item-contrib" id="gm-ct-${sid}-${cid}">${contrib}</div>
+          </div>`;
+      }).join('');
+
+      const noItems = !(course.gradeItems || []).length && !customs.length;
+      const bodyHtml = noItems
         ? `<p class="gm-no-items">No grade items defined. <a href="#" onclick="switchView('courses');return false">Configure in Course Catalog.</a></p>`
-        : `<div class="gm-items-grid">${itemsHtml}</div>
+        : `<div class="gm-items-grid" id="gm-grid-${sid}">${catalogHtml}${customHtml}</div>
            <div class="gm-course-foot">
              <div class="gm-totals" id="gm-tot-${sid}">${totHtml}</div>
              <div class="gm-actions">
-               <button class="gm-btn-clear" onclick="gmClearCourse('${course.code}')">Remove</button>
+               <button class="gm-btn-add-item" onclick="gmAddCustomItem('${course.code}')" title="Add a custom grade item">+ Add Item</button>
+               <button class="gm-btn-clear" onclick="gmClearCourse('${course.code}')">Remove All</button>
                <button class="gm-btn-save" id="gm-sv-${sid}" onclick="gmSaveCourse('${course.code}')">Save Course</button>
              </div>
            </div>`;
@@ -3581,8 +3658,56 @@
           </div>
           <div class="gm-course-sum" id="gm-sum-${sid}">${sumHtml}${chevHtml}</div>
         </div>
-        <div class="gm-course-body" style="display:${isOpen ? 'block' : 'none'}">${bodyHtml}</div>
+        <div class="gm-course-body" id="gm-body-${sid}" style="display:${isOpen ? 'block' : 'none'}">${bodyHtml}</div>
       </div>`;
+    }
+
+    // Re-render only the items grid + footer of an open course card
+    function _gmRefreshCourseBody(courseCode) {
+      const course = gmState.courses.find(c => c.code === courseCode);
+      if (!course) return;
+      const sid  = _gmSafeId(courseCode);
+      const body = document.getElementById(`gm-body-${sid}`);
+      if (!body) return;
+      const saved = gmState.studentGrades[course.code];
+      const items = saved?.items || {};
+      // Rebuild the same HTML as in gmRenderCourseCard (body portion only)
+      const tmp = document.createElement('div');
+      tmp.innerHTML = gmRenderCourseCard(course);
+      const newBody = tmp.querySelector(`#gm-body-${sid}`);
+      if (newBody) { body.innerHTML = newBody.innerHTML; }
+    }
+
+    function gmAddCustomItem(courseCode) {
+      if (!gmState.customItems[courseCode]) gmState.customItems[courseCode] = [];
+      const id = 'ci_' + Date.now();
+      gmState.customItems[courseCode].push({ id, name: '', weight: 10 });
+      gmState.expanded[courseCode] = true;
+      _gmRefreshCourseBody(courseCode);
+      // Focus the new name input
+      setTimeout(() => {
+        const inp = document.querySelector(`input[data-ci-id="${id}"].gm-ci-name`);
+        if (inp) inp.focus();
+      }, 50);
+    }
+
+    function gmRemoveCustomItem(courseCode, itemId) {
+      gmState.customItems[courseCode] = (gmState.customItems[courseCode] || []).filter(ci => ci.id !== itemId);
+      _gmRefreshCourseBody(courseCode);
+      gmLiveCalc(courseCode);
+    }
+
+    function gmUpdateCustomItem(courseCode, itemId, field, rawValue) {
+      const ci = (gmState.customItems[courseCode] || []).find(x => x.id === itemId);
+      if (!ci) return;
+      if (field === 'weight') {
+        ci.weight = Math.max(1, parseFloat(rawValue) || 1);
+        // Sync data-weight on the matching score input
+        const inp = document.querySelector(`input.gm-item-input[data-course="${courseCode}"][data-item="${itemId}"]`);
+        if (inp) inp.setAttribute('data-weight', ci.weight);
+      } else {
+        ci[field] = rawValue;
+      }
     }
 
     function gmToggleCourse(courseCode) {
@@ -3599,21 +3724,25 @@
     }
 
     function gmLiveCalc(courseCode) {
-      const course = gmState.courses.find(c => c.code === courseCode);
-      if (!course) return;
       const sid = _gmSafeId(courseCode);
       let total = 0, wt = 0;
-      (course.gradeItems || []).forEach(item => {
-        const key   = item.id || item.name;
-        const input = document.querySelector(`input[data-course="${courseCode}"][data-item="${key}"]`);
-        const v     = parseFloat(input?.value ?? '');
-        const cid   = _gmSafeId(String(key));
-        const cEl   = document.getElementById(`gm-ct-${sid}-${cid}`);
-        if (!isNaN(v) && v >= 0) {
-          const c = (v / 100) * item.weight;
-          total += c; wt += item.weight;
-          if (cEl) cEl.textContent = `${c.toFixed(1)}/${item.weight}pts`;
-        } else { if (cEl) cEl.textContent = ''; }
+      // Iterate ALL score inputs for this course (catalog + custom) via DOM
+      document.querySelectorAll(`input.gm-item-input[data-course="${courseCode}"]`).forEach(input => {
+        const v    = parseFloat(input.value ?? '');
+        const w    = parseFloat(input.getAttribute('data-weight') ?? '0');
+        const key  = input.getAttribute('data-item');
+        const cid  = _gmSafeId(String(key));
+        const cEl  = document.getElementById(`gm-ct-${sid}-${cid}`);
+        const bEl  = document.getElementById(`gm-bar-${sid}-${cid}`);
+        if (!isNaN(v) && v >= 0 && w > 0) {
+          const c = (v / 100) * w;
+          total += c; wt += w;
+          if (cEl) cEl.textContent = `${c.toFixed(1)} / ${w} pts`;
+          if (bEl) { bEl.style.width = Math.min(100, v) + '%'; bEl.style.background = v >= 80 ? '#c9a84c' : v >= 60 ? '#d4b56a' : '#ef4444'; }
+        } else {
+          if (cEl) cEl.textContent = '';
+          if (bEl) { bEl.style.width = '0%'; bEl.style.background = 'transparent'; }
+        }
       });
       const totEl    = document.getElementById(`gm-tot-${sid}`);
       const sumEl    = document.getElementById(`gm-sum-${sid}`);
@@ -3638,13 +3767,21 @@
       try {
         const items = {};
         let total = 0, wt = 0;
-        (course.gradeItems || []).forEach(item => {
-          const key   = item.id || item.name;
-          const input = document.querySelector(`input[data-course="${courseCode}"][data-item="${key}"]`);
-          const v     = parseFloat(input?.value ?? '');
-          if (!isNaN(v) && v >= 0 && v <= 100) { items[key] = v; total += (v / 100) * item.weight; wt += item.weight; }
+        // Collect all score inputs — catalog items + any custom items
+        document.querySelectorAll(`input.gm-item-input[data-course="${courseCode}"]`).forEach(input => {
+          const key = input.getAttribute('data-item');
+          const w   = parseFloat(input.getAttribute('data-weight') ?? '0');
+          const v   = parseFloat(input.value ?? '');
+          if (key && !isNaN(v) && v >= 0 && v <= 100 && w > 0) {
+            items[key] = v;
+            total += (v / 100) * w;
+            wt    += w;
+          }
         });
-        if (!Object.keys(items).length) { showToast('Enter at least one score before saving.', 'warn'); return; }
+        // Persist custom item definitions alongside grades so they can be reloaded
+        const customs = gmState.customItems[courseCode] || [];
+        if (customs.length) items.__customDefs = customs;
+        if (!Object.keys(items).filter(k => k !== '__customDefs').length) { showToast('Enter at least one score before saving.', 'warn'); return; }
         const lg  = _gmLetterGrade(total);
         const sem = course.semester || student.metadata?.current_semester || student.current_semester || 'Semester 1';
         const row = {
