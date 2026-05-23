@@ -5562,6 +5562,51 @@ function handlePolicyAcknowledgment(policyId, acknowledged) {
   logPortalActivity('update', 'student', `Acknowledged policy ${policyId}`, { policyId, acknowledged });
 }
 
+// ─── Stale-While-Revalidate profile cache ────────────────────────────────────
+const PROFILE_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+
+function _getCacheKey() {
+  return sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId') ||
+         sessionStorage.getItem('studentId')       || localStorage.getItem('studentId') || null;
+}
+
+function loadProfileCache(key) {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem('acnhs_pcache_' + key);
+    if (!raw) return null;
+    const entry = JSON.parse(raw);
+    if (!entry || (Date.now() - entry.cachedAt) > PROFILE_CACHE_TTL) return null;
+    return entry; // { profile, gradesCache, cachedAt }
+  } catch (e) { return null; }
+}
+
+function saveProfileCache(key, profile, gradesCache) {
+  if (!key || !profile) return;
+  try {
+    localStorage.setItem('acnhs_pcache_' + key, JSON.stringify({
+      profile, gradesCache: gradesCache || { grades: [], transfers: [] }, cachedAt: Date.now()
+    }));
+  } catch (e) { /* storage full — skip silently */ }
+}
+
+async function _silentRefresh(cacheKey) {
+  try {
+    const freshProfile = await fetchStudentProfile();
+    if (!freshProfile) return;
+    portalState.profile = freshProfile;
+    await loadTransferCreditsForStudent(freshProfile);
+    saveProfileCache(cacheKey, freshProfile, portalState._gradesCache);
+    // Silently update DOM with fresh values
+    portalState.dataset = buildPortalDataset(freshProfile);
+    populateStudentProfile(freshProfile, portalState.dataset);
+    renderPortalSections(portalState.dataset);
+    refreshLiveGpaMetrics();
+    try { sessionStorage.setItem('studentData', JSON.stringify(freshProfile)); } catch(e) {}
+  } catch (e) { /* background refresh failed — cached data still showing */ }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 document.addEventListener('DOMContentLoaded', async () => {
   // My Account Dropdown functionality
   const myAccountBtn = document.getElementById('myAccountBtn');
@@ -5615,39 +5660,50 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   let studentProfile = null;
-  try {
-    studentProfile = await fetchStudentProfile();
-    portalState.profile = studentProfile;
-    
-    if (studentProfile) {
-      // Save full student object so alerts.js can read group/program for targeting
-      try {
-        sessionStorage.setItem('studentData', JSON.stringify(studentProfile));
-      } catch(e) {}
-    }
-    
-    // Load transfer credits and calculate GPA
-    if (studentProfile) {
-      await loadTransferCreditsForStudent(studentProfile);
-    }
-  } catch (error) {
-    console.error('❌ Failed to load student profile:', error);
-    showProfileError(error.message || 'Unable to load your profile at this time.');
-  }
+  const _cacheKey = _getCacheKey();
+  const _cached    = loadProfileCache(_cacheKey);
 
-  if (studentProfile) {
+  if (_cached) {
+    // ── INSTANT PATH: render immediately from cache ──────────────────────────
+    studentProfile           = _cached.profile;
+    portalState._gradesCache = _cached.gradesCache;
+    portalState.profile      = studentProfile;
+    try { sessionStorage.setItem('studentData', JSON.stringify(studentProfile)); } catch(e) {}
+
     portalState.dataset = buildPortalDataset(studentProfile);
     populateStudentProfile(studentProfile, portalState.dataset);
-  } else {
-    console.warn('⚠️ No student profile found - showing profile preparation message');
-    showProfileError('Your student profile is being prepared. Please check back soon.');
-    portalState.dataset = deepClone(DEFAULT_PORTAL_DATA);
-  }
+    renderPortalSections(portalState.dataset);
+    refreshLiveGpaMetrics();
 
-  renderPortalSections(portalState.dataset);
-  refreshLiveGpaMetrics(); // async — overwrites KPIs with live DB values after initial render
-  wireDocumentVaultEvents();
-  wirePolicyListeners();
+    // Fire background refresh — silently updates DOM if data changed
+    setTimeout(() => _silentRefresh(_cacheKey), 0);
+  } else {
+    // ── FIRST VISIT: fetch from DB, render, then cache ───────────────────────
+    try {
+      studentProfile      = await fetchStudentProfile();
+      portalState.profile = studentProfile;
+      if (studentProfile) {
+        try { sessionStorage.setItem('studentData', JSON.stringify(studentProfile)); } catch(e) {}
+        await loadTransferCreditsForStudent(studentProfile);
+        saveProfileCache(_cacheKey || studentProfile.student_id, studentProfile, portalState._gradesCache);
+      }
+    } catch (error) {
+      console.error('❌ Failed to load student profile:', error);
+      showProfileError(error.message || 'Unable to load your profile at this time.');
+    }
+
+    if (studentProfile) {
+      portalState.dataset = buildPortalDataset(studentProfile);
+      populateStudentProfile(studentProfile, portalState.dataset);
+    } else {
+      console.warn('⚠️ No student profile found - showing profile preparation message');
+      showProfileError('Your student profile is being prepared. Please check back soon.');
+      portalState.dataset = deepClone(DEFAULT_PORTAL_DATA);
+    }
+
+    renderPortalSections(portalState.dataset);
+    refreshLiveGpaMetrics();
+  }
 
   const studentData = buildStudentData(studentProfile || {});
 
