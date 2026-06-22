@@ -3090,11 +3090,14 @@
       XLSX.utils.book_append_sheet(wb, wsBrw, '9. Browsers');
 
       // ── SHEET 10: Channel Mix ─────────────────────────────────
+      // Distribute kpi.conversions proportionally, fixing rounding so sum is exact
+      const chConvsXL = DEMO_CHANNELS.data.map(w => Math.round(kpi.conversions * w / 100));
+      chConvsXL[0] += kpi.conversions - chConvsXL.reduce((a, b) => a + b, 0);
       const chData = [['Rank','Channel','% Share','Est. Users','Est. Conversions','Conv Rate']];
       DEMO_CHANNELS.labels.forEach((l,i) => {
         const pct = DEMO_CHANNELS.data[i];
         const u   = Math.round(kpi.users * pct/100);
-        const c   = Math.round(kpi.conversions * pct/100);
+        const c   = chConvsXL[i];
         chData.push([i+1, l, pct+'%', u, c, u > 0 ? ((c/u)*100).toFixed(2)+'%' : '0.00%']);
       });
       const wsCh = XLSX.utils.aoa_to_sheet(chData);
@@ -3549,13 +3552,16 @@
       if (y > 220) { doc.addPage(); y = pageHeader('Channel Mix'); }
       y = sectionHead('9. Marketing Channel Mix', y);
       const totalUsersEst = kpi.users;
+      // Distribute kpi.conversions proportionally, fixing rounding so sum is exact
+      const chConvsPDF = DEMO_CHANNELS.data.map(w => Math.round(kpi.conversions * w / 100));
+      chConvsPDF[0] += kpi.conversions - chConvsPDF.reduce((a, b) => a + b, 0);
       doc.autoTable({
         startY: y,
         head: [['Channel', '% Share', 'Est. Users', 'Est. Convs', 'Conv Rate']],
         body: DEMO_CHANNELS.labels.map((l,i) => {
           const pct = DEMO_CHANNELS.data[i];
           const u   = Math.round(totalUsersEst * pct/100);
-          const c   = Math.round(kpi.conversions * pct/100);
+          const c   = chConvsPDF[i];
           return [l, pct+'%', u.toLocaleString(), c.toLocaleString(), u > 0 ? ((c/u)*100).toFixed(2)+'%' : '0.00%'];
         }),
         theme: 'grid',
