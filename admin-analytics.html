@@ -15,6 +15,10 @@
   <script src="js/acnhs-logo-base64.js"></script>
   <!-- Chart.js for native charts (Phase 2 ready) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <!-- Export libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
   <style>
     :root {
       --navy-deep:    #020617;
@@ -990,6 +994,27 @@
     .phase2-feature .feat-text strong { color: var(--text); }
 
     /* ── ERROR STATE ── */
+    /* ── EXPORT BUTTONS ── */
+    .export-btn {
+      background: linear-gradient(135deg, rgba(201,168,76,0.18), rgba(201,168,76,0.08)) !important;
+      border-color: rgba(201,168,76,0.4) !important;
+      color: var(--gold-primary) !important;
+      font-weight: 600 !important;
+      gap: 5px;
+    }
+    .export-btn:hover {
+      background: linear-gradient(135deg, rgba(201,168,76,0.30), rgba(201,168,76,0.14)) !important;
+      border-color: var(--gold-primary) !important;
+    }
+    .export-pdf-btn {
+      background: linear-gradient(135deg, rgba(59,130,246,0.18), rgba(59,130,246,0.08)) !important;
+      border-color: rgba(59,130,246,0.4) !important;
+      color: #93c5fd !important;
+    }
+    .export-pdf-btn:hover {
+      background: linear-gradient(135deg, rgba(59,130,246,0.28), rgba(59,130,246,0.14)) !important;
+      border-color: #3b82f6 !important;
+    }
     .error-state {
       display: none;
       align-items: center;
@@ -1381,6 +1406,12 @@
 
       <button class="filter-btn" onclick="refreshData()" title="Refresh data" id="refreshBtn">
         🔄 Refresh
+      </button>
+      <button class="filter-btn export-btn" onclick="exportExcel()" title="Export all data to Excel">
+        📊 Export Excel
+      </button>
+      <button class="filter-btn export-btn export-pdf-btn" onclick="exportPDF()" title="Export all data to PDF">
+        📄 Export PDF
       </button>
     </div>
 
@@ -2731,6 +2762,321 @@
     window.closeDetailModal = closeDetailModal;
     window.handleDetailOverlayClick = handleDetailOverlayClick;
     window.sortDetailTable  = sortDetailTable;
+    window.exportExcel = exportExcel;
+    window.exportPDF   = exportPDF;
+
+    // ============================================================
+    // EXPORT — EXCEL (all sheets)
+    // ============================================================
+    function exportExcel() {
+      const range   = currentRange;
+      const kpi     = DEMO_KPI[range]  || DEMO_KPI['7d'];
+      const conv    = DEMO_CONV[range] || DEMO_CONV['7d'];
+      const label   = RANGE_LABELS[range] || range;
+      const genDate = new Date().toLocaleString('en-US', { dateStyle:'medium', timeStyle:'short' });
+      const wb      = XLSX.utils.book_new();
+
+      // ── Sheet 1: Summary ─────────────────────────────────────
+      const summaryData = [
+        ['ACNHS Analytics Export'],
+        ['Generated:', genDate],
+        ['Period:', label],
+        [],
+        ['METRIC', 'VALUE'],
+        ['Total Users',            kpi.users],
+        ['New Users',              kpi.newUsers],
+        ['Sessions',               kpi.sessions],
+        ['Page Views',             kpi.views],
+        ['Engagement Rate',        kpi.engRate],
+        ['Avg. Session Duration',  kpi.avgTime],
+        ['Total Events',           kpi.events],
+        ['Conversions',            kpi.conversions],
+        [],
+        ['CONVERSION EVENTS', 'COUNT'],
+        ['Apply Now Clicks',       conv.apply_now],
+        ['Request Info Clicks',    conv.request_info],
+        ['Portal Logins',          conv.login],
+        ['Contact Form Submits',   conv.contact],
+        ['Phone Call Clicks',      conv.call],
+        ['WhatsApp Clicks',        conv.whatsapp],
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      wsSummary['!cols'] = [{wch:30},{wch:20}];
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
+
+      // ── Sheet 2: Top Pages ────────────────────────────────────
+      const pagesData = [['Page', 'Views', 'Engagement Rate']];
+      DEMO_TOP_PAGES.forEach(p => pagesData.push([p.page, p.views, p.engRate]));
+      const wsPages = XLSX.utils.aoa_to_sheet(pagesData);
+      wsPages['!cols'] = [{wch:35},{wch:12},{wch:18}];
+      XLSX.utils.book_append_sheet(wb, wsPages, 'Top Pages');
+
+      // ── Sheet 3: Traffic Sources ──────────────────────────────
+      const srcData = [['Source / Medium', 'Users', 'Conversions']];
+      DEMO_SOURCES.forEach(s => srcData.push([s.source, s.users, s.conv]));
+      const wsSrc = XLSX.utils.aoa_to_sheet(srcData);
+      wsSrc['!cols'] = [{wch:28},{wch:12},{wch:14}];
+      XLSX.utils.book_append_sheet(wb, wsSrc, 'Traffic Sources');
+
+      // ── Sheet 4: Countries ────────────────────────────────────
+      const ctryData = [['Country', 'Users', '% Share']];
+      DEMO_COUNTRIES.forEach(c => ctryData.push([c.loc.replace(/^\S+\s/,''), c.users, c.pct + '%']));
+      const wsCtry = XLSX.utils.aoa_to_sheet(ctryData);
+      wsCtry['!cols'] = [{wch:22},{wch:12},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, wsCtry, 'Countries');
+
+      // ── Sheet 5: Devices ──────────────────────────────────────
+      const devData = [['Device', '% Share', 'Sessions']];
+      DEMO_DEVICES.forEach(d => devData.push([d.name, d.pct + '%', d.count]));
+      const wsDev = XLSX.utils.aoa_to_sheet(devData);
+      wsDev['!cols'] = [{wch:14},{wch:12},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, wsDev, 'Devices');
+
+      // ── Sheet 6: Browsers ─────────────────────────────────────
+      const brwData = [['Browser', 'Users', '% Share']];
+      DEMO_BROWSERS.forEach(b => brwData.push([b.name, b.users, b.pct + '%']));
+      const wsBrw = XLSX.utils.aoa_to_sheet(brwData);
+      wsBrw['!cols'] = [{wch:14},{wch:12},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, wsBrw, 'Browsers');
+
+      // ── Sheet 7: Channel Mix ──────────────────────────────────
+      const chData = [['Channel', '% Share']];
+      DEMO_CHANNELS.labels.forEach((l,i) => chData.push([l, DEMO_CHANNELS.data[i] + '%']));
+      const wsCh = XLSX.utils.aoa_to_sheet(chData);
+      wsCh['!cols'] = [{wch:14},{wch:12}];
+      XLSX.utils.book_append_sheet(wb, wsCh, 'Channel Mix');
+
+      const fileName = `ACNHS_Analytics_${range}_${new Date().toISOString().slice(0,10)}.xlsx`;
+      XLSX.writeFile(wb, fileName);
+    }
+
+    // ============================================================
+    // EXPORT — PDF
+    // ============================================================
+    async function exportPDF() {
+      const { jsPDF } = window.jspdf;
+      const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const range = currentRange;
+      const kpi   = DEMO_KPI[range]  || DEMO_KPI['7d'];
+      const conv  = DEMO_CONV[range] || DEMO_CONV['7d'];
+      const label = RANGE_LABELS[range] || range;
+      const W     = doc.internal.pageSize.getWidth();
+      let   y     = 18;
+
+      const gold  = [201, 168, 76];
+      const navy  = [2, 6, 23];
+      const white = [255, 255, 255];
+      const muted = [120, 140, 170];
+
+      // ── Header bar
+      doc.setFillColor(...navy);
+      doc.rect(0, 0, W, 28, 'F');
+      doc.setFillColor(...gold);
+      doc.rect(0, 26, W, 2, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(16);
+      doc.setTextColor(...gold);
+      doc.text('ACNHS Analytics Report', 14, 12);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(...muted);
+      doc.text(`Period: ${label}   |   Generated: ${new Date().toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short'})}`, 14, 20);
+      y = 38;
+
+      // ── KPI Summary
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Key Performance Indicators', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Metric', 'Value']],
+        body: [
+          ['Total Users',           kpi.users.toLocaleString()],
+          ['New Users',             kpi.newUsers.toLocaleString()],
+          ['Sessions',              kpi.sessions.toLocaleString()],
+          ['Page Views',            kpi.views.toLocaleString()],
+          ['Engagement Rate',       kpi.engRate],
+          ['Avg. Session Duration', kpi.avgTime],
+          ['Total Events',          kpi.events.toLocaleString()],
+          ['Conversions',           kpi.conversions.toLocaleString()],
+        ],
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 80 } },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      // ── Conversions
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Conversion Events', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Event', 'Count']],
+        body: [
+          ['Apply Now Clicks',     conv.apply_now],
+          ['Request Info Clicks',  conv.request_info],
+          ['Portal Logins',        conv.login],
+          ['Contact Form Submits', conv.contact],
+          ['Phone Call Clicks',    conv.call],
+          ['WhatsApp Clicks',      conv.whatsapp],
+        ],
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 80 } },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      // ── New page for tables
+      if (y > 200) { doc.addPage(); y = 18; }
+
+      // ── Top Pages
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Top Pages', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Page', 'Views', 'Engagement Rate']],
+        body: DEMO_TOP_PAGES.map(p => [p.page, p.views.toLocaleString(), p.engRate]),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 8, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 100 }, 1: { cellWidth: 30 }, 2: { cellWidth: 40 } },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      if (y > 220) { doc.addPage(); y = 18; }
+
+      // ── Traffic Sources
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Traffic Sources', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Source / Medium', 'Users', 'Conversions']],
+        body: DEMO_SOURCES.map(s => [s.source, s.users.toLocaleString(), s.conv]),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 } },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      if (y > 220) { doc.addPage(); y = 18; }
+
+      // ── Countries + Devices side by side (two narrow tables)
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Countries', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Country', 'Users', '% Share']],
+        body: DEMO_COUNTRIES.map(c => [c.loc.replace(/^\S+\s/, ''), c.users.toLocaleString(), c.pct + '%']),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 70 }, 1: { cellWidth: 40 }, 2: { cellWidth: 40 } },
+      });
+      y = doc.lastAutoTable.finalY + 10;
+
+      if (y > 220) { doc.addPage(); y = 18; }
+
+      // ── Devices & Browsers
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Devices', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Device', '% Share', 'Sessions']],
+        body: DEMO_DEVICES.map(d => [d.name, d.pct + '%', d.count.toLocaleString()]),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 110 },
+        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 24 }, 2: { cellWidth: 26 } },
+      });
+
+      const devFinalY = doc.lastAutoTable.finalY;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Browsers', W / 2 + 4, y); 
+
+      doc.autoTable({
+        startY: y,
+        head: [['Browser', 'Users', '% Share']],
+        body: DEMO_BROWSERS.map(b => [b.name, b.users.toLocaleString(), b.pct + '%']),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: W / 2 + 4, right: 14 },
+        columnStyles: { 0: { cellWidth: 26 }, 1: { cellWidth: 22 }, 2: { cellWidth: 22 } },
+      });
+
+      y = Math.max(devFinalY, doc.lastAutoTable.finalY) + 10;
+
+      // ── Channel Mix
+      if (y > 240) { doc.addPage(); y = 18; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(11);
+      doc.setTextColor(...gold);
+      doc.text('Channel Mix', 14, y); y += 6;
+
+      doc.autoTable({
+        startY: y,
+        head: [['Channel', '% Share']],
+        body: DEMO_CHANNELS.labels.map((l, i) => [l, DEMO_CHANNELS.data[i] + '%']),
+        theme: 'grid',
+        headStyles:  { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 9 },
+        bodyStyles:  { fontSize: 9, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [245, 248, 255] },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0: { cellWidth: 60 }, 1: { cellWidth: 40 } },
+      });
+
+      // ── Footer on each page
+      const pageCount = doc.internal.getNumberOfPages();
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i);
+        doc.setFillColor(...navy);
+        doc.rect(0, doc.internal.pageSize.getHeight() - 10, W, 10, 'F');
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(...muted);
+        doc.text('Armenian College of Nursing & Health Sciences — Confidential Analytics Report', 14, doc.internal.pageSize.getHeight() - 3.5);
+        doc.text(`Page ${i} of ${pageCount}`, W - 14, doc.internal.pageSize.getHeight() - 3.5, { align: 'right' });
+      }
+
+      const fileName = `ACNHS_Analytics_${range}_${new Date().toISOString().slice(0,10)}.pdf`;
+      doc.save(fileName);
+    }
   </script>
 </body>
 </html>
