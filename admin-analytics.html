@@ -1185,6 +1185,10 @@
     .detail-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
     .detail-stat-value { font-size: 18px; font-weight: 700; color: var(--text); }
     .detail-stat-value.gold { color: var(--gold-primary); }
+    .detail-stat.filterable { cursor: pointer; transition: border-color 0.15s, background 0.15s, transform 0.1s; }
+    .detail-stat.filterable:hover { border-color: rgba(201,168,76,0.4); background: rgba(201,168,76,0.07); transform: translateY(-1px); }
+    .detail-stat.filter-active { border-color: rgba(201,168,76,0.65) !important; background: rgba(201,168,76,0.12) !important; box-shadow: 0 0 0 1px rgba(201,168,76,0.25); }
+    .detail-stat.filter-active .detail-stat-label { color: var(--gold-primary); }
     .detail-modal-body {
       overflow-y: auto;
       flex: 1;
@@ -1973,10 +1977,10 @@
         rows = buildSessionRows(Math.min(d.sessions, 150), days);
         icon = '📊'; title = 'Sessions'; subtitle = 'All site sessions — newest first';
         summaryStats = [
-          { label:'Total Sessions', value: d.sessions.toLocaleString(), gold: true },
-          { label:'Engaged', value: Math.round(d.sessions * 0.64).toLocaleString() },
-          { label:'Avg Duration', value: d.avgTime },
-          { label:'Bounce Rate', value: '36%' },
+          { label:'Total Sessions', value: d.sessions.toLocaleString(), gold: true, isAllFilter: true },
+          { label:'Engaged',        value: Math.round(d.sessions * 0.64).toLocaleString(), filter: r => r.engaged },
+          { label:'Avg Duration',   value: d.avgTime },
+          { label:'Bounce Rate',    value: '36%', filter: r => !r.engaged },
         ];
         cols = [
           { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
@@ -1992,9 +1996,9 @@
         rows = buildUserRows(Math.min(d.users, 150), days, false);
         icon = '👥'; title = 'Total Users'; subtitle = 'All users in period — newest first';
         summaryStats = [
-          { label:'Total Users', value: d.users.toLocaleString(), gold: true },
-          { label:'New Users', value: d.newUsers.toLocaleString() },
-          { label:'Returning', value: (d.users - d.newUsers).toLocaleString() },
+          { label:'Total Users',  value: d.users.toLocaleString(),              gold: true, isAllFilter: true },
+          { label:'New Users',    value: d.newUsers.toLocaleString(),            filter: r => r.isNew },
+          { label:'Returning',    value: (d.users - d.newUsers).toLocaleString(),filter: r => !r.isNew },
           { label:'Avg Sessions', value: (d.sessions / d.users).toFixed(1) },
         ];
         cols = [
@@ -2028,10 +2032,10 @@
         const engaged = rows.filter(r => r.engaged);
         icon = '💡'; title = 'Engagement Rate'; subtitle = 'Engaged vs non-engaged sessions — newest first';
         summaryStats = [
-          { label:'Engagement Rate', value: d.engRate, gold: true },
-          { label:'Engaged Sessions', value: engaged.length.toLocaleString() },
-          { label:'Non-Engaged', value: (rows.length - engaged.length).toLocaleString() },
-          { label:'Avg Time', value: d.avgTime },
+          { label:'Engagement Rate',  value: d.engRate,                               gold: true, isAllFilter: true },
+          { label:'Engaged Sessions', value: engaged.length.toLocaleString(),          filter: r => r.engaged },
+          { label:'Non-Engaged',      value: (rows.length - engaged.length).toLocaleString(), filter: r => !r.engaged },
+          { label:'Avg Time',         value: d.avgTime },
         ];
         cols = [
           { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
@@ -2085,10 +2089,10 @@
         icon = '🎯'; title = 'Key Conversions'; subtitle = 'All conversion events — newest first';
         const convD = DEMO_CONV[currentRange] || DEMO_CONV['7d'];
         summaryStats = [
-          { label:'Total Conversions', value: d.conversions.toLocaleString(), gold: true },
-          { label:'Apply Now', value: convD.apply_now },
-          { label:'Logins', value: convD.login },
-          { label:'Contact', value: convD.contact },
+          { label:'Total Conversions', value: d.conversions.toLocaleString(), gold: true, isAllFilter: true },
+          { label:'Apply Now',         value: convD.apply_now, filter: r => r.event === 'apply_now_click' },
+          { label:'Logins',            value: convD.login,     filter: r => r.event === 'login_submit' },
+          { label:'Contact',           value: convD.contact,   filter: r => r.event === 'contact_submit' },
         ];
         cols = [
           { key:'ts',      label:'Date & Time', type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
@@ -2143,11 +2147,35 @@
       });
     }
 
-    // ── Sort state for the currently open modal ──
-    let _modalRows = [];
-    let _modalCols = [];
-    let _sortKey   = null;
-    let _sortDir   = 'asc'; // 'asc' | 'desc'
+    // ── Modal state ──
+    let _modalRows        = [];
+    let _modalAllRows     = [];
+    let _modalCols        = [];
+    let _modalSummaryStats= [];
+    let _modalFootNote    = '';
+    let _activeFilterIdx  = -1;
+    let _sortKey          = null;
+    let _sortDir          = 'asc'; // 'asc' | 'desc'
+
+    function _applySort() {
+      if (!_sortKey) return;
+      const col = _modalCols.find(c => c.key === _sortKey);
+      if (!col) return;
+      const dir = _sortDir === 'asc' ? 1 : -1;
+      _modalRows = [..._modalRows].sort((a, b) => {
+        let av = a[_sortKey], bv = b[_sortKey];
+        if (col.type === 'date') return dir * (av - bv);
+        if (col.type === 'num')  return dir * (parseInt(av) - parseInt(bv));
+        if (col.type === 'bool') return dir * ((av ? 1 : 0) - (bv ? 1 : 0));
+        return dir * String(av).localeCompare(String(bv));
+      });
+    }
+
+    function _renderTableBody() {
+      document.getElementById('detailTableBody').innerHTML = _modalRows.map(r =>
+        `<tr>${_modalCols.map(c => `<td>${c.render(r)}</td>`).join('')}</tr>`
+      ).join('');
+    }
 
     function sortDetailTable(colKey) {
       const col = _modalCols.find(c => c.key === colKey);
@@ -2158,18 +2186,8 @@
         _sortKey = colKey;
         _sortDir = col.type === 'date' ? 'desc' : 'asc';
       }
-      const dir = _sortDir === 'asc' ? 1 : -1;
-      _modalRows = [..._modalRows].sort((a, b) => {
-        let av = a[colKey], bv = b[colKey];
-        if (col.type === 'date')   return dir * (av - bv);
-        if (col.type === 'num')    return dir * (parseInt(av) - parseInt(bv));
-        if (col.type === 'bool')   return dir * ((av ? 1 : 0) - (bv ? 1 : 0));
-        return dir * String(av).localeCompare(String(bv));
-      });
-      // Re-render tbody only
-      document.getElementById('detailTableBody').innerHTML = _modalRows.map(r =>
-        `<tr>${_modalCols.map(c => `<td>${c.render(r)}</td>`).join('')}</tr>`
-      ).join('');
+      _applySort();
+      _renderTableBody();
       // Update header arrow indicators
       document.querySelectorAll('#detailTableHead th').forEach(th => {
         const k = th.dataset.sortKey;
@@ -2179,22 +2197,62 @@
       });
     }
 
+    function filterDetailModal(idx) {
+      const s = _modalSummaryStats[idx];
+      if (!s || (!s.filter && !s.isAllFilter)) return;
+
+      if (s.isAllFilter || _activeFilterIdx === idx) {
+        // Clear filter — show all rows
+        _activeFilterIdx = -1;
+        _modalRows = [..._modalAllRows];
+        document.getElementById('detailModalFootNote').textContent = _modalFootNote;
+      } else {
+        _activeFilterIdx = idx;
+        _modalRows = _modalAllRows.filter(s.filter);
+        const tot = _modalAllRows.length;
+        const fil = _modalRows.length;
+        document.getElementById('detailModalFootNote').textContent =
+          `${fil} of ${tot} rows · Filtered: ${s.label} · Demo data`;
+      }
+
+      // Re-apply active sort (without toggling direction)
+      if (_sortKey) _applySort();
+      _renderTableBody();
+
+      // Update active styles on stat boxes
+      document.querySelectorAll('#detailModalSummary .detail-stat').forEach((el, i) => {
+        if (!_modalSummaryStats[i]?.filter && !_modalSummaryStats[i]?.isAllFilter) return;
+        const isAllBox = _modalSummaryStats[i]?.isAllFilter;
+        const active   = isAllBox ? _activeFilterIdx === -1 : i === _activeFilterIdx;
+        el.classList.toggle('filter-active', active);
+      });
+    }
+    window.filterDetailModal = filterDetailModal;
+
     function showDetailModal({ icon, title, subtitle, summaryStats, cols, rows, footNote }) {
-      _modalRows = [...rows];
-      _modalCols = cols;
-      _sortKey   = null;
-      _sortDir   = 'asc';
+      _modalRows         = [...rows];
+      _modalAllRows      = [...rows];
+      _modalCols         = cols;
+      _modalSummaryStats = summaryStats;
+      _modalFootNote     = footNote || '';
+      _activeFilterIdx   = -1;
+      _sortKey           = null;
+      _sortDir           = 'asc';
 
       document.getElementById('detailModalIcon').textContent = icon;
       document.getElementById('detailModalTitle').textContent = title;
       document.getElementById('detailModalSubtitle').textContent = subtitle;
       document.getElementById('detailModalFootNote').textContent = footNote || '';
-      document.getElementById('detailModalSummary').innerHTML = summaryStats.map(s => `
-        <div class="detail-stat">
-          <div class="detail-stat-label">${s.label}</div>
-          <div class="detail-stat-value ${s.gold ? 'gold' : ''}">${s.value}</div>
-        </div>
-      `).join('');
+      document.getElementById('detailModalSummary').innerHTML = summaryStats.map((s, i) => {
+        const hasFilter = s.filter || s.isAllFilter;
+        const isActive  = !!s.isAllFilter; // "All" box active by default
+        return `
+          <div class="detail-stat${hasFilter ? ' filterable' : ''}${isActive ? ' filter-active' : ''}"
+               ${hasFilter ? `onclick="filterDetailModal(${i})" title="Filter: ${s.label}"` : ''}>
+            <div class="detail-stat-label">${s.label}</div>
+            <div class="detail-stat-value ${s.gold ? 'gold' : ''}">${s.value}</div>
+          </div>`;
+      }).join('');
 
       // Build table with sortable headers
       const thead = `<thead id="detailTableHead"><tr>${cols.map(c =>
