@@ -96,7 +96,7 @@ const ACNHS_HEADER_HTML = `
       <a href="help-support.html">Support</a>
     </div>
     <div class="mobile-nav-section">
-      <button class="btn btn-primary mobile-login-btn" type="button" data-action="student-login">Login to Portal</button>
+      <button class="btn btn-primary mobile-login-btn" type="button" data-action="student-login">Login</button>
     </div>
   </nav>
 </div>
