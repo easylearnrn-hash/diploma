@@ -4373,67 +4373,159 @@
       }
 
       try {
-        // Use student_id (ACNHS-XXXXXXX) as primary lookup — always present in
-        // hubStudentData and never stale between sessions unlike UUID caches.
         const studentIdCode = studentData && (studentData.studentId || studentData.student_id);
         const studentUuid   = studentData && studentData.id;
 
         let row = null;
 
-        // Primary: query by student_id text (most reliable cross-session).
         if (studentIdCode) {
           const { data, error } = await db
             .from('students')
-            .select('final_exam_date, final_exam_time')
+            .select('final_exam_date, final_exam_time, final_exam_status')
             .eq('student_id', studentIdCode)
             .maybeSingle();
           if (!error && data) row = data;
         }
 
-        // Fallback: query by UUID if student_id lookup found nothing.
         if (!row && studentUuid) {
           const { data, error } = await db
             .from('students')
-            .select('final_exam_date, final_exam_time')
+            .select('final_exam_date, final_exam_time, final_exam_status')
             .eq('id', studentUuid)
             .maybeSingle();
           if (!error && data) row = data;
         }
 
-        const examDate = row && row.final_exam_date;
-        const examTime = row && row.final_exam_time;
-        if (!examDate) return;
+        const examDate   = row && row.final_exam_date;
+        const examTime   = row && row.final_exam_time;
+        const examStatus = row && row.final_exam_status; // 'pending' | 'pass' | 'fail' | null
 
-        _finalExamDateRaw = examDate;
+        if (!examDate && !examStatus) return;
+
+        _finalExamDateRaw = examDate || null;
         _finalExamTimeRaw = examTime || null;
 
-        const d = new Date(examDate + 'T00:00:00');
-        bannerVal.textContent = d.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-
-        if (examTime && bannerTime) {
-          const { la, armenia } = _fmtBothTZ(examDate, examTime);
-          bannerTime.innerHTML = `
-            <div style="display:inline-flex;align-items:stretch;border:1px solid rgba(201,168,76,0.22);border-radius:8px;overflow:hidden;">
-              <div style="padding:6px 12px;background:rgba(201,168,76,0.07);">
-                <div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Armenia</div>
-                <div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${armenia}</div>
-              </div>
-              <div style="width:1px;background:rgba(201,168,76,0.18);"></div>
-              <div style="padding:6px 12px;background:rgba(201,168,76,0.04);">
-                <div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Los Angeles</div>
-                <div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${la}</div>
-              </div>
-            </div>
-          `;
-          bannerTime.style.display = 'block';
+        // Determine whether the exam date+time has already passed
+        let examHasPassed = false;
+        if (examDate) {
+          const timeStr = examTime || '23:59';
+          const [hh, mm] = timeStr.split(':').map(Number);
+          const parts = examDate.split('-').map(Number);
+          parts[1] -= 1; // 0-index month
+          const examDateUTC = Date.UTC(parts[0], parts[1], parts[2], hh - 4, mm); // Armenia = UTC+4
+          examHasPassed = Date.now() > examDateUTC;
         }
 
-        banner.style.display = 'block';
+        // --- PASS ---
+        if (examStatus === 'pass') {
+          banner.style.cssText = 'display:block;margin-top:16px;position:relative;background:linear-gradient(145deg,rgba(4,38,24,0.97),rgba(5,46,28,0.99));border:1px solid rgba(52,211,153,0.45);border-radius:var(--radius-md);overflow:hidden;';
+          banner.onclick = null;
+          banner.innerHTML = `
+            <div style="height:2px;background:linear-gradient(90deg,transparent,#34d399 30%,#6ee7b7 50%,#34d399 70%,transparent);"></div>
+            <div style="padding:12px 14px 14px;text-align:center;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:8px;">
+                <div style="flex:1;height:1px;background:rgba(52,211,153,0.2);"></div>
+                <span style="font-size:8.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(52,211,153,0.65);">Final Examination</span>
+                <div style="flex:1;height:1px;background:rgba(52,211,153,0.2);"></div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(52,211,153,0.15);border:1.5px solid rgba(52,211,153,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </div>
+                <div style="text-align:left;">
+                  <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#6ee7b7;line-height:1.1;">Pass</div>
+                  <div style="font-size:10px;color:rgba(110,231,183,0.6);margin-top:2px;">Result Confirmed</div>
+                </div>
+              </div>
+            </div>`;
+
+        // --- FAIL ---
+        } else if (examStatus === 'fail') {
+          banner.style.cssText = 'display:block;margin-top:16px;position:relative;background:linear-gradient(145deg,rgba(38,4,4,0.97),rgba(46,5,5,0.99));border:1px solid rgba(248,113,113,0.45);border-radius:var(--radius-md);overflow:hidden;';
+          banner.onclick = null;
+          banner.innerHTML = `
+            <div style="height:2px;background:linear-gradient(90deg,transparent,#f87171 30%,#fca5a5 50%,#f87171 70%,transparent);"></div>
+            <div style="padding:12px 14px 14px;text-align:center;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:8px;">
+                <div style="flex:1;height:1px;background:rgba(248,113,113,0.2);"></div>
+                <span style="font-size:8.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(248,113,113,0.65);">Final Examination</span>
+                <div style="flex:1;height:1px;background:rgba(248,113,113,0.2);"></div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(248,113,113,0.12);border:1.5px solid rgba(248,113,113,0.4);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </div>
+                <div style="text-align:left;">
+                  <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#fca5a5;line-height:1.1;">Failed</div>
+                  <div style="font-size:10px;color:rgba(252,165,165,0.6);margin-top:2px;">Result Confirmed</div>
+                </div>
+              </div>
+            </div>`;
+
+        // --- PENDING (explicit status OR date has passed with no result) ---
+        } else if (examStatus === 'pending' || (examDate && examHasPassed)) {
+          banner.style.cssText = 'display:block;margin-top:16px;position:relative;background:linear-gradient(145deg,rgba(23,23,7,0.97),rgba(30,28,5,0.99));border:1px solid rgba(251,191,36,0.35);border-radius:var(--radius-md);overflow:hidden;';
+          banner.onclick = null;
+          banner.innerHTML = `
+            <div style="height:2px;background:linear-gradient(90deg,transparent,#fbbf24 30%,#fde68a 50%,#fbbf24 70%,transparent);"></div>
+            <div style="padding:12px 14px 14px;text-align:center;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:8px;">
+                <div style="flex:1;height:1px;background:rgba(251,191,36,0.15);"></div>
+                <span style="font-size:8.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:rgba(251,191,36,0.6);">Final Examination</span>
+                <div style="flex:1;height:1px;background:rgba(251,191,36,0.15);"></div>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+                <div style="width:36px;height:36px;border-radius:50%;background:rgba(251,191,36,0.1);border:1.5px solid rgba(251,191,36,0.35);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+                </div>
+                <div style="text-align:left;">
+                  <div style="font-family:'Playfair Display',serif;font-size:18px;font-weight:700;color:#fde68a;line-height:1.1;">Pending</div>
+                  <div style="font-size:10px;color:rgba(253,230,138,0.55);margin-top:2px;">Awaiting official result</div>
+                </div>
+              </div>
+            </div>`;
+
+        // --- SCHEDULED (future date, no result yet) ---
+        } else if (examDate) {
+          banner.style.cssText = 'display:block;margin-top:16px;position:relative;background:linear-gradient(145deg,rgba(12,28,56,0.95),rgba(7,18,40,0.98));border:1px solid rgba(201,168,76,0.32);border-radius:var(--radius-md);overflow:hidden;cursor:pointer;transition:border-color 0.2s,box-shadow 0.2s;';
+          banner.onclick = openFinalExamPopup;
+          banner.onmouseover = function(){ this.style.borderColor='rgba(201,168,76,0.65)';this.style.boxShadow='0 6px 24px rgba(0,0,0,0.45)'; };
+          banner.onmouseout  = function(){ this.style.borderColor='rgba(201,168,76,0.32)';this.style.boxShadow='none'; };
+
+          const d = new Date(examDate + 'T00:00:00');
+          const dateLabel = d.toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+          let timeHtml = '';
+          if (examTime) {
+            const { la, armenia } = _fmtBothTZ(examDate, examTime);
+            timeHtml = `
+              <div style="display:none;margin-top:8px;" id="finalExamTimeValue">
+                <div style="display:inline-flex;align-items:stretch;border:1px solid rgba(201,168,76,0.22);border-radius:8px;overflow:hidden;">
+                  <div style="padding:6px 12px;background:rgba(201,168,76,0.07);">
+                    <div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Armenia</div>
+                    <div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${armenia}</div>
+                  </div>
+                  <div style="width:1px;background:rgba(201,168,76,0.18);"></div>
+                  <div style="padding:6px 12px;background:rgba(201,168,76,0.04);">
+                    <div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Los Angeles</div>
+                    <div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${la}</div>
+                  </div>
+                </div>
+              </div>`;
+          }
+          banner.innerHTML = `
+            <div style="height:2px;background:linear-gradient(90deg,transparent,rgba(201,168,76,0.8) 40%,var(--gold-200) 50%,rgba(201,168,76,0.8) 60%,transparent);"></div>
+            <div style="padding:12px 14px 14px;text-align:center;">
+              <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-bottom:7px;">
+                <div style="flex:1;height:1px;background:rgba(201,168,76,0.15);"></div>
+                <span style="font-size:8.5px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-400);">Final Examination</span>
+                <div style="flex:1;height:1px;background:rgba(201,168,76,0.15);"></div>
+              </div>
+              <div id="finalExamDateValue" style="font-family:'Playfair Display',serif;font-size:17px;font-weight:700;color:var(--gold-200);letter-spacing:-0.01em;line-height:1.2;margin-bottom:4px;">${dateLabel}</div>
+              ${examTime ? `<div style="margin-top:8px;display:inline-flex;align-items:stretch;border:1px solid rgba(201,168,76,0.22);border-radius:8px;overflow:hidden;"><div style="padding:6px 12px;background:rgba(201,168,76,0.07);"><div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Armenia</div><div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${_fmtBothTZ(examDate,examTime).armenia}</div></div><div style="width:1px;background:rgba(201,168,76,0.18);"></div><div style="padding:6px 12px;background:rgba(201,168,76,0.04);"><div style="font-size:7.5px;font-weight:800;text-transform:uppercase;letter-spacing:.14em;color:rgba(201,168,76,0.5);margin-bottom:2px;">Los Angeles</div><div style="font-size:13px;font-weight:900;color:var(--gold-200);letter-spacing:-.02em;line-height:1;">${_fmtBothTZ(examDate,examTime).la}</div></div></div>` : ''}
+              <div style="font-size:8px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text-muted);margin-top:10px;">Tap to view details</div>
+            </div>`;
+        }
+
       } catch (examErr) {
         console.warn('Could not fetch final exam date:', examErr);
       }
