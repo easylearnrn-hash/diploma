@@ -3743,9 +3743,12 @@
         {key:'call_click',         count: conv.call},
         {key:'whatsapp_click',     count: conv.whatsapp},
       ];
+      // Use exact counts + days-1 offset so every timestamp falls within the report period
+      const periodDaysPDF = Math.max(1, days - 1);
       const admEvtPdf = [];
       admEvtTypesPDF.forEach(e => {
-        buildConvRows(Math.max(4, e.count), days, e.key).forEach(r => admEvtPdf.push(r));
+        if (e.count > 0)
+          buildConvRows(e.count, periodDaysPDF, e.key).forEach(r => admEvtPdf.push(r));
       });
       admEvtPdf.sort((a,b) => b.ts - a.ts);
 
@@ -3777,7 +3780,8 @@
       y = sectionHead('12b. Portal Activity Events (Excluded from Admissions Rate)', y);
 
       const portalEvtPdf = [];
-      buildConvRows(Math.max(4, conv.login), days, 'login_submit').forEach(r => portalEvtPdf.push(r));
+      if (conv.login > 0)
+        buildConvRows(conv.login, periodDaysPDF, 'login_submit').forEach(r => portalEvtPdf.push(r));
       portalEvtPdf.sort((a,b) => b.ts - a.ts);
 
       doc.autoTable({
