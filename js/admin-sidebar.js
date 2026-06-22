@@ -415,11 +415,9 @@
     // Setup event listeners
     setupSidebarEvents();
 
-    // Restore collapsed state from localStorage
-    const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
-    if (isCollapsed) {
-      sidebar.classList.add('collapsed');
-    }
+    // Always start collapsed on page load/refresh
+    localStorage.setItem('sidebarCollapsed', 'true');
+    sidebar.classList.add('collapsed');
 
     // Initialize submission badge
     initFormsBadge();
