@@ -111,7 +111,10 @@
     '  padding:0 24px;',
     '  background:rgba(0,0,0,0.15);',
     '  position:relative;z-index:5;pointer-events:auto;',
+    '  overflow-x:auto;-webkit-overflow-scrolling:touch;',
+    '  scrollbar-width:none;',
     '}',
+    '#accred-tabs::-webkit-scrollbar{display:none}',
     '.accred-tab{',
     '  padding:11px 18px;',
     '  font-family:"Inter",sans-serif;',
@@ -196,6 +199,15 @@
     '  font-size:11px;',
     '  color:rgba(255,255,255,0.25);',
     '  letter-spacing:.5px;',
+    '}',
+
+    /* mobile tweaks */
+    '@media(max-width:480px){',
+    '  #accred-header{padding:14px 16px 12px}',
+    '  #accred-tabs{padding:0 12px}',
+    '  .accred-tab{padding:10px 12px;font-size:10px;letter-spacing:.4px}',
+    '  #accred-footer{padding:14px 16px 18px}',
+    '  #accred-caption-title{font-size:14px}',
     '}'
   ].join('');
   document.head.appendChild(style);
