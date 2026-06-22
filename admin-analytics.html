@@ -1931,6 +1931,18 @@
       return currentRange === 'today' ? 1 : currentRange === '7d' ? 7 : currentRange === '28d' ? 28 : 90;
     }
 
+    // Distributes a total across n days with natural day-to-day variation,
+    // guaranteed to sum exactly to total (no rounding drift).
+    function distributeTotal(total, n) {
+      if (n <= 0 || total <= 0) return Array(n).fill(0);
+      const w    = Array.from({ length: n }, () => 0.3 + Math.random());
+      const sum  = w.reduce((a, b) => a + b, 0);
+      const vals = w.map(wi => Math.round(total * wi / sum));
+      const diff = total - vals.reduce((a, b) => a + b, 0);
+      vals[vals.length - 1] = Math.max(0, vals[vals.length - 1] + diff);
+      return vals;
+    }
+
     // ============================================================
     // DETAIL MODAL FUNCTIONS
     // ============================================================
@@ -2787,6 +2799,21 @@
       const sessionsPerUser  = (kpi.sessions / kpi.users).toFixed(2);
       const totalConvEvents  = Object.values(conv).reduce((a,b)=>a+b,0);
 
+      // ── Scale factors: align static 90d demo data to the selected period
+      const _scalePV   = kpi.views    / DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
+      const _scaleSrc  = kpi.users    / DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
+      const _scaleConv = totalConvEvents / Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
+      const _scaleCtry = kpi.users    / DEMO_COUNTRIES.reduce((a,c)=>a+c.users,0);
+      const _scaleDev  = kpi.sessions / DEMO_DEVICES.reduce((a,d)=>a+d.count,0);
+      const _scaleBrw  = kpi.users    / DEMO_BROWSERS.reduce((a,b)=>a+b.users,0);
+      const scaledPages    = DEMO_TOP_PAGES.map(p => ({...p, views: Math.round(p.views * _scalePV)}));
+      const scaledSources  = DEMO_SOURCES.map(s  => ({...s, users: Math.round(s.users * _scaleSrc), conv: Math.round(s.conv * _scaleConv)}));
+      const scaledCountries= DEMO_COUNTRIES.map(c => ({...c, users: Math.round(c.users * _scaleCtry)}));
+      const scaledDevices  = DEMO_DEVICES.map(d  => ({...d, count: Math.round(d.count * _scaleDev)}));
+      const scaledBrowsers = DEMO_BROWSERS.map(b  => ({...b, users: Math.round(b.users * _scaleBrw)}));
+      const maxSessRows = Math.min(200, kpi.sessions);
+      const maxPVRows   = Math.min(200, kpi.views);
+
       // ── SHEET 1: Cover ────────────────────────────────────────
       const coverData = [
         ['ACNHS ANALYTICS REPORT — FULL EXPORT'],
@@ -2809,9 +2836,9 @@
         ['8. Devices',          'Device type breakdown'],
         ['9. Browsers',         'Browser market share'],
         ['10. Channel Mix',     'Marketing channel distribution'],
-        ['11. Sessions Log',    '200 individual session records'],
-        ['12. Page Views Log',  '200 individual page view records'],
-        ['13. Events Log',      '150 individual conversion event records'],
+        ['11. Sessions Log',    maxSessRows + ' individual session records'],
+        ['12. Page Views Log',  maxPVRows   + ' individual page view records'],
+        ['13. Events Log',      'All conversion event records (by type)'],
       ];
       const wsCover = XLSX.utils.aoa_to_sheet(coverData);
       wsCover['!cols'] = [{wch:32},{wch:52}];
@@ -2857,17 +2884,18 @@
       // ── SHEET 3: Daily Trend ──────────────────────────────────
       const trendRows = [['Date', 'Users', 'New Users', 'Sessions', 'Page Views', 'Events', 'Engagement Rate', 'Avg Duration (s)']];
       const now = new Date();
-      for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(now); d.setDate(d.getDate() - i);
+      // Distribute KPI totals across days so each column sums exactly to KPI
+      const dU  = distributeTotal(kpi.users,    days);
+      const dS  = distributeTotal(kpi.sessions, days);
+      const dPV = distributeTotal(kpi.views,    days);
+      const dEv = distributeTotal(kpi.events,   days);
+      for (let i = 0; i < days; i++) {
+        const d = new Date(now); d.setDate(d.getDate() - (days - 1 - i));
         const dateStr = d.toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'});
-        const u  = Math.round(kpi.users   / days * (0.7 + Math.random()*0.6));
-        const nu = Math.round(u * 0.65 + Math.random() * u * 0.2);
-        const s  = Math.round(kpi.sessions/ days * (0.7 + Math.random()*0.6));
-        const pv = Math.round(kpi.views   / days * (0.7 + Math.random()*0.6));
-        const ev = Math.round(kpi.events  / days * (0.7 + Math.random()*0.6));
-        const er = (55 + Math.floor(Math.random()*20)) + '%';
-        const dur= (90 + Math.floor(Math.random()*120));
-        trendRows.push([dateStr, u, nu, s, pv, ev, er, dur]);
+        const nu  = Math.min(dU[i], Math.round(dU[i] * (0.55 + Math.random() * 0.25)));
+        const er  = (55 + Math.floor(Math.random()*20)) + '%';
+        const dur = (90 + Math.floor(Math.random()*120));
+        trendRows.push([dateStr, dU[i], nu, dS[i], dPV[i], dEv[i], er, dur]);
       }
       const wsTrend = XLSX.utils.aoa_to_sheet(trendRows);
       wsTrend['!cols'] = [{wch:18},{wch:10},{wch:12},{wch:12},{wch:14},{wch:10},{wch:18},{wch:18}];
@@ -2890,9 +2918,9 @@
       XLSX.utils.book_append_sheet(wb, wsConv, '4. Conversions');
 
       // ── SHEET 5: Top Pages ────────────────────────────────────
-      const totalViews = DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
+      const totalViews = scaledPages.reduce((a,p)=>a+p.views,0);
       const pagesData = [['Rank','Page URL','Views','% of Total Views','Engagement Rate','Bounce Rate (est.)','Avg Views/Day']];
-      DEMO_TOP_PAGES.forEach((p,i) => {
+      scaledPages.forEach((p,i) => {
         const eng = parseInt(p.engRate);
         pagesData.push([
           i+1, p.page, p.views,
@@ -2907,14 +2935,14 @@
       XLSX.utils.book_append_sheet(wb, wsPages, '5. Top Pages');
 
       // ── SHEET 6: Traffic Sources ──────────────────────────────
-      const totalSrcUsers = DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
+      const totalSrcUsers = scaledSources.reduce((a,s)=>a+s.users,0);
       const srcData = [['Rank','Source / Medium','Users','% Share','Conversions','Conv Rate','Avg Conv/User']];
-      DEMO_SOURCES.forEach((s,i) => srcData.push([
+      scaledSources.forEach((s,i) => srcData.push([
         i+1, s.source, s.users,
         ((s.users/totalSrcUsers)*100).toFixed(1)+'%',
         s.conv,
-        ((s.conv/s.users)*100).toFixed(2)+'%',
-        (s.conv/s.users).toFixed(3),
+        s.users > 0 ? ((s.conv/s.users)*100).toFixed(2)+'%' : '0.00%',
+        s.users > 0 ? (s.conv/s.users).toFixed(3) : '0',
       ]));
       const wsSrc = XLSX.utils.aoa_to_sheet(srcData);
       wsSrc['!cols'] = [{wch:6},{wch:28},{wch:10},{wch:12},{wch:14},{wch:12},{wch:16}];
@@ -2922,7 +2950,7 @@
 
       // ── SHEET 7: Countries ────────────────────────────────────
       const ctryData = [['Rank','Country','Users','% Share','Users/Day (est.)']];
-      DEMO_COUNTRIES.forEach((c,i) => ctryData.push([
+      scaledCountries.forEach((c,i) => ctryData.push([
         i+1, c.loc.replace(/^\S+\s/,''), c.users, c.pct+'%', (c.users/days).toFixed(1),
       ]));
       const wsCtry = XLSX.utils.aoa_to_sheet(ctryData);
@@ -2931,7 +2959,7 @@
 
       // ── SHEET 8: Devices ──────────────────────────────────────
       const devData = [['Device','Sessions','% Share','Sessions/Day','Est. Users']];
-      DEMO_DEVICES.forEach(d => devData.push([
+      scaledDevices.forEach(d => devData.push([
         d.name, d.count, d.pct+'%',
         (d.count/days).toFixed(1),
         Math.round(d.count * 0.82),
@@ -2942,7 +2970,7 @@
 
       // ── SHEET 9: Browsers ─────────────────────────────────────
       const brwData = [['Rank','Browser','Users','% Share','New Users (est.)','Returning (est.)']];
-      DEMO_BROWSERS.forEach((b,i) => {
+      scaledBrowsers.forEach((b,i) => {
         const nu = Math.round(b.users * 0.65);
         brwData.push([i+1, b.name, b.users, b.pct+'%', nu, b.users-nu]);
       });
@@ -2951,20 +2979,19 @@
       XLSX.utils.book_append_sheet(wb, wsBrw, '9. Browsers');
 
       // ── SHEET 10: Channel Mix ─────────────────────────────────
-      const totalUsers = DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
       const chData = [['Rank','Channel','% Share','Est. Users','Est. Conversions','Conv Rate']];
       DEMO_CHANNELS.labels.forEach((l,i) => {
         const pct = DEMO_CHANNELS.data[i];
-        const u   = Math.round(totalUsers * pct/100);
+        const u   = Math.round(kpi.users * pct/100);
         const c   = Math.round(kpi.conversions * pct/100);
-        chData.push([i+1, l, pct+'%', u, c, ((c/u)*100).toFixed(2)+'%']);
+        chData.push([i+1, l, pct+'%', u, c, u > 0 ? ((c/u)*100).toFixed(2)+'%' : '0.00%']);
       });
       const wsCh = XLSX.utils.aoa_to_sheet(chData);
       wsCh['!cols'] = [{wch:6},{wch:14},{wch:12},{wch:14},{wch:20},{wch:14}];
       XLSX.utils.book_append_sheet(wb, wsCh, '10. Channel Mix');
 
       // ── SHEET 11: Sessions Log ────────────────────────────────
-      const sessRows = buildSessionRows(200, days);
+      const sessRows = buildSessionRows(maxSessRows, days);
       const sessData = [['#','Timestamp','Entry Page','Pages Viewed','Duration','Device','Source / Medium','Engaged?','Session Type']];
       sessRows.forEach((r,i) => sessData.push([
         i+1,
@@ -2980,7 +3007,7 @@
       XLSX.utils.book_append_sheet(wb, wsSession, '11. Sessions Log');
 
       // ── SHEET 12: Page Views Log ──────────────────────────────
-      const pvRows = buildPageViewRows(200, days);
+      const pvRows = buildPageViewRows(maxPVRows, days);
       const pvData = [['#','Timestamp','Page URL','Time on Page','Device','Country','Source / Medium','Session Type']];
       pvRows.forEach((r,i) => pvData.push([
         i+1,
@@ -3054,9 +3081,25 @@
       const pagesPerSession = (kpi.views / kpi.sessions).toFixed(2);
       const convRate        = ((kpi.conversions / kpi.sessions) * 100).toFixed(2) + '%';
       const sessPerUser     = (kpi.sessions / kpi.users).toFixed(2);
-      const totalConvEvts   = Object.values(conv).reduce((a,b)=>a+b,0);
-      const totalViews      = DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
-      const totalSrcUsers   = DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
+      const totalConvEvts  = Object.values(conv).reduce((a,b)=>a+b,0);
+      // ── Scale factors: align static 90d demo data to selected period
+      const _sPg   = kpi.views    / DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
+      const _sSrc  = kpi.users    / DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
+      const _sConv = totalConvEvts/ Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
+      const _sCtry = kpi.users    / DEMO_COUNTRIES.reduce((a,c)=>a+c.users,0);
+      const _sDev  = kpi.sessions / DEMO_DEVICES.reduce((a,d)=>a+d.count,0);
+      const _sBrw  = kpi.users    / DEMO_BROWSERS.reduce((a,b)=>a+b.users,0);
+      const scaledPg   = DEMO_TOP_PAGES.map(p => ({...p, views: Math.round(p.views * _sPg)}));
+      const scaledSrc  = DEMO_SOURCES.map(s  => ({...s, users: Math.round(s.users * _sSrc), conv: Math.round(s.conv * _sConv)}));
+      const scaledCtry = DEMO_COUNTRIES.map(c => ({...c, users: Math.round(c.users * _sCtry)}));
+      const scaledDev  = DEMO_DEVICES.map(d  => ({...d, count: Math.round(d.count * _sDev)}));
+      const scaledBrw  = DEMO_BROWSERS.map(b  => ({...b, users: Math.round(b.users * _sBrw)}));
+      const totalViews    = scaledPg.reduce((a,p)=>a+p.views,0);
+      const totalSrcUsers = scaledSrc.reduce((a,s)=>a+s.users,0);
+      const maxSessPDF = Math.min(50, kpi.sessions);
+      const maxPVPDF   = Math.min(50, kpi.views);
+      const maxSessXL  = Math.min(200, kpi.sessions);
+      const maxPVXL    = Math.min(200, kpi.views);
 
       // ─────────────────────────────────────────────────────────
       // Helper: add a section heading with gold underline
@@ -3245,16 +3288,17 @@
       y = sectionHead('3. Daily Traffic Trend — ' + label, y);
 
       const trendBody = [];
-      const nowRef = new Date();
+      const nowRef   = new Date();
       const showDays = Math.min(days, 30);
-      for (let i = showDays - 1; i >= 0; i--) {
-        const d = new Date(nowRef); d.setDate(d.getDate() - i);
+      // Use distributeTotal so day-by-day rows sum exactly to KPI totals
+      const tdU  = distributeTotal(Math.round(kpi.users    * showDays / days), showDays);
+      const tdS  = distributeTotal(Math.round(kpi.sessions * showDays / days), showDays);
+      const tdPV = distributeTotal(Math.round(kpi.views    * showDays / days), showDays);
+      for (let i = 0; i < showDays; i++) {
+        const d = new Date(nowRef); d.setDate(d.getDate() - (showDays - 1 - i));
         const dateStr = d.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-        const u  = Math.round(kpi.users   / days * (0.65 + Math.random()*0.7));
-        const s  = Math.round(kpi.sessions/ days * (0.65 + Math.random()*0.7));
-        const pv = Math.round(kpi.views   / days * (0.65 + Math.random()*0.7));
         const er = (54 + Math.floor(Math.random()*22)) + '%';
-        trendBody.push([dateStr, u, s, pv, er]);
+        trendBody.push([dateStr, tdU[i], tdS[i], tdPV[i], er]);
       }
       if (days > 30) trendBody.push(['...', '(full data in Excel Sheet 3)', '', '', '']);
 
@@ -3287,7 +3331,7 @@
       doc.autoTable({
         startY: y,
         head: [['#', 'Page URL', 'Views', '% Total', 'Eng. Rate', 'Bounce', 'Views/Day']],
-        body: DEMO_TOP_PAGES.map((p,i) => {
+        body: scaledPg.map((p,i) => {
           const eng = parseInt(p.engRate);
           return [i+1, p.page, p.views.toLocaleString(), ((p.views/totalViews)*100).toFixed(1)+'%',
                   p.engRate, (100-eng)+'%', (p.views/days).toFixed(1)];
@@ -3306,10 +3350,10 @@
       doc.autoTable({
         startY: y,
         head: [['#', 'Source / Medium', 'Users', '% Users', 'Conversions', 'Conv Rate']],
-        body: DEMO_SOURCES.map((s,i) => [
+        body: scaledSrc.map((s,i) => [
           i+1, s.source, s.users.toLocaleString(),
           ((s.users/totalSrcUsers)*100).toFixed(1)+'%',
-          s.conv, ((s.conv/s.users)*100).toFixed(2)+'%',
+          s.conv, s.users > 0 ? ((s.conv/s.users)*100).toFixed(2)+'%' : '0.00%',
         ]),
         theme: 'grid',
         headStyles: { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 8 },
@@ -3329,7 +3373,7 @@
       doc.autoTable({
         startY: y,
         head: [['Country', 'Users', '% Share', 'Users/Day']],
-        body: DEMO_COUNTRIES.map(c => [
+        body: scaledCtry.map(c => [
           c.loc.replace(/^\S+\s/,''), c.users.toLocaleString(),
           c.pct+'%', (c.users/days).toFixed(1),
         ]),
@@ -3346,7 +3390,7 @@
       doc.autoTable({
         startY: y,
         head: [['Device', 'Sessions', '% Share', 'Sessions/Day', 'Est. Users']],
-        body: DEMO_DEVICES.map(d => [
+        body: scaledDev.map(d => [
           d.name, d.count.toLocaleString(), d.pct+'%',
           (d.count/days).toFixed(1), Math.round(d.count*0.82).toLocaleString(),
         ]),
@@ -3363,7 +3407,7 @@
       doc.autoTable({
         startY: y,
         head: [['Browser', 'Users', '% Share', 'New (est.)', 'Returning (est.)']],
-        body: DEMO_BROWSERS.map(b => {
+        body: scaledBrw.map(b => {
           const nu = Math.round(b.users * 0.65);
           return [b.name, b.users.toLocaleString(), b.pct+'%', nu.toLocaleString(), (b.users-nu).toLocaleString()];
         }),
@@ -3378,7 +3422,7 @@
 
       if (y > 220) { doc.addPage(); y = pageHeader('Channel Mix'); }
       y = sectionHead('9. Marketing Channel Mix', y);
-      const totalUsersEst = DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
+      const totalUsersEst = kpi.users;
       doc.autoTable({
         startY: y,
         head: [['Channel', '% Share', 'Est. Users', 'Est. Convs', 'Conv Rate']],
@@ -3386,7 +3430,7 @@
           const pct = DEMO_CHANNELS.data[i];
           const u   = Math.round(totalUsersEst * pct/100);
           const c   = Math.round(kpi.conversions * pct/100);
-          return [l, pct+'%', u.toLocaleString(), c.toLocaleString(), ((c/u)*100).toFixed(2)+'%'];
+          return [l, pct+'%', u.toLocaleString(), c.toLocaleString(), u > 0 ? ((c/u)*100).toFixed(2)+'%' : '0.00%'];
         }),
         theme: 'grid',
         headStyles: { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 8 },
@@ -3401,9 +3445,9 @@
       // ─────────────────────────────────────────────────────────
       doc.addPage();
       y = pageHeader('Session Log');
-      y = sectionHead('10. Individual Sessions — 50 Most Recent', y);
+      y = sectionHead('10. Individual Sessions — ' + maxSessPDF + ' Most Recent', y);
 
-      const sessRows = buildSessionRows(200, days).slice(0, 50);
+      const sessRows = buildSessionRows(maxSessPDF, days);
       doc.autoTable({
         startY: y,
         head: [['#', 'Timestamp', 'Entry Page', 'Pages', 'Duration', 'Device', 'Source', 'Engaged?']],
@@ -3426,16 +3470,16 @@
       });
       y = doc.lastAutoTable.finalY + 4;
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...muted);
-      doc.text('Full 200-record session log available in Excel export (Sheet 11).', 14, y);
+      doc.text('Full ' + maxSessXL + '-record session log available in Excel export (Sheet 11).', 14, y);
 
       // ─────────────────────────────────────────────────────────
       // PAGE 7 — PAGE VIEWS LOG
       // ─────────────────────────────────────────────────────────
       doc.addPage();
       y = pageHeader('Page Views Log');
-      y = sectionHead('11. Individual Page Views — 50 Most Recent', y);
+      y = sectionHead('11. Individual Page Views — ' + maxPVPDF + ' Most Recent', y);
 
-      const pvRows = buildPageViewRows(200, days).slice(0, 50);
+      const pvRows = buildPageViewRows(maxPVPDF, days);
       doc.autoTable({
         startY: y,
         head: [['#', 'Timestamp', 'Page URL', 'Time on Page', 'Device', 'Country', 'Source']],
@@ -3456,7 +3500,7 @@
       });
       y = doc.lastAutoTable.finalY + 4;
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...muted);
-      doc.text('Full 200-record page views log available in Excel export (Sheet 12).', 14, y);
+      doc.text('Full ' + maxPVXL + '-record page views log available in Excel export (Sheet 12).', 14, y);
 
       // ─────────────────────────────────────────────────────────
       // PAGE 8 — CONVERSION EVENTS LOG
