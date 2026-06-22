@@ -42,6 +42,20 @@ function applyAcnshLogo() {
 
 window.applyAcnshLogo = applyAcnshLogo;
 
+// Watch for img[data-acnhs-logo] being inserted into the DOM during parsing
+// and set the real src immediately — before the browser renders a frame with the placeholder.
+const _logoMO = new MutationObserver(function(mutations) {
+	mutations.forEach(function(m) {
+		m.addedNodes.forEach(function(n) {
+			if (n.nodeType !== 1) return;
+			if (n.matches && n.matches('img[data-acnhs-logo]')) n.src = ACNHS_LOGO_DATA_URL;
+			if (n.querySelectorAll) n.querySelectorAll('img[data-acnhs-logo]').forEach(function(img) { img.src = ACNHS_LOGO_DATA_URL; });
+		});
+	});
+});
+_logoMO.observe(document.documentElement, { subtree: true, childList: true });
+document.addEventListener('DOMContentLoaded', function() { _logoMO.disconnect(); }, { once: true });
+
 // Apply logo immediately if DOM is ready, otherwise wait
 if (document.readyState === 'loading') {
 	document.addEventListener('DOMContentLoaded', applyAcnshLogo);
