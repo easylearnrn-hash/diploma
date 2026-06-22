@@ -3261,6 +3261,20 @@
     async function exportPDF() {
       const { jsPDF } = window.jspdf;
       const doc   = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+      // Pre-load ACNHS seal for cover page & page headers
+      let sealImgData = null;
+      try {
+        const _si = new Image();
+        _si.src = 'assets/acnhs-seal.png';
+        await new Promise(r => { _si.onload = r; _si.onerror = r; });
+        if (_si.naturalWidth > 0) {
+          const _cv = document.createElement('canvas');
+          _cv.width = _si.naturalWidth; _cv.height = _si.naturalHeight;
+          _cv.getContext('2d').drawImage(_si, 0, 0);
+          sealImgData = _cv.toDataURL('image/png');
+        }
+      } catch (_e) {}
       const range = currentRange;
       const kpi   = DEMO_KPI[range]  || DEMO_KPI['7d'];
       const conv  = DEMO_CONV[range] || DEMO_CONV['7d'];
@@ -3278,10 +3292,11 @@
       const rangeStr = fmtDate(rangeStart) + ' – ' + fmtDate(rangeEnd);
 
       const gold  = [201, 168, 76];
-      const navy  = [2, 6, 23];
+      const navy  = [2,   6,  23];
       const white = [255, 255, 255];
-      const muted = [120, 140, 170];
-      const light = [245, 248, 255];
+      const muted = [138, 158, 192];
+      const light = [229, 236, 255];  // navy-tinted alternating rows
+      const ink   = [12,  28,  68];   // deep navy body text
 
       // ── Derived metrics
       const returningUsers  = kpi.users - kpi.newUsers;
@@ -3314,14 +3329,17 @@
       // Helper: add a section heading with gold underline
       // ─────────────────────────────────────────────────────────
       function sectionHead(text, yPos) {
+        // Gold left accent bar
+        doc.setFillColor(...gold);
+        doc.rect(14, yPos - 4, 2.5, 6.5, 'F');
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.setTextColor(...gold);
-        doc.text(text, 14, yPos);
+        doc.setFontSize(10.5);
+        doc.setTextColor(10, 22, 58);
+        doc.text(text, 18.5, yPos);
         doc.setDrawColor(...gold);
-        doc.setLineWidth(0.4);
-        doc.line(14, yPos + 1.5, W - 14, yPos + 1.5);
-        return yPos + 7;
+        doc.setLineWidth(0.3);
+        doc.line(14, yPos + 3, W - 14, yPos + 3);
+        return yPos + 9;
       }
 
       // ─────────────────────────────────────────────────────────
@@ -3329,17 +3347,21 @@
       // ─────────────────────────────────────────────────────────
       function pageHeader(title) {
         doc.setFillColor(...navy);
-        doc.rect(0, 0, W, 16, 'F');
+        doc.rect(0, 0, W, 18, 'F');
         doc.setFillColor(...gold);
-        doc.rect(0, 15, W, 1.5, 'F');
+        doc.rect(0, 17, W, 1.5, 'F');
+        if (sealImgData) {
+          doc.addImage(sealImgData, 'PNG', W - 20, 1.5, 15, 15);
+        }
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
+        doc.setFontSize(8.5);
         doc.setTextColor(...gold);
-        doc.text('ACNHS ANALYTICS — ' + label.toUpperCase() + '  (' + rangeStr + ')', 14, 7);
+        doc.text('ACNHS ANALYTICS — ' + label.toUpperCase() + '  (' + rangeStr + ')', 14, 7.5);
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...muted);
-        doc.text(title, 14, 12.5);
-        return 24;
+        doc.setFontSize(9);
+        doc.setTextColor(...white);
+        doc.text(title, 14, 13.5);
+        return 26;
       }
 
       // ─────────────────────────────────────────────────────────
@@ -3348,44 +3370,53 @@
       doc.setFillColor(...navy);
       doc.rect(0, 0, W, H, 'F');
 
-      // Gold accent stripe
-      doc.setFillColor(...gold);
-      doc.rect(0, H * 0.42, W, 2, 'F');
+      // ACNHS Seal — centered in upper third of cover
+      if (sealImgData) {
+        doc.addImage(sealImgData, 'PNG', W / 2 - 20, 26, 40, 40);
+      }
+      // Decorative gold ring around seal
+      doc.setDrawColor(...gold);
+      doc.setLineWidth(0.7);
+      doc.circle(W / 2, 46, 21.5, 'S');
 
       // Title block
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(26);
+      doc.setFontSize(22);
       doc.setTextColor(...gold);
-      doc.text('ACNHS', W / 2, 62, { align: 'center' });
-      doc.setFontSize(14);
+      doc.text('ACNHS', W / 2, 82, { align: 'center' });
+      doc.setFontSize(12);
       doc.setTextColor(...white);
-      doc.text('Analytics Report', W / 2, 73, { align: 'center' });
+      doc.text('Analytics Report', W / 2, 91, { align: 'center' });
 
-      doc.setFontSize(10);
+      doc.setFontSize(9);
       doc.setTextColor(...muted);
-      doc.text('Armenian College of Nursing & Health Sciences', W / 2, 82, { align: 'center' });
-      doc.text('www.acnhs.am', W / 2, 88, { align: 'center' });
+      doc.text('Armenian College of Nursing & Health Sciences', W / 2, 100, { align: 'center' });
+      doc.text('www.acnhs.am', W / 2, 106, { align: 'center' });
 
       // Period badge
       doc.setFillColor(30, 40, 70);
-      doc.roundedRect(W/2 - 50, 96, 100, 20, 3, 3, 'F');
+      doc.roundedRect(W/2 - 52, 113, 104, 15, 3, 3, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
       doc.setTextColor(...gold);
-      doc.text(label, W / 2, 104, { align: 'center' });
+      doc.text(label, W / 2, 120, { align: 'center' });
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       doc.setTextColor(...muted);
-      doc.text(rangeStr, W / 2, 111, { align: 'center' });
+      doc.text(rangeStr, W / 2, 126, { align: 'center' });
+
+      // Gold accent stripe
+      doc.setFillColor(...gold);
+      doc.rect(0, 131, W, 2, 'F');
 
       // KPI quick-stats box
       doc.setFillColor(15, 25, 55);
-      doc.roundedRect(14, 126, W - 28, 52, 3, 3, 'F');
+      doc.roundedRect(14, 136, W - 28, 52, 3, 3, 'F');
       const kpiItems = [
         ['Users', kpi.users.toLocaleString()],
         ['Sessions', kpi.sessions.toLocaleString()],
         ['Page Views', kpi.views.toLocaleString()],
-        ['Conversions', kpi.conversions.toLocaleString()],
+        ['Adm. Convs', kpi.conversions.toLocaleString()],
       ];
       const colW = (W - 28) / 4;
       kpiItems.forEach((item, idx) => {
@@ -3393,25 +3424,25 @@
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
         doc.setTextColor(...gold);
-        doc.text(item[1], cx, 148, { align: 'center' });
+        doc.text(item[1], cx, 156, { align: 'center' });
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(8);
         doc.setTextColor(...muted);
-        doc.text(item[0], cx, 155, { align: 'center' });
+        doc.text(item[0], cx, 163, { align: 'center' });
         if (idx < 3) {
           doc.setDrawColor(40, 55, 90);
           doc.setLineWidth(0.3);
-          doc.line(14 + colW * (idx + 1), 130, 14 + colW * (idx + 1), 173);
+          doc.line(14 + colW * (idx + 1), 140, 14 + colW * (idx + 1), 183);
         }
       });
 
       // Sections list
       doc.setFillColor(10, 18, 45);
-      doc.roundedRect(14, 188, W - 28, 62, 3, 3, 'F');
+      doc.roundedRect(14, 196, W - 28, 62, 3, 3, 'F');
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(...gold);
-      doc.text('THIS REPORT CONTAINS:', 20, 196);
+      doc.text('THIS REPORT CONTAINS:', 20, 204);
       const sections = [
         '1. Executive Summary & KPIs',   '2. Conversion Event Analysis',
         '3. Daily Traffic Trends',        '4. Top Pages Breakdown',
@@ -3427,7 +3458,7 @@
       sections.forEach((s, i) => {
         const col = i < half ? 0 : 1;
         const row = i < half ? i : i - half;
-        doc.text('• ' + s, 20 + col * 90, 204 + row * 7);
+        doc.text('• ' + s, 20 + col * 90, 211 + row * 7);
       });
 
       // Footer on cover
@@ -3465,7 +3496,7 @@
         bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0: { cellWidth: 52 }, 1: { cellWidth: 34 }, 2: { cellWidth: 86 } },
+        columnStyles: { 0: { cellWidth: 58 }, 1: { cellWidth: 38 }, 2: { cellWidth: 86 } },
       });
       y = doc.lastAutoTable.finalY + 8;
 
@@ -3487,7 +3518,7 @@
         bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:46}, 1:{cellWidth:36}, 2:{cellWidth:22}, 3:{cellWidth:26}, 4:{cellWidth:28} },
+        columnStyles: { 0:{cellWidth:52}, 1:{cellWidth:42}, 2:{cellWidth:24}, 3:{cellWidth:30}, 4:{cellWidth:34} },
       });
       y = doc.lastAutoTable.finalY + 6;
       y = sectionHead('2b. Portal Activity (Excluded from Admissions Rate)', y);
@@ -3501,7 +3532,7 @@
         headStyles: { fillColor: [80, 80, 120], textColor: white, fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:46}, 1:{cellWidth:36}, 2:{cellWidth:22}, 3:{cellWidth:26}, 4:{cellWidth:28} },
+        columnStyles: { 0:{cellWidth:52}, 1:{cellWidth:42}, 2:{cellWidth:24}, 3:{cellWidth:30}, 4:{cellWidth:34} },
       });
 
       // ─────────────────────────────────────────────────────────
@@ -3535,7 +3566,7 @@
         bodyStyles: { fontSize: 7.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:28}, 1:{cellWidth:22}, 2:{cellWidth:26}, 3:{cellWidth:30}, 4:{cellWidth:26} },
+        columnStyles: { 0:{cellWidth:42}, 1:{cellWidth:34}, 2:{cellWidth:36}, 3:{cellWidth:38}, 4:{cellWidth:32} },
       });
       y = doc.lastAutoTable.finalY + 6;
       if (days > 30) {
@@ -3565,7 +3596,7 @@
         bodyStyles: { fontSize: 7.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:62}, 2:{cellWidth:18}, 3:{cellWidth:18}, 4:{cellWidth:18}, 5:{cellWidth:18}, 6:{cellWidth:18} },
+        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:70}, 2:{cellWidth:20}, 3:{cellWidth:20}, 4:{cellWidth:22}, 5:{cellWidth:22}, 6:{cellWidth:20} },
       });
       y = doc.lastAutoTable.finalY + 8;
 
@@ -3584,7 +3615,7 @@
         bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:56}, 2:{cellWidth:20}, 3:{cellWidth:20}, 4:{cellWidth:26}, 5:{cellWidth:22} },
+        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:66}, 2:{cellWidth:22}, 3:{cellWidth:22}, 4:{cellWidth:32}, 5:{cellWidth:32} },
       });
 
       // ─────────────────────────────────────────────────────────
@@ -3606,7 +3637,7 @@
         bodyStyles: { fontSize: 8.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:60}, 1:{cellWidth:34}, 2:{cellWidth:30}, 3:{cellWidth:34} },
+        columnStyles: { 0:{cellWidth:72}, 1:{cellWidth:40}, 2:{cellWidth:34}, 3:{cellWidth:36} },
       });
       y = doc.lastAutoTable.finalY + 8;
 
@@ -3623,7 +3654,7 @@
         bodyStyles: { fontSize: 8.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:34}, 1:{cellWidth:30}, 2:{cellWidth:24}, 3:{cellWidth:34}, 4:{cellWidth:34} },
+        columnStyles: { 0:{cellWidth:40}, 1:{cellWidth:34}, 2:{cellWidth:28}, 3:{cellWidth:40}, 4:{cellWidth:40} },
       });
       y = doc.lastAutoTable.finalY + 8;
 
@@ -3640,7 +3671,7 @@
         bodyStyles: { fontSize: 8.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:34}, 1:{cellWidth:28}, 2:{cellWidth:26}, 3:{cellWidth:28}, 4:{cellWidth:34} },
+        columnStyles: { 0:{cellWidth:40}, 1:{cellWidth:34}, 2:{cellWidth:30}, 3:{cellWidth:36}, 4:{cellWidth:42} },
       });
       y = doc.lastAutoTable.finalY + 8;
 
@@ -3664,7 +3695,7 @@
         bodyStyles: { fontSize: 8.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 14, right: 14 },
-        columnStyles: { 0:{cellWidth:38}, 1:{cellWidth:26}, 2:{cellWidth:30}, 3:{cellWidth:28}, 4:{cellWidth:30} },
+        columnStyles: { 0:{cellWidth:44}, 1:{cellWidth:30}, 2:{cellWidth:36}, 3:{cellWidth:34}, 4:{cellWidth:38} },
       });
 
       // ─────────────────────────────────────────────────────────
@@ -3693,7 +3724,7 @@
         bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 8, right: 8 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:40}, 3:{cellWidth:12}, 4:{cellWidth:18}, 5:{cellWidth:18}, 6:{cellWidth:22}, 7:{cellWidth:18} },
+        columnStyles: { 0:{cellWidth:10}, 1:{cellWidth:28}, 2:{cellWidth:48}, 3:{cellWidth:14}, 4:{cellWidth:22}, 5:{cellWidth:22}, 6:{cellWidth:26}, 7:{cellWidth:24} },
       });
       y = doc.lastAutoTable.finalY + 4;
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...muted);
@@ -3723,7 +3754,7 @@
         bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 8, right: 8 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:44}, 3:{cellWidth:22}, 4:{cellWidth:18}, 5:{cellWidth:22}, 6:{cellWidth:22} },
+        columnStyles: { 0:{cellWidth:10}, 1:{cellWidth:30}, 2:{cellWidth:58}, 3:{cellWidth:22}, 4:{cellWidth:22}, 5:{cellWidth:26}, 6:{cellWidth:26} },
       });
       y = doc.lastAutoTable.finalY + 4;
       doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...muted);
@@ -3767,7 +3798,7 @@
         bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 8, right: 8 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:36}, 3:{cellWidth:44}, 4:{cellWidth:18}, 5:{cellWidth:20} },
+        columnStyles: { 0:{cellWidth:10}, 1:{cellWidth:30}, 2:{cellWidth:44}, 3:{cellWidth:52}, 4:{cellWidth:26}, 5:{cellWidth:32} },
       });
       if (admEvtPdf.length > 60) {
         y = doc.lastAutoTable.finalY + 3;
@@ -3799,7 +3830,7 @@
         bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: [240, 238, 255] },
         margin: { left: 8, right: 8 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:36}, 3:{cellWidth:44}, 4:{cellWidth:18}, 5:{cellWidth:20} },
+        columnStyles: { 0:{cellWidth:10}, 1:{cellWidth:30}, 2:{cellWidth:44}, 3:{cellWidth:52}, 4:{cellWidth:26}, 5:{cellWidth:32} },
       });
       if (portalEvtPdf.length > 30) {
         y = doc.lastAutoTable.finalY + 3;
