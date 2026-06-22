@@ -2550,7 +2550,18 @@
     // ============================================================
     // RENDER TABLES
     // ============================================================
-    function renderTables() {
+    function renderTables(range) {
+      range = range || currentRange;
+      // Scale source conv values to admissions-only total for the selected period
+      const _kpi  = DEMO_KPI[range]  || DEMO_KPI['7d'];
+      const _conv = DEMO_CONV[range] || DEMO_CONV['7d'];
+      const admConvForSrc = _conv.apply_now + _conv.request_info + _conv.contact + _conv.call + _conv.whatsapp;
+      const rawSrcConvTotal = DEMO_SOURCES.reduce((a, s) => a + s.conv, 0);
+      let scaledSrcConvs = DEMO_SOURCES.map(s => Math.round(s.conv / rawSrcConvTotal * admConvForSrc));
+      // Fix rounding drift so the column sums exactly to admConvForSrc
+      const scaledSum = scaledSrcConvs.reduce((a, b) => a + b, 0);
+      if (scaledSum !== admConvForSrc) scaledSrcConvs[0] += (admConvForSrc - scaledSum);
+
       const maxViews = DEMO_TOP_PAGES[0].views;
 
       document.getElementById('topPagesBody').innerHTML = DEMO_TOP_PAGES.map((p, i) => `
@@ -2579,7 +2590,7 @@
               <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${Math.round(s.users/maxUsers*100)}%;"></div></div>
             </div>
           </td>
-          <td><span class="pill blue">${s.conv}</span></td>
+          <td><span class="pill blue">${scaledSrcConvs[i]}</span></td>
         </tr>
       `).join('');
       document.getElementById('sourcesBadge').textContent = DEMO_SOURCES.length + ' sources';
@@ -2798,6 +2809,7 @@
       setTimeout(() => {
         renderKPIs(currentRange);
         renderConversions(currentRange);
+        renderTables(currentRange);
         buildCharts(currentRange);
         btn.innerHTML = '🔄 Refresh';
         btn.disabled = false;
@@ -2812,7 +2824,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       renderKPIs(currentRange);
       renderConversions(currentRange);
-      renderTables();
+      renderTables(currentRange);
       buildCharts(currentRange);
       loadLookerUrl();
 
@@ -2895,7 +2907,7 @@
       // ── Scale factors: align static 90d demo data to the selected period
       const _scalePV   = kpi.views    / DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
       const _scaleSrc  = kpi.users    / DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
-      const _scaleConv = totalConvEvents / Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
+      const _scaleConv = (conv.apply_now + conv.request_info + conv.contact + conv.call + conv.whatsapp) / Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
       const _scaleCtry = kpi.users    / DEMO_COUNTRIES.reduce((a,c)=>a+c.users,0);
       const _scaleDev  = kpi.sessions / DEMO_DEVICES.reduce((a,d)=>a+d.count,0);
       const _scaleBrw  = kpi.users    / DEMO_BROWSERS.reduce((a,b)=>a+b.users,0);
@@ -3184,7 +3196,7 @@
       // ── Scale factors: align static 90d demo data to selected period
       const _sPg   = kpi.views    / DEMO_TOP_PAGES.reduce((a,p)=>a+p.views,0);
       const _sSrc  = kpi.users    / DEMO_SOURCES.reduce((a,s)=>a+s.users,0);
-      const _sConv = totalConvEvts/ Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
+      const _sConv = (conv.apply_now + conv.request_info + conv.contact + conv.call + conv.whatsapp) / Math.max(1, DEMO_SOURCES.reduce((a,s)=>a+s.conv,0));
       const _sCtry = kpi.users    / DEMO_COUNTRIES.reduce((a,c)=>a+c.users,0);
       const _sDev  = kpi.sessions / DEMO_DEVICES.reduce((a,d)=>a+d.count,0);
       const _sBrw  = kpi.users    / DEMO_BROWSERS.reduce((a,b)=>a+b.users,0);
