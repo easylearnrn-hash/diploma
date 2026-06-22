@@ -291,6 +291,7 @@
 
     tabsWrap.querySelectorAll('.accred-tab').forEach(function(t, i) {
       t.classList.toggle('active', i === current);
+      if (i === current) t.scrollIntoView({ inline: 'nearest', block: 'nearest' });
     });
     dotsWrap.querySelectorAll('.accred-dot').forEach(function(d, i) {
       d.classList.toggle('active', i === current);
