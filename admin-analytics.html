@@ -3642,49 +3642,73 @@
       // ─────────────────────────────────────────────────────────
       doc.addPage();
       y = pageHeader('Conversion Events Log');
-      y = sectionHead('12. Conversion Events — All Records', y);
+      y = sectionHead('12a. Admissions Conversion Events', y);
 
-      const evtTypes2 = [
-        {key:'apply_now_click', count: conv.apply_now},
+      const admEvtTypesPDF = [
+        {key:'apply_now_click',    count: conv.apply_now},
         {key:'request_info_click', count: conv.request_info},
-        {key:'login_submit', count: conv.login},
-        {key:'contact_submit', count: conv.contact},
-        {key:'call_click', count: conv.call},
-        {key:'whatsapp_click', count: conv.whatsapp},
+        {key:'contact_submit',     count: conv.contact},
+        {key:'call_click',         count: conv.call},
+        {key:'whatsapp_click',     count: conv.whatsapp},
       ];
-      const allEvtPdf = [];
-      evtTypes2.forEach(e => {
-        buildConvRows(Math.max(4, e.count), days, e.key).forEach(r => allEvtPdf.push(r));
+      const admEvtPdf = [];
+      admEvtTypesPDF.forEach(e => {
+        buildConvRows(Math.max(4, e.count), days, e.key).forEach(r => admEvtPdf.push(r));
       });
-      allEvtPdf.sort((a,b)=>b.ts-a.ts);
+      admEvtPdf.sort((a,b) => b.ts - a.ts);
 
       doc.autoTable({
         startY: y,
-        head: [['#', 'Timestamp', 'Event', 'Trigger Page', 'Device', 'Country', 'Category']],
-        body: allEvtPdf.slice(0, 80).map((r,i) => {
-          const cat = r.event.includes('apply')||r.event.includes('info') ? 'Admissions' :
-                      r.event.includes('login') ? 'Portal' :
-                      r.event.includes('contact') ? 'Support' : 'Engagement';
-          return [
-            i+1,
-            r.ts.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}),
-            r.event, r.page,
-            r.device.replace(/\s\S+$/,''),
-            r.country.replace(/\s\S+$/,''),
-            cat,
-          ];
-        }),
+        head: [['#', 'Timestamp', 'Event', 'Trigger Page', 'Device', 'Country']],
+        body: admEvtPdf.slice(0, 60).map((r, i) => [
+          i+1,
+          r.ts.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}),
+          r.event, r.page,
+          r.device.replace(/\s\S+$/,''),
+          r.country.replace(/\s\S+$/,''),
+        ]),
         theme: 'striped',
         headStyles: { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 7 },
         bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
         margin: { left: 8, right: 8 },
-        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:32}, 3:{cellWidth:40}, 4:{cellWidth:18}, 5:{cellWidth:18}, 6:{cellWidth:20} },
+        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:36}, 3:{cellWidth:44}, 4:{cellWidth:18}, 5:{cellWidth:20} },
       });
-      if (allEvtPdf.length > 80) {
-        y = doc.lastAutoTable.finalY + 4;
-        doc.setFont('helvetica', 'italic'); doc.setFontSize(7); doc.setTextColor(...muted);
-        doc.text(`Showing 80 of ${allEvtPdf.length} events. Full dataset available in Excel export (Sheet 13).`, 14, y);
+      if (admEvtPdf.length > 60) {
+        y = doc.lastAutoTable.finalY + 3;
+        doc.setFont('helvetica','italic'); doc.setFontSize(7); doc.setTextColor(...muted);
+        doc.text(`Showing 60 of ${admEvtPdf.length} admissions events. Full dataset in Excel Sheet 13.`, 14, y);
+      }
+
+      y = doc.lastAutoTable.finalY + 8;
+      if (y > 230) { doc.addPage(); y = pageHeader('Conversion Events Log'); }
+      y = sectionHead('12b. Portal Activity Events (Excluded from Admissions Rate)', y);
+
+      const portalEvtPdf = [];
+      buildConvRows(Math.max(4, conv.login), days, 'login_submit').forEach(r => portalEvtPdf.push(r));
+      portalEvtPdf.sort((a,b) => b.ts - a.ts);
+
+      doc.autoTable({
+        startY: y,
+        head: [['#', 'Timestamp', 'Event', 'Trigger Page', 'Device', 'Country']],
+        body: portalEvtPdf.slice(0, 30).map((r, i) => [
+          i+1,
+          r.ts.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}),
+          r.event, r.page,
+          r.device.replace(/\s\S+$/,''),
+          r.country.replace(/\s\S+$/,''),
+        ]),
+        theme: 'striped',
+        headStyles: { fillColor: [70, 60, 120], textColor: white, fontStyle: 'bold', fontSize: 7 },
+        bodyStyles: { fontSize: 6.5, textColor: [30, 50, 80] },
+        alternateRowStyles: { fillColor: [240, 238, 255] },
+        margin: { left: 8, right: 8 },
+        columnStyles: { 0:{cellWidth:8}, 1:{cellWidth:26}, 2:{cellWidth:36}, 3:{cellWidth:44}, 4:{cellWidth:18}, 5:{cellWidth:20} },
+      });
+      if (portalEvtPdf.length > 30) {
+        y = doc.lastAutoTable.finalY + 3;
+        doc.setFont('helvetica','italic'); doc.setFontSize(7); doc.setTextColor(...muted);
+        doc.text(`Showing 30 of ${portalEvtPdf.length} portal login events. Full dataset in Excel Sheet 13.`, 14, y);
       }
 
       // ─────────────────────────────────────────────────────────
