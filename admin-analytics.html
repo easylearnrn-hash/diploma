@@ -1480,7 +1480,7 @@
       <div class="chart-header">
         <div>
           <div class="chart-title">🎯 Conversions Trend</div>
-          <div class="chart-subtitle">apply_now_click · request_info · login_submit · contact_submit</div>
+          <div class="chart-subtitle">apply_now_click · request_info · contact_submit · call_click · whatsapp_click <span style="opacity:0.55;font-size:9px;">· login_submit tracked separately</span></div>
         </div>
         <div class="chart-tabs">
           <button class="chart-tab active" onclick="switchConvMetric('all',this)">All Events</button>
@@ -1782,10 +1782,12 @@
     }
 
     const DEMO_KPI = {
-      '7d':  { users: 312, newUsers: 218, sessions: 489, views: 1204, engRate: '64%', avgTime: '2m 38s', events: 3872, conversions: 28 },
-      '28d': { users: 1241, newUsers: 870, sessions: 1987, views: 4830, engRate: '61%', avgTime: '2m 51s', events: 15280, conversions: 94 },
-      '90d': { users: 3850, newUsers: 2640, sessions: 6120, views: 14700, engRate: '59%', avgTime: '2m 44s', events: 48200, conversions: 287 },
-      'today': { users: 47, newUsers: 31, sessions: 62, views: 178, engRate: '68%', avgTime: '2m 14s', events: 540, conversions: 4 },
+      // conversions = admissions-only (apply_now + request_info + contact + call + whatsapp)
+      // portalLogins tracked separately — NOT counted in admissions conversion rate
+      '7d':    { users: 312,  newUsers: 218,  sessions: 489,  views: 1204,  engRate: '64%', avgTime: '2m 38s', events: 3872,  conversions: 38,  portalLogins: 42  },
+      '28d':   { users: 1241, newUsers: 870,  sessions: 1987, views: 4830,  engRate: '61%', avgTime: '2m 51s', events: 15280, conversions: 147, portalLogins: 187 },
+      '90d':   { users: 3850, newUsers: 2640, sessions: 6120, views: 14700, engRate: '59%', avgTime: '2m 44s', events: 48200, conversions: 448, portalLogins: 570 },
+      'today': { users: 47,   newUsers: 31,   sessions: 62,   views: 178,   engRate: '68%', avgTime: '2m 14s', events: 540,   conversions: 4,   portalLogins: 7   },
     };
 
     const DEMO_CONV = {
@@ -2083,23 +2085,41 @@
         ];
 
       } else if (type === 'conversions') {
-        const allConvEvents = ['apply_now_click','request_info_click','login_submit','contact_submit','call_click','whatsapp_click'];
-        const ts = makeDemoTimestamps(Math.min(d.conversions * 3, 150), days);
-        rows = ts.map(t => ({ ts: t, event: rnd(allConvEvents), page: rnd(PAGE_LIST), device: rnd(DEVICE_LIST), country: rnd(COUNTRY_LIST) }));
-        icon = '🎯'; title = 'Key Conversions'; subtitle = 'All conversion events — newest first';
+        const admEvents = ['apply_now_click','request_info_click','contact_submit','call_click','whatsapp_click'];
         const convD = DEMO_CONV[currentRange] || DEMO_CONV['7d'];
+        const ts = makeDemoTimestamps(Math.min(d.conversions * 2, 150), days);
+        rows = ts.map(t => ({ ts: t, event: rnd(admEvents), page: rnd(PAGE_LIST), device: rnd(DEVICE_LIST), country: rnd(COUNTRY_LIST) }));
+        icon = '🎯'; title = 'Admissions Conversions'; subtitle = 'Apply / contact / info events — login excluded';
         summaryStats = [
-          { label:'Total Conversions', value: d.conversions.toLocaleString(), gold: true, isAllFilter: true },
+          { label:'Admissions Conv.',  value: d.conversions.toLocaleString(),    gold: true, isAllFilter: true },
           { label:'Apply Now',         value: convD.apply_now, filter: r => r.event === 'apply_now_click' },
-          { label:'Logins',            value: convD.login,     filter: r => r.event === 'login_submit' },
+          { label:'Request Info',      value: convD.request_info, filter: r => r.event === 'request_info_click' },
           { label:'Contact',           value: convD.contact,   filter: r => r.event === 'contact_submit' },
         ];
         cols = [
           { key:'ts',      label:'Date & Time', type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
-          { key:'event',   label:'Event',       type:'string', render: r => { const c = r.event.includes('apply')?'gold':r.event.includes('login')?'blue':r.event.includes('contact')?'green':r.event.includes('call')?'purple':'amber'; return `<span class="detail-pill ${c}">${r.event}</span>`; } },
+          { key:'event',   label:'Event',       type:'string', render: r => { const c = r.event.includes('apply')?'gold':r.event.includes('info')?'purple':r.event.includes('contact')?'green':r.event.includes('call')?'blue':'amber'; return `<span class="detail-pill ${c}">${r.event}</span>`; } },
           { key:'page',    label:'Page',        type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
           { key:'device',  label:'Device',      type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
           { key:'country', label:'Country',     type:'string', render: r => r.country },
+        ];
+
+      } else if (type === 'portal') {
+        const convD2 = DEMO_CONV[currentRange] || DEMO_CONV['7d'];
+        rows = buildConvRows(Math.min(convD2.login * 2, 150), days, 'login_submit');
+        icon = '🔐'; title = 'Portal Activity'; subtitle = 'Student & staff portal logins — excluded from admissions rate';
+        summaryStats = [
+          { label:'Portal Logins',        value: d.portalLogins.toLocaleString(), gold: true, isAllFilter: true },
+          { label:'Login Rate',           value: ((d.portalLogins / d.sessions) * 100).toFixed(1) + '%' },
+          { label:'Excl. from Adm. Rate', value: '✓ Yes' },
+          { label:'Est. Students',        value: Math.round(d.portalLogins * 0.9).toLocaleString() },
+        ];
+        cols = [
+          { key:'ts',      label:'Date & Time',  type:'date',   render: r => `<span class="ts-cell">${fmtTs(r.ts)}</span>` },
+          { key:'event',   label:'Event',        type:'string', render: r => `<span class="detail-pill purple">${r.event}</span>` },
+          { key:'page',    label:'Trigger Page', type:'string', render: r => `<span class="page-cell">${r.page}</span>` },
+          { key:'device',  label:'Device',       type:'string', render: r => `<span class="detail-pill blue">${r.device}</span>` },
+          { key:'country', label:'Country',      type:'string', render: r => r.country },
         ];
       }
 
@@ -2460,15 +2480,17 @@
       const d = DEMO_KPI[range] || DEMO_KPI['7d'];
       const isCompare = compareEnabled;
 
+      const admRate = ((d.conversions / d.sessions) * 100).toFixed(1) + '%';
       const cards = [
-        { icon:'👥', label:'Total Users',            value: d.users.toLocaleString(),    trend:'+8%',  up:true,  sub:'vs prev period',           type:'users'       },
-        { icon:'✨', label:'New Users',              value: d.newUsers.toLocaleString(),  trend:'+12%', up:true,  sub:'first-time visitors',       type:'newusers'    },
-        { icon:'📊', label:'Sessions',               value: d.sessions.toLocaleString(),  trend:'+5%',  up:true,  sub:'total site visits',         type:'sessions'    },
-        { icon:'📄', label:'Page Views',             value: d.views.toLocaleString(),     trend:'+3%',  up:true,  sub:'total page impressions',    type:'pageviews'   },
-        { icon:'⏱️', label:'Avg Engagement Time',   value: d.avgTime,                    trend:'-4%',  up:false, sub:'per session',               type:'avgtime'     },
-        { icon:'💡', label:'Engagement Rate',        value: d.engRate,                    trend:'+2%',  up:true,  sub:'sessions with engagement',  type:'engrate'     },
-        { icon:'🎬', label:'Total Events',           value: d.events.toLocaleString(),    trend:'+18%', up:true,  sub:'all GA4 events',             type:'events'      },
-        { icon:'🎯', label:'Key Conversions',        value: d.conversions.toLocaleString(),trend:'+21%',up:true,  sub:'apply/contact/login',       type:'conversions' },
+        { icon:'👥', label:'Total Users',          value: d.users.toLocaleString(),         trend:'+8%',  up:true,  sub:'vs prev period',                   type:'users'       },
+        { icon:'✨', label:'New Users',            value: d.newUsers.toLocaleString(),       trend:'+12%', up:true,  sub:'first-time visitors',               type:'newusers'    },
+        { icon:'📊', label:'Sessions',             value: d.sessions.toLocaleString(),       trend:'+5%',  up:true,  sub:'total site visits',                 type:'sessions'    },
+        { icon:'📄', label:'Page Views',           value: d.views.toLocaleString(),          trend:'+3%',  up:true,  sub:'total page impressions',            type:'pageviews'   },
+        { icon:'⏱️', label:'Avg Engagement Time', value: d.avgTime,                         trend:'-4%',  up:false, sub:'per session',                       type:'avgtime'     },
+        { icon:'💡', label:'Engagement Rate',      value: d.engRate,                         trend:'+2%',  up:true,  sub:'sessions with engagement',           type:'engrate'     },
+        { icon:'🎯', label:'Admissions Conv.',     value: d.conversions.toLocaleString(),    trend:'+21%', up:true,  sub:'conv. rate: ' + admRate,             type:'conversions' },
+        { icon:'🎬', label:'Total Events',         value: d.events.toLocaleString(),         trend:'+18%', up:true,  sub:'all GA4 events',                     type:'events'      },
+        { icon:'🔐', label:'Portal Activity',      value: d.portalLogins.toLocaleString(),   trend:'+5%',  up:true,  sub:'login_submit — excl. from rate',    type:'portal'      },
       ];
 
       const grid = document.getElementById('kpiGrid');
@@ -2490,17 +2512,17 @@
     // ============================================================
     function renderConversions(range) {
       const d = DEMO_CONV[range] || DEMO_CONV['7d'];
-      const convs = [
-        { icon:'📝', label:'Apply Now Clicks',     key:'apply_now',    event:'apply_now_click'    },
-        { icon:'ℹ️', label:'Request Info Clicks',  key:'request_info', event:'request_info_click' },
-        { icon:'🔐', label:'Login Submits',        key:'login',        event:'login_submit'       },
-        { icon:'📬', label:'Contact Submits',      key:'contact',      event:'contact_submit'     },
-        { icon:'📞', label:'Phone Call Clicks',    key:'call',         event:'call_click'         },
-        { icon:'💬', label:'WhatsApp Clicks',      key:'whatsapp',     event:'whatsapp_click'     },
+      const admConvs = [
+        { icon:'📝', label:'Apply Now Clicks',    key:'apply_now',    event:'apply_now_click'    },
+        { icon:'ℹ️', label:'Request Info Clicks', key:'request_info', event:'request_info_click' },
+        { icon:'📬', label:'Contact Submits',     key:'contact',      event:'contact_submit'     },
+        { icon:'📞', label:'Phone Call Clicks',   key:'call',         event:'call_click'         },
+        { icon:'💬', label:'WhatsApp Clicks',     key:'whatsapp',     event:'whatsapp_click'     },
       ];
-
-      const grid = document.getElementById('conversionsGrid');
-      grid.innerHTML = convs.map((c, i) => `
+      const portalConvs = [
+        { icon:'🔐', label:'Login Submits',       key:'login',        event:'login_submit'       },
+      ];
+      const makeConvCard = (c, i) => `
         <div class="conv-card clickable" style="animation-delay:${i * 0.05}s;" onclick="openConvModal('${c.key}')" title="Click for event detail">
           <div class="conv-icon">${c.icon}</div>
           <div>
@@ -2508,8 +2530,21 @@
             <div class="conv-value">${(d[c.key] || 0).toLocaleString()}</div>
             <div class="conv-trend">↑ event: <code style="font-size:10px;background:rgba(201,168,76,0.1);padding:1px 5px;border-radius:4px;">${c.event}</code></div>
           </div>
-        </div>
-      `).join('');
+        </div>`;
+
+      const grid = document.getElementById('conversionsGrid');
+      grid.innerHTML =
+        `<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:4px 0 8px;">
+           <span style="font-size:11px;font-weight:700;color:var(--gold-primary);text-transform:uppercase;letter-spacing:0.8px;">🎯 Admissions Conversions</span>
+           <div style="flex:1;height:1px;background:rgba(201,168,76,0.25);"></div>
+         </div>` +
+        admConvs.map((c, i) => makeConvCard(c, i)).join('') +
+        `<div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:12px 0 8px;">
+           <span style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.8px;">🔐 Portal Activity</span>
+           <span style="font-size:10px;color:var(--text-muted);opacity:0.65;">— not counted in admissions rate</span>
+           <div style="flex:1;height:1px;background:rgba(255,255,255,0.08);"></div>
+         </div>` +
+        portalConvs.map((c, i) => makeConvCard(c, admConvs.length + i)).join('');
     }
 
     // ============================================================
@@ -2924,16 +2959,18 @@
         ['Total Events',             kpi.events,           'All GA4 event hits'],
         ['Events per Session',       eventsPerSession,     'events ÷ sessions'],
         [],
-        ['── CONVERSIONS ──', '', ''],
-        ['Total Conversions',        kpi.conversions,      'Defined conversion events'],
-        ['Conversion Rate',          convRate,             'conversions ÷ sessions × 100'],
-        ['Total Conversion Events',  totalConvEvents,      'Sum of all conv event types'],
+        ['── ADMISSIONS CONVERSIONS ──', '', ''],
+        ['Admissions Conversions',   kpi.conversions,      'apply_now + request_info + contact + call + whatsapp'],
+        ['Admissions Conv. Rate',    convRate,             'admissions convs ÷ sessions × 100'],
         ['Apply Now Clicks',         conv.apply_now,       'apply_now_click GA4 event'],
         ['Request Info Clicks',      conv.request_info,    'request_info_click GA4 event'],
-        ['Portal Logins',            conv.login,           'login_submit GA4 event'],
         ['Contact Form Submits',     conv.contact,         'contact_submit GA4 event'],
         ['Phone Call Clicks',        conv.call,            'call_click GA4 event'],
         ['WhatsApp Clicks',          conv.whatsapp,        'whatsapp_click GA4 event'],
+        [],
+        ['── PORTAL ACTIVITY (excl. from admissions rate) ──', '', ''],
+        ['Portal Logins',            conv.login,           'login_submit — existing students/staff'],
+        ['Portal Login Rate',        ((conv.login/kpi.sessions)*100).toFixed(2)+'%', 'login_submit ÷ sessions × 100'],
       ];
       const wsKPI = XLSX.utils.aoa_to_sheet(kpiData);
       wsKPI['!cols'] = [{wch:28},{wch:16},{wch:42}];
@@ -2960,16 +2997,20 @@
       XLSX.utils.book_append_sheet(wb, wsTrend, '3. Daily Trend');
 
       // ── SHEET 4: Conversions ──────────────────────────────────
+      const admConvXL = conv.apply_now + conv.request_info + conv.contact + conv.call + conv.whatsapp;
       const convData = [
-        ['Event Name', 'GA4 Event Key', 'Count', 'Conv Rate vs Sessions', 'Conv Rate vs Total Convs', 'Notes'],
-        ['Apply Now Clicks',    'apply_now_click',    conv.apply_now,    ((conv.apply_now/kpi.sessions)*100).toFixed(2)+'%',    ((conv.apply_now/totalConvEvents)*100).toFixed(1)+'%',    'Primary CTA — admissions funnel'],
-        ['Request Info Clicks', 'request_info_click', conv.request_info, ((conv.request_info/kpi.sessions)*100).toFixed(2)+'%', ((conv.request_info/totalConvEvents)*100).toFixed(1)+'%', 'Top of funnel interest'],
-        ['Portal Logins',       'login_submit',       conv.login,        ((conv.login/kpi.sessions)*100).toFixed(2)+'%',        ((conv.login/totalConvEvents)*100).toFixed(1)+'%',        'Existing student engagement'],
-        ['Contact Form',        'contact_submit',     conv.contact,      ((conv.contact/kpi.sessions)*100).toFixed(2)+'%',      ((conv.contact/totalConvEvents)*100).toFixed(1)+'%',      'Direct inquiry submission'],
-        ['Phone Call Clicks',   'call_click',         conv.call,         ((conv.call/kpi.sessions)*100).toFixed(2)+'%',         ((conv.call/totalConvEvents)*100).toFixed(1)+'%',         'Outbound call intent'],
-        ['WhatsApp Clicks',     'whatsapp_click',     conv.whatsapp,     ((conv.whatsapp/kpi.sessions)*100).toFixed(2)+'%',     ((conv.whatsapp/totalConvEvents)*100).toFixed(1)+'%',     'Messaging channel click'],
+        ['─── ADMISSIONS CONVERSIONS (counted in admissions rate) ───', '', '', '', '', ''],
+        ['Event Name', 'GA4 Event Key', 'Count', 'Rate vs Sessions', '% of Adm. Convs', 'Notes'],
+        ['Apply Now Clicks',    'apply_now_click',    conv.apply_now,    ((conv.apply_now/kpi.sessions)*100).toFixed(2)+'%',    admConvXL > 0 ? ((conv.apply_now/admConvXL)*100).toFixed(1)+'%' : '0%',    'Primary CTA — admissions funnel'],
+        ['Request Info Clicks', 'request_info_click', conv.request_info, ((conv.request_info/kpi.sessions)*100).toFixed(2)+'%', admConvXL > 0 ? ((conv.request_info/admConvXL)*100).toFixed(1)+'%' : '0%', 'Top of funnel interest'],
+        ['Contact Form',        'contact_submit',     conv.contact,      ((conv.contact/kpi.sessions)*100).toFixed(2)+'%',      admConvXL > 0 ? ((conv.contact/admConvXL)*100).toFixed(1)+'%' : '0%',      'Direct inquiry submission'],
+        ['Phone Call Clicks',   'call_click',         conv.call,         ((conv.call/kpi.sessions)*100).toFixed(2)+'%',         admConvXL > 0 ? ((conv.call/admConvXL)*100).toFixed(1)+'%' : '0%',         'Outbound call intent'],
+        ['WhatsApp Clicks',     'whatsapp_click',     conv.whatsapp,     ((conv.whatsapp/kpi.sessions)*100).toFixed(2)+'%',     admConvXL > 0 ? ((conv.whatsapp/admConvXL)*100).toFixed(1)+'%' : '0%',     'Messaging channel click'],
+        ['ADMISSIONS TOTAL',    '',                   admConvXL,         ((admConvXL/kpi.sessions)*100).toFixed(2)+'%',         '100%', ''],
         [],
-        ['TOTAL', '', totalConvEvents, ((totalConvEvents/kpi.sessions)*100).toFixed(2)+'%', '100%', ''],
+        ['─── PORTAL ACTIVITY (excluded from admissions rate) ───', '', '', '', '', ''],
+        ['Event Name', 'GA4 Event Key', 'Count', 'Rate vs Sessions', 'Category', 'Notes'],
+        ['Portal Logins',       'login_submit',       conv.login,        ((conv.login/kpi.sessions)*100).toFixed(2)+'%',        'Existing Students/Staff', 'Excluded from admissions conversion rate'],
       ];
       const wsConv = XLSX.utils.aoa_to_sheet(convData);
       wsConv['!cols'] = [{wch:24},{wch:22},{wch:10},{wch:24},{wch:26},{wch:36}];
@@ -3306,7 +3347,8 @@
           ['Engagement Rate',         kpi.engRate,                        `Bounce rate: ${bounceRate}`],
           ['Avg. Session Duration',   kpi.avgTime,                        'Mean time on site'],
           ['Total Events',            kpi.events.toLocaleString(),        `${(kpi.events/kpi.sessions).toFixed(1)} events per session`],
-          ['Conversions',             kpi.conversions.toLocaleString(),   `Conversion rate: ${convRate}`],
+          ['Admissions Conversions',  kpi.conversions.toLocaleString(),   `Adm. conv. rate: ${convRate} — login excluded`],
+          ['Portal Logins',           kpi.portalLogins.toLocaleString(),  'login_submit — tracked separately, excl. from rate'],
         ],
         theme: 'grid',
         headStyles: { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 8 },
@@ -3319,21 +3361,35 @@
 
       y = sectionHead('2. Conversion Event Analysis', y);
 
+      const admConvPDF = conv.apply_now + conv.request_info + conv.contact + conv.call + conv.whatsapp;
       doc.autoTable({
         startY: y,
-        head: [['Event Name', 'GA4 Key', 'Count', 'Conv Rate', '% of All Convs']],
+        head: [['Event Name', 'GA4 Key', 'Count', 'Rate vs Sessions', '% of Adm. Convs']],
         body: [
-          ['Apply Now Clicks',    'apply_now_click',    conv.apply_now,    ((conv.apply_now/kpi.sessions)*100).toFixed(2)+'%',    ((conv.apply_now/totalConvEvts)*100).toFixed(1)+'%'],
-          ['Request Info Clicks', 'request_info_click', conv.request_info, ((conv.request_info/kpi.sessions)*100).toFixed(2)+'%', ((conv.request_info/totalConvEvts)*100).toFixed(1)+'%'],
-          ['Portal Logins',       'login_submit',       conv.login,        ((conv.login/kpi.sessions)*100).toFixed(2)+'%',        ((conv.login/totalConvEvts)*100).toFixed(1)+'%'],
-          ['Contact Form',        'contact_submit',     conv.contact,      ((conv.contact/kpi.sessions)*100).toFixed(2)+'%',      ((conv.contact/totalConvEvts)*100).toFixed(1)+'%'],
-          ['Phone Call Clicks',   'call_click',         conv.call,         ((conv.call/kpi.sessions)*100).toFixed(2)+'%',         ((conv.call/totalConvEvts)*100).toFixed(1)+'%'],
-          ['WhatsApp Clicks',     'whatsapp_click',     conv.whatsapp,     ((conv.whatsapp/kpi.sessions)*100).toFixed(2)+'%',     ((conv.whatsapp/totalConvEvts)*100).toFixed(1)+'%'],
+          ['Apply Now Clicks',    'apply_now_click',    conv.apply_now,    ((conv.apply_now/kpi.sessions)*100).toFixed(2)+'%',    admConvPDF > 0 ? ((conv.apply_now/admConvPDF)*100).toFixed(1)+'%' : '0%'],
+          ['Request Info Clicks', 'request_info_click', conv.request_info, ((conv.request_info/kpi.sessions)*100).toFixed(2)+'%', admConvPDF > 0 ? ((conv.request_info/admConvPDF)*100).toFixed(1)+'%' : '0%'],
+          ['Contact Form',        'contact_submit',     conv.contact,      ((conv.contact/kpi.sessions)*100).toFixed(2)+'%',      admConvPDF > 0 ? ((conv.contact/admConvPDF)*100).toFixed(1)+'%' : '0%'],
+          ['Phone Call Clicks',   'call_click',         conv.call,         ((conv.call/kpi.sessions)*100).toFixed(2)+'%',         admConvPDF > 0 ? ((conv.call/admConvPDF)*100).toFixed(1)+'%' : '0%'],
+          ['WhatsApp Clicks',     'whatsapp_click',     conv.whatsapp,     ((conv.whatsapp/kpi.sessions)*100).toFixed(2)+'%',     admConvPDF > 0 ? ((conv.whatsapp/admConvPDF)*100).toFixed(1)+'%' : '0%'],
         ],
         theme: 'grid',
         headStyles: { fillColor: gold, textColor: navy, fontStyle: 'bold', fontSize: 8 },
         bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         alternateRowStyles: { fillColor: light },
+        margin: { left: 14, right: 14 },
+        columnStyles: { 0:{cellWidth:46}, 1:{cellWidth:36}, 2:{cellWidth:22}, 3:{cellWidth:26}, 4:{cellWidth:28} },
+      });
+      y = doc.lastAutoTable.finalY + 6;
+      y = sectionHead('2b. Portal Activity (Excluded from Admissions Rate)', y);
+      doc.autoTable({
+        startY: y,
+        head: [['Event Name', 'GA4 Key', 'Count', 'Rate vs Sessions', 'Category']],
+        body: [
+          ['Portal Logins', 'login_submit', conv.login, ((conv.login/kpi.sessions)*100).toFixed(2)+'%', 'Existing Students/Staff'],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [80, 80, 120], textColor: white, fontStyle: 'bold', fontSize: 8 },
+        bodyStyles: { fontSize: 8, textColor: [30, 50, 80] },
         margin: { left: 14, right: 14 },
         columnStyles: { 0:{cellWidth:46}, 1:{cellWidth:36}, 2:{cellWidth:22}, 3:{cellWidth:26}, 4:{cellWidth:28} },
       });
