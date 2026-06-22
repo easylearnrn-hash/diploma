@@ -5,7 +5,7 @@ const ACNHS_HEADER_HTML = `
 <header class="site-header">
   <div class="nav">
     <a href="index.html" class="acn-logo" aria-label="Armenian College of Nursing &amp; Health Sciences">
-      <img class="acn-logo-seal" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==" alt="ACNHS Seal" data-acnhs-logo>
+      <img class="acn-logo-seal" src="${window.ACNHS_LOGO_DATA_URL||'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=='}" alt="ACNHS Seal" data-acnhs-logo>
       <div class="acn-logo-text">
         <span class="line-1">Armenian College of Nursing</span>
         <span class="line-2">&amp; Health Sciences</span>
