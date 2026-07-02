@@ -3074,17 +3074,31 @@
       const content = document.getElementById('questionnaireContent');
       
       try {
-        // Try to find questionnaire by control_number or application id
-        const { data, error } = await vidSupabase
+        // Try to find questionnaire by control_number — take the most recent if duplicates exist
+        let { data, error } = await vidSupabase
           .from('enrollment_questionnaires')
           .select('*')
           .eq('control_number', student.student_id)
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
 
         if (error && error.code !== 'PGRST116') {
           console.error('❌ Error loading questionnaire:', error);
           section.style.display = 'none';
           return;
+        }
+
+        // Fallback: look up by application_id (handles control_number case/whitespace mismatch)
+        if ((!data || !data.questionnaire_data) && student._original_id) {
+          const { data: dataById, error: errorById } = await vidSupabase
+            .from('enrollment_questionnaires')
+            .select('*')
+            .eq('application_id', student._original_id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!errorById) data = dataById;
         }
 
         if (!data || !data.questionnaire_data) {
