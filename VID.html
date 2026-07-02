@@ -2077,72 +2077,95 @@
     function generateTimelineSummary(q) {
       if (!q || !q.personal_info) return null;
       
+      // Normalize: support both snake_case (current) and legacy camelCase field names
+      const pi = q.personal_info;
+      const eh = q.education_history || {};
+      const rt = q.residency_travel || {};
+
+      const dob           = pi.date_of_birth || pi.dateOfBirth || pi.dob || null;
+      const hsGradDate    = eh.hs_grad_date  || eh.hsGradDate  || null;
+      const armenianEdu   = eh.armenian_edu  || eh.armenianEdu || null;
+      const institution   = eh.armenian_institution || eh.armenianInstitution || null;
+      const appDate       = eh.application_date     || eh.applicationDate     || null;
+      const gradDate      = eh.graduation_date       || eh.graduationDate       || null;
+      const departureDate = rt.permanent_departure_date || rt.permanentDepartureDate || rt.departureDate || null;
+      const travelHistory = rt.travel_history || rt.travelHistory || [];
+
       let html = '';
       let birthYear = null;
       let currentAge = null;
       let hsGradYear = null;
       let uniGradYear = null;
-      let pronoun = 'they'; // Default pronoun
+      let pronoun = 'they';
       let pronounCap = 'They';
-      let possessive = 'their';
+      let pronoun_possessive = 'their';
       
-      // 1. Birth date and current age - First paragraph
-      if (q.personal_info.date_of_birth) {
-        const birthDate = new Date(q.personal_info.date_of_birth);
+      // 1. Birth date and current age
+      if (dob) {
+        const birthDate = new Date(dob);
         birthYear = birthDate.getFullYear();
         const today = new Date();
         currentAge = today.getFullYear() - birthYear;
-        
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
         const birthMonth = monthNames[birthDate.getMonth()];
         const birthDay = birthDate.getDate();
-        
         html += `<p style="margin-bottom: 12px;">The student was born on <strong>${birthMonth} ${birthDay}, ${birthYear}</strong>, and is currently <strong>${currentAge} years old</strong>.</p>`;
       }
       
       // 2. High school graduation + university (if applicable) - Second paragraph
       let graduationParagraph = '';
-      if (q.education_history && q.education_history.hs_grad_date && birthYear) {
-        const hsGradDate = new Date(q.education_history.hs_grad_date);
-        hsGradYear = hsGradDate.getFullYear();
-        const hsGradAge = hsGradYear - birthYear;
-        graduationParagraph = `${pronounCap} graduated from high school in <strong>${hsGradYear}</strong> at the age of <strong>${hsGradAge}</strong>.`;
+      if (hsGradDate) {
+        const hsGradDateObj = new Date(hsGradDate);
+        hsGradYear = hsGradDateObj.getFullYear();
+        if (birthYear) {
+          const hsGradAge = hsGradYear - birthYear;
+          graduationParagraph = `${pronounCap} graduated from high school in <strong>${hsGradYear}</strong> at the age of <strong>${hsGradAge}</strong>.`;
+        } else {
+          graduationParagraph = `${pronounCap} graduated from high school in <strong>${hsGradYear}</strong>.`;
+        }
       }
       
       // Add university information if they attended
-      if (q.education_history && q.education_history.armenian_edu === 'yes') {
+      if (armenianEdu === 'yes') {
         // Application/Entry date
-        if (q.education_history.application_date && birthYear) {
-          const appDate = new Date(q.education_history.application_date);
-          const appYear = appDate.getFullYear();
-          const appAge = appYear - birthYear;
+        if (appDate) {
+          const appDateObj = new Date(appDate);
+          const appYear = appDateObj.getFullYear();
           
           let uniText = ` ${pronounCap} entered`;
-          if (q.education_history.armenian_institution) {
-            uniText += ` <strong>${q.education_history.armenian_institution}</strong>`;
+          if (institution) {
+            uniText += ` <strong>${institution}</strong>`;
           } else {
             uniText += ` university`;
           }
-          uniText += ` in <strong>${appYear}</strong> at the age of <strong>${appAge}</strong>.`;
+          if (birthYear) {
+            const appAge = appYear - birthYear;
+            uniText += ` in <strong>${appYear}</strong> at the age of <strong>${appAge}</strong>.`;
+          } else {
+            uniText += ` in <strong>${appYear}</strong>.`;
+          }
           graduationParagraph += uniText;
         }
         
         // University graduation
-        if (q.education_history.graduation_date && birthYear) {
-          const gradDate = new Date(q.education_history.graduation_date);
-          uniGradYear = gradDate.getFullYear();
-          const gradAge = uniGradYear - birthYear;
-          graduationParagraph += ` ${pronounCap} graduated in <strong>${uniGradYear}</strong> at the age of <strong>${gradAge}</strong>.`;
+        if (gradDate) {
+          const gradDateObj = new Date(gradDate);
+          uniGradYear = gradDateObj.getFullYear();
+          if (birthYear) {
+            const gradAge = uniGradYear - birthYear;
+            graduationParagraph += ` ${pronounCap} graduated in <strong>${uniGradYear}</strong> at the age of <strong>${gradAge}</strong>.`;
+          } else {
+            graduationParagraph += ` ${pronounCap} graduated in <strong>${uniGradYear}</strong>.`;
+          }
         }
       }
       
       // 3. Years lived in Armenia after graduation + permanent departure
-      if (q.residency_travel && q.residency_travel.permanent_departure_date && birthYear) {
-        const depDate = new Date(q.residency_travel.permanent_departure_date);
-        const depYear = depDate.getFullYear();
-        const depAge = depYear - birthYear;
+      if (departureDate) {
+        const depDateObj = new Date(departureDate);
+        const depYear = depDateObj.getFullYear();
         const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-        const depMonth = monthNames[depDate.getMonth()];
+        const depMonth = monthNames[depDateObj.getMonth()];
         
         // Calculate years lived in Armenia after final graduation
         let afterGradYear = uniGradYear || hsGradYear;
@@ -2153,7 +2176,12 @@
           graduationParagraph += `<br>After graduating from ${gradType}, ${pronoun} continued to reside in Armenia for <strong>${yearsAfterGrad} year${yearsAfterGrad !== 1 ? 's' : ''}</strong>.`;
         }
         
-        graduationParagraph += ` ${pronounCap} permanently left Armenia in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at the age of <strong>${depAge}</strong>.`;
+        if (birthYear) {
+          const depAge = depYear - birthYear;
+          graduationParagraph += ` ${pronounCap} permanently left Armenia in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong> at the age of <strong>${depAge}</strong>.`;
+        } else {
+          graduationParagraph += ` ${pronounCap} permanently left Armenia in <strong style="color: var(--danger);">${depMonth} ${depYear}</strong>.`;
+        }
       }
       
       if (graduationParagraph) {
@@ -2161,8 +2189,8 @@
       }
       
       // Summary: Years NOT being a student (after final graduation before leaving)
-      if (q.residency_travel && q.residency_travel.permanent_departure_date && (uniGradYear || hsGradYear)) {
-        const depDate = new Date(q.residency_travel.permanent_departure_date);
+      if (departureDate && (uniGradYear || hsGradYear)) {
+        const depDate = new Date(departureDate);
         const depYear = depDate.getFullYear();
         const finalGradYear = uniGradYear || hsGradYear;
         
@@ -2181,8 +2209,8 @@
       }
       
       // 4. Travel history - Third paragraph with bullet list
-      if (q.residency_travel && q.residency_travel.travel_history && q.residency_travel.travel_history.length > 0) {
-        const trips = q.residency_travel.travel_history;
+      if (travelHistory.length > 0) {
+        const trips = travelHistory;
         const tripCount = trips.length;
         
         // Number words for better readability
