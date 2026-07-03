@@ -710,6 +710,8 @@
   <!-- Toast -->
   <div id="toast"></div>
 
+  <script src="js/supabase.min.js"></script>
+  <script src="js/supabase-config.js"></script>
   <script>
     // ─── State ─────────────────────────────────────────
     const files = {
@@ -1345,124 +1347,136 @@
       });
     }
 
-    // ─── Save / Load Progress ─────────────────────────
-    const STORAGE_KEY = 'docbuilder_saves';
-    let currentSaveId = null;
+    // ─── Save / Load Progress (Supabase) ─────────────────
+    let _db = null;
+    function getDB() {
+      if (_db) return _db;
+      _db = initSupabase();
+      if (!_db) throw new Error('Supabase not initialised — check connection.');
+      return _db;
+    }
 
-    function saveProgress() {
+    async function saveProgress() {
       const studentName = document.getElementById('studentName').value.trim();
       if (!studentName) {
         showToast('Enter a student name before saving.', 'error');
         return;
       }
-      let saves = [];
-      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
-
-      const existingIdx = saves.findIndex(s =>
-        s.fields.studentName.trim().toLowerCase() === studentName.toLowerCase()
-      );
-      const id = existingIdx >= 0
-        ? saves[existingIdx].id
-        : (Date.now().toString(36) + Math.random().toString(36).slice(2));
-
-      const record = {
-        id,
-        savedAt: new Date().toISOString(),
-        fields: {
-          studentName,
-          leftArmenia: document.getElementById('leftArmenia').value,
-          enteredUS:   document.getElementById('enteredUS').value,
-        },
-        files: {
-          photo:      files.photo,
-          diplomaARM: files.diplomaARM,
-          diplomaRUS: files.diplomaRUS,
-          birth:      files.birth,
-          passport:   files.passport,
-          additional: files.additional,
-        }
-      };
-
-      if (existingIdx >= 0) saves[existingIdx] = record;
-      else saves.push(record);
-
+      const btn = document.querySelector('.btn-topbar-save');
+      const orig = btn.textContent;
+      btn.textContent = 'Saving...';
+      btn.disabled = true;
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(saves));
-        currentSaveId = id;
-        showToast('Progress saved!', 'success');
-      } catch(e) {
-        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-          showToast('Storage limit reached — remove large files first.', 'error');
-        } else {
-          showToast('Save failed. Please try again.', 'error');
-        }
+        const db = getDB();
+        const { error } = await db.from('export_sessions').upsert({
+          student_name: studentName,
+          left_armenia: document.getElementById('leftArmenia').value || null,
+          entered_us:   document.getElementById('enteredUS').value   || null,
+          files_data: {
+            photo:      files.photo,
+            diplomaARM: files.diplomaARM,
+            diplomaRUS: files.diplomaRUS,
+            birth:      files.birth,
+            passport:   files.passport,
+            additional: files.additional,
+          },
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'student_name' });
+        if (error) throw error;
+        showToast('Saved to cloud!', 'success');
+      } catch (e) {
+        console.error('Save error:', e);
+        showToast('Save failed: ' + (e.message || 'Network error'), 'error');
+      } finally {
+        btn.textContent = orig;
+        btn.disabled = false;
       }
     }
 
-    function openLoadModal() {
-      let saves = [];
-      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
-
+    async function openLoadModal() {
       const listEl = document.getElementById('loadStudentList');
-      if (saves.length === 0) {
-        listEl.innerHTML = '<div class="empty-saves">No saved students yet.<br>Fill in the form and click <strong>Save Progress</strong> to store your work.</div>';
-      } else {
-        listEl.innerHTML = saves.slice().reverse().map(s => {
-          const d = new Date(s.savedAt);
-          const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-          const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-          return `<div class="student-list-item" id="sli-${s.id}">
-            <div class="sli-info">
-              <div class="sli-name">${escHtml(s.fields.studentName)}</div>
-              <div class="sli-date">Saved ${dateStr} at ${timeStr}</div>
-            </div>
-            <div class="sli-actions">
-              <button class="btn-sli-load" onclick="loadStudent('${s.id}')">Load</button>
-              <button class="btn-sli-delete" onclick="deleteSave('${s.id}')">Delete</button>
-            </div>
-          </div>`;
-        }).join('');
-      }
+      listEl.innerHTML = '<div class="empty-saves">Loading…</div>';
       document.getElementById('loadModal').classList.add('active');
+      try {
+        const db = getDB();
+        const { data, error } = await db
+          .from('export_sessions')
+          .select('id, student_name, updated_at')
+          .order('updated_at', { ascending: false });
+        if (error) throw error;
+        if (!data || data.length === 0) {
+          listEl.innerHTML = '<div class="empty-saves">No saved students yet.<br>Fill in the form and click <strong>Save Progress</strong> to store your work.</div>';
+        } else {
+          listEl.innerHTML = data.map(s => {
+            const d = new Date(s.updated_at);
+            const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            return \`<div class="student-list-item" id="sli-\${s.id}">
+              <div class="sli-info">
+                <div class="sli-name">\${escHtml(s.student_name)}</div>
+                <div class="sli-date">Saved \${dateStr} at \${timeStr}</div>
+              </div>
+              <div class="sli-actions">
+                <button class="btn-sli-load" onclick="loadStudent('\${s.id}')">Load</button>
+                <button class="btn-sli-delete" onclick="deleteSave('\${s.id}')">Delete</button>
+              </div>
+            </div>\`;
+          }).join('');
+        }
+      } catch (e) {
+        listEl.innerHTML = \`<div class="empty-saves" style="color:var(--danger)">Could not connect: \${escHtml(e.message || 'Unknown error')}</div>\`;
+      }
     }
 
     function closeLoadModal() {
       document.getElementById('loadModal').classList.remove('active');
     }
 
-    function loadStudent(id) {
-      let saves = [];
-      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
-      const record = saves.find(s => s.id === id);
-      if (!record) { showToast('Record not found.', 'error'); return; }
+    async function loadStudent(id) {
+      const btn = document.querySelector(\`#sli-\${id} .btn-sli-load\`);
+      if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+      try {
+        const db = getDB();
+        const { data, error } = await db
+          .from('export_sessions')
+          .select('*')
+          .eq('id', id)
+          .single();
+        if (error) throw error;
 
-      // Restore form fields
-      document.getElementById('studentName').value = record.fields.studentName || '';
-      document.getElementById('leftArmenia').value = record.fields.leftArmenia || '';
-      document.getElementById('enteredUS').value   = record.fields.enteredUS   || '';
+        document.getElementById('studentName').value = data.student_name || '';
+        document.getElementById('leftArmenia').value = data.left_armenia || '';
+        document.getElementById('enteredUS').value   = data.entered_us   || '';
 
-      // Restore file state
-      files.photo      = record.files.photo      || null;
-      files.diplomaARM = record.files.diplomaARM || null;
-      files.diplomaRUS = record.files.diplomaRUS || null;
-      files.birth      = record.files.birth      || null;
-      files.passport   = record.files.passport   || null;
-      files.additional = Array.isArray(record.files.additional) ? record.files.additional : [];
+        const f = data.files_data || {};
+        files.photo      = f.photo      || null;
+        files.diplomaARM = f.diplomaARM || null;
+        files.diplomaRUS = f.diplomaRUS || null;
+        files.birth      = f.birth      || null;
+        files.passport   = f.passport   || null;
+        files.additional = Array.isArray(f.additional) ? f.additional : [];
 
-      // Rebuild all previews
-      restoreAllPreviews();
-
-      currentSaveId = id;
-      closeLoadModal();
-      showToast(`Loaded: ${record.fields.studentName}`, 'success');
+        restoreAllPreviews();
+        closeLoadModal();
+        showToast(\`Loaded: \${data.student_name}\`, 'success');
+      } catch (e) {
+        showToast('Load failed: ' + (e.message || 'Network error'), 'error');
+        if (btn) { btn.textContent = 'Load'; btn.disabled = false; }
+      }
     }
 
-    function deleteSave(id) {
-      let saves = [];
-      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
-      saves = saves.filter(s => s.id !== id);
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saves)); } catch(e) {}
-      openLoadModal(); // refresh list
+    async function deleteSave(id) {
+      const btn = document.querySelector(\`#sli-\${id} .btn-sli-delete\`);
+      if (btn) { btn.textContent = '...'; btn.disabled = true; }
+      try {
+        const db = getDB();
+        const { error } = await db.from('export_sessions').delete().eq('id', id);
+        if (error) throw error;
+        openLoadModal();
+      } catch (e) {
+        showToast('Delete failed: ' + (e.message || 'Network error'), 'error');
+        if (btn) { btn.textContent = 'Delete'; btn.disabled = false; }
+      }
     }
 
     function restoreAllPreviews() {
