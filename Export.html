@@ -286,6 +286,109 @@
     }
     .progress-step { font-size: 10px; color: var(--text-muted); letter-spacing: 0.3px; }
 
+    /* ─── Save/Load topbar buttons ───────────────────── */
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .btn-topbar {
+      font-size: 11px; font-weight: 600; font-family: 'Inter', sans-serif;
+      padding: 7px 14px; border-radius: 6px; cursor: pointer;
+      letter-spacing: 0.2px; transition: opacity 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .btn-topbar-save {
+      background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border);
+    }
+    .btn-topbar-save:hover { opacity: 0.78; }
+    .btn-topbar-load {
+      background: transparent; color: var(--text-sub); border: 1px solid var(--border);
+    }
+    .btn-topbar-load:hover { border-color: var(--gold-border); color: var(--text); }
+
+    /* ─── Load Modal ─────────────────────────────────── */
+    #loadModal {
+      display: none; position: fixed; inset: 0;
+      background: rgba(8,12,20,0.88);
+      backdrop-filter: blur(6px);
+      z-index: 9998;
+      align-items: center; justify-content: center;
+    }
+    #loadModal.active { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 100%; max-width: 520px;
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      margin: 16px;
+    }
+    .modal-header {
+      display: flex; align-items: flex-start; justify-content: space-between;
+      padding: 20px 22px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .modal-header h2 { font-size: 15px; font-weight: 600; }
+    .modal-header p { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+    .modal-close {
+      width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0;
+      background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      color: var(--text-sub); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; font-size: 16px;
+      transition: background 0.12s;
+    }
+    .modal-close:hover { background: rgba(255,255,255,0.1); color: var(--text); }
+    .modal-list { overflow-y: auto; padding: 12px; flex: 1; }
+    .empty-saves {
+      text-align: center; padding: 40px 20px;
+      font-size: 12px; color: var(--text-muted); line-height: 1.8;
+    }
+    .empty-saves strong { color: var(--gold); font-weight: 500; }
+    .student-list-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 13px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--surface-2);
+      margin-bottom: 8px;
+      transition: border-color 0.12s;
+    }
+    .student-list-item:hover { border-color: var(--gold-border); }
+    .sli-info { flex: 1; min-width: 0; }
+    .sli-name { font-size: 13px; font-weight: 500; }
+    .sli-date { font-size: 10.5px; color: var(--text-muted); margin-top: 3px; }
+    .sli-actions { display: flex; gap: 7px; flex-shrink: 0; }
+    .btn-sli-load {
+      padding: 6px 14px; border-radius: 6px; border: none; cursor: pointer;
+      font-size: 11px; font-weight: 600; font-family: 'Inter', sans-serif;
+      background: var(--gold); color: #0a0c14; transition: opacity 0.12s;
+    }
+    .btn-sli-load:hover { opacity: 0.85; }
+    .btn-sli-delete {
+      padding: 6px 12px; border-radius: 6px; cursor: pointer;
+      font-size: 11px; font-weight: 500; font-family: 'Inter', sans-serif;
+      background: transparent; border: 1px solid rgba(224,82,82,0.25);
+      color: var(--danger); transition: background 0.12s;
+    }
+    .btn-sli-delete:hover { background: rgba(224,82,82,0.1); }
+
+    /* ─── Toast notification ─────────────────────────── */
+    #toast {
+      position: fixed; bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(12px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 11px 18px;
+      font-size: 12px; font-weight: 500;
+      color: var(--text);
+      opacity: 0; pointer-events: none;
+      transition: opacity 0.22s, transform 0.22s;
+      z-index: 10000;
+      white-space: nowrap;
+      max-width: calc(100vw - 48px);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.toast-success { border-color: rgba(34,197,94,0.3); color: var(--success); }
+    #toast.toast-error   { border-color: rgba(224,82,82,0.3);  color: var(--danger);  }
+
     /* ─── Validation ─────────────────────────────────── */
     .val-msg {
       display: none; align-items: center; gap: 8px;
@@ -302,7 +405,11 @@
 
   <div class="topbar">
     <span class="topbar-title">Document Package Builder</span>
-    <span class="topbar-badge">PDF Export</span>
+    <div class="topbar-actions">
+      <button class="btn-topbar btn-topbar-load" onclick="openLoadModal()">Load Student</button>
+      <button class="btn-topbar btn-topbar-save" onclick="saveProgress()">Save Progress</button>
+      <span class="topbar-badge">PDF Export</span>
+    </div>
   </div>
 
   <div class="container">
@@ -585,6 +692,23 @@
       <div class="progress-step" id="progressStep">Initializing…</div>
     </div>
   </div>
+
+  <!-- Load Student Modal -->
+  <div id="loadModal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h2>Load Student</h2>
+          <p>Select a previously saved student to continue editing</p>
+        </div>
+        <button class="modal-close" onclick="closeLoadModal()">&#215;</button>
+      </div>
+      <div class="modal-list" id="loadStudentList"></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
 
   <script>
     // ─── State ─────────────────────────────────────────
@@ -1165,6 +1289,168 @@
         document.head.appendChild(s);
       });
     }
+
+    // ─── Save / Load Progress ─────────────────────────
+    const STORAGE_KEY = 'docbuilder_saves';
+    let currentSaveId = null;
+
+    function saveProgress() {
+      const studentName = document.getElementById('studentName').value.trim();
+      if (!studentName) {
+        showToast('Enter a student name before saving.', 'error');
+        return;
+      }
+      let saves = [];
+      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
+
+      const existingIdx = saves.findIndex(s =>
+        s.fields.studentName.trim().toLowerCase() === studentName.toLowerCase()
+      );
+      const id = existingIdx >= 0
+        ? saves[existingIdx].id
+        : (Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+      const record = {
+        id,
+        savedAt: new Date().toISOString(),
+        fields: {
+          studentName,
+          leftArmenia: document.getElementById('leftArmenia').value,
+          enteredUS:   document.getElementById('enteredUS').value,
+        },
+        files: {
+          photo:      files.photo,
+          diplomaARM: files.diplomaARM,
+          diplomaRUS: files.diplomaRUS,
+          birth:      files.birth,
+          passport:   files.passport,
+          additional: files.additional,
+        }
+      };
+
+      if (existingIdx >= 0) saves[existingIdx] = record;
+      else saves.push(record);
+
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(saves));
+        currentSaveId = id;
+        showToast('Progress saved!', 'success');
+      } catch(e) {
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+          showToast('Storage limit reached — remove large files first.', 'error');
+        } else {
+          showToast('Save failed. Please try again.', 'error');
+        }
+      }
+    }
+
+    function openLoadModal() {
+      let saves = [];
+      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
+
+      const listEl = document.getElementById('loadStudentList');
+      if (saves.length === 0) {
+        listEl.innerHTML = '<div class="empty-saves">No saved students yet.<br>Fill in the form and click <strong>Save Progress</strong> to store your work.</div>';
+      } else {
+        listEl.innerHTML = saves.slice().reverse().map(s => {
+          const d = new Date(s.savedAt);
+          const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+          const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+          return `<div class="student-list-item" id="sli-${s.id}">
+            <div class="sli-info">
+              <div class="sli-name">${escHtml(s.fields.studentName)}</div>
+              <div class="sli-date">Saved ${dateStr} at ${timeStr}</div>
+            </div>
+            <div class="sli-actions">
+              <button class="btn-sli-load" onclick="loadStudent('${s.id}')">Load</button>
+              <button class="btn-sli-delete" onclick="deleteSave('${s.id}')">Delete</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      document.getElementById('loadModal').classList.add('active');
+    }
+
+    function closeLoadModal() {
+      document.getElementById('loadModal').classList.remove('active');
+    }
+
+    function loadStudent(id) {
+      let saves = [];
+      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
+      const record = saves.find(s => s.id === id);
+      if (!record) { showToast('Record not found.', 'error'); return; }
+
+      // Restore form fields
+      document.getElementById('studentName').value = record.fields.studentName || '';
+      document.getElementById('leftArmenia').value = record.fields.leftArmenia || '';
+      document.getElementById('enteredUS').value   = record.fields.enteredUS   || '';
+
+      // Restore file state
+      files.photo      = record.files.photo      || null;
+      files.diplomaARM = record.files.diplomaARM || null;
+      files.diplomaRUS = record.files.diplomaRUS || null;
+      files.birth      = record.files.birth      || null;
+      files.passport   = record.files.passport   || null;
+      files.additional = Array.isArray(record.files.additional) ? record.files.additional : [];
+
+      // Rebuild all previews
+      restoreAllPreviews();
+
+      currentSaveId = id;
+      closeLoadModal();
+      showToast(`Loaded: ${record.fields.studentName}`, 'success');
+    }
+
+    function deleteSave(id) {
+      let saves = [];
+      try { saves = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); } catch(e) { saves = []; }
+      saves = saves.filter(s => s.id !== id);
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(saves)); } catch(e) {}
+      openLoadModal(); // refresh list
+    }
+
+    function restoreAllPreviews() {
+      ['photo', 'diplomaARM', 'diplomaRUS', 'birth', 'passport'].forEach(key => {
+        const prevArea = document.getElementById('prev-' + key);
+        if (prevArea) {
+          prevArea.classList.remove('visible');
+          prevArea.innerHTML = `
+            <button class="remove-btn" onclick="removeFile('${key}',event)">\u00d7</button>
+            <img class="preview-img" id="previmg-${key}" src="" alt="">`;
+        }
+        if (files[key]) {
+          updateSinglePreview(key, files[key].dataUrl, files[key].mimeType);
+          updateCardState(key, true);
+        } else {
+          updateCardState(key, false);
+        }
+      });
+      renderMultiplePreviews('additional');
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    let _toastTimer = null;
+    function showToast(msg, type) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'show toast-' + (type || 'success');
+      if (_toastTimer) clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => { el.className = ''; }, 3200);
+    }
+
+    // Close modal on backdrop click or ESC
+    document.getElementById('loadModal').addEventListener('click', function(e) {
+      if (e.target === this) closeLoadModal();
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeLoadModal();
+    });
   </script>
 
 </body>
