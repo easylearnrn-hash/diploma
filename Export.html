@@ -813,7 +813,6 @@
 
         // ── Document pages ────────────────────────────
         const queue = [
-          { key: 'photo',      label: DOC_LABELS.photo,      sub: 'Standard 3×4 cm format' },
           { key: 'birth',      label: DOC_LABELS.birth,      sub: 'Full official document' },
           { key: 'passport',   label: DOC_LABELS.passport,   sub: 'Biographical / photo page' },
         ];
@@ -842,7 +841,7 @@
           const pct = 20 + Math.round(((i + 1) / (total + 1)) * 70);
           setProgress(pct, `Adding: ${label}…`);
           await new Promise(r => setTimeout(r, 20));
-          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, pageNum++, key === 'photo' ? 30 : undefined, key === 'photo' ? 40 : undefined);
+          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, pageNum++);
         }
 
         for (let i = 0; i < files.additional.length; i++) {
@@ -870,14 +869,30 @@
     async function drawCoverPage(doc, studentName, leftArmenia, enteredUS) {
       const W = 210, H = 297, M = 18;
 
+      // ── 3×4 Photo (top-right corner) ─────────────────
+      const photoX = W - M - 30;   // 162mm from left
+      const photoY = 20;
+      const photoW = 30, photoH = 40;
+      if (files.photo && files.photo.mimeType !== 'application/pdf') {
+        const fmt = files.photo.dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+        doc.addImage(files.photo.dataUrl, fmt, photoX, photoY, photoW, photoH, undefined, 'FAST');
+        doc.setDrawColor(201, 168, 76);
+        doc.setLineWidth(0.4);
+        doc.rect(photoX, photoY, photoW, photoH, 'S');
+      }
+
       // ── Travel Information ────────────────────────
+      // Heading only spans left portion to leave room for the photo
+      const headingW = photoX - M - 8;  // 138mm
       let y = 24;
       const headingDataUrl = await renderArmenianLine('ՃԱՄՓՈՐԴՈՒԹՅԱՆ ՏԵՂԵԿԱՏՎՈՒԹՅՈՒՆ');
-      doc.addImage(headingDataUrl, 'PNG', M, y, W - M * 2, 10);
+      doc.addImage(headingDataUrl, 'PNG', M, y, headingW, 10);
       doc.setDrawColor(201, 168, 76);
       doc.setLineWidth(0.4);
-      doc.line(M, y + 11, W - M, y + 11);
-      y += 17;
+      doc.line(M, y + 11, M + headingW, y + 11);
+
+      // y must clear both the heading row and the photo block
+      y = Math.max(y + 17, photoY + photoH + 10);
 
       // Date card (Armenian, canvas — jsPDF can't render Armenian)
       const dateCardUrl = await renderDateCard(formatArmenianDate(enteredUS));
