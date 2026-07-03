@@ -1349,6 +1349,41 @@
       return _db;
     }
 
+    const EXPORT_BUCKET = 'export-files';
+
+    // Upload one { dataUrl, mimeType } file object to Supabase Storage.
+    // Returns { storagePath, mimeType } on success, or null if fileObj is empty.
+    async function uploadFileToStorage(db, folder, fieldName, fileObj) {
+      if (!fileObj || !fileObj.dataUrl) return null;
+      const [header, b64] = fileObj.dataUrl.split(',');
+      const mime = fileObj.mimeType || (header.match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+      const ext  = mime.split('/')[1]?.replace('jpeg', 'jpg') || 'bin';
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob  = new Blob([bytes], { type: mime });
+      const path  = `${folder}/${fieldName}.${ext}`;
+      const { error } = await db.storage.from(EXPORT_BUCKET).upload(path, blob, {
+        upsert: true, contentType: mime,
+      });
+      if (error) throw error;
+      return { storagePath: path, mimeType: mime };
+    }
+
+    // Download a storage-backed file ref back to { dataUrl, mimeType }.
+    // Passes through any object that already has a dataUrl (legacy compat).
+    async function downloadFileFromStorage(db, fileRef) {
+      if (!fileRef) return null;
+      if (fileRef.dataUrl) return fileRef; // legacy: already a data URL
+      if (!fileRef.storagePath) return null;
+      const { data, error } = await db.storage.from(EXPORT_BUCKET).download(fileRef.storagePath);
+      if (error) { console.warn('Storage download failed:', fileRef.storagePath, error); return null; }
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve({ dataUrl: reader.result, mimeType: fileRef.mimeType });
+        reader.onerror = reject;
+        reader.readAsDataURL(data);
+      });
+    }
+
     async function saveProgress() {
       const studentName = document.getElementById('studentName').value.trim();
       if (!studentName) {
@@ -1361,17 +1396,35 @@
       btn.disabled = true;
       try {
         const db = getDB();
+        // Sanitise student name for use as a storage folder
+        const folder = studentName.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+
+        btn.textContent = 'Uploading…';
+        // Upload each file to Supabase Storage in parallel; only paths saved in DB
+        const [photoRef, diplomaARMRef, diplomaRUSRef, birthRef, passportRef] = await Promise.all([
+          uploadFileToStorage(db, folder, 'photo',      files.photo),
+          uploadFileToStorage(db, folder, 'diplomaARM', files.diplomaARM),
+          uploadFileToStorage(db, folder, 'diplomaRUS', files.diplomaRUS),
+          uploadFileToStorage(db, folder, 'birth',      files.birth),
+          uploadFileToStorage(db, folder, 'passport',   files.passport),
+        ]);
+        const additionalRefs = await Promise.all(
+          (files.additional || []).map((f, i) => uploadFileToStorage(db, folder, `additional_${i}`, f))
+        );
+
+        btn.textContent = 'Saving…';
         const { error } = await db.from('export_sessions').upsert({
           student_name: studentName,
           left_armenia: document.getElementById('leftArmenia').value || null,
           entered_us:   document.getElementById('enteredUS').value   || null,
           files_data: {
-            photo:      files.photo,
-            diplomaARM: files.diplomaARM,
-            diplomaRUS: files.diplomaRUS,
-            birth:      files.birth,
-            passport:   files.passport,
-            additional: files.additional,
+            _v:         2,           // v2 = storage-backed paths
+            photo:      photoRef,
+            diplomaARM: diplomaARMRef,
+            diplomaRUS: diplomaRUSRef,
+            birth:      birthRef,
+            passport:   passportRef,
+            additional: additionalRefs,
           },
           updated_at: new Date().toISOString(),
         }, { onConflict: 'student_name' });
@@ -1443,12 +1496,34 @@
         document.getElementById('enteredUS').value   = data.entered_us   || '';
 
         const f = data.files_data || {};
-        files.photo      = f.photo      || null;
-        files.diplomaARM = f.diplomaARM || null;
-        files.diplomaRUS = f.diplomaRUS || null;
-        files.birth      = f.birth      || null;
-        files.passport   = f.passport   || null;
-        files.additional = Array.isArray(f.additional) ? f.additional : [];
+        if (f._v === 2) {
+          // v2: files are stored in Supabase Storage — download them
+          if (btn) btn.textContent = 'Downloading…';
+          const [photo, diplomaARM, diplomaRUS, birth, passport] = await Promise.all([
+            downloadFileFromStorage(db, f.photo),
+            downloadFileFromStorage(db, f.diplomaARM),
+            downloadFileFromStorage(db, f.diplomaRUS),
+            downloadFileFromStorage(db, f.birth),
+            downloadFileFromStorage(db, f.passport),
+          ]);
+          files.photo      = photo;
+          files.diplomaARM = diplomaARM;
+          files.diplomaRUS = diplomaRUS;
+          files.birth      = birth;
+          files.passport   = passport;
+          files.additional = await Promise.all(
+            (Array.isArray(f.additional) ? f.additional : []).map(ref => downloadFileFromStorage(db, ref))
+          );
+          files.additional = files.additional.filter(Boolean);
+        } else {
+          // Legacy v1: files are raw data URLs stored directly in jsonb
+          files.photo      = f.photo      || null;
+          files.diplomaARM = f.diplomaARM || null;
+          files.diplomaRUS = f.diplomaRUS || null;
+          files.birth      = f.birth      || null;
+          files.passport   = f.passport   || null;
+          files.additional = Array.isArray(f.additional) ? f.additional : [];
+        }
 
         restoreAllPreviews();
         closeLoadModal();
