@@ -713,6 +713,15 @@
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
   <script>
+    // ─── Admin Auth Guard ─────────────────────────────────
+    (function() {
+      const isAdmin    = sessionStorage.getItem('isAdmin')    === 'true' || localStorage.getItem('isAdmin')    === 'true';
+      const isLoggedIn = sessionStorage.getItem('isLoggedIn') === 'true' || localStorage.getItem('isLoggedIn') === 'true';
+      if (!isLoggedIn || !isAdmin) {
+        window.location.replace('login.html');
+      }
+    })();
+
     // ─── State ─────────────────────────────────────────
     const files = {
       photo:       null,
@@ -1049,16 +1058,6 @@
       );
       doc.addImage(armenianDataUrl, 'PNG', M, y, W - M * 2, 36);
 
-      // ── Bottom strip ──────────────────────────────────────────────
-      doc.setFillColor(201, 168, 76);
-      doc.rect(0, H - 9, W, 0.8, 'F');
-      doc.setFillColor(13, 27, 42);
-      doc.rect(0, H - 8.2, W, 8.2, 'F');
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(5.5);
-      doc.setTextColor(60, 85, 110);
-      doc.text('IMMIGRATION DOCUMENT PACKAGE', M, H - 3.5);
-      doc.text('1', W - M, H - 3.5, { align: 'right' });
     }
 
     // ─── Page Frame (consistent header/footer for document pages) ──
@@ -1090,11 +1089,9 @@
     async function addPhotoPage(doc, pageNum) {
       doc.addPage();
       const W = 210, H = 297;
-      drawPageFrame(doc, 'PROFESSIONAL PHOTOGRAPH', pageNum);
-
       const photoW = 60, photoH = 80;
       const photoX = (W - photoW) / 2;
-      const photoY = 10 + (H - 20 - photoH) / 2;   // vertically centred
+      const photoY = (H - photoH) / 2;   // fully centred
 
       if (files.photo && files.photo.mimeType !== 'application/pdf') {
         const fmt = files.photo.dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
@@ -1246,11 +1243,10 @@
     async function addDualImagePage(doc, topDataUrl, topMime, botDataUrl, botMime, pageNum) {
       doc.addPage();
       const W = 210, H = 297, M = 8;
-      drawPageFrame(doc, 'SCHOOL DIPLOMA / ATESTAT', pageNum);
 
-      const TOP = 10, BOT = 10, GAP = 5;
+      const GAP = 5;
       const slotW = W - M * 2;
-      const slotH = (H - TOP - BOT - GAP) / 2;
+      const slotH = (H - M * 2 - GAP) / 2;
 
       const renderSlot = (dataUrl, mime, slotY) => new Promise(resolve => {
         if (!dataUrl) { resolve(); return; }
@@ -1278,22 +1274,19 @@
         img.src = dataUrl;
       });
 
-      await renderSlot(topDataUrl, topMime, TOP);
-      await renderSlot(botDataUrl, botMime, TOP + slotH + GAP);
+      await renderSlot(topDataUrl, topMime, M);
+      await renderSlot(botDataUrl, botMime, M + slotH + GAP);
 
-      // Gold divider
       doc.setDrawColor(201, 168, 76);
       doc.setLineWidth(0.4);
-      doc.line(M, TOP + slotH + GAP / 2, W - M, TOP + slotH + GAP / 2);
+      doc.line(M, M + slotH + GAP / 2, W - M, M + slotH + GAP / 2);
     }
 
     // ─── Add Document Page ────────────────────────────
     async function addDocumentPage(doc, dataUrl, mimeType, title, subtitle, pageNum) {
       doc.addPage();
       const W = 210, H = 297, M = 10;
-      drawPageFrame(doc, title.toUpperCase(), pageNum);
-
-      const TOP = 10, BOT = 10;
+      const TOP = 0, BOT = 0;
 
       if (mimeType === 'application/pdf') {
         const midY = TOP + (H - TOP - BOT) / 2;
