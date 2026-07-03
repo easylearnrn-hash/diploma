@@ -433,7 +433,7 @@
                 <div class="doc-name">School Diploma / Atestat — Side 1</div>
                 <div class="doc-sub">Armenian language version (front side)</div>
               </div>
-              <span class="doc-badge required" id="badge-diplomaARM">Required</span>
+              <span class="doc-badge optional" id="badge-diplomaARM">Optional</span>
             </div>
             <div class="drop-zone" id="dz-diplomaARM">
               <div class="drop-zone-area" id="dza-diplomaARM"
@@ -627,7 +627,7 @@
       additional:  []   // array of { dataUrl, name, mimeType }
     };
 
-    const REQUIRED = ['photo','diplomaARM','diplomaRUS','birth','passport'];
+    const REQUIRED = ['photo','diplomaRUS','birth','passport'];
 
     const DOC_LABELS = {
       photo:       'Professional 3×4 Photograph',
@@ -852,12 +852,14 @@
 
         const total = queue.length + files.additional.length;
 
+        let pageNum = 2;
         for (let i = 0; i < queue.length; i++) {
           const { key, label, sub } = queue[i];
+          if (!files[key]) continue; // skip optional docs not uploaded
           const pct = 10 + Math.round(((i + 1) / (total + 1)) * 80);
           setProgress(pct, `Adding: ${label}…`);
           await new Promise(r => setTimeout(r, 20));
-          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, i + 2, key === 'photo' ? 30 : undefined, key === 'photo' ? 40 : undefined);
+          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, pageNum++, key === 'photo' ? 30 : undefined, key === 'photo' ? 40 : undefined);
         }
 
         for (let i = 0; i < files.additional.length; i++) {
@@ -866,7 +868,7 @@
           setProgress(pct, `Adding additional document ${i + 1}…`);
           await new Promise(r => setTimeout(r, 20));
           await addDocumentPage(doc, f.dataUrl, f.mimeType,
-            `Additional Supporting Document — ${i + 1}`, f.name, queue.length + i + 2);
+            `Additional Supporting Document — ${i + 1}`, f.name, pageNum++);
         }
 
         setProgress(95, 'Finalising PDF…');
