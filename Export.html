@@ -352,6 +352,13 @@
         </div>
       </div>
       <div class="section-body">
+        <div class="field-group" style="margin-bottom:20px;">
+          <label class="field-label" for="studentName">
+            Student's Full Name<span class="req">*</span>
+          </label>
+          <input type="text" id="studentName" class="field-input" placeholder="e.g. Mariam Abelyan" autocomplete="name" required>
+          <span class="field-caption">Full legal name as it appears on official documents</span>
+        </div>
         <div class="date-grid">
           <div class="field-group">
             <label class="field-label" for="leftArmenia">
@@ -785,8 +792,10 @@
 
     // ─── Validation ────────────────────────────────────
     function validate() {
+      const studentName = document.getElementById('studentName').value.trim();
       const leftArmenia = document.getElementById('leftArmenia').value;
       const enteredUS   = document.getElementById('enteredUS').value;
+      if (!studentName) return "Please enter the student's full name.";
       if (!leftArmenia) return 'Please enter the date you permanently left Armenia.';
       if (!enteredUS)   return 'Please enter the date you entered the United States.';
       for (const key of REQUIRED) {
@@ -823,13 +832,14 @@
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+        const studentName = document.getElementById('studentName').value.trim();
         const leftArmenia = document.getElementById('leftArmenia').value;
         const enteredUS   = document.getElementById('enteredUS').value;
 
         // ── Page 1: Cover ─────────────────────────────
         setProgress(5, 'Building cover page…');
         await new Promise(r => setTimeout(r, 30));
-        drawCoverPage(doc, leftArmenia, enteredUS);
+        await drawCoverPage(doc, studentName, leftArmenia, enteredUS);
 
         // ── Document pages ────────────────────────────
         const queue = [
@@ -873,7 +883,7 @@
     }
 
     // ─── Draw Cover Page ──────────────────────────────
-    function drawCoverPage(doc, leftArmenia, enteredUS) {
+    async function drawCoverPage(doc, studentName, leftArmenia, enteredUS) {
       const W = 210, H = 297, M = 18;
 
       // Navy header band
@@ -951,7 +961,17 @@
       doc.setTextColor(201, 168, 76);
       doc.text(formatDateLong(enteredUS), M + 9, y + 20);
 
-      y += 40;
+      y += 8;
+
+      // ── Armenian Official Statement ───────────────
+      sectionHeading(doc, 'OFFICIAL STATEMENT', M, y);
+      y += 8;
+      const armenianDataUrl = await renderArmenianStatement(
+        buildArmenianSentence(studentName, leftArmenia, enteredUS)
+      );
+      // 1740×280 canvas → 174mm × 28mm in PDF
+      doc.addImage(armenianDataUrl, 'PNG', M, y, W - M * 2, 28);
+      y += 34;
 
       // ── Documents Included ─────────────────────────
       sectionHeading(doc, 'DOCUMENTS INCLUDED IN THIS PACKAGE', M, y);
@@ -969,7 +989,7 @@
       }
 
       docRows.forEach((row, i) => {
-        const rowY = y + i * 13;
+        const rowY = y + i * 12;
         if (i % 2 === 0) {
           doc.setFillColor(245, 240, 232);
           doc.rect(M, rowY - 3, W - M * 2, 12, 'F');
@@ -1004,6 +1024,75 @@
       doc.setTextColor(74, 100, 130);
       doc.text('Armenian College of Nursing & Health Sciences  ·  Yerevan, Armenia  ·  acnhs.am', W / 2, H - 9, { align: 'center' });
       doc.text('CONFIDENTIAL — FOR OFFICIAL USE ONLY', W / 2, H - 4, { align: 'center' });
+    }
+
+    // ─── Armenian helpers ──────────────────────────────────
+    function formatArmenianDate(val) {
+      if (!val) return '';
+      const [y, m, d] = val.split('-').map(Number);
+      return `${String(d).padStart(2,'0')}.${String(m).padStart(2,'0')}.${y}`;
+    }
+
+    function buildArmenianSentence(name, leftArmenia, enteredUS) {
+      const d1 = formatArmenianDate(leftArmenia);
+      const d2 = formatArmenianDate(enteredUS);
+      return `${name}-ը լքել է Հայաստանը մշտական բնակության նպատակով ${d1}-ին և մուտք է գործել ԱՄՆ ${d2}-ին։`;
+    }
+
+    function renderArmenianStatement(sentence) {
+      return new Promise(resolve => {
+        const cW = 1740, cH = 280;
+        const canvas = document.createElement('canvas');
+        canvas.width = cW;
+        canvas.height = cH;
+        const ctx = canvas.getContext('2d');
+
+        // Cream background
+        ctx.fillStyle = '#f5f0e8';
+        ctx.fillRect(0, 0, cW, cH);
+
+        // Top + bottom gold rule
+        ctx.fillStyle = '#c9a84c';
+        ctx.fillRect(0, 0, cW, 7);
+        ctx.fillRect(0, cH - 7, cW, 7);
+
+        // Left gold accent bar + navy depth stripe
+        ctx.fillStyle = '#c9a84c';
+        ctx.fillRect(0, 0, 14, cH);
+        ctx.fillStyle = '#0d1b2a';
+        ctx.fillRect(14, 0, 5, cH);
+
+        // Section label
+        ctx.font = 'bold 22px "Helvetica Neue", Arial, sans-serif';
+        ctx.fillStyle = '#8a6218';
+        ctx.fillText('OFFICIAL STATEMENT', 38, 46);
+
+        // Thin rule under label
+        ctx.fillStyle = '#d4c89a';
+        ctx.fillRect(38, 54, cW - 56, 1);
+
+        // Armenian sentence — word-wrapped, 2 lines max
+        ctx.font = '36px Arial, "Noto Sans Armenian", "DejaVu Sans", sans-serif';
+        ctx.fillStyle = '#1a1208';
+        const maxW = cW - 56;
+        const words = sentence.split(' ');
+        let line = '';
+        let lineY = 106;
+        const lineH = 52;
+        for (const word of words) {
+          const test = line + (line ? ' ' : '') + word;
+          if (ctx.measureText(test).width > maxW && line) {
+            ctx.fillText(line, 38, lineY);
+            line = word;
+            lineY += lineH;
+          } else {
+            line = test;
+          }
+        }
+        if (line) ctx.fillText(line, 38, lineY);
+
+        resolve(canvas.toDataURL('image/png'));
+      });
     }
 
     function sectionHeading(doc, text, x, y) {
