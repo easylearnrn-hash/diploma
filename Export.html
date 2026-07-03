@@ -857,7 +857,7 @@
           const pct = 10 + Math.round(((i + 1) / (total + 1)) * 80);
           setProgress(pct, `Adding: ${label}…`);
           await new Promise(r => setTimeout(r, 20));
-          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, i + 2);
+          await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, i + 2, key === 'photo' ? 30 : undefined, key === 'photo' ? 40 : undefined);
         }
 
         for (let i = 0; i < files.additional.length; i++) {
@@ -886,44 +886,8 @@
     async function drawCoverPage(doc, studentName, leftArmenia, enteredUS) {
       const W = 210, H = 297, M = 18;
 
-      // Navy header band
-      doc.setFillColor(13, 27, 42);
-      doc.rect(0, 0, W, 64, 'F');
-
-      // Gold accent bar
-      doc.setFillColor(201, 168, 76);
-      doc.rect(0, 64, W, 2.5, 'F');
-
-      // Thin left accent strip
-      doc.setFillColor(201, 168, 76);
-      doc.rect(0, 0, 4, 64, 'F');
-
-      // ACNHS wordmark
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.setTextColor(255, 255, 255);
-      doc.text('ACNHS', M + 4, 26);
-
-      // Subtitle
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(201, 168, 76);
-      doc.text('IMMIGRATION DOCUMENT PACKAGE', M + 4, 37);
-
-      // Institution line
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(8);
-      doc.setTextColor(106, 138, 170);
-      doc.text('Armenian College of Nursing & Health Sciences  ·  Yerevan, Armenia  ·  acnhs.am', M + 4, 47);
-
-      // Generated date
-      const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-      doc.setFontSize(7.5);
-      doc.setTextColor(74, 100, 130);
-      doc.text(`Generated: ${today}`, M + 4, 57);
-
       // ── Travel Information ────────────────────────
-      let y = 82;
+      let y = 24;
       sectionHeading(doc, 'TRAVEL INFORMATION', M, y);
       y += 10;
 
@@ -969,52 +933,8 @@
       const armenianDataUrl = await renderArmenianStatement(
         buildArmenianSentence(studentName, leftArmenia, enteredUS)
       );
-      // 1740×280 canvas → 174mm × 28mm in PDF
-      doc.addImage(armenianDataUrl, 'PNG', M, y, W - M * 2, 28);
-      y += 34;
-
-      // ── Documents Included ─────────────────────────
-      sectionHeading(doc, 'DOCUMENTS INCLUDED IN THIS PACKAGE', M, y);
-      y += 10;
-
-      const docRows = [
-        'Professional 3×4 Photograph',
-        'School Diploma / Atestat — Armenian Language Side',
-        'School Diploma / Atestat — Russian Language Side',
-        'Birth Certificate',
-        'Passport (Biographical Page)',
-      ];
-      if (files.additional.length > 0) {
-        docRows.push(`Additional Supporting Document${files.additional.length > 1 ? 's' : ''} (${files.additional.length} file${files.additional.length > 1 ? 's' : ''})`);
-      }
-
-      docRows.forEach((row, i) => {
-        const rowY = y + i * 12;
-        if (i % 2 === 0) {
-          doc.setFillColor(245, 240, 232);
-          doc.rect(M, rowY - 3, W - M * 2, 12, 'F');
-        }
-
-        // Checkmark circle
-        doc.setFillColor(39, 174, 96);
-        doc.circle(M + 5, rowY + 3, 3.2, 'F');
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7);
-        doc.setTextColor(255, 255, 255);
-        doc.text('✓', M + 3.2, rowY + 5.2);
-
-        // Row text
-        doc.setFont('helvetica', i === docRows.length - 1 && files.additional.length > 0 ? 'italic' : 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(26, 18, 8);
-        doc.text(row, M + 12, rowY + 4.5);
-
-        // Page ref
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(7.5);
-        doc.setTextColor(138, 98, 24);
-        doc.text(`pg. ${i + 2}`, W - M, rowY + 4.5, { align: 'right' });
-      });
+      // 1740×360 canvas → 174mm × 36mm in PDF
+      doc.addImage(armenianDataUrl, 'PNG', M, y, W - M * 2, 36);
 
       // Footer
       doc.setFillColor(13, 27, 42);
@@ -1030,18 +950,22 @@
     function formatArmenianDate(val) {
       if (!val) return '';
       const [y, m, d] = val.split('-').map(Number);
-      return `${String(d).padStart(2,'0')}.${String(m).padStart(2,'0')}.${y}`;
+      const months = [
+        'հունվարի','փետրվարի','մարտի','ապրիլի','մայիսի','հունիսի',
+        'հուլիսի','օգոստոսի','սեպտեմբերի','հոկտեմբերի','նոյեմբերի','դեկտեմբերի'
+      ];
+      return `${months[m - 1]} ${d}-ին ${y} թ.`;
     }
 
     function buildArmenianSentence(name, leftArmenia, enteredUS) {
       const d1 = formatArmenianDate(leftArmenia);
       const d2 = formatArmenianDate(enteredUS);
-      return `${name}-ը լքել է Հայաստանը մշտական բնակության նպատակով ${d1}-ին և մուտք է գործել ԱՄՆ ${d2}-ին։`;
+      return `${name}-ը լքել է Հայաստանը մշտական բնակության նպատակով ${d1} և մուտք է գործել ԱՄՆ ${d2}։`;
     }
 
     function renderArmenianStatement(sentence) {
       return new Promise(resolve => {
-        const cW = 1740, cH = 280;
+        const cW = 1740, cH = 360;
         const canvas = document.createElement('canvas');
         canvas.width = cW;
         canvas.height = cH;
@@ -1114,7 +1038,7 @@
     }
 
     // ─── Add Document Page ────────────────────────────
-    async function addDocumentPage(doc, dataUrl, mimeType, title, subtitle, pageNum) {
+    async function addDocumentPage(doc, dataUrl, mimeType, title, subtitle, pageNum, fixedW, fixedH) {
       doc.addPage();
 
       const W = 210, H = 297, M = 10;
@@ -1206,20 +1130,28 @@
           const availW = W - M * 2;
           const availH = H - HEADER_H - FOOTER_H - 6;
 
-          // Scale to fit, maintaining aspect ratio (never distort)
-          const scaleX = availW / imgW;
-          const scaleY = availH / imgH;
-          const scale  = Math.min(scaleX, scaleY);
-
-          const drawW = imgW * scale;
-          const drawH = imgH * scale;
-
-          // Center within available area
-          const x = availX + (availW - drawW) / 2;
-          const y = availY + (availH - drawH) / 2;
-
           const fmt = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
-          doc.addImage(dataUrl, fmt, x, y, drawW, drawH, undefined, 'FAST');
+
+          if (fixedW && fixedH) {
+            // Render at exact fixed size (e.g. 3×4 photo = 30×40mm), centred
+            const x = availX + (availW - fixedW) / 2;
+            const y = availY + (availH - fixedH) / 2;
+            doc.addImage(dataUrl, fmt, x, y, fixedW, fixedH, undefined, 'FAST');
+            // Gold border
+            doc.setDrawColor(201, 168, 76);
+            doc.setLineWidth(0.4);
+            doc.rect(x, y, fixedW, fixedH, 'S');
+          } else {
+            // Scale to fit, maintaining aspect ratio
+            const scaleX = availW / imgW;
+            const scaleY = availH / imgH;
+            const scale  = Math.min(scaleX, scaleY);
+            const drawW = imgW * scale;
+            const drawH = imgH * scale;
+            const x = availX + (availW - drawW) / 2;
+            const y = availY + (availH - drawH) / 2;
+            doc.addImage(dataUrl, fmt, x, y, drawW, drawH, undefined, 'FAST');
+          }
 
           resolve();
         };
