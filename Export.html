@@ -844,8 +844,6 @@
         // ── Document pages ────────────────────────────
         const queue = [
           { key: 'photo',      label: DOC_LABELS.photo,      sub: 'Standard 3×4 cm format' },
-          { key: 'diplomaARM', label: DOC_LABELS.diplomaARM, sub: 'Armenian language side' },
-          { key: 'diplomaRUS', label: DOC_LABELS.diplomaRUS, sub: 'Russian language side' },
           { key: 'birth',      label: DOC_LABELS.birth,      sub: 'Full official document' },
           { key: 'passport',   label: DOC_LABELS.passport,   sub: 'Biographical / photo page' },
         ];
@@ -853,10 +851,25 @@
         const total = queue.length + files.additional.length;
 
         let pageNum = 2;
+
+        // Atestat: both sides on one page if at least one side uploaded
+        if (files.diplomaARM || files.diplomaRUS) {
+          setProgress(12, 'Adding: School Diploma / Atestat…');
+          await new Promise(r => setTimeout(r, 20));
+          await addDualImagePage(
+            doc,
+            files.diplomaARM ? files.diplomaARM.dataUrl : null,
+            files.diplomaARM ? files.diplomaARM.mimeType : null,
+            files.diplomaRUS ? files.diplomaRUS.dataUrl : null,
+            files.diplomaRUS ? files.diplomaRUS.mimeType : null,
+            pageNum++
+          );
+        }
+
         for (let i = 0; i < queue.length; i++) {
           const { key, label, sub } = queue[i];
-          if (!files[key]) continue; // skip optional docs not uploaded
-          const pct = 10 + Math.round(((i + 1) / (total + 1)) * 80);
+          if (!files[key]) continue;
+          const pct = 20 + Math.round(((i + 1) / (total + 1)) * 70);
           setProgress(pct, `Adding: ${label}…`);
           await new Promise(r => setTimeout(r, 20));
           await addDocumentPage(doc, files[key].dataUrl, files[key].mimeType, label, sub, pageNum++, key === 'photo' ? 30 : undefined, key === 'photo' ? 40 : undefined);
@@ -1033,6 +1046,48 @@
       const months = ['January','February','March','April','May','June',
                       'July','August','September','October','November','December'];
       return `${months[parts[1]-1]} ${parts[2]}, ${parts[0]}`;
+    }
+
+    // ─── Add Dual Image Page (Atestat: Armenian top, Russian bottom) ───────
+    async function addDualImagePage(doc, topDataUrl, topMime, botDataUrl, botMime, pageNum) {
+      doc.addPage();
+      const W = 210, H = 297, M = 8;
+      const slotW = W - M * 2;
+      const slotH = (H - M * 3) / 2; // two equal slots with gap between
+
+      const renderSlot = (dataUrl, mime, slotY) => new Promise(resolve => {
+        if (!dataUrl) { resolve(); return; }
+        if (mime === 'application/pdf') {
+          doc.setFillColor(245, 240, 232);
+          doc.rect(M, slotY, slotW, slotH, 'F');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(90, 74, 42);
+          doc.text('PDF — see attachment', W / 2, slotY + slotH / 2, { align: 'center' });
+          resolve(); return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          const fmt = dataUrl.startsWith('data:image/png') ? 'PNG' : 'JPEG';
+          const scale = Math.min(slotW / img.naturalWidth, slotH / img.naturalHeight);
+          const drawW = img.naturalWidth * scale;
+          const drawH = img.naturalHeight * scale;
+          const x = M + (slotW - drawW) / 2;
+          const y = slotY + (slotH - drawH) / 2;
+          doc.addImage(dataUrl, fmt, x, y, drawW, drawH, undefined, 'FAST');
+          resolve();
+        };
+        img.onerror = resolve;
+        img.src = dataUrl;
+      });
+
+      await renderSlot(topDataUrl, topMime, M);                 // Armenian — top
+      await renderSlot(botDataUrl, botMime, M * 2 + slotH);    // Russian — bottom
+
+      // Thin gold divider between slots
+      doc.setDrawColor(201, 168, 76);
+      doc.setLineWidth(0.3);
+      doc.line(M, M + slotH + M / 2, W - M, M + slotH + M / 2);
     }
 
     // ─── Add Document Page ────────────────────────────
