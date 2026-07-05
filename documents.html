@@ -1441,8 +1441,11 @@
                 <input type="text" id="gov-acnhsTitle" value="Dean of Academic Affairs" oninput="renderGovernment()">
               </div>
               <div class="form-group">
-                <label>Signing Date</label>
-                <input type="date" id="gov-acnhsDate" oninput="renderGovernment()">
+                <label>Signature Style</label>
+                <select id="gov-sigStyle" onchange="renderGovernment()">
+                  <option value="armenian" selected>🇦🇲 Armenian Government Style</option>
+                  <option value="us">🇺🇸 US / International Style</option>
+                </select>
               </div>
             </div>
 
@@ -1583,7 +1586,7 @@
         ? ['gov-agencyName','gov-department','gov-addresseeName','gov-addresseeTitle',
            'gov-letterType','gov-docTitle','gov-subject','gov-refNo','gov-docDate',
            'gov-para1','gov-para2','gov-para3','gov-para4',
-           'gov-acnhsName','gov-acnhsTitle','gov-acnhsDate']
+           'gov-acnhsName','gov-acnhsTitle','gov-acnhsDate','gov-sigStyle']
         : ['mou-instName','mou-instAddress','mou-startDate','mou-refNo','mou-duration','mou-country',
            'mou-purpose','mou-areas','mou-partnerName','mou-partnerTitle','mou-partnerDate',
            'mou-acnhsName','mou-acnhsTitle','mou-acnhsDate'];
@@ -2357,6 +2360,7 @@
     const acnhsName      = v('gov-acnhsName')      || '__________________________';
     const acnhsTitle     = v('gov-acnhsTitle')     || '__________________________';
     const acnhsDate      = v('gov-acnhsDate');
+    const sigStyle       = document.getElementById('gov-sigStyle')?.value || 'armenian';
     const para1          = document.getElementById('gov-para1')?.innerHTML || 'We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS).';
     const para2          = document.getElementById('gov-para2')?.innerHTML || 'The purpose of this correspondence is as follows:';
     const para3          = document.getElementById('gov-para3')?.innerHTML || 'We remain committed to full compliance with all applicable regulatory requirements.';
@@ -2424,35 +2428,36 @@
         <p>${para4}</p>
       </div>
 
-      <!-- SIGNATURE — Authentic Armenian Government Style -->
+      <!-- SIGNATURE -->
       <div style="margin-top:44px;">
         <div style="height:1px;background:#1a2e4a;opacity:0.25;margin-bottom:22px;"></div>
-        <div style="display:flex;align-items:flex-end;justify-content:flex-end;gap:0;">
-
-          <!-- Signatory block (right-aligned) -->
+        ${sigStyle === 'armenian' ? `
+        <!-- Armenian Government Style: title above line, name below, Armenian date, city -->
+        <div style="display:flex;justify-content:flex-end;">
           <div style="text-align:left;min-width:260px;max-width:320px;">
-            <!-- Title ABOVE the line (Armenian convention) -->
             <div style="font-size:11.5px;font-weight:700;color:#1a2e4a;line-height:1.6;margin-bottom:30px;">
               ${escHtml(acnhsTitle)}<br>
               <span style="font-weight:400;font-size:10.5px;">Armenian College of Nursing &amp; Health Sciences</span>
             </div>
-            <!-- Signature underline -->
             <div style="border-bottom:1px solid #1a2e4a;width:220px;margin-bottom:5px;"></div>
-            <!-- Name below line -->
             <div style="font-size:12px;color:#1a2e4a;font-weight:500;">${escHtml(acnhsName)}</div>
-            <!-- Armenian-format date (from Document Date) + city -->
             <div style="font-size:11px;color:#555;margin-top:7px;line-height:1.85;">
-              ${docDate
-                ? `${armDate(docDate)}<br><span style="color:#888;font-size:10px;">(${fmtDate(docDate)})</span>`
-                : '<span style="color:#aaa;">&laquo;&nbsp;&nbsp;&nbsp;&raquo; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2026 \u0569.</span>'
-              }<br>
+              ${docDate ? armDate(docDate) : '<span style="color:#aaa;">&laquo;&nbsp;&nbsp;&nbsp;&raquo; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; 2026 \u0569.</span>'}<br>
               \u0535\u0580\u0565\u057E\u0561\u0576
             </div>
           </div>
-
-          <!-- Կ.Տ. seal removed -->
-
-        </div>
+        </div>` : `
+        <!-- US / International Style: line first, name + title below, English date -->
+        <div style="display:flex;justify-content:flex-end;">
+          <div style="text-align:left;min-width:260px;max-width:320px;">
+            <div style="border-bottom:1px solid #1a2e4a;width:220px;margin-bottom:6px;"></div>
+            <div style="font-size:12px;color:#1a2e4a;font-weight:700;">${escHtml(acnhsName)}</div>
+            <div style="font-size:11px;color:#555;margin-top:2px;">${escHtml(acnhsTitle)}</div>
+            <div style="font-size:11px;color:#555;">Armenian College of Nursing &amp; Health Sciences</div>
+            <div style="font-size:11px;color:#555;margin-top:6px;">${docDate ? fmtDate(docDate) : '_______________'}</div>
+          </div>
+        </div>`
+        }
       </div>
     `;
 
@@ -2474,6 +2479,8 @@
     if (nameEl) { nameEl.value = 'Dr. Hrachya A. Vardanyan'; nameEl.readOnly = false; }
     const titleEl = document.getElementById('gov-acnhsTitle');
     if (titleEl) { titleEl.value = 'Dean of Academic Affairs'; titleEl.readOnly = false; }
+    const sigStyleEl = document.getElementById('gov-sigStyle');
+    if (sigStyleEl) sigStyleEl.value = 'armenian';
     const typeEl = document.getElementById('gov-letterType');
     if (typeEl) { typeEl.value = 'Official Request'; typeEl.dispatchEvent(new Event('change')); }
     const titleEl2 = document.getElementById('gov-docTitle');
