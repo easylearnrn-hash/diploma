@@ -2320,16 +2320,16 @@
      RENDER: Government Correspondence
   ═══════════════════════════════════════════ */
   function renderGovernment() {
-    const agencyName     = v('gov-agencyName')     || '[Ministry / Government Agency]';
-    const department     = v('gov-department');
-    const addresseeName  = v('gov-addresseeName')  || '[Addressee Name]';
-    const addresseeTitle = v('gov-addresseeTitle') || '[Addressee Title]';
+    const agencyName     = v('gov-agencyName')     || '';
+    const department     = v('gov-department')     || '';
+    const addresseeName  = v('gov-addresseeName')  || '';
+    const addresseeTitle = v('gov-addresseeTitle') || '';
     const _letterTypeSel = document.getElementById('gov-letterType')?.value || 'Official Request';
     const letterType     = _letterTypeSel === 'Other'
                          ? (v('gov-letterTypeOther') || 'Other')
                          : _letterTypeSel;
     const docTitle       = v('gov-docTitle')       || 'Official Correspondence';
-    const subject        = v('gov-subject')        || '[Subject / Matter]';
+    const subject        = v('gov-subject')        || '';
     const refNo          = v('gov-refNo')          || 'ACNHS-GOV-' + new Date().getFullYear() + '-001';
     const docDate        = v('gov-docDate')        || new Date().toISOString().split('T')[0];
     const acnhsName      = v('gov-acnhsName')      || '__________________________';
@@ -2340,6 +2340,19 @@
     const para3          = document.getElementById('gov-para3')?.innerHTML || 'We remain committed to full compliance with all applicable regulatory requirements.';
     const para4          = document.getElementById('gov-para4')?.innerHTML || 'We thank you for your time and continued support of nursing education in Armenia.';
     const logoSrc        = getLogoSrc();
+
+    // Build recipient lines — only render non-empty fields
+    const recipientLines = [
+      addresseeTitle ? `<div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeTitle)}</div>` : '',
+      addresseeName  ? `<div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeName)}</div>`  : '',
+      agencyName     ? `<div>${escHtml(agencyName)}</div>`     : '',
+      department     ? `<div>${escHtml(department)}</div>`     : '',
+    ].filter(Boolean).join('');
+
+    // Dear line — only if at least one name field is filled
+    const dearLine = (addresseeTitle || addresseeName)
+      ? `<p>Dear ${[addresseeTitle, addresseeName].filter(Boolean).map(escHtml).join(' ')},</p>`
+      : '';
 
     const html = `
       <!-- HEADER -->
@@ -2371,24 +2384,19 @@
         <div class="doc-parties">${escHtml(letterType)}</div>
       </div>
 
-      <!-- RECIPIENT BLOCK -->
-      <div style="margin:18px 0 22px 0;line-height:1.7;font-size:13px;">
-        <div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeTitle)}</div>
-        <div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeName)}</div>
-        <div>${escHtml(agencyName)}</div>
-        ${department ? `<div>${escHtml(department)}</div>` : ''}
-        <div>Republic of Armenia</div>
-      </div>
+      <!-- RECIPIENT BLOCK — hidden when all fields empty -->
+      ${recipientLines ? `<div style="margin:18px 0 22px 0;line-height:1.7;font-size:13px;">${recipientLines}</div>` : ''}
 
-      <!-- SUBJECT LINE -->
+      <!-- SUBJECT LINE — hidden when empty -->
+      ${subject ? `
       <div style="margin:0 0 22px 0;padding:10px 14px;background:#f0f4f8;border-left:4px solid #c9a84c;border-radius:4px;">
         <span style="font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:0.08em;color:#888;">Re: </span>
         <span style="font-weight:700;color:#1a2e4a;">${escHtml(subject)}</span>
-      </div>
+      </div>` : ''}
 
       <!-- BODY -->
       <div class="doc-body">
-        <p>Dear ${escHtml(addresseeTitle)} ${escHtml(addresseeName)},</p>
+        ${dearLine}
         <p>${para1}</p>
         <p>${para2}</p>
         <p>${para3}</p>
