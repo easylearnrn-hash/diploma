@@ -1092,6 +1092,15 @@
           </div>
           <div class="doc-type-badge soon">Soon</div>
         </div>
+
+        <div class="doc-type-card" id="typeCard-government" data-type="government" onclick="selectDocType('government')">
+          <div class="doc-icon">🏛️</div>
+          <div class="doc-type-info">
+            <div class="doc-type-name">Government Correspondence</div>
+            <div class="doc-type-desc">Official letters to ministries &amp; government agencies</div>
+          </div>
+          <div class="doc-type-badge">Ready</div>
+        </div>
       </aside>
 
       <!-- RIGHT: Form + Preview -->
@@ -1308,6 +1317,98 @@
           </div>
         </div>
 
+        <!-- ── GOVERNMENT FORM ── -->
+        <div class="form-card" id="form-government" style="display:none;">
+          <div class="form-card-header">
+            <div class="form-card-header-icon">🏛️</div>
+            <div class="form-card-header-text">
+              <h2>Government Correspondence</h2>
+              <p>Official letter to a ministry or government agency — updates in real time</p>
+            </div>
+          </div>
+          <div class="form-body">
+
+            <p class="form-section-title">🏛️ Recipient Agency</p>
+            <div class="form-grid">
+              <div class="form-group span2">
+                <label>Ministry / Government Agency <span class="req">*</span></label>
+                <input type="text" id="gov-agencyName" placeholder="e.g. Ministry of Health of the Republic of Armenia" oninput="renderGovernment()">
+              </div>
+              <div class="form-group span2">
+                <label>Department / Division</label>
+                <input type="text" id="gov-department" placeholder="e.g. Department of Medical Education &amp; Licensing" oninput="renderGovernment()">
+              </div>
+              <div class="form-group">
+                <label>Addressee Full Name <span class="req">*</span></label>
+                <input type="text" id="gov-addresseeName" placeholder="e.g. Anahit Avanesyan" oninput="renderGovernment()">
+              </div>
+              <div class="form-group">
+                <label>Addressee Title / Position <span class="req">*</span></label>
+                <input type="text" id="gov-addresseeTitle" placeholder="e.g. Minister of Health" oninput="renderGovernment()">
+              </div>
+            </div>
+
+            <p class="form-section-title">📋 Letter Details</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Letter Type</label>
+                <select id="gov-letterType" onchange="renderGovernment()">
+                  <option value="Official Request">Official Request</option>
+                  <option value="Notification">Notification</option>
+                  <option value="Application">Application</option>
+                  <option value="Submission">Submission</option>
+                  <option value="Report">Report</option>
+                  <option value="Inquiry">Inquiry</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Document Date</label>
+                <input type="date" id="gov-docDate" oninput="renderGovernment()">
+              </div>
+              <div class="form-group">
+                <label>Document Reference No.</label>
+                <input type="text" id="gov-refNo" placeholder="e.g. ACNHS-GOV-2026-001" oninput="renderGovernment()">
+              </div>
+            </div>
+            <div class="form-grid full">
+              <div class="form-group">
+                <label>Subject / Matter <span class="req">*</span></label>
+                <textarea id="gov-subject" rows="3" placeholder="e.g. Request for Accreditation Extension of the Bachelor of Science in Nursing Program" oninput="renderGovernment()"></textarea>
+              </div>
+            </div>
+
+            <p class="form-section-title">✍️ ACNHS Signatory</p>
+            <div class="form-grid">
+              <div class="form-group">
+                <label>Name</label>
+                <input type="text" id="gov-acnhsName" value="Dr. Hrachya A. Vardanyan" oninput="renderGovernment()">
+              </div>
+              <div class="form-group">
+                <label>Title / Position</label>
+                <input type="text" id="gov-acnhsTitle" value="Dean of Academic Affairs" oninput="renderGovernment()">
+              </div>
+              <div class="form-group">
+                <label>Signing Date</label>
+                <input type="date" id="gov-acnhsDate" oninput="renderGovernment()">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button class="save-btn" id="saveBtn-government" onclick="saveAndAssignRef('government')">
+                <span>💾</span> Save &amp; Assign Ref
+              </button>
+              <button class="generate-btn" onclick="printDocument()">
+                <span>🖨️</span> Print / Save PDF
+              </button>
+              <button class="clear-btn" onclick="clearGovernmentForm()">
+                ↺ Clear Form
+              </button>
+            </div>
+
+          </div>
+        </div>
+
         <!-- ── DOCUMENT PREVIEW ── -->
         <div class="preview-panel" id="previewPanel">
           <div class="preview-panel-header">
@@ -1351,6 +1452,7 @@
           <button class="active" data-type="all" onclick="filterLoadDocs('all', this)">All</button>
           <button data-type="CAA" onclick="filterLoadDocs('CAA', this)">Affiliation (CAA)</button>
           <button data-type="MOU" onclick="filterLoadDocs('MOU', this)">MOU</button>
+          <button data-type="GOV" onclick="filterLoadDocs('GOV', this)">Government</button>
         </div>
         <div class="load-doc-list" id="loadDocList">
           <div class="load-empty">Loading documents…</div>
@@ -1378,6 +1480,7 @@
   const DOC_META = {
     affiliation: { code: 'CAA', refInputId: 'aff-refNo' },
     mou:         { code: 'MOU', refInputId: 'mou-refNo' },
+    government:  { code: 'GOV', refInputId: 'gov-refNo' },
   };
 
   async function saveAndAssignRef(docType) {
@@ -1410,14 +1513,24 @@
       }
 
       const createdBy   = sessionStorage.getItem('adminEmail') || 'admin';
-      const partnerName = docType === 'affiliation' ? (v('aff-hospitalName') || null) : (v('mou-instName') || null);
-      const partnerAddr = docType === 'affiliation' ? (v('aff-hospitalAddress') || null) : (v('mou-instAddress') || null);
-      const startDate   = docType === 'affiliation' ? (v('aff-startDate') || null) : (v('mou-startDate') || null);
+      const partnerName = docType === 'affiliation' ? (v('aff-hospitalName') || null)
+                        : docType === 'government'  ? (v('gov-agencyName')   || null)
+                        : (v('mou-instName') || null);
+      const partnerAddr = docType === 'affiliation' ? (v('aff-hospitalAddress') || null)
+                        : docType === 'government'  ? (v('gov-department')      || null)
+                        : (v('mou-instAddress') || null);
+      const startDate   = docType === 'affiliation' ? (v('aff-startDate') || null)
+                        : docType === 'government'  ? (v('gov-docDate')   || null)
+                        : (v('mou-startDate') || null);
 
       // Serialize all form fields for future reload
       const allFields = docType === 'affiliation'
         ? ['aff-hospitalName','aff-hospitalAddress','aff-startDate','aff-refNo','aff-capacity',
            'aff-hospName','aff-hospTitle','aff-hospDate','aff-acnhsName','aff-acnhsTitle','aff-acnhsDate']
+        : docType === 'government'
+        ? ['gov-agencyName','gov-department','gov-addresseeName','gov-addresseeTitle',
+           'gov-letterType','gov-subject','gov-refNo','gov-docDate',
+           'gov-acnhsName','gov-acnhsTitle','gov-acnhsDate']
         : ['mou-instName','mou-instAddress','mou-startDate','mou-refNo','mou-duration','mou-country',
            'mou-purpose','mou-areas','mou-partnerName','mou-partnerTitle','mou-partnerDate',
            'mou-acnhsName','mou-acnhsTitle','mou-acnhsDate'];
@@ -1443,6 +1556,7 @@
       if (input) { input.value = refNo; input.readOnly = true; }
       if (docType === 'affiliation') renderAffiliation();
       else if (docType === 'mou')    renderMOU();
+      else if (docType === 'government') renderGovernment();
 
       btns.forEach(b => {
         b.innerHTML = '✅ Saved — ' + refNo;
@@ -1531,7 +1645,9 @@
       return;
     }
 
-    const docType = doc.doc_type === 'CAA' ? 'affiliation' : 'mou';
+    const docType = doc.doc_type === 'CAA' ? 'affiliation'
+                  : doc.doc_type === 'GOV' ? 'government'
+                  : 'mou';
 
     // Switch to correct doc type
     selectDocType(docType);
@@ -1550,6 +1666,7 @@
 
     // Re-render the document
     if (docType === 'affiliation') renderAffiliation();
+    else if (docType === 'government') renderGovernment();
     else renderMOU();
 
     // Update save buttons to show already-saved state
@@ -1588,16 +1705,19 @@
     // Show the right form
     document.getElementById('form-affiliation').style.display = (type === 'affiliation') ? 'block' : 'none';
     document.getElementById('form-mou').style.display         = (type === 'mou')         ? 'block' : 'none';
+    document.getElementById('form-government').style.display  = (type === 'government')  ? 'block' : 'none';
     document.getElementById('previewPanel').style.display     = 'block';
     document.getElementById('emptyState').style.display       = 'none';
 
     if (type === 'affiliation') { renderAffiliation(); }
     if (type === 'mou')         { renderMOU(); }
+    if (type === 'government')  { renderGovernment(); }
   }
 
   function showComingSoon() {
     document.getElementById('form-affiliation').style.display = 'none';
     document.getElementById('form-mou').style.display         = 'none';
+    document.getElementById('form-government').style.display  = 'none';
     document.getElementById('previewPanel').style.display     = 'none';
     document.getElementById('emptyState').style.display       = 'block';
     document.getElementById('emptyState').innerHTML = `
@@ -2135,6 +2255,114 @@
     document.getElementById('mou-acnhsTitle').value = 'Dean of Academic Affairs';
     document.getElementById('mou-country').value    = 'Republic of Armenia';
     renderMOU();
+  }
+
+  /* ═══════════════════════════════════════════
+     RENDER: Government Correspondence
+  ═══════════════════════════════════════════ */
+  function renderGovernment() {
+    const agencyName     = v('gov-agencyName')     || '[Ministry / Government Agency]';
+    const department     = v('gov-department');
+    const addresseeName  = v('gov-addresseeName')  || '[Addressee Name]';
+    const addresseeTitle = v('gov-addresseeTitle') || '[Addressee Title]';
+    const letterType     = document.getElementById('gov-letterType')?.value || 'Official Request';
+    const subject        = v('gov-subject')        || '[Subject / Matter]';
+    const refNo          = v('gov-refNo')          || 'ACNHS-GOV-' + new Date().getFullYear() + '-001';
+    const docDate        = v('gov-docDate')        || new Date().toISOString().split('T')[0];
+    const acnhsName      = v('gov-acnhsName')      || '__________________________';
+    const acnhsTitle     = v('gov-acnhsTitle')     || '__________________________';
+    const acnhsDate      = v('gov-acnhsDate');
+    const logoSrc        = getLogoSrc();
+
+    const html = `
+      <!-- HEADER -->
+      <div class="doc-header">
+        <div class="doc-header-left">
+          <div class="uni-name">Armenian College of<br>Nursing &amp; Health Sciences</div>
+          <div class="uni-dept">Office of the Dean</div>
+          <div class="uni-dept">Yerevan, Republic of Armenia</div>
+        </div>
+        <div class="doc-header-center">
+          <img src="${logoSrc}" alt="ACNHS Seal">
+        </div>
+        <div class="doc-header-right">
+          <div class="doc-ref">Ref: ${escHtml(refNo)}</div>
+          <div class="doc-meta">Date: ${fmtDate(docDate)}</div>
+          <div class="doc-meta doc-url">www.acnhs.am</div>
+        </div>
+      </div>
+
+      <!-- MICROTEXT -->
+      <div class="doc-microtext">
+        ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES &bull; OFFICIAL CORRESPONDENCE &bull; DO NOT ALTER OR REPRODUCE WITHOUT AUTHORIZATION &bull;
+        ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES &bull; OFFICIAL CORRESPONDENCE &bull; DO NOT ALTER OR REPRODUCE WITHOUT AUTHORIZATION &bull;
+      </div>
+
+      <!-- TITLE -->
+      <div class="doc-title-block">
+        <h1>Official Correspondence</h1>
+        <div class="doc-parties">${escHtml(letterType)}</div>
+      </div>
+
+      <!-- RECIPIENT BLOCK -->
+      <div style="margin:18px 0 22px 0;line-height:1.7;font-size:13px;">
+        <div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeTitle)}</div>
+        <div style="font-weight:700;color:#1a2e4a;">${escHtml(addresseeName)}</div>
+        <div>${escHtml(agencyName)}</div>
+        ${department ? `<div>${escHtml(department)}</div>` : ''}
+        <div>Republic of Armenia</div>
+      </div>
+
+      <!-- SUBJECT LINE -->
+      <div style="margin:0 0 22px 0;padding:10px 14px;background:#f0f4f8;border-left:4px solid #c9a84c;border-radius:4px;">
+        <span style="font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:0.08em;color:#888;">Re: </span>
+        <span style="font-weight:700;color:#1a2e4a;">${escHtml(subject)}</span>
+      </div>
+
+      <!-- BODY -->
+      <div class="doc-body">
+        <p>Dear ${escHtml(addresseeTitle)} ${escHtml(addresseeName)},</p>
+        <p>We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.</p>
+        <p>The purpose of this correspondence is the following: <strong>${escHtml(subject)}</strong></p>
+        <p>We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.</p>
+        <p>We thank you for your time and continued support of nursing education in Armenia.</p>
+      </div>
+
+      <!-- SIGNATURE -->
+      <div class="doc-sig-container" style="margin-top:32px;">
+        <div class="doc-sig-block">
+          <h4>Armenian College of Nursing &amp; Health Sciences</h4>
+          ${sigLine('Name',      acnhsName)}
+          ${sigLine('Title',     acnhsTitle)}
+          ${sigLine('Signature', '')}
+          ${sigLine('Date',      acnhsDate ? fmtDate(acnhsDate) : '')}
+        </div>
+      </div>
+    `;
+
+    document.getElementById('docContent').innerHTML = html;
+    document.getElementById('docFooter').innerHTML =
+      `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; info@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)} &nbsp;|&nbsp; Page 1`;
+
+    const wm = document.getElementById('docWatermarkImg');
+    if (wm) wm.src = getLogoSrc();
+  }
+
+  function clearGovernmentForm() {
+    ['gov-agencyName','gov-department','gov-addresseeName','gov-addresseeTitle',
+     'gov-subject','gov-refNo','gov-docDate','gov-acnhsDate'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.value = ''; el.readOnly = false; }
+    });
+    const nameEl = document.getElementById('gov-acnhsName');
+    if (nameEl) { nameEl.value = 'Dr. Hrachya A. Vardanyan'; nameEl.readOnly = false; }
+    const titleEl = document.getElementById('gov-acnhsTitle');
+    if (titleEl) { titleEl.value = 'Dean of Academic Affairs'; titleEl.readOnly = false; }
+    const typeEl = document.getElementById('gov-letterType');
+    if (typeEl) typeEl.value = 'Official Request';
+    const btn = document.getElementById('saveBtn-government');
+    if (btn) { btn.innerHTML = '<span>💾</span> Save &amp; Assign Ref'; btn.classList.remove('saved'); btn.disabled = false; }
+    renderGovernment();
   }
 
   /* ── Script loader ── */
