@@ -2680,16 +2680,250 @@
     e.target.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      if (document.querySelector(`script[src="${CSS.escape ? src : src}"]`)) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = src; s.onload = resolve; s.onerror = reject;
-      document.head.appendChild(s);
-    });
+  /**
+   * Build a complete self-contained A4 HTML document for Playwright PDF export.
+   *
+   * Layout (physical A4 = 297 mm tall):
+   *   0–12 mm   : Playwright header band  (continuation header in pdf-server.js)
+   *   12–281 mm : Content viewport        (border frame + body)
+   *   281–297 mm: Playwright footer band  (page numbers in pdf-server.js)
+   *
+   * position:fixed elements are relative to the content viewport (12–281 mm).
+   * The outer border at fixed top:4mm = 16 mm from physical top.
+   *
+   * @param {string} contentHtml  innerHTML of #docContent (rendered letter HTML)
+   * @param {string} logoDataUrl  data URL for the ACNHS seal (watermark)
+   * @param {string} refNo        document reference number
+   */
+  function buildPrintHtml(contentHtml, logoDataUrl, refNo) {
+    const safeRef = escHtml(refNo || '');
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <base href="http://localhost:8000/">
+  <title>${safeRef}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;500;600;700&amp;family=Noto+Sans+Armenian:wght@400;600;700;800&amp;family=Playfair+Display:wght@700;800&amp;family=Inter:wght@400;500;600;700;800&amp;family=EB+Garamond:ital,wght@0,400;0,600;1,400&amp;display=swap" rel="stylesheet">
+  <style>
+    :root { --doc-ink: #0a0f1e; --doc-slate: #3a4a6b; --doc-gold: #9a7a2c; }
+
+    @page { size: A4; margin: 0; }
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0; background: #fff;
+      color: var(--doc-ink);
+      font-family: 'Noto Serif Armenian', 'EB Garamond', 'Times New Roman', Georgia, serif;
+      font-size: 11pt; line-height: 1.65;
+      background-image: repeating-linear-gradient(
+        45deg,
+        rgba(10,15,30,0.018), rgba(10,15,30,0.018) 1px,
+        transparent 1px, transparent 7px
+      );
+    }
+
+    /* Disable ligatures to prevent glyph-composition artefacts */
+    * {
+      font-feature-settings: "liga" 0, "clig" 0, "dlig" 0;
+      -webkit-font-feature-settings: "liga" 0;
+    }
+
+    /* ─── PAGE BORDER FRAME ───────────────────────────────────────────────────
+       position:fixed → repeats on EVERY page in Playwright PDF.
+       Coordinates relative to the content viewport (starts at 12 mm from
+       physical top because margin.top:'12mm' is set in pdf-server.js).
+    ──────────────────────────────────────────────────────────────────────── */
+    .pdf-frame-outer {
+      position: fixed; top: 4mm; left: 4mm; right: 4mm; bottom: 4mm;
+      border: 1.5px solid rgba(10,15,30,0.22);
+      pointer-events: none; z-index: 100;
+    }
+    .pdf-frame-inner {
+      position: fixed; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
+      border: 0.5px solid rgba(154,122,44,0.45);
+      pointer-events: none; z-index: 100;
+    }
+
+    /* ─── WATERMARK ───────────────────────────────────────────────────────── */
+    .pdf-watermark {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      opacity: 0.032; pointer-events: none; z-index: 1;
+    }
+    .pdf-watermark img { width: 420px; max-width: 80%; }
+
+    /* ─── CONTENT WRAPPER ─────────────────────────────────────────────────────
+       10 mm top/bottom inside the viewport, 20 mm left/right.
+       Physical text starts ~22 mm from page top, ~20 mm from sides.
+    ──────────────────────────────────────────────────────────────────────── */
+    .pdf-content { padding: 10mm 20mm 10mm 20mm; position: relative; z-index: 2; }
+
+    /* ─── DOCUMENT HEADER ─────────────────────────────────────────────────── */
+    .doc-header {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      align-items: center; margin-bottom: 7mm; padding-bottom: 5mm;
+      border-bottom: 1.5px solid rgba(10,15,30,0.15); position: relative;
+    }
+    .doc-header::after {
+      content: ''; position: absolute; bottom: -3px; left: 0; right: 0;
+      height: 0.5px; background: rgba(154,122,44,0.45);
+    }
+    .doc-header-left  { text-align: left;  padding-right: 15px; }
+    .doc-header-right { text-align: right; padding-left:  15px; }
+    .doc-header-center { display: flex; justify-content: center; }
+    .doc-header-center img { width: 77px; height: 77px; object-fit: contain; }
+    .uni-name {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 10pt; font-weight: 800; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--doc-ink); line-height: 1.35; margin-bottom: 3.5px;
+    }
+    .uni-dept {
+      font-family: 'Inter', sans-serif; font-size: 7.5pt; font-weight: 500;
+      color: var(--doc-slate); text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.4;
+    }
+    .doc-ref {
+      font-family: 'Inter', sans-serif; font-size: 8.5pt; font-weight: 700;
+      color: var(--doc-ink); text-transform: uppercase;
+      letter-spacing: 0.06em; margin-bottom: 3.5px; line-height: 1.35;
+    }
+    .doc-meta {
+      font-family: 'Inter', sans-serif; font-size: 7.5pt; font-weight: 500;
+      color: var(--doc-slate); text-transform: uppercase; letter-spacing: 0.04em; line-height: 1.4;
+    }
+    .doc-url { color: var(--doc-gold); font-weight: 600; }
+
+    /* ─── MICROTEXT ────────────────────────────────────────────────────────── */
+    .doc-microtext {
+      font-family: 'Inter', sans-serif; font-size: 5.5pt; text-align: center;
+      letter-spacing: 0.08em; color: rgba(10,15,30,0.18);
+      text-transform: uppercase; overflow: hidden; white-space: nowrap;
+      margin: 1.5mm 0; line-height: 1.2;
+    }
+
+    /* ─── TITLE BLOCK ──────────────────────────────────────────────────────── */
+    .doc-title-block {
+      text-align: center; margin: 6mm 0 5mm;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .doc-title-block h1 {
+      font-family: 'Noto Sans Armenian', 'Inter', sans-serif;
+      font-size: 13.5pt; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--doc-ink); margin-bottom: 3mm; margin-top: 0;
+    }
+    .doc-title-block .doc-parties {
+      font-size: 10pt; font-family: 'Noto Serif Armenian', 'Inter', sans-serif;
+      color: var(--doc-slate); line-height: 1.6;
+    }
+    .doc-title-block .doc-parties strong { color: var(--doc-ink); font-weight: 600; }
+
+    /* ─── BODY ─────────────────────────────────────────────────────────────── */
+    .doc-body { line-height: 1.75; }
+    .doc-body p { margin: 0 0 3.5mm 0; text-align: justify; hyphens: auto; }
+
+    /* ─── RULES ─────────────────────────────────────────────────────────────── */
+    .doc-rule {
+      width: 100%; height: 0; border: none;
+      border-top: 1px solid rgba(10,15,30,0.14); margin: 3.5mm 0;
+    }
+    .doc-rule.gold { border-top: 1px solid rgba(154,122,44,0.35); }
+
+    /* ─── SECTIONS ──────────────────────────────────────────────────────────── */
+    .doc-section { margin: 4mm 0; }
+    .doc-section-heading {
+      font-family: 'Inter', sans-serif; font-size: 9pt; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.1em; color: var(--doc-ink);
+      margin-bottom: 2mm; display: flex; align-items: baseline; gap: 5px;
+      break-after: avoid; page-break-after: avoid;
+    }
+    .doc-section-heading .sec-num { color: var(--doc-gold); font-size: 10pt; font-weight: 700; }
+    .doc-section p { margin-bottom: 2mm; text-align: justify; hyphens: auto; }
+
+    /* ─── HIGHLIGHT ─────────────────────────────────────────────────────────── */
+    .doc-highlight {
+      background: rgba(154,122,44,0.08); border-left: 2.5px solid var(--doc-gold);
+      padding: 2.5mm 4mm; margin: 2mm 0; font-size: 10.5pt;
+      border-radius: 0 3px 3px 0;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+
+    /* ─── LISTS ─────────────────────────────────────────────────────────────── */
+    .doc-list { list-style: none; padding: 0; margin: 1.5mm 0; }
+    .doc-list li {
+      display: flex; align-items: baseline; gap: 5px; margin-bottom: 1.5mm; padding-left: 4mm;
+    }
+    .doc-list li::before { content: '—'; color: var(--doc-gold); font-weight: 600; flex-shrink: 0; }
+    .doc-list.numbered { counter-reset: doclist; }
+    .doc-list.numbered li { counter-increment: doclist; }
+    .doc-list.numbered li::before {
+      content: counter(doclist) '.'; color: var(--doc-gold); font-weight: 700;
+      min-width: 14px; font-family: 'Inter', sans-serif; font-size: 9pt;
+    }
+
+    /* ─── PARTIES GRID ──────────────────────────────────────────────────────── */
+    .doc-parties-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; margin: 2mm 0;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .doc-party-box {
+      border: 1px solid rgba(10,15,30,0.12); border-radius: 3px; padding: 3mm 4mm; font-size: 10pt;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .doc-party-box strong {
+      display: block; font-family: 'Inter', sans-serif; font-size: 8pt; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--doc-gold); margin-bottom: 2mm;
+    }
+
+    /* ─── SIGNATURE ─────────────────────────────────────────────────────────── */
+    .doc-signature-section { margin-top: 6mm; break-inside: avoid; page-break-inside: avoid; }
+    .doc-sig-wrapper        { break-inside: avoid; page-break-inside: avoid; }
+    .doc-sig-heading {
+      font-family: 'Inter', sans-serif; font-size: 9pt; font-weight: 800;
+      text-transform: uppercase; letter-spacing: 0.1em; color: var(--doc-ink);
+      text-align: center; margin-bottom: 4mm;
+    }
+    .doc-sig-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8mm;
+      break-inside: avoid; page-break-inside: avoid;
+    }
+    .doc-sig-block { border-top: 1.5px solid rgba(10,15,30,0.2); padding-top: 3mm; }
+    .doc-sig-block h4 {
+      font-family: 'Inter', sans-serif; font-size: 8.5pt; font-weight: 700;
+      color: var(--doc-ink); margin-bottom: 4mm;
+    }
+    .doc-sig-line {
+      display: flex; align-items: flex-end; gap: 6px; margin-bottom: 3mm; font-size: 9.5pt; line-height: 1;
+    }
+    .doc-sig-line .lbl {
+      font-family: 'Inter', sans-serif; font-size: 8pt; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em; color: var(--doc-slate);
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .doc-sig-line .val {
+      flex: 1; border-bottom: 0.75px solid rgba(10,15,30,0.25);
+      min-height: 14px; padding-bottom: 2px; padding-left: 4px; font-size: 10pt;
+    }
+  </style>
+</head>
+<body>
+  <!-- Double border frame — position:fixed → repeats on every page -->
+  <div class="pdf-frame-outer"></div>
+  <div class="pdf-frame-inner"></div>
+  <!-- Centred watermark — position:fixed → repeats on every page -->
+  <div class="pdf-watermark"><img src="${logoDataUrl}" alt="ACNHS Seal"></div>
+  <!-- Document content -->
+  <div class="pdf-content">
+${contentHtml}
+  </div>
+</body>
+</html>`;
   }
 
-  /* ── PDF Export (pixel-perfect, print-ready) ── */
+  /* ── PDF Export via Playwright PDF Server (http://localhost:8001) ───────────
+     Requires: node pdf-server.js   (in a separate terminal)
+     First-time setup: npm install && npx playwright install chromium
+  ── */
   async function printDocument() {
     const btns = document.querySelectorAll('.generate-btn, .preview-btn.primary');
     btns.forEach(b => {
@@ -2698,181 +2932,65 @@
       b.innerHTML = '<span>⏳</span> Generating PDF…';
     });
 
-    let wrapper    = null;
-    let ligStyle   = null;
-
     try {
-      if (typeof html2pdf === 'undefined') {
-        await loadScript('js/html2pdf.bundle.min.js');
+      const contentEl = document.getElementById('docContent');
+      if (!contentEl || !contentEl.innerHTML.trim()) {
+        throw new Error('Document not rendered. Please fill in the form fields first.');
       }
 
-      const sheet = document.getElementById('docSheet');
-
-      // ── 1. Deep-clone the rendered sheet ──
-      const clone = sheet.cloneNode(true);
-      clone.id = '__pdf-render-clone';
-
-      // Strip preview-only transform/shadow; keep the real A4 layout
-      clone.style.cssText = [
-        'transform: none',
-        'box-shadow: none',
-        'overflow: visible',
-        'width: 210mm',
-        'min-height: 0',
-        'margin: 0',
-        'padding: 10mm 12mm',
-        'background-color: #ffffff',
-        'background-image: repeating-linear-gradient(45deg, rgba(10,15,30,0.035), rgba(10,15,30,0.035) 1px, transparent 1px, transparent 7px)',
-        'display: flex',
-        'flex-direction: column',
-        'font-family: \'Noto Serif Armenian\', \'EB Garamond\', \'Times New Roman\', Georgia, serif',
-        // Disable ligatures on the root — cascades down
-        'font-feature-settings: "liga" 0, "clig" 0, "dlig" 0',
-        '-webkit-font-feature-settings: "liga" 0',
-      ].join(';');
-
-      // ── 2. Inject a scoped style to kill ligatures on EVERY child ──
-      //    html2canvas can misplace composite glyphs (fi, ffi, ng etc.)
-      //    in EB Garamond, producing "arisfingm", "betweane" artefacts.
-      ligStyle = document.createElement('style');
-      ligStyle.textContent = `
-        #__pdf-render-clone,
-        #__pdf-render-clone * {
-          font-feature-settings: "liga" 0, "clig" 0, "dlig" 0 !important;
-          -webkit-font-feature-settings: "liga" 0 !important;
-          text-rendering: geometricPrecision !important;
-          -webkit-text-stroke: 0 !important;
-        }
-        #__pdf-render-clone .doc-sig-wrapper,
-        #__pdf-render-clone .doc-signature-section,
-        #__pdf-render-clone .doc-sig-grid,
-        #__pdf-render-clone .doc-sig-block,
-        #__pdf-render-clone .doc-party-box,
-        #__pdf-render-clone .doc-parties-grid,
-        #__pdf-render-clone .doc-highlight,
-        #__pdf-render-clone .doc-title-block {
-          page-break-inside: avoid !important;
-          break-inside: avoid-page !important;
-        }
-      `;
-      document.head.appendChild(ligStyle);
-
-      // ── 3. Place clone off-screen — html2canvas requires DOM presence ──
-      wrapper = document.createElement('div');
-      wrapper.style.cssText =
-        'position:fixed;left:-9999px;top:0;width:210mm;pointer-events:none;z-index:-1;';
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
-
-      // Give the browser one frame to apply the ligature-disabling styles
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
-
-      // ── 3.5 Replicate Watermark per A4 Page ──
-      const cloneWm = clone.querySelector('.doc-watermark');
-      if (cloneWm) {
-        cloneWm.style.display = 'none'; // hide the single centered watermark
-        // Calculate total A4 pages based on clone's rendered height
-        const pxPerMm = clone.offsetWidth / 210;
-        const pageHeightPx = 297 * pxPerMm;
-        const totalPages = Math.max(1, Math.ceil(clone.offsetHeight / pageHeightPx));
-        
-        const wmContainer = document.createElement('div');
-        wmContainer.style.cssText = 'position: absolute; top:0; left:0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; z-index: 1;';
-        
-        const src = cloneWm.querySelector('img')?.src || getLogoSrc();
-        
-        for (let i = 0; i < totalPages; i++) {
-          const pageWm = document.createElement('div');
-          pageWm.style.cssText = `position: absolute; top: ${i * 297}mm; left: 0; width: 210mm; height: 297mm; display: flex; align-items: center; justify-content: center; opacity: 0.055;`;
-          const img = document.createElement('img');
-          img.src = src;
-          img.style.cssText = 'width: 420px; max-width: 80%;';
-          pageWm.appendChild(img);
-          wmContainer.appendChild(pageWm);
-        }
-        clone.insertBefore(wmContainer, clone.firstChild);
-      }
-
-      // ── 4. Filename ──
-      const hospitalRaw  = v('aff-hospitalName') || v('mou-instName') || '';
+      // ── Gather metadata ────────────────────────────────────────────────────
+      const refNo = (
+        v('gov-refNo') || v('aff-refNo') || v('mou-refNo') ||
+        `ACNHS-${(currentDocType || 'DOC').toUpperCase()}-${new Date().getFullYear()}-001`
+      );
+      const hospitalRaw  = v('aff-hospitalName') || v('mou-instName') || v('gov-agencyName') || '';
       const hospitalSlug = hospitalRaw
         .replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 36);
-      const refNo = (v('aff-refNo') || v('mou-refNo') ||
-        `ACNHS-${currentDocType.toUpperCase()}-${new Date().getFullYear()}-001`)
-        .replace(/\s+/g, '-');
-      const filename = hospitalSlug ? `${refNo}_${hospitalSlug}.pdf` : `${refNo}.pdf`;
+      const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
+        .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.pdf';
 
-      // ── 5. html2pdf options ──
-      const opts = {
-        margin:   0,
-        filename,
-        image: {
-          // PNG: lossless — no JPEG compression artefacts on thin rule lines or text
-          type:    'png',
-        },
-        html2canvas: {
-          scale:           3,        // 3× = ~264 DPI — sharp for professional print
-          useCORS:         true,
-          allowTaint:      false,
-          logging:         false,
-          letterRendering: true,     // respect letter-spacing in serif fonts
-          backgroundColor: null,          // let clone's own background-color/image render
-          scrollX:         0,
-          scrollY:         0,
-          removeContainer: false,    // we handle cleanup ourselves
-          // Force font loading before capture
-          onclone: (clonedDoc) => {
-            const el = clonedDoc.getElementById('__pdf-render-clone');
-            if (el) {
-              el.style.fontFeatureSettings  = '"liga" 0, "clig" 0, "dlig" 0';
-              el.querySelectorAll('*').forEach(n => {
-                n.style.fontFeatureSettings         = '"liga" 0, "clig" 0, "dlig" 0';
-                n.style.webkitFontFeatureSettings   = '"liga" 0';
-              });
-              // Only keep-together for structural blocks, NOT paragraphs
-              el.querySelectorAll(
-                '.doc-sig-wrapper,.doc-signature-section,.doc-sig-grid,.doc-sig-block,.doc-party-box,.doc-parties-grid,.doc-highlight,.doc-title-block'
-              ).forEach(n => {
-                n.style.pageBreakInside = 'avoid';
-                n.style.breakInside     = 'avoid-page';
-              });
-            }
-          },
-        },
-        jsPDF: {
-          unit:        'mm',
-          format:      'a4',
-          orientation: 'portrait',
-          compress:    true,
-        },
-        // Keep signature and key structural blocks together; let paragraphs slice naturally
-        pagebreak: {
-          mode:  ['css'],
-          avoid: [
-            '.doc-sig-wrapper',
-            '.doc-signature-section',
-            '.doc-sig-grid',
-            '.doc-sig-block',
-            '.doc-party-box',
-            '.doc-parties-grid',
-            '.doc-highlight',
-            '.doc-title-block',
-          ],
-        },
-      };
+      // ── Build self-contained print HTML ───────────────────────────────────
+      const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
 
-      await html2pdf().set(opts).from(clone).save();
+      // ── POST to Playwright PDF server ─────────────────────────────────────
+      const response = await fetch('http://localhost:8001/generate-pdf', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ html: printHtml, filename, refNo }),
+      });
+
+      if (!response.ok) {
+        let msg = `Server error ${response.status}`;
+        try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      // ── Download the returned PDF blob ────────────────────────────────────
+      const blob = await response.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
 
     } catch (err) {
-      console.error('PDF generation failed:', err);
-      alert(
-        '⚠️ PDF generation failed.\n\n' +
-        'Please make sure you are accessing the page via http://localhost:8000 ' +
-        '(not file://) and try again.\n\nError: ' + err.message
-      );
+      console.error('[printDocument]', err);
+      const isDown = err.message.includes('Failed to fetch') ||
+                     err.message.includes('NetworkError') ||
+                     err.message.includes('Load failed');
+      if (isDown) {
+        alert(
+          '⚠️ PDF server is not running.\n\n' +
+          'Start it in a new terminal:\n\n' +
+          '  node pdf-server.js\n\n' +
+          '(First-time setup: npm install && npx playwright install chromium)\n\n' +
+          'Then click "Print / Save PDF" again.'
+        );
+      } else {
+        alert('⚠️ PDF generation failed.\n\nError: ' + err.message);
+      }
     } finally {
-      ligStyle?.remove();
-      wrapper?.remove();
       btns.forEach(b => {
         b.disabled = false;
         if (b._origHTML) { b.innerHTML = b._origHTML; delete b._origHTML; }
