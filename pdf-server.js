@@ -99,13 +99,29 @@ const server = http.createServer(async (req, res) => {
       preferCSSPageSize:   false,  // use format: 'A4' explicitly
       displayHeaderFooter: true,
       margin: {
-        top:    '0',       // @page margin: 0 in CSS; body padding handles top spacing
-        bottom: '16mm',    // space reserved for the Playwright footer band
+        top:    '24mm',    // pushes content area to 24mm from physical top; border top at 4mm → 20mm gap ✓
+        bottom: '20mm',    // footer band; border bottom at 277mm (bottom:20mm), footer text at ~281mm ✓
         left:   '0',
         right:  '0',
       },
-      // Blank header — the document letterhead is part of the HTML body
-      headerTemplate: '<div></div>',
+      // Compact running header — appears in the 24mm top band on every page
+      headerTemplate: `
+        <div style="
+          font-size: 7px;
+          width: 100%;
+          text-align: center;
+          font-family: Arial, Helvetica, sans-serif;
+          color: rgba(10,15,30,0.38);
+          padding: 12mm 16mm 0;
+          box-sizing: border-box;
+          line-height: 1.2;
+          letter-spacing: 0.05em;
+          text-transform: uppercase;
+        ">
+          ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES
+          &bull; Official Correspondence &bull;
+          Ref:&nbsp;${safeRef}
+        </div>`,
       // Footer band: appears in the 16 mm bottom margin on every page
       footerTemplate: `
         <div style="
@@ -114,7 +130,7 @@ const server = http.createServer(async (req, res) => {
           text-align: center;
           font-family: Arial, Helvetica, sans-serif;
           color: rgba(10,15,30,0.45);
-          padding: 3px 16mm 0;
+          padding: 4mm 16mm 0;
           box-sizing: border-box;
           line-height: 1.2;
         ">
