@@ -343,6 +343,33 @@
       box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
     }
     textarea { resize: vertical; min-height: 72px; line-height: 1.6; }
+
+    /* Rich-text contenteditable body fields */
+    .rich-field {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 10px;
+      padding: 11px 14px;
+      font-size: 14px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      line-height: 1.6;
+      min-height: 72px;
+      outline: none;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      width: 100%;
+      box-sizing: border-box;
+      cursor: text;
+    }
+    .rich-field:focus {
+      border-color: var(--gold-primary);
+      background: rgba(201,168,76,0.06);
+      box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+    }
+    .rich-field ul, .rich-field ol { padding-left: 20px; margin: 4px 0; }
+    .rich-field b, .rich-field strong { font-weight: 700; }
+    .rich-field i, .rich-field em { font-style: italic; }
     select option { background: #0f172a; color: var(--text); }
 
     /* Clinical areas checkboxes */
@@ -1387,19 +1414,19 @@
             <div class="form-grid full">
               <div class="form-group">
                 <label>Opening Paragraph</label>
-                <textarea id="gov-para1" rows="3" oninput="renderGovernment()">We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.</textarea>
+                <div id="gov-para1" contenteditable="true" class="rich-field" oninput="renderGovernment()">We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.</div>
               </div>
               <div class="form-group">
                 <label>Main Body / Purpose</label>
-                <textarea id="gov-para2" rows="4" oninput="renderGovernment()">The purpose of this correspondence is as follows:</textarea>
+                <div id="gov-para2" contenteditable="true" class="rich-field" style="min-height:90px;" oninput="renderGovernment()">The purpose of this correspondence is as follows:</div>
               </div>
               <div class="form-group">
                 <label>Closing Statement</label>
-                <textarea id="gov-para3" rows="3" oninput="renderGovernment()">We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.</textarea>
+                <div id="gov-para3" contenteditable="true" class="rich-field" oninput="renderGovernment()">We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.</div>
               </div>
               <div class="form-group">
                 <label>Sign-off Line</label>
-                <textarea id="gov-para4" rows="2" oninput="renderGovernment()">We thank you for your time and continued support of nursing education in Armenia.</textarea>
+                <div id="gov-para4" contenteditable="true" class="rich-field" oninput="renderGovernment()">We thank you for your time and continued support of nursing education in Armenia.</div>
               </div>
             </div>
 
@@ -1561,7 +1588,11 @@
            'mou-purpose','mou-areas','mou-partnerName','mou-partnerTitle','mou-partnerDate',
            'mou-acnhsName','mou-acnhsTitle','mou-acnhsDate'];
       const formData = {};
-      allFields.forEach(id => { formData[id] = v(id) || ''; });
+      allFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) { formData[id] = ''; return; }
+        formData[id] = el.contentEditable === 'true' ? el.innerHTML : (el.value || '');
+      });
 
       const { error: insertErr } = await sb.from('documents').insert({
         doc_type:        meta.code,
@@ -1682,7 +1713,9 @@
     const fd = doc.form_data;
     Object.keys(fd).forEach(fieldId => {
       const el = document.getElementById(fieldId);
-      if (el) el.value = fd[fieldId] || '';
+      if (!el) return;
+      if (el.contentEditable === 'true') el.innerHTML = fd[fieldId] || '';
+      else el.value = fd[fieldId] || '';
     });
 
     // Lock the ref input since it's already registered
@@ -2302,10 +2335,10 @@
     const acnhsName      = v('gov-acnhsName')      || '__________________________';
     const acnhsTitle     = v('gov-acnhsTitle')     || '__________________________';
     const acnhsDate      = v('gov-acnhsDate');
-    const para1          = v('gov-para1')          || 'We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS).';
-    const para2          = v('gov-para2')          || 'The purpose of this correspondence is as follows:';
-    const para3          = v('gov-para3')          || 'We remain committed to full compliance with all applicable regulatory requirements and look forward to your favorable response.';
-    const para4          = v('gov-para4')          || 'We thank you for your time and continued support of nursing education in Armenia.';
+    const para1          = document.getElementById('gov-para1')?.innerHTML || 'We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS).';
+    const para2          = document.getElementById('gov-para2')?.innerHTML || 'The purpose of this correspondence is as follows:';
+    const para3          = document.getElementById('gov-para3')?.innerHTML || 'We remain committed to full compliance with all applicable regulatory requirements.';
+    const para4          = document.getElementById('gov-para4')?.innerHTML || 'We thank you for your time and continued support of nursing education in Armenia.';
     const logoSrc        = getLogoSrc();
 
     const html = `
@@ -2356,10 +2389,10 @@
       <!-- BODY -->
       <div class="doc-body">
         <p>Dear ${escHtml(addresseeTitle)} ${escHtml(addresseeName)},</p>
-        <p>${escHtml(para1)}</p>
-        <p>${escHtml(para2)}</p>
-        <p>${escHtml(para3)}</p>
-        <p>${escHtml(para4)}</p>
+        <p>${para1}</p>
+        <p>${para2}</p>
+        <p>${para3}</p>
+        <p>${para4}</p>
       </div>
 
       <!-- SIGNATURE -->
@@ -2398,14 +2431,14 @@
     if (titleEl2) titleEl2.value = 'Official Correspondence';
     // Reset body paragraphs to defaults
     const defaults = {
-      'gov-para1': 'We respectfully write on behalf of the Armenian College of Nursing & Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.',
+      'gov-para1': 'We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.',
       'gov-para2': 'The purpose of this correspondence is as follows:',
       'gov-para3': 'We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.',
       'gov-para4': 'We thank you for your time and continued support of nursing education in Armenia.',
     };
     Object.entries(defaults).forEach(([id, val]) => {
       const el = document.getElementById(id);
-      if (el) el.value = val;
+      if (el) el.innerHTML = val;
     });
     const btn = document.getElementById('saveBtn-government');
     if (btn) { btn.innerHTML = '<span>💾</span> Save &amp; Assign Ref'; btn.classList.remove('saved'); btn.disabled = false; }
