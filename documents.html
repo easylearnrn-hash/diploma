@@ -1468,6 +1468,9 @@
               <button class="save-btn" id="saveBtn-government" onclick="saveAndAssignRef('government')">
                 <span>💾</span> Save &amp; Assign Ref
               </button>
+              <button class="save-btn" id="saveAsNewBtn-government" onclick="saveAndAssignRef('government', true)" style="display:none;background:linear-gradient(135deg,#1a3a5c,#0d2840);" title="Keep the existing record and save as a brand-new document with a new reference number">
+                <span>＋</span> Save as New
+              </button>
               <button class="generate-btn" onclick="printDocument()">
                 <span>🖨️</span> Print / Save PDF
               </button>
@@ -1541,6 +1544,7 @@
 
   let currentDocType = 'affiliation';
   let currentScale   = 0.72;
+  let _loadedDocId   = null;   // ID of the currently-loaded Supabase document (null = new doc)
 
   /* ═══════════════════════════════════════════
      SUPABASE REF NUMBER REGISTRY
@@ -1553,7 +1557,7 @@
     government:  { code: 'GOV', refInputId: 'gov-refNo' },
   };
 
-  async function saveAndAssignRef(docType) {
+  async function saveAndAssignRef(docType, forceNew = false) {
     const meta = DOC_META[docType];
     if (!meta) return;
 
@@ -1570,8 +1574,60 @@
 
       const year = new Date().getFullYear();
       const existingRef = document.getElementById(meta.refInputId)?.value?.trim();
-      let refNo = existingRef;
 
+      // ── UPDATE existing record ──────────────────────────────────────
+      if (_loadedDocId && !forceNew) {
+        const refNo = existingRef;
+
+        const allFields = docType === 'affiliation'
+          ? ['aff-hospitalName','aff-hospitalAddress','aff-startDate','aff-refNo','aff-capacity',
+             'aff-hospName','aff-hospTitle','aff-hospDate','aff-acnhsName','aff-acnhsTitle','aff-acnhsDate']
+          : docType === 'government'
+          ? ['gov-agencyName','gov-department','gov-addresseeName','gov-addresseeTitle',
+             'gov-letterType','gov-letterTypeOther','gov-docTitle','gov-subject','gov-refNo','gov-docDate',
+             'gov-para1','gov-para2','gov-para3','gov-para4',
+             'gov-acnhsName','gov-acnhsTitle','gov-acnhsPhone','gov-acnhsEmail','gov-acnhsDate','gov-sigStyle','gov-instLang']
+          : ['mou-instName','mou-instAddress','mou-startDate','mou-refNo','mou-duration','mou-country',
+             'mou-purpose','mou-areas','mou-partnerName','mou-partnerTitle','mou-partnerDate',
+             'mou-acnhsName','mou-acnhsTitle','mou-acnhsDate'];
+        const formData = {};
+        allFields.forEach(id => {
+          const el = document.getElementById(id);
+          if (!el) { formData[id] = ''; return; }
+          formData[id] = el.contentEditable === 'true' ? el.innerHTML : (el.value || '');
+        });
+
+        const partnerName = docType === 'affiliation' ? (v('aff-hospitalName') || null)
+                          : docType === 'government'  ? (v('gov-agencyName')   || null)
+                          : (v('mou-instName') || null);
+
+        const { error: updateErr } = await sb.from('documents')
+          .update({ form_data: formData, partner_name: partnerName, issued_date: new Date().toISOString().split('T')[0] })
+          .eq('id', _loadedDocId);
+        if (updateErr) throw updateErr;
+
+        if (docType === 'affiliation') renderAffiliation();
+        else if (docType === 'mou')    renderMOU();
+        else if (docType === 'government') renderGovernment();
+
+        btns.forEach(b => {
+          b.innerHTML = '✅ Updated — ' + refNo;
+          b.classList.add('saved');
+          b.disabled = false;
+        });
+        _updateSaveAsNewVisibility(docType, true);
+        return;
+      }
+
+      // ── INSERT new record ───────────────────────────────────────────
+      // When forceNew, clear the loaded state so a fresh ref is assigned
+      if (forceNew) {
+        _loadedDocId = null;
+        const refInput = document.getElementById(meta.refInputId);
+        if (refInput) { refInput.value = ''; refInput.readOnly = false; }
+      }
+
+      let refNo = forceNew ? '' : existingRef;
       if (!refNo) {
         const { data, error } = await sb.rpc('next_doc_sequence', {
           p_type: meta.code,
@@ -1633,17 +1689,28 @@
       else if (docType === 'mou')    renderMOU();
       else if (docType === 'government') renderGovernment();
 
+      // Fetch the new record's ID so subsequent saves can UPDATE it
+      const { data: savedRow } = await sb.from('documents').select('id').eq('ref_number', refNo).maybeSingle();
+      if (savedRow) _loadedDocId = savedRow.id;
+
       btns.forEach(b => {
         b.innerHTML = '✅ Saved — ' + refNo;
         b.classList.add('saved');
         b.disabled = false;
       });
+      _updateSaveAsNewVisibility(docType, true);
 
     } catch (e) {
       console.error('Save failed:', e);
       btns.forEach(b => { b.disabled = false; b.innerHTML = b._orig || '💾 Save & Assign Ref'; });
       alert('⚠️ Could not save document record.\n\nMake sure the documents table exists in Supabase.\nError: ' + e.message);
     }
+  }
+
+  /** Show/hide the "Save as New" button depending on whether a doc is loaded */
+  function _updateSaveAsNewVisibility(docType, show) {
+    const btn = document.getElementById(`saveAsNewBtn-${docType}`);
+    if (btn) btn.style.display = show ? 'inline-flex' : 'none';
   }
 
   /* ═══════════════════════════════════════════
@@ -1750,11 +1817,17 @@
     else if (docType === 'government') renderGovernment();
     else renderMOU();
 
-    // Update save buttons to show already-saved state
+    // Update save buttons to show already-loaded state (editable)
+    _loadedDocId = doc.id;
     ['saveBtn-' + docType, 'saveBtn-preview'].forEach(btnId => {
       const btn = document.getElementById(btnId);
-      if (btn) { btn.innerHTML = '✅ Loaded — ' + doc.ref_number; btn.classList.add('saved'); }
+      if (btn) {
+        btn.innerHTML = '💾 Save Changes — ' + doc.ref_number;
+        btn.classList.remove('saved');
+        btn.disabled = false;
+      }
     });
+    _updateSaveAsNewVisibility(docType, true);
 
     closeLoadModal();
   }
@@ -2514,6 +2587,10 @@
   }
 
   function clearGovernmentForm() {
+    _loadedDocId = null;
+    _updateSaveAsNewVisibility('government', false);
+    const savBtn = document.getElementById('saveBtn-government');
+    if (savBtn) { savBtn.innerHTML = '<span>💾</span> Save &amp; Assign Ref'; savBtn.classList.remove('saved'); savBtn.disabled = false; }
     ['gov-agencyName','gov-department','gov-addresseeName','gov-addresseeTitle',
      'gov-subject','gov-refNo','gov-docDate','gov-acnhsDate'].forEach(id => {
       const el = document.getElementById(id);
