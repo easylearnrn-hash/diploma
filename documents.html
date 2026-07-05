@@ -1414,19 +1414,19 @@
             <div class="form-grid full">
               <div class="form-group">
                 <label>Opening Paragraph</label>
-                <div id="gov-para1" contenteditable="true" class="rich-field" oninput="renderGovernment()">We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.</div>
+                <div id="gov-para1" contenteditable="true" class="rich-field" oninput="renderGovernment()" onpaste="cleanPaste(event)">We respectfully write on behalf of the Armenian College of Nursing &amp; Health Sciences (ACNHS), an accredited institution of higher nursing education located in Yerevan, Republic of Armenia.</div>
               </div>
               <div class="form-group">
                 <label>Main Body / Purpose</label>
-                <div id="gov-para2" contenteditable="true" class="rich-field" style="min-height:90px;" oninput="renderGovernment()">The purpose of this correspondence is as follows:</div>
+                <div id="gov-para2" contenteditable="true" class="rich-field" style="min-height:90px;" oninput="renderGovernment()" onpaste="cleanPaste(event)">The purpose of this correspondence is as follows:</div>
               </div>
               <div class="form-group">
                 <label>Closing Statement</label>
-                <div id="gov-para3" contenteditable="true" class="rich-field" oninput="renderGovernment()">We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.</div>
+                <div id="gov-para3" contenteditable="true" class="rich-field" oninput="renderGovernment()" onpaste="cleanPaste(event)">We remain committed to full compliance with all applicable regulatory requirements and look forward to your guidance and favorable response in this matter. Should you require any additional documentation or clarification, please do not hesitate to contact our office.</div>
               </div>
               <div class="form-group">
                 <label>Sign-off Line</label>
-                <div id="gov-para4" contenteditable="true" class="rich-field" oninput="renderGovernment()">We thank you for your time and continued support of nursing education in Armenia.</div>
+                <div id="gov-para4" contenteditable="true" class="rich-field" oninput="renderGovernment()" onpaste="cleanPaste(event)">We thank you for your time and continued support of nursing education in Armenia.</div>
               </div>
             </div>
 
@@ -2446,6 +2446,50 @@
   }
 
   /* ── Script loader ── */
+  /* ── Rich-paste handler — strips colors/fonts but keeps bold, italic, lists ── */
+  function cleanPaste(e) {
+    e.preventDefault();
+    const cd = e.clipboardData;
+    let html = cd.getData('text/html');
+    if (html) {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+
+      // Remove Word/Google Docs meta wrappers (html > body > div wrappers)
+      const body = tmp.querySelector('body');
+      if (body) tmp.innerHTML = body.innerHTML;
+
+      // Strip inline style properties that cause dark-on-dark or white-on-white issues
+      tmp.querySelectorAll('[style]').forEach(el => {
+        const s = el.style;
+        s.color           = '';
+        s.backgroundColor = '';
+        s.background      = '';
+        s.fontFamily      = '';
+        s.fontSize        = '';
+        s.fontWeight      = ''; // let <b>/<strong> carry weight instead
+        if (!el.getAttribute('style').trim()) el.removeAttribute('style');
+      });
+
+      // Unwrap bare <span>s with no remaining attributes (Word wraps everything in spans)
+      tmp.querySelectorAll('span').forEach(span => {
+        const hasAttrs = span.getAttributeNames().length > 0;
+        if (!hasAttrs) span.replaceWith(...span.childNodes);
+      });
+
+      // Remove script/style/meta/link junk
+      tmp.querySelectorAll('script,style,meta,link').forEach(el => el.remove());
+
+      document.execCommand('insertHTML', false, tmp.innerHTML);
+    } else {
+      // Plain text — preserve newlines as <br>
+      const text = cd.getData('text/plain');
+      document.execCommand('insertHTML', false,
+        text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>'));
+    }
+    e.target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
   function loadScript(src) {
     return new Promise((resolve, reject) => {
       if (document.querySelector(`script[src="${CSS.escape ? src : src}"]`)) { resolve(); return; }
