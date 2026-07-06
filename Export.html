@@ -803,6 +803,14 @@
       .note-tooltip { min-width: 200px; max-width: calc(100vw - 32px); }
       #studentNoteIndicator .note-tooltip { right: -4px; }
     }
+
+    /* ── Touch devices: disable CSS hover, use JS .touch-active instead ── */
+    @media (hover: none) {
+      .note-indicator-wrap:hover .note-tooltip,
+      .note-indicator-wrap:focus-within .note-tooltip { display: none; }
+      .note-indicator-wrap.touch-active .note-tooltip { display: block; }
+      .btn-note-indicator { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    }
   </style>
 </head>
 <body>
@@ -2378,6 +2386,23 @@
       if (_toastTimer) clearTimeout(_toastTimer);
       _toastTimer = setTimeout(() => { el.className = ''; }, 3200);
     }
+
+    // Mobile touch: make (i) note indicators tappable
+    document.addEventListener('click', function(e) {
+      const btn = e.target.closest('.btn-note-indicator');
+      if (btn) {
+        const wrap = btn.closest('.note-indicator-wrap');
+        const isOpen = wrap.classList.contains('touch-active');
+        document.querySelectorAll('.note-indicator-wrap.touch-active')
+          .forEach(el => el.classList.remove('touch-active'));
+        if (!isOpen) wrap.classList.add('touch-active');
+        e.stopPropagation();
+        return;
+      }
+      // Tap anywhere else closes all open tooltips
+      document.querySelectorAll('.note-indicator-wrap.touch-active')
+        .forEach(el => el.classList.remove('touch-active'));
+    });
 
     // Clear note indicator when student name is manually edited
     document.getElementById('studentName').addEventListener('input', function() {
