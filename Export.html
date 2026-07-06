@@ -158,6 +158,33 @@
     input[type="date"]::-webkit-calendar-picker-indicator { opacity: 0.3; filter: invert(1); cursor: pointer; }
     .field-caption { font-size: 10.5px; color: var(--text-muted); line-height: 1.4; }
 
+    /* ─── Student Name Field Note Indicator ───────────── */
+    .field-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .field-input-wrap .field-input { padding-right: 38px; }
+    #studentNoteIndicator {
+      display: none;
+      position: absolute;
+      right: 11px;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    #studentNoteIndicator.visible { display: block; }
+    /* Align tooltip to the right edge instead of center for the name field */
+    #studentNoteIndicator .note-tooltip {
+      left: auto;
+      right: 0;
+      transform: none;
+    }
+    #studentNoteIndicator .note-tooltip::after {
+      left: auto;
+      right: 7px;
+      transform: none;
+    }
+
     /* ─── Upload cards ──────────────────────────────── */
     .upload-cards { display: flex; flex-direction: column; gap: 8px; }
     .upload-card {
@@ -714,7 +741,17 @@
           <label class="field-label" for="studentName">
             Student's Full Name (Armenian)<span class="req">*</span>
           </label>
-          <input type="text" id="studentName" class="field-input" placeholder="Անուն Ազգանուն (հայերեն, ինչպես նշված է անձնագրում)" autocomplete="name" required>
+          <div class="field-input-wrap">
+            <input type="text" id="studentName" class="field-input" placeholder="Անուն Ազգանուն (հայերեն, ինչպես նշված է անձնագրում)" autocomplete="name" required>
+            <div id="studentNoteIndicator" class="note-indicator-wrap">
+              <span class="btn-note-indicator">i</span>
+              <div class="note-tooltip">
+                <div class="note-tooltip-label">Internal Note</div>
+                <div class="note-tooltip-meta" id="studentNoteTooltipMeta"></div>
+                <div class="note-tooltip-text" id="studentNoteTooltipText"></div>
+              </div>
+            </div>
+          </div>
           <span class="field-caption">Մուտքագրեք անունը և ազգանունը հայերեն՝ ճիշտ այնպես, ինչպես նշված է անձնագրում։</span>
         </div>
         <div class="date-grid">
@@ -2164,6 +2201,30 @@
 
         closeLoadModal();
         showToast(`Loaded: ${data.student_name}`, 'success');
+
+        // Show note indicator on the student name field if a note exists
+        (async () => {
+          try {
+            const db = getDB();
+            const key = getStudentKeyForNotes(data.student_name || '');
+            const { data: note } = await db
+              .from(EXPORT_NOTES_TABLE)
+              .select('note_text, author_name, author_email, updated_at')
+              .eq('student_key', key)
+              .maybeSingle();
+            if (note && note.note_text) {
+              const author   = note.author_name || note.author_email || 'Admin';
+              const noteDate = new Date(note.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              document.getElementById('studentNoteTooltipMeta').textContent = `${author} · ${noteDate}`;
+              document.getElementById('studentNoteTooltipText').innerHTML = escHtml(note.note_text).replace(/\n/g, '<br>');
+              document.getElementById('studentNoteIndicator').classList.add('visible');
+            } else {
+              document.getElementById('studentNoteIndicator').classList.remove('visible');
+            }
+          } catch (_) {
+            document.getElementById('studentNoteIndicator').classList.remove('visible');
+          }
+        })();
       } catch (e) {
         showToast('Load failed: ' + (e.message || 'Network error'), 'error');
         if (btn) { btn.textContent = 'Load'; btn.disabled = false; }
@@ -2218,6 +2279,11 @@
       if (_toastTimer) clearTimeout(_toastTimer);
       _toastTimer = setTimeout(() => { el.className = ''; }, 3200);
     }
+
+    // Clear note indicator when student name is manually edited
+    document.getElementById('studentName').addEventListener('input', function() {
+      document.getElementById('studentNoteIndicator').classList.remove('visible');
+    });
 
     // Close modal on backdrop click or ESC
     document.getElementById('loadModal').addEventListener('click', function(e) {
