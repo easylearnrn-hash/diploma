@@ -99,24 +99,26 @@ const server = http.createServer(async (req, res) => {
       preferCSSPageSize:   false,  // use format: 'A4' explicitly
       displayHeaderFooter: true,
       margin: {
-        top:    '24mm',    // Safe text start distance from top
-        bottom: '26mm',    // Reserve space for footerTemplate
-        left:   '18mm',    // Safe text start left
-        right:  '18mm',    // Safe text start right
+        top:    '0',       // top spacing handled by page-content padding inside print HTML
+        bottom: '22mm',    // reserved footer band (separate from body area)
+        left:   '0',
+        right:  '0',
       },
       // Blank header — the document letterhead is part of the HTML body
       headerTemplate: '<div></div>',
-      // Footer band: appears in the bottom margin on every page
+      // Footer band: appears in the reserved 22 mm bottom margin on every page
       footerTemplate: `
         <div style="
-          font-size: 7.5px;
+          font-size: 8px;
           width: 100%;
           text-align: center;
           font-family: Arial, Helvetica, sans-serif;
-          color: rgba(10,15,30,0.45);
-          padding: 6px 0 0;
+          color: rgba(10,15,30,0.52);
+          padding: 5mm 0 0 0;
+          margin: 0;
           box-sizing: border-box;
           line-height: 1.2;
+          white-space: nowrap;
         ">
           <strong style="color:rgba(10,15,30,0.62);">www.acnhs.am</strong>
           &nbsp;&bull;&nbsp;
