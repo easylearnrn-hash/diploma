@@ -140,6 +140,12 @@
         text: 'Documents', 
         permission: 'view_reports'
       }, 
+      {
+        href: 'Export.html',
+        icon: '📤',
+        text: 'Export',
+        permission: 'view_reports'
+      },
       { 
         href: 'admin-analytics.html', 
         icon: '📈', 
