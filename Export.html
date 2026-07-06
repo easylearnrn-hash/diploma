@@ -397,6 +397,68 @@
     }
     .btn-sli-delete:hover { background: rgba(224,82,82,0.1); }
 
+    /* ─── Note Indicator (Load Student rows) ─────────── */
+    .note-indicator-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      vertical-align: middle;
+      margin-left: 7px;
+    }
+    .btn-note-indicator {
+      width: 17px; height: 17px; border-radius: 50%;
+      background: var(--gold-bg);
+      border: 1px solid var(--gold-border);
+      color: var(--gold);
+      font-size: 10px; font-weight: 700; font-family: Georgia, serif;
+      font-style: italic;
+      cursor: default;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; user-select: none; line-height: 1;
+      transition: background 0.12s;
+    }
+    .note-indicator-wrap:hover .btn-note-indicator { background: rgba(201,168,76,0.2); }
+    .note-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 9px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--surface-3);
+      border: 1px solid var(--gold-border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      min-width: 240px;
+      max-width: 320px;
+      z-index: 10000;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.65), 0 0 0 1px rgba(255,255,255,0.04);
+      pointer-events: none;
+    }
+    .note-tooltip::after {
+      content: '';
+      position: absolute;
+      top: 100%; left: 50%;
+      transform: translateX(-50%);
+      border: 6px solid transparent;
+      border-top-color: var(--gold-border);
+    }
+    .note-tooltip-meta {
+      font-size: 10px; color: var(--gold); font-weight: 500;
+      margin-bottom: 8px;
+      display: flex; align-items: center; gap: 5px;
+    }
+    .note-tooltip-label {
+      font-size: 9px; font-weight: 600; letter-spacing: 0.06em;
+      text-transform: uppercase; color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    .note-tooltip-text {
+      font-size: 11.5px; color: var(--text); line-height: 1.58;
+      word-break: break-word;
+    }
+    .note-indicator-wrap:hover .note-tooltip,
+    .note-indicator-wrap:focus-within .note-tooltip { display: block; }
+
     /* ─── Premium Confirmation Dialog ───────────────── */
     #confirmOverlay {
       display: none; position: fixed; inset: 0;
@@ -1983,11 +2045,19 @@
       document.getElementById('loadModal').classList.add('active');
       try {
         const db = getDB();
-        const { data, error } = await db
-          .from('export_sessions')
-          .select('id, student_name, updated_at')
-          .order('updated_at', { ascending: false });
+        const [sessionsResult, notesResult] = await Promise.all([
+          db.from('export_sessions').select('id, student_name, updated_at').order('updated_at', { ascending: false }),
+          db.from(EXPORT_NOTES_TABLE).select('student_key, note_text, author_name, author_email, updated_at'),
+        ]);
+        const { data, error } = sessionsResult;
         if (error) throw error;
+
+        // Build lookup: student_key → note row
+        const notesMap = {};
+        if (notesResult.data) {
+          notesResult.data.forEach(n => { notesMap[n.student_key] = n; });
+        }
+
         if (!data || data.length === 0) {
           listEl.innerHTML = '<div class="empty-saves">No saved students yet.<br>Fill in the form and click <strong>Save Progress</strong> to store your work.</div>';
         } else {
@@ -1995,9 +2065,28 @@
             const d = new Date(s.updated_at);
             const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+            const key  = getStudentKeyForNotes(s.student_name);
+            const note = notesMap[key];
+            let noteIndicator = '';
+            if (note && note.note_text) {
+              const noteAuthor = escHtml(note.author_name || note.author_email || 'Admin');
+              const noteWhen   = new Date(note.updated_at || Date.now());
+              const noteDate   = noteWhen.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+              const noteBody   = escHtml(note.note_text).replace(/\n/g, '<br>');
+              noteIndicator = `<span class="note-indicator-wrap">
+                <span class="btn-note-indicator">i</span>
+                <div class="note-tooltip">
+                  <div class="note-tooltip-label">Internal Note</div>
+                  <div class="note-tooltip-meta">${noteAuthor} &middot; ${noteDate}</div>
+                  <div class="note-tooltip-text">${noteBody}</div>
+                </div>
+              </span>`;
+            }
+
             return `<div class="student-list-item" id="sli-${s.id}">
               <div class="sli-info">
-                <div class="sli-name">${escHtml(s.student_name)}</div>
+                <div class="sli-name">${escHtml(s.student_name)}${noteIndicator}</div>
                 <div class="sli-date">Saved ${dateStr} at ${timeStr}</div>
               </div>
               <div class="sli-actions">
