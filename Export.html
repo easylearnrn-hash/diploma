@@ -2261,35 +2261,8 @@
           _syncSaveBtn();
         }
 
-        // ── Folder: transliterate to ASCII + UUID suffix for uniqueness ────────
-        // Supabase Storage only accepts ASCII-safe path keys.
-        const _armMap = {
-          'Ա':'A','ա':'a','Բ':'B','բ':'b','Գ':'G','գ':'g','Դ':'D','դ':'d',
-          'Ե':'E','ե':'e','Զ':'Z','զ':'z','Է':'E','է':'e','Ը':'Y','ը':'y',
-          'Թ':'T','թ':'t','Ժ':'Zh','ժ':'zh','Ի':'I','ի':'i','Լ':'L','լ':'l',
-          'Խ':'Kh','խ':'kh','Ծ':'Ts','ծ':'ts','Կ':'K','կ':'k','Հ':'H','հ':'h',
-          'Ձ':'Dz','ձ':'dz','Ղ':'Gh','ղ':'gh','Ճ':'Ch','ճ':'ch','Մ':'M','մ':'m',
-          'Յ':'Y','յ':'y','Ն':'N','ն':'n','Շ':'Sh','շ':'sh','Ո':'Vo','ո':'o',
-          'Չ':'Ch','չ':'ch','Պ':'P','պ':'p','Ջ':'J','ջ':'j','Ռ':'R','ռ':'r',
-          'Ս':'S','ս':'s','Վ':'V','վ':'v','Տ':'T','տ':'t','Ր':'R','ր':'r',
-          'Ց':'Ts','ց':'ts','Ւ':'u','ւ':'u','Փ':'Ph','փ':'ph','Ք':'K','ք':'k',
-          'Օ':'O','օ':'o','Ֆ':'F','ֆ':'f',
-          'А':'A','а':'a','Б':'B','б':'b','В':'V','в':'v','Г':'G','г':'g',
-          'Д':'D','д':'d','Е':'E','е':'e','Ж':'Zh','ж':'zh','З':'Z','з':'z',
-          'И':'I','и':'i','Й':'Y','й':'y','К':'K','к':'k','Л':'L','л':'l',
-          'М':'M','м':'m','Н':'N','н':'n','О':'O','о':'o','П':'P','п':'p',
-          'Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t','У':'U','у':'u',
-          'Ф':'F','ф':'f','Х':'Kh','х':'kh','Ц':'Ts','ц':'ts','Ч':'Ch','ч':'ch',
-          'Ш':'Sh','ш':'sh','Ы':'Y','ы':'y','Э':'E','э':'e','Ю':'Yu','ю':'yu',
-          'Я':'Ya','я':'ya',
-        };
-        const safeName = (studentName.trim()
-          // Armenian ու/ՈՒ digraph → u/U before char-by-char pass
-          .replace(/ՈՒ/g,'U').replace(/ու/g,'u')
-          .split('').map(c => _armMap[c] !== undefined ? _armMap[c] : c).join('')
-          .replace(/[^a-zA-Z0-9]+/g, '_')
-          .replace(/^_+|_+$/g, '') || 'student');
-        const folder = `${safeName}_${sessionId.slice(0, 8)}`;
+        // ── Folder: readable ASCII name + UUID prefix (never rebuilds on load) ─
+        const folder = buildStorageFolder(studentName, sessionId);
         if (btn) btn.textContent = 'Uploading…';
 
         const [photoRef, diplomaARMRef, diplomaRUSRef, birthRef, passportRef] = await Promise.all([
@@ -2631,6 +2604,58 @@
         }
       });
       renderMultiplePreviews('additional');
+    }
+
+    // ─── Armenian/Cyrillic → Latin transliteration ──────────────────────────
+    // Used only for building human-readable Supabase Storage folder names.
+    // Supabase Storage rejects non-ASCII keys so we convert before uploading.
+    const _ARM_MAP = {
+      // Armenian uppercase
+      'Ա':'A','Բ':'B','Գ':'G','Դ':'D','Ե':'E','Զ':'Z','Է':'E','Ը':'Y',
+      'Թ':'T','Ժ':'Zh','Ի':'I','Լ':'L','Խ':'Kh','Ծ':'Ts','Կ':'K','Հ':'H',
+      'Ձ':'Dz','Ղ':'Gh','Ճ':'Ch','Մ':'M','Յ':'Y','Ն':'N','Շ':'Sh','Ո':'Vo',
+      'Չ':'Ch','Պ':'P','Ջ':'J','Ռ':'R','Ս':'S','Վ':'V','Տ':'T','Ր':'R',
+      'Ց':'Ts','Ւ':'V','Փ':'Ph','Ք':'K','Օ':'O','Ֆ':'F',
+      // Armenian lowercase
+      'ա':'a','բ':'b','գ':'g','դ':'d','ե':'e','զ':'z','է':'e','ը':'y',
+      'թ':'t','ժ':'zh','ի':'i','լ':'l','խ':'kh','ծ':'ts','կ':'k','հ':'h',
+      'ձ':'dz','ղ':'gh','ճ':'ch','մ':'m','յ':'y','ն':'n','շ':'sh','ո':'o',
+      'չ':'ch','պ':'p','ջ':'j','ռ':'r','ս':'s','վ':'v','տ':'t','ր':'r',
+      'ց':'ts','ւ':'v','փ':'ph','ք':'k','օ':'o','ֆ':'f',
+      // Cyrillic uppercase
+      'А':'A','Б':'B','В':'V','Г':'G','Д':'D','Е':'E','Ж':'Zh','З':'Z',
+      'И':'I','Й':'Y','К':'K','Л':'L','М':'M','Н':'N','О':'O','П':'P',
+      'Р':'R','С':'S','Т':'T','У':'U','Ф':'F','Х':'Kh','Ц':'Ts','Ч':'Ch',
+      'Ш':'Sh','Ы':'Y','Э':'E','Ю':'Yu','Я':'Ya',
+      // Cyrillic lowercase
+      'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ж':'zh','з':'z',
+      'и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p',
+      'р':'r','с':'s','т':'t','у':'u','ф':'f','х':'kh','ц':'ts','ч':'ch',
+      'ш':'sh','ы':'y','э':'e','ю':'yu','я':'ya',
+    };
+
+    function transliterateArmenianToLatin(str) {
+      // Resolve ու/ՈՒ digraph → u/U before char-by-char pass so Ւ alone stays V
+      return String(str || '')
+        .replace(/ՈՒ/g, 'U').replace(/ու/g, 'u')
+        .split('').map(c => (_ARM_MAP[c] !== undefined ? _ARM_MAP[c] : c)).join('');
+    }
+
+    // Build a Supabase-safe folder name: TransliteratedName_UUIDprefix
+    // Falls back to student_UUIDprefix if transliteration yields no ASCII letters/digits.
+    function buildStorageFolder(studentName, sessionId) {
+      const shortId        = sessionId.slice(0, 8);
+      const transliterated = transliterateArmenianToLatin(studentName || '')
+        .trim()
+        .replace(/\s+/g, '_')
+        .replace(/[^a-zA-Z0-9_-]/g, '_')
+        .replace(/_+/g, '_')
+        .replace(/^_+|_+$/g, '')
+        .slice(0, 60);
+      const safeName = (transliterated && /[a-zA-Z0-9]/.test(transliterated))
+        ? transliterated
+        : 'student';
+      return `${safeName}_${shortId}`;
     }
 
     function escHtml(str) {
