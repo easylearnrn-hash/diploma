@@ -1277,6 +1277,14 @@
       additional:  []   // array of { dataUrl, name, mimeType }
     };
 
+    // Anti-mixing guards:
+    //   _currentLoadSeq  — incremented on every loadStudent(); async callbacks check
+    //                      this and abort if a newer load has started (race condition fix)
+    //   _filesLockedToName — the student name whose files are currently in `files`;
+    //                        cleared when the user edits the name field after a load
+    let _currentLoadSeq    = 0;
+    let _filesLockedToName = null;
+
     const REQUIRED = [];
 
     const DOC_LABELS = {
@@ -2328,6 +2336,11 @@
     }
 
     async function loadStudent(id) {
+      // Grab a sequence number BEFORE any async work.
+      // If another loadStudent() call arrives while we await, our seq will be
+      // stale and we abort — preventing two students' files from mixing.
+      const loadSeq = ++_currentLoadSeq;
+
       const row = document.getElementById('sli-' + id);
       const btn = row ? row.querySelector('.btn-sli-load') : null;
       if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
@@ -2351,6 +2364,9 @@
           .single();
         if (error) throw error;
 
+        // Abort if a newer load was triggered while we were awaiting the DB query
+        if (loadSeq !== _currentLoadSeq) { closeLoadModal(); return; }
+
         document.getElementById('studentName').value = data.student_name || '';
         document.getElementById('leftArmenia').value = data.left_armenia || '';
         document.getElementById('enteredUS').value   = data.entered_us   || '';
@@ -2366,6 +2382,8 @@
             downloadFileFromStorage(db, f.birth),
             downloadFileFromStorage(db, f.passport),
           ]);
+          // Abort if a newer load started while we were downloading files
+          if (loadSeq !== _currentLoadSeq) { closeLoadModal(); return; }
           files.photo      = photo;
           files.diplomaARM = diplomaARM;
           files.diplomaRUS = diplomaRUS;
@@ -2374,6 +2392,7 @@
           files.additional = await Promise.all(
             (Array.isArray(f.additional) ? f.additional : []).map(ref => downloadFileFromStorage(db, ref))
           );
+          if (loadSeq !== _currentLoadSeq) { closeLoadModal(); return; }
           files.additional = files.additional.filter(Boolean);
         } else {
           // Legacy v1: files are raw data URLs stored directly in jsonb
@@ -2384,6 +2403,10 @@
           files.passport   = f.passport   || null;
           files.additional = Array.isArray(f.additional) ? f.additional : [];
         }
+
+        // Record which student these files belong to.
+        // Changing the name field after this point will clear files automatically.
+        _filesLockedToName = (data.student_name || '').trim();
 
         restoreAllPreviews();
 
@@ -2583,9 +2606,23 @@
         .forEach(el => el.classList.remove('touch-active'));
     });
 
-    // Clear note indicator when student name is manually edited
+    // Clear note indicator + files when student name is manually edited after a load.
+    // This is the primary guard against saving Student A's documents under Student B's name.
     document.getElementById('studentName').addEventListener('input', function() {
       document.getElementById('studentNoteIndicator').classList.remove('visible');
+      const newName = this.value.trim();
+      if (_filesLockedToName !== null && newName !== _filesLockedToName) {
+        // Name diverged from the loaded student — wipe files immediately
+        files.photo      = null;
+        files.diplomaARM = null;
+        files.diplomaRUS = null;
+        files.birth      = null;
+        files.passport   = null;
+        files.additional = [];
+        _filesLockedToName = null;
+        restoreAllPreviews();
+        showToast('Student name changed — documents cleared to prevent mixing', 'error');
+      }
     });
 
     // Close modal on backdrop click or ESC
