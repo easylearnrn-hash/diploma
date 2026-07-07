@@ -708,6 +708,48 @@
     #toast.toast-success { border-color: rgba(34,197,94,0.3); color: var(--success); }
     #toast.toast-error   { border-color: rgba(224,82,82,0.3);  color: var(--danger);  }
 
+    /* ─── Preview hover zoom + action bar ───────────── */
+    .preview-area { overflow: visible; }
+    .preview-img {
+      cursor: pointer;
+      transition: transform 0.22s cubic-bezier(0.22,1,0.36,1);
+      position: relative; z-index: 1;
+    }
+    .preview-area:hover .preview-img {
+      transform: scale(2.4);
+      z-index: 30;
+    }
+    .preview-pdf { transition: transform 0.18s ease; }
+    .preview-area:hover .preview-pdf {
+      transform: scale(1.08);
+      position: relative; z-index: 30;
+    }
+    .multi-preview-item { overflow: visible; }
+    .multi-preview-item:hover .preview-img { transform: scale(2.4); z-index: 30; }
+    .preview-actions-bar {
+      position: absolute;
+      bottom: -28px;
+      left: 50%; transform: translateX(-50%);
+      display: none;
+      align-items: center;
+      gap: 4px;
+      z-index: 35;
+      white-space: nowrap;
+    }
+    .preview-area:hover .preview-actions-bar,
+    .multi-preview-item:hover .preview-actions-bar { display: flex; }
+    .preview-dl-btn {
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(8,12,20,0.92);
+      border: 1px solid var(--gold-border);
+      color: var(--gold);
+      font-size: 9.5px; font-weight: 600; font-family: 'Inter', sans-serif;
+      cursor: pointer; line-height: 1.5;
+      transition: background 0.1s;
+    }
+    .preview-dl-btn:hover { background: rgba(201,168,76,0.2); }
+
     /* ─── Validation ─────────────────────────────────── */
     .val-msg {
       display: none; align-items: center; gap: 8px;
@@ -1308,16 +1350,21 @@
       prevArea.classList.add('visible');
       if (mimeType && mimeType.startsWith('image/')) {
         prevImg.src = dataUrl;
+        prevImg.onclick = () => openFileInNewTab(key);
         prevImg.style.display = 'block';
       } else {
         // PDF or other — show generic icon
         prevImg.style.display = 'none';
         prevArea.innerHTML = `
           <button class="remove-btn" onclick="removeFile('${key}',event)">×</button>
-          <div class="preview-pdf">
+          <div class="preview-pdf" onclick="openFileInNewTab('${key}')" style="cursor:pointer">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span>PDF</span>
             <div class="file-name">${files[key].name}</div>
+          </div>
+          <div class="preview-actions-bar">
+            <button class="preview-dl-btn" onclick="downloadFile('${key}',event)">⬇ Save</button>
+            <button class="preview-dl-btn" onclick="openFileInNewTab('${key}')">↗ Open</button>
           </div>`;
       }
     }
@@ -1331,14 +1378,22 @@
         if (f.mimeType && f.mimeType.startsWith('image/')) {
           item.innerHTML = `
             <button class="remove-btn" onclick="removeAdditional(${i})">×</button>
-            <img class="preview-img" src="${f.dataUrl}" alt="${f.name}" style="width:72px;height:58px;">`;
+            <img class="preview-img" src="${f.dataUrl}" alt="${f.name}" style="width:72px;height:58px;" onclick="openAdditionalInNewTab(${i})">
+            <div class="preview-actions-bar">
+              <button class="preview-dl-btn" onclick="downloadAdditional(${i},event)">⬇ Save</button>
+              <button class="preview-dl-btn" onclick="openAdditionalInNewTab(${i})">↗ Open</button>
+            </div>`;
         } else {
           item.innerHTML = `
             <button class="remove-btn" onclick="removeAdditional(${i})">×</button>
-            <div class="preview-pdf" style="width:72px;height:58px;">
+            <div class="preview-pdf" style="width:72px;height:58px;cursor:pointer" onclick="openAdditionalInNewTab(${i})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9a84c" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
               <span>PDF</span>
               <div class="file-name">${f.name}</div>
+            </div>
+            <div class="preview-actions-bar">
+              <button class="preview-dl-btn" onclick="downloadAdditional(${i},event)">⬇ Save</button>
+              <button class="preview-dl-btn" onclick="openAdditionalInNewTab(${i})">↗ Open</button>
             </div>`;
         }
         wrap.appendChild(item);
@@ -1353,7 +1408,11 @@
       prevArea.classList.remove('visible');
       prevArea.innerHTML = `
         <button class="remove-btn" onclick="removeFile('${key}',event)">×</button>
-        <img class="preview-img" id="previmg-${key}" src="" alt="">`;
+        <img class="preview-img" id="previmg-${key}" src="" alt="" onclick="openFileInNewTab('${key}')">
+        <div class="preview-actions-bar">
+          <button class="preview-dl-btn" onclick="downloadFile('${key}',event)">⬇ Save</button>
+          <button class="preview-dl-btn" onclick="openFileInNewTab('${key}')">↗ Open</button>
+        </div>`;
       updateCardState(key, false);
     }
 
@@ -2374,7 +2433,11 @@
           prevArea.classList.remove('visible');
           prevArea.innerHTML = `
             <button class="remove-btn" onclick="removeFile('${key}',event)">\u00d7</button>
-            <img class="preview-img" id="previmg-${key}" src="" alt="">`;
+            <img class="preview-img" id="previmg-${key}" src="" alt="" onclick="openFileInNewTab('${key}')">
+            <div class="preview-actions-bar">
+              <button class="preview-dl-btn" onclick="downloadFile('${key}',event)">⬇ Save</button>
+              <button class="preview-dl-btn" onclick="openFileInNewTab('${key}')">↗ Open</button>
+            </div>`;
         }
         if (files[key]) {
           updateSinglePreview(key, files[key].dataUrl, files[key].mimeType);
@@ -2390,6 +2453,51 @@
       return String(str)
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ─── File preview helpers (zoom, download, open) ────────────
+    function _dataUrlToBlob(dataUrl, mimeType) {
+      const [, b64] = dataUrl.split(',');
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      return new Blob([bytes], { type: mimeType || 'application/octet-stream' });
+    }
+
+    function openFileInNewTab(key) {
+      const f = files[key];
+      if (!f || !f.dataUrl) return;
+      const url = URL.createObjectURL(_dataUrlToBlob(f.dataUrl, f.mimeType));
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+
+    function downloadFile(key, e) {
+      if (e) e.stopPropagation();
+      const f = files[key];
+      if (!f || !f.dataUrl) return;
+      const ext = f.mimeType ? '.' + f.mimeType.split('/')[1].replace('jpeg','jpg') : '';
+      const a = document.createElement('a');
+      a.href = f.dataUrl;
+      a.download = f.name || (key + ext);
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+
+    function openAdditionalInNewTab(i) {
+      const f = files.additional[i];
+      if (!f || !f.dataUrl) return;
+      const url = URL.createObjectURL(_dataUrlToBlob(f.dataUrl, f.mimeType));
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 120000);
+    }
+
+    function downloadAdditional(i, e) {
+      if (e) e.stopPropagation();
+      const f = files.additional[i];
+      if (!f || !f.dataUrl) return;
+      const ext = f.mimeType ? '.' + f.mimeType.split('/')[1].replace('jpeg','jpg') : '';
+      const a = document.createElement('a');
+      a.href = f.dataUrl;
+      a.download = f.name || ('additional_' + i + ext);
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
 
     let _toastTimer = null;
