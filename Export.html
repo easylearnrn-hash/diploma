@@ -1497,6 +1497,12 @@
       }
       valMsg.classList.remove('visible');
 
+      // Snapshot form fields NOW (synchronous) before any await —
+      // prevents a race where loadStudent() fires during PDF build and changes the fields.
+      const studentName = document.getElementById('studentName').value.trim();
+      const leftArmenia = document.getElementById('leftArmenia').value;
+      const enteredUS   = document.getElementById('enteredUS').value;
+
       // Load jsPDF
       if (typeof window.jspdf === 'undefined') {
         setProgress(0, 'Loading PDF library…');
@@ -1516,10 +1522,6 @@
       try {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-        const studentName = document.getElementById('studentName').value.trim();
-        const leftArmenia = document.getElementById('leftArmenia').value;
-        const enteredUS   = document.getElementById('enteredUS').value;
 
         // ── Page 1: Cover ─────────────────────────────
         setProgress(5, 'Building cover page…');
@@ -2221,7 +2223,22 @@
     }
 
     async function saveProgress() {
+      // ── Snapshot ALL state synchronously BEFORE any await ─────────────────────
+      // If another student is loaded while uploads are in-flight, these captured
+      // values remain bound to the CURRENT student and cannot be contaminated.
       const studentName = document.getElementById('studentName').value.trim();
+      const leftArmenia = document.getElementById('leftArmenia').value || null;
+      const enteredUS   = document.getElementById('enteredUS').value   || null;
+      const saveFiles = {
+        photo:      files.photo,
+        diplomaARM: files.diplomaARM,
+        diplomaRUS: files.diplomaRUS,
+        birth:      files.birth,
+        passport:   files.passport,
+        additional: [...(files.additional || [])], // shallow-copy so live splice() can't affect us
+      };
+      // ──────────────────────────────────────────────────────────────────────────
+
       if (!studentName) {
         showToast('Enter a student name before saving.', 'error');
         return;
@@ -2238,21 +2255,21 @@
         btn.textContent = 'Uploading…';
         // Upload each file to Supabase Storage in parallel; only paths saved in DB
         const [photoRef, diplomaARMRef, diplomaRUSRef, birthRef, passportRef] = await Promise.all([
-          uploadFileToStorage(db, folder, 'photo',      files.photo),
-          uploadFileToStorage(db, folder, 'diplomaARM', files.diplomaARM),
-          uploadFileToStorage(db, folder, 'diplomaRUS', files.diplomaRUS),
-          uploadFileToStorage(db, folder, 'birth',      files.birth),
-          uploadFileToStorage(db, folder, 'passport',   files.passport),
+          uploadFileToStorage(db, folder, 'photo',      saveFiles.photo),
+          uploadFileToStorage(db, folder, 'diplomaARM', saveFiles.diplomaARM),
+          uploadFileToStorage(db, folder, 'diplomaRUS', saveFiles.diplomaRUS),
+          uploadFileToStorage(db, folder, 'birth',      saveFiles.birth),
+          uploadFileToStorage(db, folder, 'passport',   saveFiles.passport),
         ]);
         const additionalRefs = await Promise.all(
-          (files.additional || []).map((f, i) => uploadFileToStorage(db, folder, `additional_${i}`, f))
+          saveFiles.additional.map((f, i) => uploadFileToStorage(db, folder, `additional_${i}`, f))
         );
 
         btn.textContent = 'Saving…';
         const { error } = await db.from('export_sessions').upsert({
           student_name: studentName,
-          left_armenia: document.getElementById('leftArmenia').value || null,
-          entered_us:   document.getElementById('enteredUS').value   || null,
+          left_armenia: leftArmenia,
+          entered_us:   enteredUS,
           files_data: {
             _v:         2,           // v2 = storage-backed paths
             photo:      photoRef,
