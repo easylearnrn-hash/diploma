@@ -354,6 +354,12 @@
       background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border);
     }
     .btn-topbar-save:hover { opacity: 0.78; }
+    .btn-topbar-save-new {
+      background: transparent;
+      color: var(--gold);
+      border: 1px solid var(--gold-border);
+    }
+    .btn-topbar-save-new:hover { background: var(--gold-bg); opacity: 0.9; }
     .btn-topbar-load {
       background: transparent; color: var(--text-sub); border: 1px solid var(--border);
     }
@@ -879,6 +885,7 @@
       <button class="btn-topbar btn-topbar-load" onclick="openLoadModal()">Load Student</button>
       <button class="btn-topbar btn-topbar-notes" onclick="openNotesModal()">Notes</button>
       <button class="btn-topbar btn-topbar-save" onclick="saveProgress()">Save Progress</button>
+      <button class="btn-topbar btn-topbar-save-new" onclick="saveAsNew()" title="Clear current session — next Save Progress creates a new entry">Save As New</button>
       <span class="topbar-badge">PDF Export</span>
     </div>
   </div>
@@ -1277,41 +1284,18 @@
       additional:  []   // array of { dataUrl, name, mimeType }
     };
 
-    // Anti-mixing guards:
-    //   _currentLoadSeq    — incremented on every loadStudent(); every async callback
-    //                       captures this value and aborts if it has since changed.
-    //   _filesLockedToName — the student name whose data is in `files`; if the admin
-    //                       edits the name field after a load, all data is wiped.
-    let _currentLoadSeq    = 0;
-    let _filesLockedToName = null;
+    // Anti-mixing guard: _currentLoadSeq is incremented on every loadStudent();
+    // every async callback captures this value and aborts if it has since changed.
+    let _currentLoadSeq = 0;
 
-    // Build a unique, human-readable storage folder name for a student.
-    //
-    // Format:  "<slug>-<hash>"   e.g. "lusine-tumasyan-2k3j9m"
-    //          "<hash>"          e.g. "2k3j9m"  (pure Armenian — no ASCII chars)
-    //
-    // The hash (djb2 base-36) guarantees uniqueness even across students whose
-    // names share the same Latin characters.  The slug prefix (ASCII letters /
-    // digits only) makes folders identifiable in the Supabase Storage browser.
-    // Armenian / Cyrillic characters are silently dropped from the slug; the hash
-    // alone identifies those students.
-    function _studentFolderHash(name) {
-      // 1. Compute hash — uniqueness guarantee regardless of script/language
-      let h = 5381;
-      for (let i = 0; i < name.length; i++) {
-        h = Math.imul(h, 33) ^ name.charCodeAt(i);
-      }
-      const hash = (h >>> 0).toString(36); // e.g. "2k3j9m"
-
-      // 2. Build a readable slug from ASCII-safe characters only
-      const slug = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-') // collapse non-ASCII / punctuation → hyphen
-        .replace(/^-+|-+$/g, '')     // trim leading/trailing hyphens
-        .slice(0, 24);               // cap length
-
-      return slug ? `${slug}-${hash}` : hash;
-    }
+    // Session identity — the ONLY source of truth for which student is loaded.
+    //   currentExportSessionId  — UUID of the currently open export_sessions row.
+    //                             null = brand-new unsaved session.
+    //   _filesLockedToSessionId — session whose files are in `files`.
+    //                             Files are ALWAYS tied to a UUID, NEVER to a name.
+    //                             Editing the student name does NOT touch documents.
+    let currentExportSessionId    = null;
+    let _filesLockedToSessionId   = null;
 
     const REQUIRED = [];
 
@@ -1954,11 +1938,8 @@
       return (document.getElementById('studentName').value || '').trim();
     }
 
-    function getStudentKeyForNotes(studentName) {
-      return String(studentName || '').trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-
-    function getSelectedNotesStudentName() {
+    // Returns the session UUID currently selected in the notes modal dropdown
+    function getSelectedNotesSessionId() {
       const select = document.getElementById('notesStudentSelect');
       return (select && select.value ? select.value : '').trim();
     }
@@ -1967,90 +1948,70 @@
       document.getElementById('notesList').innerHTML = `<div class="empty-saves">${escHtml(text)}</div>`;
     }
 
-    async function loadNotesStudentOptions(preferredStudentName) {
+    async function loadNotesStudentOptions(preferredSessionId) {
       const select = document.getElementById('notesStudentSelect');
       if (!select) return '';
-      select.innerHTML = '<option value="">Loading students…</option>';
+      select.innerHTML = '<option value="">Loading sessions…</option>';
 
       try {
         const db = getDB();
         const { data, error } = await db
           .from('export_sessions')
-          .select('student_name')
-          .order('student_name', { ascending: true });
+          .select('id, student_name, updated_at')
+          .order('updated_at', { ascending: false });
         if (error) throw error;
 
-        const names = (data || [])
-          .map(row => String(row.student_name || '').trim())
-          .filter(Boolean);
-
-        const currentInputName = getStudentNameForNotes();
-        if (currentInputName) names.unshift(currentInputName);
-
-        const uniqueNames = [];
-        const seen = new Set();
-        names.forEach(name => {
-          const key = name.toLowerCase();
-          if (!seen.has(key)) {
-            seen.add(key);
-            uniqueNames.push(name);
-          }
-        });
-
-        if (uniqueNames.length === 0) {
-          select.innerHTML = '<option value="">No students found</option>';
+        const sessions = (data || []).filter(row => row.id);
+        if (sessions.length === 0) {
+          select.innerHTML = '<option value="">No saved students found</option>';
           return '';
         }
 
         select.innerHTML = '';
-        uniqueNames.forEach(name => {
+        sessions.forEach(s => {
           const opt = document.createElement('option');
-          opt.value = name;
-          opt.textContent = name;
+          opt.value = s.id;
+          const dateStr = s.updated_at
+            ? new Date(s.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            : '';
+          opt.textContent = (s.student_name || '(unnamed)') + (dateStr ? ` — ${dateStr}` : '');
           select.appendChild(opt);
         });
 
-        let selected = '';
-        const preferred = String(preferredStudentName || '').trim().toLowerCase();
-        if (preferred) {
-          const match = uniqueNames.find(n => n.toLowerCase() === preferred);
-          if (match) selected = match;
-        }
-        if (!selected && currentInputName) {
-          const match = uniqueNames.find(n => n.toLowerCase() === currentInputName.toLowerCase());
-          if (match) selected = match;
-        }
-        if (!selected) selected = uniqueNames[0];
-
-        select.value = selected;
-        return selected;
+        // Prefer the passed session ID, then the currently loaded session, then first
+        const preferred = String(preferredSessionId || '').trim();
+        const match     = preferred ? sessions.find(s => s.id === preferred) : null;
+        const fallback  = currentExportSessionId ? sessions.find(s => s.id === currentExportSessionId) : null;
+        const chosen    = match || fallback || sessions[0];
+        select.value    = chosen ? chosen.id : '';
+        return select.value;
       } catch (e) {
-        select.innerHTML = '<option value="">Could not load students</option>';
-        showToast('Could not load students for notes: ' + (e.message || 'Network error'), 'error');
+        select.innerHTML = '<option value="">Could not load sessions</option>';
+        showToast('Could not load sessions for notes: ' + (e.message || 'Network error'), 'error');
         return '';
       }
     }
 
-    function setNotesContext(studentName) {
-      const hasStudent = !!studentName;
+    function setNotesContext(sessionId) {
+      const hasSession = !!sessionId;
       const hint = document.getElementById('notesHint');
-      hint.textContent = hasStudent
-        ? 'One shared internal note per student. Visible to all admins and not exported to PDF.'
-        : 'Select a student first, then add or update their internal note.';
-      document.getElementById('notesInput').disabled = !hasStudent;
-      document.getElementById('saveNoteBtn').disabled = !hasStudent;
+      hint.textContent = hasSession
+        ? 'One internal note per document package. Visible to all admins and not exported to PDF.'
+        : 'Select a student session to view or edit its internal note.';
+      document.getElementById('notesInput').disabled = !hasSession;
+      document.getElementById('saveNoteBtn').disabled = !hasSession;
     }
 
     async function openNotesModal() {
       document.getElementById('notesModal').classList.add('active');
-      const studentName = await loadNotesStudentOptions(getStudentNameForNotes());
-      setNotesContext(studentName);
-      if (!studentName) {
+      const sessionId = await loadNotesStudentOptions(currentExportSessionId);
+      setNotesContext(sessionId);
+      if (!sessionId) {
         document.getElementById('notesInput').value = '';
-        renderNoNotesMessage('Select a student to view or edit their internal note.');
+        renderNoNotesMessage('Select a session to view or edit its internal note.');
         return;
       }
-      await loadInternalNote(studentName);
+      await loadInternalNote(sessionId);
     }
 
     function closeNotesModal() {
@@ -2058,44 +2019,43 @@
     }
 
     async function refreshNotes() {
-      const preferred = getSelectedNotesStudentName() || getStudentNameForNotes();
-      const studentName = await loadNotesStudentOptions(preferred);
-      setNotesContext(studentName);
-      if (!studentName) {
+      const preferred = getSelectedNotesSessionId() || currentExportSessionId;
+      const sessionId = await loadNotesStudentOptions(preferred);
+      setNotesContext(sessionId);
+      if (!sessionId) {
         document.getElementById('notesInput').value = '';
-        renderNoNotesMessage('Select a student to view or edit their internal note.');
+        renderNoNotesMessage('Select a session to view or edit its internal note.');
         return;
       }
-      await loadInternalNote(studentName);
+      await loadInternalNote(sessionId);
     }
 
     async function handleNotesStudentChange() {
-      const studentName = getSelectedNotesStudentName();
-      setNotesContext(studentName);
-      if (!studentName) {
+      const sessionId = getSelectedNotesSessionId();
+      setNotesContext(sessionId);
+      if (!sessionId) {
         document.getElementById('notesInput').value = '';
-        renderNoNotesMessage('Select a student to view or edit their internal note.');
+        renderNoNotesMessage('Select a session to view or edit its internal note.');
         return;
       }
-      await loadInternalNote(studentName);
+      await loadInternalNote(sessionId);
     }
 
-    async function loadInternalNote(studentName) {
+    async function loadInternalNote(sessionId) {
       const listEl = document.getElementById('notesList');
       listEl.innerHTML = '<div class="empty-saves">Loading note…</div>';
       try {
         const db = getDB();
-        const studentKey = getStudentKeyForNotes(studentName);
         const { data, error } = await db
           .from(EXPORT_NOTES_TABLE)
           .select('id, note_text, author_name, author_email, created_at, updated_at')
-          .eq('student_key', studentKey)
+          .eq('export_session_id', sessionId)
           .maybeSingle();
         if (error && error.code !== 'PGRST116') throw error;
 
         if (!data) {
           document.getElementById('notesInput').value = '';
-          listEl.innerHTML = '<div class="empty-saves">No note saved yet for this student.</div>';
+          listEl.innerHTML = '<div class="empty-saves">No note saved yet for this session.</div>';
           return;
         }
 
@@ -2115,8 +2075,8 @@
                 class="btn-sli-delete"
                 style="padding:4px 10px;font-size:10.5px;"
                 data-note-id="${escHtml(data.id)}"
-                data-student-name="${escHtml(studentName)}"
-                onclick="deleteInternalNote(this.dataset.noteId, this.dataset.studentName)"
+                data-session-id="${escHtml(sessionId)}"
+                onclick="deleteInternalNote(this.dataset.noteId, this.dataset.sessionId)"
               >Delete</button>
             </div>
           </div>
@@ -2124,14 +2084,14 @@
         </div>`;
       } catch (e) {
         const msg = String(e.message || 'Unknown error');
-        const setupHint = msg.includes('does not exist')
-          ? 'Notes table is missing. Run ADD-EXPORT-SESSION-NOTES.sql in Supabase SQL Editor.'
+        const setupHint = msg.includes('does not exist') || msg.includes('column') || msg.includes('export_session_id')
+          ? 'Notes table needs migration. Run ADD-UUID-NOTES-MIGRATION.sql in Supabase SQL Editor.'
           : msg;
         listEl.innerHTML = `<div class="empty-saves" style="color:var(--danger)">${escHtml(setupHint)}</div>`;
       }
     }
 
-    async function deleteInternalNote(noteId, studentName) {
+    async function deleteInternalNote(noteId, sessionId) {
       const confirmed = await showConfirm(
         'Delete Internal Note',
         'This note will be permanently removed and cannot be recovered.'
@@ -2143,7 +2103,7 @@
         if (error) throw error;
         document.getElementById('notesInput').value = '';
         document.getElementById('notesList').innerHTML =
-          '<div class="empty-saves">Note deleted. No note saved yet for this student.</div>';
+          '<div class="empty-saves">Note deleted. No note saved yet for this session.</div>';
         showToast('Note deleted.', 'success');
       } catch (e) {
         showToast('Could not delete note: ' + (e.message || 'Network error'), 'error');
@@ -2176,9 +2136,9 @@
     });
 
     async function saveInternalNote() {
-      const studentName = getSelectedNotesStudentName();
-      if (!studentName) {
-        showToast('Select a student before saving a note.', 'error');
+      const sessionId = getSelectedNotesSessionId();
+      if (!sessionId) {
+        showToast('Select a student session before saving a note.', 'error');
         return;
       }
 
@@ -2198,19 +2158,17 @@
         const db = getDB();
         const authorEmail = sessionStorage.getItem('userEmail') || localStorage.getItem('userEmail') || null;
         const authorName  = sessionStorage.getItem('userName')  || localStorage.getItem('userName')  || null;
-        const studentKey = getStudentKeyForNotes(studentName);
 
         const { error } = await db.from(EXPORT_NOTES_TABLE).upsert({
-          student_name: studentName,
-          student_key: studentKey,
-          note_text: noteText,
+          export_session_id: sessionId,
+          note_text:    noteText,
           author_email: authorEmail,
-          author_name: authorName,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'student_key' });
+          author_name:  authorName,
+          updated_at:   new Date().toISOString(),
+        }, { onConflict: 'export_session_id' });
         if (error) throw error;
 
-        await loadInternalNote(studentName);
+        await loadInternalNote(sessionId);
         showToast('Internal note saved.', 'success');
       } catch (e) {
         showToast('Could not save note: ' + (e.message || 'Network error'), 'error');
@@ -2254,9 +2212,7 @@
     }
 
     async function saveProgress() {
-      // ── Snapshot ALL state synchronously BEFORE any await ─────────────────────
-      // If another student is loaded while uploads are in-flight, these captured
-      // values remain bound to the CURRENT student and cannot be contaminated.
+      // ── Snapshot ALL state synchronously BEFORE any await ────────────────────
       const studentName = document.getElementById('studentName').value.trim();
       const leftArmenia = document.getElementById('leftArmenia').value || null;
       const enteredUS   = document.getElementById('enteredUS').value   || null;
@@ -2266,27 +2222,43 @@
         diplomaRUS: files.diplomaRUS,
         birth:      files.birth,
         passport:   files.passport,
-        additional: [...(files.additional || [])], // shallow-copy so live splice() can't affect us
+        additional: [...(files.additional || [])],
       };
-      // ──────────────────────────────────────────────────────────────────────────
 
       if (!studentName) {
         showToast('Enter a student name before saving.', 'error');
         return;
       }
       const btn = document.querySelector('.btn-topbar-save');
-      const orig = btn.textContent;
-      btn.textContent = 'Saving...';
-      btn.disabled = true;
+      const orig = btn ? btn.textContent : 'Save Progress';
+      if (btn) { btn.textContent = 'Saving...'; btn.disabled = true; }
       try {
         const db = getDB();
-        // Build a per-student storage folder using the name hash.
-        // _studentFolderHash() is defined at module level and handles all Unicode
-        // (including Armenian) without collisions.
-        const folder = _studentFolderHash(studentName.trim());
+        let sessionId = currentExportSessionId;
 
-        btn.textContent = 'Uploading…';
-        // Upload each file to Supabase Storage in parallel; only paths saved in DB
+        if (!sessionId) {
+          // ── NEW SESSION: INSERT first to obtain the stable UUID ───────────────
+          if (btn) btn.textContent = 'Creating…';
+          const { data: newRow, error: insertErr } = await db
+            .from('export_sessions')
+            .insert({
+              student_name: studentName,
+              left_armenia: leftArmenia,
+              entered_us:   enteredUS,
+              files_data:   {},
+            })
+            .select('id')
+            .single();
+          if (insertErr) throw insertErr;
+          sessionId = newRow.id;
+          currentExportSessionId  = sessionId;
+          _filesLockedToSessionId = sessionId;
+        }
+
+        // ── Folder is the session UUID — completely independent of student name ─
+        const folder = `export_sessions/${sessionId}`;
+        if (btn) btn.textContent = 'Uploading…';
+
         const [photoRef, diplomaARMRef, diplomaRUSRef, birthRef, passportRef] = await Promise.all([
           uploadFileToStorage(db, folder, 'photo',      saveFiles.photo),
           uploadFileToStorage(db, folder, 'diplomaARM', saveFiles.diplomaARM),
@@ -2298,31 +2270,43 @@
           saveFiles.additional.map((f, i) => uploadFileToStorage(db, folder, `additional_${i}`, f))
         );
 
-        btn.textContent = 'Saving…';
-        const { error } = await db.from('export_sessions').upsert({
-          student_name: studentName,
-          left_armenia: leftArmenia,
-          entered_us:   enteredUS,
-          files_data: {
-            _v:         2,           // v2 = storage-backed paths
-            photo:      photoRef,
-            diplomaARM: diplomaARMRef,
-            diplomaRUS: diplomaRUSRef,
-            birth:      birthRef,
-            passport:   passportRef,
-            additional: additionalRefs,
-          },
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'student_name' });
-        if (error) throw error;
-        showToast('Saved to cloud!', 'success');
+        // ── UPDATE by UUID — never by student_name ────────────────────────────
+        if (btn) btn.textContent = 'Saving…';
+        const { error: updateErr } = await db
+          .from('export_sessions')
+          .update({
+            student_name: studentName,
+            left_armenia: leftArmenia,
+            entered_us:   enteredUS,
+            files_data: {
+              _v:         2,
+              photo:      photoRef,
+              diplomaARM: diplomaARMRef,
+              diplomaRUS: diplomaRUSRef,
+              birth:      birthRef,
+              passport:   passportRef,
+              additional: additionalRefs,
+            },
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', sessionId);
+        if (updateErr) throw updateErr;
+
+        showToast(`Saved: ${studentName}`, 'success');
       } catch (e) {
         console.error('Save error:', e);
         showToast('Save failed: ' + (e.message || 'Network error'), 'error');
       } finally {
-        btn.textContent = orig;
-        btn.disabled = false;
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
       }
+    }
+
+    // Clear session identity so next Save Progress creates a brand-new DB row.
+    // Documents already on the form are kept and will be re-uploaded into the new folder.
+    function saveAsNew() {
+      currentExportSessionId  = null;
+      _filesLockedToSessionId = null;
+      showToast('Ready for new student — edit the name and click Save Progress.', 'success');
     }
 
     async function openLoadModal() {
@@ -2333,15 +2317,15 @@
         const db = getDB();
         const [sessionsResult, notesResult] = await Promise.all([
           db.from('export_sessions').select('id, student_name, updated_at').order('updated_at', { ascending: false }),
-          db.from(EXPORT_NOTES_TABLE).select('student_key, note_text, author_name, author_email, updated_at'),
+          db.from(EXPORT_NOTES_TABLE).select('export_session_id, note_text, author_name, author_email, updated_at'),
         ]);
         const { data, error } = sessionsResult;
         if (error) throw error;
 
-        // Build lookup: student_key → note row
+        // Build lookup: export_session_id → note row
         const notesMap = {};
         if (notesResult.data) {
-          notesResult.data.forEach(n => { notesMap[n.student_key] = n; });
+          notesResult.data.forEach(n => { if (n.export_session_id) notesMap[n.export_session_id] = n; });
         }
 
         if (!data || data.length === 0) {
@@ -2352,8 +2336,7 @@
             const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
             const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 
-            const key  = getStudentKeyForNotes(s.student_name);
-            const note = notesMap[key];
+            const note = notesMap[s.id];
             let noteIndicator = '';
             if (note && note.note_text) {
               const noteAuthor = escHtml(note.author_name || note.author_email || 'Admin');
@@ -2410,7 +2393,8 @@
       files.birth      = null;
       files.passport   = null;
       files.additional = [];
-      _filesLockedToName = null;                            // release lock
+      currentExportSessionId  = null;                       // release session lock
+      _filesLockedToSessionId = null;                       // release file lock
       document.getElementById('studentName').value  = '';  // clear name
       document.getElementById('leftArmenia').value  = '';  // clear date
       document.getElementById('enteredUS').value    = '';  // clear date
@@ -2468,14 +2452,14 @@
           files.additional = Array.isArray(f.additional) ? f.additional : [];
         }
 
-        // Record which student these files belong to.
-        // Changing the name field after this point will clear files automatically.
-        _filesLockedToName = (data.student_name || '').trim();
+        // Lock files to the session UUID — name changes no longer wipe documents.
+        currentExportSessionId  = data.id;
+        _filesLockedToSessionId = data.id;
 
         restoreAllPreviews();
 
         if (document.getElementById('notesModal').classList.contains('active')) {
-          const selected = await loadNotesStudentOptions(data.student_name || '');
+          const selected = await loadNotesStudentOptions(data.id);
           setNotesContext(selected);
           if (selected) {
             await loadInternalNote(selected);
@@ -2495,11 +2479,10 @@
         (async () => {
           try {
             const db = getDB();
-            const key = getStudentKeyForNotes(data.student_name || '');
             const { data: note } = await db
               .from(EXPORT_NOTES_TABLE)
               .select('note_text, author_name, author_email, updated_at')
-              .eq('student_key', key)
+              .eq('export_session_id', data.id)
               .maybeSingle();
             // Abort if a newer student has been loaded since this started
             if (_noteLoadSeq !== _currentLoadSeq) return;
@@ -2523,13 +2506,55 @@
     }
 
     async function deleteSave(id) {
+      const confirmed = await showConfirm(
+        'Delete Student Package',
+        'This will permanently delete the saved data and all uploaded files for this student. This cannot be undone.'
+      );
+      if (!confirmed) return;
+
       const row = document.getElementById('sli-' + id);
       const btn = row ? row.querySelector('.btn-sli-delete') : null;
       if (btn) { btn.textContent = '...'; btn.disabled = true; }
       try {
         const db = getDB();
+
+        // Fetch files_data first so we can delete storage objects
+        const { data: sessionRow } = await db
+          .from('export_sessions')
+          .select('files_data')
+          .eq('id', id)
+          .single();
+
+        if (sessionRow && sessionRow.files_data) {
+          const f = sessionRow.files_data;
+          const paths = [];
+          ['photo','diplomaARM','diplomaRUS','birth','passport'].forEach(key => {
+            if (f[key] && f[key].storagePath) paths.push(f[key].storagePath);
+          });
+          if (Array.isArray(f.additional)) {
+            f.additional.forEach(a => { if (a && a.storagePath) paths.push(a.storagePath); });
+          }
+          if (paths.length > 0) {
+            await db.storage.from(EXPORT_BUCKET).remove(paths);
+          }
+        }
+
         const { error } = await db.from('export_sessions').delete().eq('id', id);
         if (error) throw error;
+
+        // Reset state if this was the currently loaded session
+        if (currentExportSessionId === id) {
+          currentExportSessionId  = null;
+          _filesLockedToSessionId = null;
+          files.photo = files.diplomaARM = files.diplomaRUS = files.birth = files.passport = null;
+          files.additional = [];
+          document.getElementById('studentName').value = '';
+          document.getElementById('leftArmenia').value = '';
+          document.getElementById('enteredUS').value   = '';
+          document.getElementById('studentNoteIndicator').classList.remove('visible');
+          restoreAllPreviews();
+        }
+
         openLoadModal();
       } catch (e) {
         showToast('Delete failed: ' + (e.message || 'Network error'), 'error');
@@ -2683,27 +2708,11 @@
         .forEach(el => el.classList.remove('touch-active'));
     });
 
-    // Clear note indicator + files + dates when student name is manually edited after a load.
-    // This is the primary guard against saving Student A's data under Student B's name.
+    // Name is now a display/label field only.
+    // Changing it does NOT wipe documents — docs are tied to session UUID, not name.
+    // Typo corrections are safe: just fix the name and click Save Progress.
     document.getElementById('studentName').addEventListener('input', function() {
       document.getElementById('studentNoteIndicator').classList.remove('visible');
-      const newName = this.value.trim();
-      if (_filesLockedToName !== null && newName !== _filesLockedToName) {
-        // Name diverged from the loaded student — wipe ALL student-specific data immediately
-        files.photo      = null;
-        files.diplomaARM = null;
-        files.diplomaRUS = null;
-        files.birth      = null;
-        files.passport   = null;
-        files.additional = [];
-        _filesLockedToName = null;
-        _currentLoadSeq++; // Abort any pending FileReader uploads
-        // Also clear travel dates — they belong to the previous student, not the new name
-        document.getElementById('leftArmenia').value = '';
-        document.getElementById('enteredUS').value   = '';
-        restoreAllPreviews();
-        showToast('Student name changed — all data cleared to prevent mixing', 'error');
-      }
     });
 
     // Close modal on backdrop click or ESC
