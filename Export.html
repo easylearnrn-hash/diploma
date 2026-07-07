@@ -354,6 +354,10 @@
       background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border);
     }
     .btn-topbar-save:hover { opacity: 0.78; }
+    .btn-topbar-save.is-update {
+      background: #1a3d2b; color: #4ade80; border: 1px solid #22c55e;
+    }
+    .btn-topbar-save.is-update:hover { background: #1f4d34; opacity: 0.9; }
     .btn-topbar-save-new {
       background: transparent;
       color: var(--gold);
@@ -884,7 +888,7 @@
     <div class="topbar-actions">
       <button class="btn-topbar btn-topbar-load" onclick="openLoadModal()">Load Student</button>
       <button class="btn-topbar btn-topbar-notes" onclick="openNotesModal()">Notes</button>
-      <button class="btn-topbar btn-topbar-save" onclick="saveProgress()">Save Progress</button>
+      <button id="saveProgressBtn" class="btn-topbar btn-topbar-save" onclick="saveProgress()">Save Progress</button>
       <button class="btn-topbar btn-topbar-save-new" onclick="saveAsNew()" title="Clear current session — next Save Progress creates a new entry">Save As New</button>
       <span class="topbar-badge">PDF Export</span>
     </div>
@@ -2253,6 +2257,7 @@
           sessionId = newRow.id;
           currentExportSessionId  = sessionId;
           _filesLockedToSessionId = sessionId;
+          updateSaveBtn();
         }
 
         // ── Folder: transliterate to ASCII + UUID suffix for uniqueness ────────
@@ -2320,6 +2325,7 @@
         if (updateErr) throw updateErr;
 
         showToast(`Saved: ${studentName}`, 'success');
+        updateSaveBtn();
       } catch (e) {
         console.error('Save error:', e);
         showToast('Save failed: ' + (e.message || 'Network error'), 'error');
@@ -2333,7 +2339,20 @@
     function saveAsNew() {
       currentExportSessionId  = null;
       _filesLockedToSessionId = null;
+      updateSaveBtn();
       showToast('Ready for new student — edit the name and click Save Progress.', 'success');
+    }
+
+    function updateSaveBtn() {
+      const btn = document.getElementById('saveProgressBtn');
+      if (!btn) return;
+      if (currentExportSessionId) {
+        btn.textContent = 'Update';
+        btn.classList.add('is-update');
+      } else {
+        btn.textContent = 'Save Progress';
+        btn.classList.remove('is-update');
+      }
     }
 
     async function openLoadModal() {
@@ -2422,6 +2441,7 @@
       files.additional = [];
       currentExportSessionId  = null;                       // release session lock
       _filesLockedToSessionId = null;                       // release file lock
+      updateSaveBtn();
       document.getElementById('studentName').value  = '';  // clear name
       document.getElementById('leftArmenia').value  = '';  // clear date
       document.getElementById('enteredUS').value    = '';  // clear date
@@ -2482,6 +2502,7 @@
         // Lock files to the session UUID — name changes no longer wipe documents.
         currentExportSessionId  = data.id;
         _filesLockedToSessionId = data.id;
+        updateSaveBtn();
 
         restoreAllPreviews();
 
@@ -2573,6 +2594,7 @@
         if (currentExportSessionId === id) {
           currentExportSessionId  = null;
           _filesLockedToSessionId = null;
+          updateSaveBtn();
           files.photo = files.diplomaARM = files.diplomaRUS = files.birth = files.passport = null;
           files.additional = [];
           document.getElementById('studentName').value = '';
