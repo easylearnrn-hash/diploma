@@ -1345,8 +1345,12 @@
     }
 
     function processSingleFile(key, file) {
+      // Capture sequence so a loadStudent() call that arrives while the
+      // FileReader is running won't let this callback pollute the new student.
+      const uploadSeq = _currentLoadSeq;
       const reader = new FileReader();
       reader.onload = function(e) {
+        if (_currentLoadSeq !== uploadSeq) return; // student changed mid-read
         const dataUrl = e.target.result;
         files[key] = { dataUrl, name: file.name, mimeType: file.type };
         updateSinglePreview(key, dataUrl, file.type);
@@ -1356,10 +1360,12 @@
     }
 
     function processMultipleFiles(key, fileArr) {
+      const uploadSeq = _currentLoadSeq;
       let loaded = 0;
       fileArr.forEach(file => {
         const reader = new FileReader();
         reader.onload = function(e) {
+          if (_currentLoadSeq !== uploadSeq) return; // student changed mid-read
           files[key].push({ dataUrl: e.target.result, name: file.name, mimeType: file.type });
           loaded++;
           if (loaded === fileArr.length) renderMultiplePreviews(key);
