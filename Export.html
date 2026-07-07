@@ -2412,11 +2412,11 @@
           files.diplomaRUS = diplomaRUS;
           files.birth      = birth;
           files.passport   = passport;
-          files.additional = await Promise.all(
+          const downloadedAdditional = await Promise.all(
             (Array.isArray(f.additional) ? f.additional : []).map(ref => downloadFileFromStorage(db, ref))
           );
           if (loadSeq !== _currentLoadSeq) { closeLoadModal(); return; }
-          files.additional = files.additional.filter(Boolean);
+          files.additional = downloadedAdditional.filter(Boolean);
         } else {
           // Legacy v1: files are raw data URLs stored directly in jsonb
           files.photo      = f.photo      || null;
@@ -2643,6 +2643,7 @@
         files.passport   = null;
         files.additional = [];
         _filesLockedToName = null;
+        _currentLoadSeq++; // Abort any pending FileReader uploads
         restoreAllPreviews();
         showToast('Student name changed — documents cleared to prevent mixing', 'error');
       }
