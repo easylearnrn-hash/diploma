@@ -2529,26 +2529,31 @@
         const src = el.src || el.getAttribute('src');
         if (!src || src === window.location.href || src === '') return;
 
+        // Position BEFORE setting src so it's always correct whether
+        // the image is fresh or already cached (onload won't fire for cached images).
+        // Use the CSS max-dimensions as conservative bounds so the overlay
+        // is guaranteed to stay fully on screen regardless of image aspect ratio.
+        const rect = el.getBoundingClientRect();
+        const ow = W + 14;          // 614px  (600 image + 6px padding × 2 + 2px border)
+        const oh = 572;             // 574px  (560 max-height + 6px padding × 2 + 2px border)
+
+        // Prefer: left of thumbnail → right of thumbnail → clamp to right edge
+        let left = rect.left - ow - 12;
+        if (left < 10) left = rect.right + 12;
+        if (left + ow > window.innerWidth - 10) left = window.innerWidth - ow - 10;
+        if (left < 10) left = 10;
+
+        // Centre vertically on the thumbnail; clamp top and bottom
+        let top = rect.top + rect.height / 2 - oh / 2;
+        if (top < 10) top = 10;
+        if (top + oh > window.innerHeight - 10) top = window.innerHeight - oh - 10;
+        if (top < 10) top = 10; // safety if oh > viewport height
+
+        overlay.style.left = Math.round(left) + 'px';
+        overlay.style.top  = Math.round(top)  + 'px';
+
         img.src = src;
         overlay.classList.add('visible');
-
-        // Smart positioning: prefer left of thumbnail, else right, clamped to viewport
-        const rect = el.getBoundingClientRect();
-        img.onload = function() {
-          const oh = Math.min(img.naturalHeight * (W / img.naturalWidth), 360) + 14;
-          const ow = W + 14;
-
-          let left = rect.left - ow - 12;
-          if (left < 10) left = rect.right + 12;
-          if (left + ow > window.innerWidth - 10) left = window.innerWidth - ow - 10;
-
-          let top = rect.top + rect.height / 2 - oh / 2;
-          if (top < 10) top = 10;
-          if (top + oh > window.innerHeight - 10) top = window.innerHeight - oh - 10;
-
-          overlay.style.left = Math.round(left) + 'px';
-          overlay.style.top  = Math.round(top)  + 'px';
-        };
       });
 
       document.addEventListener('mouseout', function(e) {
