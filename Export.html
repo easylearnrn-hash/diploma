@@ -915,7 +915,7 @@
             Student's Full Name (Armenian)<span class="req">*</span>
           </label>
           <div class="field-input-wrap">
-            <input type="text" id="studentName" class="field-input" placeholder="Անուն Ազգանուն (հայերեն, ինչպես նշված է անձնագրում)" autocomplete="name" required>
+            <input type="text" id="studentName" class="field-input" placeholder="Անուն Ազգանուն (հայերեն, ինչպես նշված է անձնագրում)" autocomplete="off" required>
           </div>
           <span class="field-caption">Մուտքագրեք անունը և ազգանունը հայերեն՝ ճիշտ այնպես, ինչպես նշված է անձնագրում։</span>
         </div>
@@ -924,14 +924,14 @@
             <label class="field-label" for="leftArmenia">
               Date you permanently left Armenia<span class="req">*</span>
             </label>
-            <input type="date" id="leftArmenia" class="field-input" required>
+            <input type="date" id="leftArmenia" class="field-input" autocomplete="off" required>
             <span class="field-caption">The date you departed Armenia with no intention to return as a permanent resident</span>
           </div>
           <div class="field-group">
             <label class="field-label" for="enteredUS">
               Date you entered the United States<span class="req">*</span>
             </label>
-            <input type="date" id="enteredUS" class="field-input" required>
+            <input type="date" id="enteredUS" class="field-input" autocomplete="off" required>
             <span class="field-caption">Your first date of entry into the United States</span>
           </div>
         </div>
@@ -2368,14 +2368,20 @@
       const btn = row ? row.querySelector('.btn-sli-load') : null;
       if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
 
-      // ── Clear all file state immediately so no stale data from a previous
-      //    student can bleed into this load (critical: must happen before any await)
+      // ── Clear ALL student-specific state synchronously before any await ──────
+      //    Files, dates, name, and lock — a blank slate so nothing from the
+      //    previous student can ever bleed into this load.
       files.photo      = null;
       files.diplomaARM = null;
       files.diplomaRUS = null;
       files.birth      = null;
       files.passport   = null;
       files.additional = [];
+      _filesLockedToName = null;                            // release lock
+      document.getElementById('studentName').value  = '';  // clear name
+      document.getElementById('leftArmenia').value  = '';  // clear date
+      document.getElementById('enteredUS').value    = '';  // clear date
+      document.getElementById('studentNoteIndicator').classList.remove('visible');
       restoreAllPreviews();
 
       try {
