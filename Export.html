@@ -710,22 +710,35 @@
 
     /* ─── Preview hover zoom + action bar ───────────── */
     .preview-area { overflow: visible; }
-    .preview-img {
-      cursor: pointer;
-      transition: transform 0.22s cubic-bezier(0.22,1,0.36,1);
-      position: relative; z-index: 1;
-    }
-    .preview-area:hover .preview-img {
-      transform: scale(5);
-      z-index: 30;
-    }
+    .preview-img { cursor: pointer; }
     .preview-pdf { transition: transform 0.18s ease; }
     .preview-area:hover .preview-pdf {
       transform: scale(1.08);
       position: relative; z-index: 30;
     }
     .multi-preview-item { overflow: visible; }
-    .multi-preview-item:hover .preview-img { transform: scale(5); z-index: 30; }
+
+    /* Fixed floating zoom overlay — avoids all overflow/clip constraints */
+    #zoomOverlay {
+      display: none;
+      position: fixed;
+      z-index: 999990;
+      pointer-events: none;
+      background: var(--surface-2);
+      border: 1.5px solid var(--gold-border);
+      border-radius: 10px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.85), 0 0 0 1px rgba(255,255,255,0.05);
+      padding: 6px;
+    }
+    #zoomOverlay.visible { display: block; }
+    #zoomOverlayImg {
+      display: block;
+      width: 380px;
+      height: auto;
+      max-height: 360px;
+      object-fit: contain;
+      border-radius: 6px;
+    }
     .preview-actions-bar {
       position: absolute;
       bottom: -28px;
@@ -1211,6 +1224,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Fixed zoom overlay (avoids overflow clipping) -->
+  <div id="zoomOverlay"><img id="zoomOverlayImg" src="" alt=""></div>
 
   <!-- Premium Confirmation Dialog -->
   <div id="confirmOverlay" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
@@ -2454,6 +2470,47 @@
         .replace(/&/g,'&amp;').replace(/</g,'&lt;')
         .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
+
+    // ─── Hover zoom overlay (fixed position, never clipped) ──────
+    (function() {
+      const overlay = document.getElementById('zoomOverlay');
+      const img     = document.getElementById('zoomOverlayImg');
+      const W = 392; // overlay content width
+
+      document.addEventListener('mouseover', function(e) {
+        const el = e.target;
+        if (!el.classList.contains('preview-img')) return;
+        const src = el.src || el.getAttribute('src');
+        if (!src || src === window.location.href || src === '') return;
+
+        img.src = src;
+        overlay.classList.add('visible');
+
+        // Smart positioning: prefer left of thumbnail, else right, clamped to viewport
+        const rect = el.getBoundingClientRect();
+        img.onload = function() {
+          const oh = Math.min(img.naturalHeight * (W / img.naturalWidth), 360) + 14;
+          const ow = W + 14;
+
+          let left = rect.left - ow - 12;
+          if (left < 10) left = rect.right + 12;
+          if (left + ow > window.innerWidth - 10) left = window.innerWidth - ow - 10;
+
+          let top = rect.top + rect.height / 2 - oh / 2;
+          if (top < 10) top = 10;
+          if (top + oh > window.innerHeight - 10) top = window.innerHeight - oh - 10;
+
+          overlay.style.left = Math.round(left) + 'px';
+          overlay.style.top  = Math.round(top)  + 'px';
+        };
+      });
+
+      document.addEventListener('mouseout', function(e) {
+        if (e.target.classList.contains('preview-img')) {
+          overlay.classList.remove('visible');
+        }
+      });
+    })();
 
     // ─── File preview helpers (zoom, download, open) ────────────
     function _dataUrlToBlob(dataUrl, mimeType) {
