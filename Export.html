@@ -2249,8 +2249,24 @@
       btn.disabled = true;
       try {
         const db = getDB();
-        // Sanitise student name for use as a storage folder
-        const folder = studentName.replace(/[^a-z0-9_-]/gi, '_').toLowerCase();
+        // Build a storage folder that is UNIQUE per student regardless of script/language.
+        // The old approach (replace non-ASCII with '_') made ALL Armenian names collide,
+        // because every Armenian character became '_' and two names of equal length
+        // produced identical folder paths, causing files to silently overwrite each other.
+        //
+        // Fix: use a 32-bit hash of the EXACT original name (case-sensitive, full Unicode)
+        // as the folder.  Different names → different hash → different folder.
+        // Existing saved data is unaffected: downloads use the storagePath stored in the
+        // DB row, not a re-derived folder name.
+        function _nameHash(str) {
+          let h = 5381;
+          for (let i = 0; i < str.length; i++) {
+            h = Math.imul((h << 5) + h, 1) ^ str.charCodeAt(i);
+            h = h | 0; // keep 32-bit
+          }
+          return (h >>> 0).toString(36); // unsigned base-36, e.g. "1z3k9m"
+        }
+        const folder = _nameHash(studentName.trim());
 
         btn.textContent = 'Uploading…';
         // Upload each file to Supabase Storage in parallel; only paths saved in DB
