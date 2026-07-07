@@ -2255,13 +2255,34 @@
           _filesLockedToSessionId = sessionId;
         }
 
-        // ── Folder: readable name + UUID prefix for uniqueness ───────────────
-        // Keeps Armenian/Cyrillic chars; strips only path-unsafe chars (/ \ ? # & %)
-        const safeName = studentName
-          .trim()
-          .replace(/[\/\\?#&%]/g, '')
-          .replace(/\s+/g, '_')
-          .replace(/^_+|_+$/g, '') || 'student';
+        // ── Folder: transliterate to ASCII + UUID suffix for uniqueness ────────
+        // Supabase Storage only accepts ASCII-safe path keys.
+        const _armMap = {
+          'Ա':'A','ա':'a','Բ':'B','բ':'b','Գ':'G','գ':'g','Դ':'D','դ':'d',
+          'Ե':'E','ե':'e','Զ':'Z','զ':'z','Է':'E','է':'e','Ը':'Y','ը':'y',
+          'Թ':'T','թ':'t','Ժ':'Zh','ժ':'zh','Ի':'I','ի':'i','Լ':'L','լ':'l',
+          'Խ':'Kh','խ':'kh','Ծ':'Ts','ծ':'ts','Կ':'K','կ':'k','Հ':'H','հ':'h',
+          'Ձ':'Dz','ձ':'dz','Ղ':'Gh','ղ':'gh','Ճ':'Ch','ճ':'ch','Մ':'M','մ':'m',
+          'Յ':'Y','յ':'y','Ն':'N','ն':'n','Շ':'Sh','շ':'sh','Ո':'Vo','ո':'o',
+          'Չ':'Ch','չ':'ch','Պ':'P','պ':'p','Ջ':'J','ջ':'j','Ռ':'R','ռ':'r',
+          'Ս':'S','ս':'s','Վ':'V','վ':'v','Տ':'T','տ':'t','Ր':'R','ր':'r',
+          'Ց':'Ts','ց':'ts','Ւ':'u','ւ':'u','Փ':'Ph','փ':'ph','Ք':'K','ք':'k',
+          'Օ':'O','օ':'o','Ֆ':'F','ֆ':'f',
+          'А':'A','а':'a','Б':'B','б':'b','В':'V','в':'v','Г':'G','г':'g',
+          'Д':'D','д':'d','Е':'E','е':'e','Ж':'Zh','ж':'zh','З':'Z','з':'z',
+          'И':'I','и':'i','Й':'Y','й':'y','К':'K','к':'k','Л':'L','л':'l',
+          'М':'M','м':'m','Н':'N','н':'n','О':'O','о':'o','П':'P','п':'p',
+          'Р':'R','р':'r','С':'S','с':'s','Т':'T','т':'t','У':'U','у':'u',
+          'Ф':'F','ф':'f','Х':'Kh','х':'kh','Ц':'Ts','ц':'ts','Ч':'Ch','ч':'ch',
+          'Ш':'Sh','ш':'sh','Ы':'Y','ы':'y','Э':'E','э':'e','Ю':'Yu','ю':'yu',
+          'Я':'Ya','я':'ya',
+        };
+        const safeName = (studentName.trim()
+          // Armenian ու/ՈՒ digraph → u/U before char-by-char pass
+          .replace(/ՈՒ/g,'U').replace(/ու/g,'u')
+          .split('').map(c => _armMap[c] !== undefined ? _armMap[c] : c).join('')
+          .replace(/[^a-zA-Z0-9]+/g, '_')
+          .replace(/^_+|_+$/g, '') || 'student');
         const folder = `${safeName}_${sessionId.slice(0, 8)}`;
         if (btn) btn.textContent = 'Uploading…';
 
