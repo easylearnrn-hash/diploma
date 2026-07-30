@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ACNHS PDF Server — Playwright-based
+ * ACNHS Export Server - Playwright-based
  * Port: 8001
  *
  * Start:
@@ -10,15 +10,26 @@
  * First-time browser install (run once after npm install):
  *   npx playwright install chromium
  *
- * Then open http://localhost:8000/documents.html and click "Print / Save PDF".
+ * Then open http://localhost:8000/documents.html and use PDF / Word export.
  */
 
-const http    = require('http');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const http = require('http');
+const { execFileSync } = require('child_process');
 const { chromium } = require('playwright');
 
-const PORT      = 8001;
-const ORIGIN    = 'http://localhost:8000';
+const PORT = 8001;
+const ORIGIN = 'http://localhost:8000';
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB body limit
+
+const A4_TWIP_W = '11906';
+const A4_TWIP_H = '16838';
+const A4_EMU_W = '7559060';
+const A4_EMU_H = '10692130';
+const SCREEN_A4_W = 794;
+const SCREEN_A4_H = 1123;
 
 // ── Read request body as string ──────────────────────────────────────────────
 function readBody(req) {
@@ -38,6 +49,167 @@ function readBody(req) {
   });
 }
 
+function sanitizeFilename(name, fallback, ext) {
+  const base = String(name || fallback)
+    .replace(/\.[a-zA-Z0-9]+$/, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_') || fallback;
+  return `${base}.${ext}`;
+}
+
+function buildWordDocumentXml(pageCount) {
+  const pages = [];
+  for (let i = 1; i <= pageCount; i++) {
+    pages.push(`
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="${A4_EMU_W}" cy="${A4_EMU_H}"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="${i}" name="Page ${i}"/>
+            <wp:cNvGraphicFramePr>
+              <a:graphicFrameLocks noChangeAspect="1"/>
+            </wp:cNvGraphicFramePr>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="0" name="page-${i}.png"/>
+                    <pic:cNvPicPr/>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:embed="rId${i}"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm>
+                      <a:off x="0" y="0"/>
+                      <a:ext cx="${A4_EMU_W}" cy="${A4_EMU_H}"/>
+                    </a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>`);
+
+    if (i < pageCount) {
+      pages.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+    }
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    ${pages.join('\n')}
+    <w:sectPr>
+      <w:pgSz w:w="${A4_TWIP_W}" w:h="${A4_TWIP_H}"/>
+      <w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+}
+
+function buildWordDocumentRelsXml(pageCount) {
+  const rels = [];
+  for (let i = 1; i <= pageCount; i++) {
+    rels.push(`<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page-${i}.png"/>`);
+  }
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${rels.join('\n  ')}
+</Relationships>`;
+}
+
+function createDocxFromPngPages(pngPages) {
+  if (!pngPages || pngPages.length === 0) {
+    throw new Error('No pages were rendered for Word export');
+  }
+
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'acnhs-docx-'));
+  const outDocx = path.join(os.tmpdir(), `acnhs-word-${Date.now()}-${Math.random().toString(36).slice(2)}.docx`);
+
+  try {
+    fs.mkdirSync(path.join(tmpRoot, '_rels'), { recursive: true });
+    fs.mkdirSync(path.join(tmpRoot, 'word', '_rels'), { recursive: true });
+    fs.mkdirSync(path.join(tmpRoot, 'word', 'media'), { recursive: true });
+
+    const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`;
+
+    const rootRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`;
+
+    fs.writeFileSync(path.join(tmpRoot, '[Content_Types].xml'), contentTypesXml, 'utf8');
+    fs.writeFileSync(path.join(tmpRoot, '_rels', '.rels'), rootRelsXml, 'utf8');
+    fs.writeFileSync(path.join(tmpRoot, 'word', 'document.xml'), buildWordDocumentXml(pngPages.length), 'utf8');
+    fs.writeFileSync(path.join(tmpRoot, 'word', '_rels', 'document.xml.rels'), buildWordDocumentRelsXml(pngPages.length), 'utf8');
+
+    for (let i = 0; i < pngPages.length; i++) {
+      fs.writeFileSync(path.join(tmpRoot, 'word', 'media', `page-${i + 1}.png`), pngPages[i]);
+    }
+
+    execFileSync('zip', ['-q', '-r', outDocx, '.'], { cwd: tmpRoot });
+    return fs.readFileSync(outDocx);
+  } finally {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (_) {}
+    try { fs.unlinkSync(outDocx); } catch (_) {}
+  }
+}
+
+async function renderA4PngPages(html) {
+  let browser;
+  let context;
+  try {
+    browser = await chromium.launch({ headless: true });
+    context = await browser.newContext({
+      viewport: { width: SCREEN_A4_W, height: SCREEN_A4_H },
+      deviceScaleFactor: 2,
+    });
+    const page = await context.newPage();
+
+    await page.emulateMedia({ media: 'print' });
+    await page.setContent(html, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.evaluateHandle('document.fonts.ready');
+
+    const totalHeight = await page.evaluate(() =>
+      Math.max(
+        document.documentElement.scrollHeight,
+        document.body ? document.body.scrollHeight : 0
+      )
+    );
+    const pageCount = Math.max(1, Math.ceil(totalHeight / SCREEN_A4_H));
+
+    const pages = [];
+    for (let i = 0; i < pageCount; i++) {
+      await page.evaluate(y => window.scrollTo(0, y), i * SCREEN_A4_H);
+      await page.waitForTimeout(70);
+      const png = await page.screenshot({ type: 'png' });
+      pages.push(png);
+    }
+
+    return pages;
+  } finally {
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+  }
+}
+
 // ── HTTP server ──────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
 
@@ -51,7 +223,10 @@ const server = http.createServer(async (req, res) => {
     return res.end();
   }
 
-  if (req.method !== 'POST' || req.url !== '/generate-pdf') {
+  const isPdfRoute = req.url === '/generate-pdf';
+  const isWordRoute = req.url === '/generate-word';
+
+  if (req.method !== 'POST' || (!isPdfRoute && !isWordRoute)) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'Not found' }));
   }
@@ -60,7 +235,7 @@ const server = http.createServer(async (req, res) => {
   let html, filename, refNo;
   try {
     const raw = await readBody(req);
-    ({ html, filename = 'document.pdf', refNo = '' } = JSON.parse(raw));
+    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '' } = JSON.parse(raw));
   } catch (e) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
@@ -71,9 +246,9 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify({ error: 'html field is required' }));
   }
 
-  // Sanitize filename for Content-Disposition header
-  const safeFilename = String(filename || 'document.pdf')
-    .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document.pdf';
+  const safeFilename = isWordRoute
+    ? sanitizeFilename(filename, 'document', 'docx')
+    : sanitizeFilename(filename, 'document', 'pdf');
 
   // Sanitize refNo for HTML embedding inside the footer template
   const safeRef = String(refNo || '')
@@ -84,6 +259,21 @@ const server = http.createServer(async (req, res) => {
 
   let browser;
   try {
+    if (isWordRoute) {
+      const pngPages = await renderA4PngPages(html);
+      const docxBuffer = createDocxFromPngPages(pngPages);
+
+      res.writeHead(200, {
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition': `attachment; filename="${safeFilename}"`,
+        'Content-Length': String(docxBuffer.length),
+      });
+      res.end(docxBuffer);
+
+      console.log(`[export-server] Generated Word: ${safeFilename} (${pngPages.length} pages)`);
+      return;
+    }
+
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage();
 
@@ -94,19 +284,17 @@ const server = http.createServer(async (req, res) => {
     await page.evaluateHandle('document.fonts.ready');
 
     const pdfBuffer = await page.pdf({
-      format:              'A4',
-      printBackground:     true,   // render background colours, images, and the crosshatch
-      preferCSSPageSize:   false,  // use format: 'A4' explicitly
+      format: 'A4',
+      printBackground: true,
+      preferCSSPageSize: false,
       displayHeaderFooter: true,
       margin: {
-        top:    '0',       // top spacing handled by page-content padding inside print HTML
-        bottom: '22mm',    // reserved footer band (separate from body area)
-        left:   '0',
-        right:  '0',
+        top: '0',
+        bottom: '22mm',
+        left: '0',
+        right: '0',
       },
-      // Blank header — the document letterhead is part of the HTML body
       headerTemplate: '<div></div>',
-      // Footer band: appears in the reserved 22 mm bottom margin on every page
       footerTemplate: `
         <div style="
           font-size: 8px;
@@ -131,14 +319,13 @@ const server = http.createServer(async (req, res) => {
     });
 
     res.writeHead(200, {
-      'Content-Type':        'application/pdf',
+      'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="${safeFilename}"`,
-      'Content-Length':      String(pdfBuffer.length),
+      'Content-Length': String(pdfBuffer.length),
     });
     res.end(pdfBuffer);
 
-    console.log(`[pdf-server] Generated: ${safeFilename} (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
-
+    console.log(`[export-server] Generated PDF: ${safeFilename} (${(pdfBuffer.length / 1024).toFixed(1)} KB)`);
   } catch (err) {
     console.error('[pdf-server] Error:', err.message);
     if (!res.headersSent) {
@@ -153,11 +340,11 @@ const server = http.createServer(async (req, res) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`
   ╔══════════════════════════════════════════════════════╗
-  ║         ACNHS PDF Server — http://127.0.0.1:${PORT}       ║
+  ║       ACNHS Export Server - http://127.0.0.1:${PORT}      ║
   ╚══════════════════════════════════════════════════════╝
 
   Open http://localhost:8000/documents.html
-  Fill in the form, then click "Print / Save PDF".
+  Fill in the form, then click "Print / Save PDF" or "Export to Word".
   Press Ctrl+C to stop.
 `);
 });
