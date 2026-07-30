@@ -2939,34 +2939,60 @@ ${contentHtml}
 </html>`;
   }
 
+  function extractEditableWordContent(contentHtml) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = contentHtml || '';
+
+    // Keep only body text editable in Word; remove non-editable chrome from body.
+    wrap.querySelectorAll('.doc-header, .doc-microtext').forEach(el => el.remove());
+    return wrap.innerHTML;
+  }
+
   /**
-   * Build a Word-compatible HTML (.doc) with the same design.
-   * Uses display:table for all layout, Word XML namespace for page settings,
-   * and a mso-element:header watermark so it repeats on every page.
+   * Build a Word-compatible HTML (.doc) where header/footer/border are in
+   * Word's page chrome (not body-editable), and only main body text is editable.
    */
   function buildWordHtml(contentHtml, logoDataUrl, refNo) {
     const safeRef = escHtml(refNo || '');
+    const safeIssued = escHtml(todayRef()).toUpperCase();
+    const logoBlock = logoDataUrl
+      ? `<img src="${logoDataUrl}" alt="ACNHS Seal" style="width:72pt;height:72pt;display:block;margin:0 auto;">`
+      : '';
 
-    const watermarkHeader = logoDataUrl ? `
-  <div style="mso-element:header" id="wm-header">
-    <p style="margin:0;padding:0;">
-      <v:shape xmlns:v="urn:schemas-microsoft-com:vml"
-        type="#_x0000_t75"
-        style="position:absolute;left:0;top:0;width:312pt;height:312pt;
-               z-index:-251657216;
-               mso-position-horizontal:center;mso-position-horizontal-relative:margin;
-               mso-position-vertical:center;mso-position-vertical-relative:margin"
-        stroked="f">
-        <v:fill opacity=".035" color="white"/>
-        <v:imagedata src="${logoDataUrl}" o:title="watermark"/>
-      </v:shape>
-    </p>
-  </div>` : '';
+    const firstHeaderHtml = `
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;width:100%;border-bottom:1.5pt solid #c8c8d0;margin-bottom:6pt;">
+      <tr>
+        <td style="vertical-align:middle;text-align:left;width:38%;padding-right:8pt;">
+          <div style="font-family:Georgia,'Times New Roman',serif;font-size:10pt;font-weight:bold;line-height:1.35;text-transform:uppercase;color:#0a0f1e;">ARMENIAN COLLEGE OF<br>NURSING &amp; HEALTH SCIENCES</div>
+          <div style="font-family:Arial,sans-serif;font-size:7.5pt;line-height:1.35;text-transform:uppercase;color:#3a4a6b;">ACADEMIC AFFAIRS &amp; PARTNERSHIPS OFFICE</div>
+          <div style="font-family:Arial,sans-serif;font-size:7.5pt;line-height:1.35;text-transform:uppercase;color:#3a4a6b;">YEREVAN, REPUBLIC OF ARMENIA</div>
+        </td>
+        <td style="vertical-align:middle;text-align:center;width:90pt;">${logoBlock}</td>
+        <td style="vertical-align:middle;text-align:right;width:38%;padding-left:8pt;">
+          <div style="font-family:Arial,sans-serif;font-size:8.5pt;font-weight:bold;line-height:1.35;text-transform:uppercase;color:#0a0f1e;">REF: ${safeRef}</div>
+          <div style="font-family:Arial,sans-serif;font-size:7.5pt;line-height:1.35;text-transform:uppercase;color:#3a4a6b;">DATE: ${safeIssued}</div>
+          <div style="font-family:Arial,sans-serif;font-size:7.5pt;font-weight:bold;line-height:1.35;text-transform:uppercase;color:#9a7a2c;">WWW.ACNHS.AM</div>
+        </td>
+      </tr>
+    </table>
+    <div style="font-family:Arial,sans-serif;font-size:5.5pt;text-align:center;color:#c0c0cc;line-height:1.2;letter-spacing:0.08em;text-transform:uppercase;">
+      ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES • OFFICIAL INSTITUTIONAL DOCUMENT • DO NOT ALTER OR REPRODUCE WITHOUT AUTHORIZATION
+    </div>`;
+
+    const footerHtml = `
+    <div style="font-family:Arial,sans-serif;font-size:8pt;text-align:center;color:#3a4a6b;line-height:1.25;">
+      <strong style="color:#0a0f1e;">www.acnhs.am</strong>
+      &nbsp;•&nbsp;
+      info@acnhs.am
+      &nbsp;•&nbsp;
+      Ref:&nbsp;${safeRef}
+      &nbsp;•&nbsp;
+      Page&nbsp;<span style='mso-field-code:" PAGE "'></span>
+    </div>`;
 
     return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns:v="urn:schemas-microsoft-com:vml"
       xmlns="http://www.w3.org/TR/REC-html40">
 <head>
   <meta charset="UTF-8">
@@ -2981,18 +3007,22 @@ ${contentHtml}
   </w:WordDocument>
   </xml><![endif]-->
   <style>
-    :root { --doc-ink: #0a0f1e; --doc-slate: #3a4a6b; --doc-gold: #9a7a2c; }
-
-    @page {
+    @page Section1 {
       size: 210mm 297mm;
-      margin: 18mm 18mm 18mm 18mm;
-      mso-header: wm-header;
+      margin: 28mm 18mm 20mm 18mm;
       mso-header-margin: 9mm;
       mso-footer-margin: 9mm;
-      border:     1.5pt solid #1a1a2e;
+      mso-title-page: yes;
+      mso-header: hMain;
+      mso-first-header: hFirst;
+      mso-footer: fMain;
+      mso-first-footer: fMain;
+      border: 1.5pt solid #1a1a2e;
       border-alt: solid #1a1a2e .75pt;
       mso-border-shadow: yes;
     }
+
+    div.Section1 { page: Section1; }
 
     html, body {
       margin: 0; padding: 0; background: #fff;
@@ -3001,54 +3031,6 @@ ${contentHtml}
       font-size: 11pt; line-height: 1.65;
     }
 
-    /* ── HEADER: table layout so 3-col works in Word ─────────────────────── */
-    .doc-header {
-      display: table;
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 7mm;
-      padding-bottom: 5mm;
-      border-bottom: 1.5pt solid #c8c8d0;
-    }
-    .doc-header-left, .doc-header-center, .doc-header-right {
-      display: table-cell;
-      vertical-align: middle;
-    }
-    .doc-header-left  { text-align: left;  width: 38%; padding-right: 8pt; }
-    .doc-header-center { text-align: center; width: 90pt; }
-    .doc-header-right { text-align: right; width: 38%; padding-left: 8pt; }
-    .doc-header-center img {
-      width: 72pt; height: 72pt;
-      mso-width-source: auto; mso-height-source: auto;
-    }
-
-    /* ── TYPOGRAPHY ──────────────────────────────────────────────────────── */
-    .uni-name {
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 10pt; font-weight: bold;
-      text-transform: uppercase; color: #0a0f1e; line-height: 1.35;
-    }
-    .uni-dept {
-      font-family: Arial, sans-serif; font-size: 7.5pt;
-      color: #3a4a6b; text-transform: uppercase; line-height: 1.4;
-    }
-    .doc-ref {
-      font-family: Arial, sans-serif; font-size: 8.5pt; font-weight: bold;
-      color: #0a0f1e; text-transform: uppercase; line-height: 1.35;
-    }
-    .doc-meta {
-      font-family: Arial, sans-serif; font-size: 7.5pt;
-      color: #3a4a6b; text-transform: uppercase; line-height: 1.4;
-    }
-    .doc-url { color: #9a7a2c; font-weight: bold; }
-
-    .doc-microtext {
-      font-family: Arial, sans-serif; font-size: 5.5pt; text-align: center;
-      color: #c0c0cc; text-transform: uppercase; margin: 3pt 0; line-height: 1.2;
-      letter-spacing: 0.08em;
-    }
-
-    /* ── TITLE ───────────────────────────────────────────────────────────── */
     .doc-title-block { text-align: center; margin: 6mm 0 5mm; }
     .doc-title-block h1 {
       font-family: Arial, sans-serif;
@@ -3060,17 +3042,14 @@ ${contentHtml}
     }
     .doc-title-block .doc-parties strong { color: #0a0f1e; font-weight: 600; }
 
-    /* ── BODY ────────────────────────────────────────────────────────────── */
     .doc-body { line-height: 1.75; }
     .doc-body p { margin: 0 0 3.5mm 0; text-align: justify; }
 
-    /* ── RULES ───────────────────────────────────────────────────────────── */
     .doc-rule { border-top: 1pt solid #d0d0d8; margin: 3.5mm 0; }
     .doc-rule.gold { border-top: 1pt solid #c9a84c55; }
     hr.doc-rule { border: none; border-top: 1pt solid #d0d0d8; }
     hr.doc-rule.gold { border-top: 1pt solid #c9a84c55; }
 
-    /* ── SECTIONS ────────────────────────────────────────────────────────── */
     .doc-section { margin: 4mm 0; }
     .doc-section-heading {
       font-family: Arial, sans-serif; font-size: 9pt; font-weight: 800;
@@ -3079,13 +3058,11 @@ ${contentHtml}
     .doc-section-heading .sec-num { color: #9a7a2c; }
     .doc-section p { margin-bottom: 2mm; text-align: justify; }
 
-    /* ── HIGHLIGHT ───────────────────────────────────────────────────────── */
     .doc-highlight {
       background: #f8f3e8; border-left: 2.5pt solid #9a7a2c;
       padding: 2.5mm 4mm; margin: 2mm 0; font-size: 10.5pt;
     }
 
-    /* ── LISTS ───────────────────────────────────────────────────────────── */
     .doc-list { list-style: none; padding: 0; margin: 1.5mm 0; }
     .doc-list li { margin-bottom: 1.5mm; padding-left: 8mm; }
     .doc-list li::before { content: "\\2014  "; color: #9a7a2c; font-weight: bold; }
@@ -3093,7 +3070,6 @@ ${contentHtml}
     .doc-list.numbered li { counter-increment: doclist; }
     .doc-list.numbered li::before { content: counter(doclist) ".  "; color: #9a7a2c; font-weight: bold; }
 
-    /* ── PARTIES GRID (table) ────────────────────────────────────────────── */
     .doc-parties-grid { display: table; width: 100%; border-collapse: collapse; margin: 2mm 0; }
     .doc-party-box {
       display: table-cell; width: 50%;
@@ -3104,7 +3080,6 @@ ${contentHtml}
       text-transform: uppercase; color: #9a7a2c; margin-bottom: 2mm;
     }
 
-    /* ── SIGNATURE (table) ───────────────────────────────────────────────── */
     .signature-block, .doc-signature-section { margin-top: 18mm; }
     .doc-sig-wrapper { display: block; }
     .doc-sig-heading {
@@ -3134,8 +3109,12 @@ ${contentHtml}
   </style>
 </head>
 <body>
-${watermarkHeader}
+  <div style="mso-element:header" id="hMain"><p style="margin:0"></p></div>
+  <div style="mso-element:header" id="hFirst">${firstHeaderHtml}</div>
+  <div style="mso-element:footer" id="fMain">${footerHtml}</div>
+  <div class="Section1">
 ${contentHtml}
+  </div>
 </body>
 </html>`;
   }
@@ -3178,8 +3157,9 @@ ${contentHtml}
       const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
         .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.doc';
 
-      // Word HTML export remains editable and naturally paginates to all pages.
-      const wordHtml = buildWordHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
+      // Keep body text editable, but move chrome into Word header/footer regions.
+      const editableBodyHtml = extractEditableWordContent(contentEl.innerHTML);
+      const wordHtml = buildWordHtml(editableBodyHtml, getLogoSrc() || '', refNo);
       const blob = new Blob([wordHtml], { type: 'application/msword;charset=utf-8' });
       downloadBlob(blob, filename);
     } catch (err) {
