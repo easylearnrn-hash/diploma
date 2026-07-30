@@ -24,6 +24,14 @@ const PORT = 8001;
 const ORIGIN = 'http://localhost:8000';
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB body limit
 
+function resolveAllowedOrigin(requestOrigin) {
+  if (!requestOrigin) return ORIGIN;
+  if (requestOrigin === 'null') return 'null'; // file:// pages
+  if (/^https?:\/\/localhost(?::\d+)?$/i.test(requestOrigin)) return requestOrigin;
+  if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(requestOrigin)) return requestOrigin;
+  return ORIGIN;
+}
+
 const A4_TWIP_W = '11906';
 const A4_TWIP_H = '16838';
 const A4_EMU_W = '7559060';
@@ -213,8 +221,8 @@ async function renderA4PngPages(html) {
 // ── HTTP server ──────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
 
-  // CORS — only allow the local static file server
-  res.setHeader('Access-Control-Allow-Origin',  ORIGIN);
+  // CORS — allow local hosts and file:// pages (Origin: null)
+  res.setHeader('Access-Control-Allow-Origin', resolveAllowedOrigin(req.headers.origin));
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
