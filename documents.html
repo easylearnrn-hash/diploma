@@ -3141,16 +3141,41 @@ ${contentHtml}
       const hospitalSlug = hospitalRaw
         .replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 36);
       const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
-        .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.doc';
+        .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.docx';
 
-      // Keep body text editable, but move chrome into Word header/footer regions.
-      const editableBodyHtml = extractEditableWordContent(contentEl.innerHTML);
-      const wordHtml = buildWordHtml(editableBodyHtml, getLogoSrc() || '', refNo);
-      const blob = new Blob([wordHtml], { type: 'application/msword;charset=utf-8' });
+      // Exact Word export: use the same print HTML pipeline as PDF.
+      const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
+
+      const response = await fetch('http://localhost:8001/generate-word', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ html: printHtml, filename, refNo }),
+      });
+
+      if (!response.ok) {
+        let msg = `Server error ${response.status}`;
+        try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      const blob = await response.blob();
       downloadBlob(blob, filename);
     } catch (err) {
       console.error('[exportToWord]', err);
-      alert('⚠️ Word export failed.\n\nError: ' + err.message);
+      const isDown = err.message.includes('Failed to fetch') ||
+                     err.message.includes('NetworkError') ||
+                     err.message.includes('Load failed');
+      if (isDown) {
+        alert(
+          '⚠️ Export server is not running.\n\n' +
+          'Start it in a new terminal:\n\n' +
+          '  node pdf-server.js\n\n' +
+          '(First-time setup: npm install && npx playwright install chromium)\n\n' +
+          'Then click "Export to Word" again.'
+        );
+      } else {
+        alert('⚠️ Word export failed.\n\nError: ' + err.message);
+      }
     } finally {
       btns.forEach(b => {
         b.disabled = false;
