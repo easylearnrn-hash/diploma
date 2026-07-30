@@ -2975,9 +2975,9 @@ ${contentHtml}
 
     const footerOverlayHtml = `
     <v:shape xmlns:v="urn:schemas-microsoft-com:vml"
-      style="position:absolute;left:0;top:782pt;width:559pt;height:16pt;z-index:-251656120;
+      style="position:absolute;left:0;top:800pt;width:559pt;height:16pt;z-index:-251656120;
              mso-position-horizontal:center;mso-position-horizontal-relative:page;
-             mso-position-vertical-relative:page"
+             mso-position-vertical:bottom;mso-position-vertical-relative:margin"
       filled="f" stroked="f">
       <v:textbox inset="0,0,0,0">
         <div style="font-family:Arial,sans-serif;font-size:8pt;text-align:center;color:#3a4a6b;line-height:1.2;">
@@ -2991,7 +2991,7 @@ ${contentHtml}
 
     const headerHtml = `
     ${borderShapeHtml}
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;table-layout:fixed;width:100%;border-bottom:1.5pt solid #c8c8d0;margin-bottom:6pt;">
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse:collapse;table-layout:fixed;width:474pt;border-bottom:1.5pt solid #c8c8d0;margin-bottom:6pt;">
       <tr>
         <td style="vertical-align:middle;text-align:left;width:190pt;padding-right:8pt;">
           <div style="font-family:Georgia,'Times New Roman',serif;font-size:10pt;font-weight:bold;line-height:1.35;text-transform:uppercase;color:#0a0f1e;">ARMENIAN COLLEGE OF<br>NURSING &amp; HEALTH SCIENCES</div>
@@ -3006,7 +3006,7 @@ ${contentHtml}
         </td>
       </tr>
     </table>
-    <div style="font-family:Arial,sans-serif;font-size:5.5pt;text-align:center;color:#c0c0cc;line-height:1.2;letter-spacing:0.08em;text-transform:uppercase;">
+    <div style="font-family:Arial,sans-serif;font-size:5pt;text-align:center;color:#c0c0cc;line-height:1.2;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap;">
       ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES • OFFICIAL INSTITUTIONAL DOCUMENT • DO NOT ALTER OR REPRODUCE WITHOUT AUTHORIZATION
     </div>
     ${footerOverlayHtml}`;
@@ -3014,6 +3014,7 @@ ${contentHtml}
     return `<!DOCTYPE html>
 <html xmlns:o="urn:schemas-microsoft-com:office:office"
       xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns:v="urn:schemas-microsoft-com:vml"
       xmlns="http://www.w3.org/TR/REC-html40">
 <head>
   <meta charset="UTF-8">
@@ -3030,9 +3031,9 @@ ${contentHtml}
   <style>
     @page Section1 {
       size: 210mm 297mm;
-      margin: 16mm 18mm 16mm 18mm;
-      mso-header-margin: 9mm;
-      mso-footer-margin: 9mm;
+      margin: 10mm 18mm 16mm 18mm;
+      mso-header-margin: 5mm;
+      mso-footer-margin: 5mm;
       mso-page-border-surround-header: yes;
       mso-page-border-surround-footer: yes;
       mso-header: hMain;
@@ -3149,420 +3150,6 @@ ${contentHtml}
     }, 1500);
   }
 
-  // ─── Exact Word Export (pixel-identical pages) ───────────────────────────
-  const WORD_DOCX_A4_TWIP_W = '11906';
-  const WORD_DOCX_A4_TWIP_H = '16838';
-  const WORD_DOCX_A4_EMU_W = '7559060';
-  const WORD_DOCX_A4_EMU_H = '10692130';
-  const WORD_CAPTURE_W = 794;
-  const WORD_CAPTURE_H = 1123;
-
-  let _wordExactDepsPromise = null;
-  function loadWordExactScript(src) {
-    return new Promise((resolve, reject) => {
-      const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
-      if (existing && existing.dataset.loaded === 'true') return resolve();
-
-      const script = existing || document.createElement('script');
-      if (!existing) {
-        script.src = src;
-        script.async = true;
-      }
-      script.onload = () => {
-        script.dataset.loaded = 'true';
-        resolve();
-      };
-      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
-      if (!existing) document.head.appendChild(script);
-    });
-  }
-
-  async function ensureWordExactDeps() {
-    if (!_wordExactDepsPromise) {
-      _wordExactDepsPromise = (async () => {
-        if (typeof window.JSZip === 'undefined') {
-          await loadWordExactScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-        }
-        if (typeof window.html2canvas === 'undefined') {
-          await loadWordExactScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
-        }
-      })();
-    }
-    return _wordExactDepsPromise;
-  }
-
-  function dataUrlToBytes(dataUrl) {
-    const b64 = String(dataUrl).split(',')[1] || '';
-    const bin = atob(b64);
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    return bytes;
-  }
-
-  function buildDocxDocumentXmlFromPages(pageCount) {
-    const blocks = [];
-    for (let i = 1; i <= pageCount; i++) {
-      blocks.push(`
-    <w:p>
-      <w:r>
-        <w:drawing>
-          <wp:inline distT="0" distB="0" distL="0" distR="0">
-            <wp:extent cx="${WORD_DOCX_A4_EMU_W}" cy="${WORD_DOCX_A4_EMU_H}"/>
-            <wp:effectExtent l="0" t="0" r="0" b="0"/>
-            <wp:docPr id="${i}" name="Page ${i}"/>
-            <wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>
-            <a:graphic>
-              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
-                <pic:pic>
-                  <pic:nvPicPr><pic:cNvPr id="0" name="page-${i}.png"/><pic:cNvPicPr/></pic:nvPicPr>
-                  <pic:blipFill><a:blip r:embed="rId${i}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
-                  <pic:spPr>
-                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="${WORD_DOCX_A4_EMU_W}" cy="${WORD_DOCX_A4_EMU_H}"/></a:xfrm>
-                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
-                  </pic:spPr>
-                </pic:pic>
-              </a:graphicData>
-            </a:graphic>
-          </wp:inline>
-        </w:drawing>
-      </w:r>
-    </w:p>`);
-
-      if (i < pageCount) {
-        blocks.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
-      }
-    }
-
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document
-  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
-  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
-  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
-  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
-  <w:body>
-    ${blocks.join('\n')}
-    <w:sectPr>
-      <w:pgSz w:w="${WORD_DOCX_A4_TWIP_W}" w:h="${WORD_DOCX_A4_TWIP_H}"/>
-      <w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>
-    </w:sectPr>
-  </w:body>
-</w:document>`;
-  }
-
-  function buildDocxRelsXmlFromPages(pageCount) {
-    const rels = [];
-    for (let i = 1; i <= pageCount; i++) {
-      rels.push(`<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page-${i}.png"/>`);
-    }
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  ${rels.join('\n  ')}
-</Relationships>`;
-  }
-
-  function buildExactWordRenderHtml(mainBodyHtml, logoDataUrl, refNo) {
-    const safeRef = escHtml(refNo || '');
-    const safeIssued = escHtml(todayRef()).toUpperCase();
-    const logo = logoDataUrl || '';
-
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>${safeRef}</title>
-  <style>
-    :root { --doc-ink:#0a0f1e; --doc-slate:#3a4a6b; --doc-gold:#9a7a2c; }
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0; padding: 0; background: #fff; width: ${WORD_CAPTURE_W}px;
-      color: var(--doc-ink);
-      font-family: 'Noto Serif Armenian', 'EB Garamond', 'Times New Roman', Georgia, serif;
-      font-size: 11pt; line-height: 1.65;
-    }
-
-    .frame-outer {
-      position: fixed; top: 4mm; left: 4mm; right: 4mm; bottom: 4mm;
-      border: 1.5px solid #1a1a2e; pointer-events: none; z-index: 100;
-    }
-    .frame-inner {
-      position: fixed; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
-      border: 0.8px solid rgba(154,122,44,0.85); pointer-events: none; z-index: 100;
-    }
-
-    .word-watermark {
-      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      opacity: 0.032; pointer-events: none; z-index: 1;
-    }
-    .word-watermark img { width: 420px; max-width: 80%; }
-
-    .page-header {
-      position: fixed; top: 8mm; left: 12mm; right: 12mm; z-index: 2;
-      background: rgba(255,255,255,0.995);
-    }
-    .page-header table {
-      width: 100%; border-collapse: collapse; table-layout: fixed;
-      border-bottom: 1.5px solid #c8c8d0;
-    }
-    .h-left  { width: 38%; text-align: left;  padding-right: 8pt; vertical-align: middle; }
-    .h-mid   { width: 24%; text-align: center; vertical-align: middle; }
-    .h-right { width: 38%; text-align: right; padding-left: 8pt; vertical-align: middle; }
-    .h-logo { width: 94px; height: 94px; display: block; margin: 0 auto; }
-
-    .uni-name {
-      font-family: Georgia, 'Times New Roman', serif;
-      font-size: 10pt; font-weight: 800; line-height: 1.32;
-      text-transform: uppercase; color: #0a0f1e;
-    }
-    .uni-dept {
-      font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.35;
-      text-transform: uppercase; color: #3a4a6b;
-    }
-    .doc-ref {
-      font-family: Arial, sans-serif; font-size: 8.5pt; font-weight: 800;
-      line-height: 1.35; text-transform: uppercase; color: #0a0f1e;
-    }
-    .doc-meta {
-      font-family: Arial, sans-serif; font-size: 7.5pt; line-height: 1.35;
-      text-transform: uppercase; color: #3a4a6b;
-    }
-    .doc-url { color: #9a7a2c; font-weight: 800; }
-
-    .security-line {
-      margin-top: 3px;
-      font-family: Arial, sans-serif; font-size: 5.5pt;
-      text-align: center; color: #c0c0cc; text-transform: uppercase;
-      letter-spacing: 0.08em; white-space: nowrap; overflow: hidden;
-      border-top: 1px solid rgba(200,200,215,0.9);
-      line-height: 1.15; padding-top: 2px;
-    }
-
-    .page-footer {
-      position: fixed; left: 12mm; right: 12mm; bottom: 8mm;
-      text-align: center; z-index: 2;
-      font-family: Arial, sans-serif; font-size: 8pt;
-      color: #3a4a6b; line-height: 1.2;
-      white-space: nowrap;
-    }
-    .page-footer strong { color: #0a0f1e; }
-
-    .page-flow {
-      position: relative; z-index: 2;
-      padding: 74mm 12mm 20mm 12mm;
-    }
-
-    .doc-title-block { text-align: center; margin: 6mm 0 5mm; }
-    .doc-title-block h1 {
-      font-family: Arial, sans-serif; font-size: 13.5pt; font-weight: 800;
-      text-transform: uppercase; color: #0a0f1e; margin: 0 0 3mm 0;
-    }
-    .doc-title-block .doc-parties {
-      font-size: 10pt; font-family: Georgia, serif; color: #3a4a6b; line-height: 1.6;
-    }
-    .doc-title-block .doc-parties strong { color: #0a0f1e; font-weight: 600; }
-
-    .doc-body { line-height: 1.75; }
-    .doc-body p { margin: 0 0 3.5mm 0; text-align: justify; }
-
-    .doc-rule { border-top: 1pt solid #d0d0d8; margin: 3.5mm 0; }
-    .doc-rule.gold { border-top: 1pt solid rgba(201,168,76,0.35); }
-    hr.doc-rule { border: none; border-top: 1pt solid #d0d0d8; }
-    hr.doc-rule.gold { border-top: 1pt solid rgba(201,168,76,0.35); }
-
-    .doc-section { margin: 4mm 0; }
-    .doc-section-heading {
-      font-family: Arial, sans-serif; font-size: 9pt; font-weight: 800;
-      text-transform: uppercase; color: #0a0f1e; margin-bottom: 2mm; display: block;
-    }
-    .doc-section-heading .sec-num { color: #9a7a2c; }
-    .doc-section p { margin-bottom: 2mm; text-align: justify; }
-
-    .doc-highlight {
-      background: #f8f3e8; border-left: 2.5pt solid #9a7a2c;
-      padding: 2.5mm 4mm; margin: 2mm 0; font-size: 10.5pt;
-    }
-
-    .doc-list { list-style: none; padding: 0; margin: 1.5mm 0; }
-    .doc-list li { margin-bottom: 1.5mm; padding-left: 8mm; }
-    .doc-list li::before { content: '\\2014  '; color: #9a7a2c; font-weight: bold; }
-    .doc-list.numbered { counter-reset: doclist; }
-    .doc-list.numbered li { counter-increment: doclist; }
-    .doc-list.numbered li::before { content: counter(doclist) '.  '; color: #9a7a2c; font-weight: bold; }
-
-    .doc-parties-grid { display: table; width: 100%; border-collapse: collapse; margin: 2mm 0; }
-    .doc-party-box {
-      display: table-cell; width: 50%; border: 1pt solid #d0d0d8;
-      padding: 3mm 4mm; font-size: 10pt; vertical-align: top;
-    }
-    .doc-party-box strong {
-      display: block; font-family: Arial, sans-serif; font-size: 8pt; font-weight: bold;
-      text-transform: uppercase; color: #9a7a2c; margin-bottom: 2mm;
-    }
-
-    .signature-block, .doc-signature-section { margin-top: 18mm; }
-    .doc-sig-wrapper { display: block; }
-    .doc-sig-heading {
-      font-family: Arial, sans-serif; font-size: 9pt; font-weight: bold;
-      text-transform: uppercase; color: #0a0f1e; text-align: center; margin-bottom: 4mm;
-    }
-    .doc-sig-grid { display: table; width: 100%; border-collapse: collapse; }
-    .doc-sig-block {
-      display: table-cell; width: 50%; border-top: 1.5pt solid #c8c8d0;
-      padding-top: 3mm; padding-right: 8mm; vertical-align: top;
-    }
-    .doc-sig-block h4 {
-      font-family: Arial, sans-serif; font-size: 8.5pt; font-weight: bold;
-      color: #0a0f1e; margin-bottom: 4mm;
-    }
-    .doc-sig-line { margin-bottom: 3mm; font-size: 9.5pt; }
-    .doc-sig-line .lbl {
-      font-family: Arial, sans-serif; font-size: 8pt; font-weight: bold;
-      text-transform: uppercase; color: #3a4a6b;
-    }
-    .doc-sig-line .val {
-      border-bottom: 0.75pt solid #a0a0b0;
-      display: inline-block; min-width: 120pt;
-      padding-bottom: 2px; padding-left: 4px; font-size: 10pt;
-    }
-  </style>
-</head>
-<body>
-  <div class="frame-outer"></div>
-  <div class="frame-inner"></div>
-  ${logo ? `<div class="word-watermark"><img src="${logo}" alt="ACNHS Seal"></div>` : ''}
-
-  <div class="page-header">
-    <table role="presentation" cellspacing="0" cellpadding="0" border="0">
-      <tr>
-        <td class="h-left">
-          <div class="uni-name">ARMENIAN COLLEGE OF<br>NURSING &amp; HEALTH SCIENCES</div>
-          <div class="uni-dept">ACADEMIC AFFAIRS &amp; PARTNERSHIPS OFFICE</div>
-          <div class="uni-dept">YEREVAN, REPUBLIC OF ARMENIA</div>
-        </td>
-        <td class="h-mid">${logo ? `<img class="h-logo" src="${logo}" alt="ACNHS Seal">` : ''}</td>
-        <td class="h-right">
-          <div class="doc-ref">REF: ${safeRef}</div>
-          <div class="doc-meta">DATE: ${safeIssued}</div>
-          <div class="doc-meta doc-url">WWW.ACNHS.AM</div>
-        </td>
-      </tr>
-    </table>
-    <div class="security-line">ARMENIAN COLLEGE OF NURSING &amp; HEALTH SCIENCES • OFFICIAL INSTITUTIONAL DOCUMENT • DO NOT ALTER OR REPRODUCE WITHOUT AUTHORIZATION</div>
-  </div>
-
-  <div class="page-footer">
-    <strong>www.acnhs.am</strong>&nbsp; • &nbsp;info@acnhs.am&nbsp; • &nbsp;Ref:&nbsp;${safeRef}&nbsp; • &nbsp;Page
-  </div>
-
-  <div class="page-flow">
-${mainBodyHtml}
-  </div>
-</body>
-</html>`;
-  }
-
-  async function renderExactWordPages(exactHtml) {
-    await ensureWordExactDeps();
-
-    const iframe = document.createElement('iframe');
-    iframe.style.position = 'fixed';
-    iframe.style.left = '-10000px';
-    iframe.style.top = '0';
-    iframe.style.width = `${WORD_CAPTURE_W}px`;
-    iframe.style.height = `${WORD_CAPTURE_H}px`;
-    iframe.style.border = '0';
-    iframe.style.opacity = '0';
-    iframe.setAttribute('aria-hidden', 'true');
-    document.body.appendChild(iframe);
-
-    try {
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('Timed out preparing Word page renderer')), 25000);
-        iframe.onload = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        iframe.srcdoc = exactHtml;
-      });
-
-      const doc = iframe.contentDocument;
-      const win = iframe.contentWindow;
-      if (!doc || !win) throw new Error('Cannot access Word render frame');
-
-      await new Promise(r => setTimeout(r, 400));
-      if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
-
-      const totalHeight = Math.max(
-        doc.documentElement ? doc.documentElement.scrollHeight : 0,
-        doc.body ? doc.body.scrollHeight : 0
-      );
-      const pageCount = Math.max(1, Math.ceil(totalHeight / WORD_CAPTURE_H));
-      const pages = [];
-
-      for (let i = 0; i < pageCount; i++) {
-        win.scrollTo(0, i * WORD_CAPTURE_H);
-        await new Promise(r => setTimeout(r, 100));
-
-        const canvas = await window.html2canvas(doc.body, {
-          backgroundColor: '#ffffff',
-          width: WORD_CAPTURE_W,
-          height: WORD_CAPTURE_H,
-          windowWidth: WORD_CAPTURE_W,
-          windowHeight: WORD_CAPTURE_H,
-          x: 0,
-          y: i * WORD_CAPTURE_H,
-          scrollX: 0,
-          scrollY: -i * WORD_CAPTURE_H,
-          useCORS: true,
-          allowTaint: true,
-          scale: 2,
-        });
-
-        pages.push(canvas.toDataURL('image/png'));
-      }
-
-      return pages;
-    } finally {
-      document.body.removeChild(iframe);
-    }
-  }
-
-  async function buildExactWordDocxBlob(pageDataUrls) {
-    if (!pageDataUrls || !pageDataUrls.length) {
-      throw new Error('No pages rendered for Word export');
-    }
-
-    const zip = new window.JSZip();
-    zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
-  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
-  <Default Extension="xml" ContentType="application/xml"/>
-  <Default Extension="png" ContentType="image/png"/>
-  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
-</Types>`);
-
-    zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
-</Relationships>`);
-
-    const wordFolder = zip.folder('word');
-    wordFolder.file('document.xml', buildDocxDocumentXmlFromPages(pageDataUrls.length));
-    wordFolder.folder('_rels').file('document.xml.rels', buildDocxRelsXmlFromPages(pageDataUrls.length));
-
-    const media = wordFolder.folder('media');
-    pageDataUrls.forEach((dataUrl, idx) => {
-      media.file(`page-${idx + 1}.png`, dataUrlToBytes(dataUrl));
-    });
-
-    return zip.generateAsync({
-      type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      compression: 'DEFLATE',
-      compressionOptions: { level: 6 },
-    });
-  }
-
   /* ── Word Document Export ────────────────────────────────────────────────── */
   async function exportToWord() {
     const btns = document.querySelectorAll('.word-btn');
@@ -3586,13 +3173,12 @@ ${mainBodyHtml}
       const hospitalSlug = hospitalRaw
         .replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 36);
       const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
-        .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.docx';
+        .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.doc';
 
-      // Exact mode: render paged visuals with fixed chrome repeated on every page.
-      const mainBodyHtml = extractEditableWordContent(contentEl.innerHTML);
-      const exactHtml = buildExactWordRenderHtml(mainBodyHtml, getLogoSrc() || '', refNo);
-      const pages = await renderExactWordPages(exactHtml);
-      const blob = await buildExactWordDocxBlob(pages);
+      // Keep body text editable, but move chrome into Word header/footer regions.
+      const editableBodyHtml = extractEditableWordContent(contentEl.innerHTML);
+      const wordHtml = buildWordHtml(editableBodyHtml, getLogoSrc() || '', refNo);
+      const blob = new Blob([wordHtml], { type: 'application/msword;charset=utf-8' });
       downloadBlob(blob, filename);
     } catch (err) {
       console.error('[exportToWord]', err);
