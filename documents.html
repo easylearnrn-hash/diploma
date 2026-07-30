@@ -3140,6 +3140,233 @@ ${contentHtml}
 </html>`;
   }
 
+  // ─── Word Export Helpers (client fallback) ───────────────────────────────
+  const WORD_A4_TWIP_W = '11906';
+  const WORD_A4_TWIP_H = '16838';
+  const WORD_A4_EMU_W = '7559060';
+  const WORD_A4_EMU_H = '10692130';
+  const WORD_A4_SCREEN_W = 794;
+  const WORD_A4_SCREEN_H = 1123;
+
+  let _wordDepsPromise = null;
+  function loadExternalScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = Array.from(document.querySelectorAll('script')).find(s => s.src === src);
+      if (existing && existing.dataset.loaded === 'true') {
+        resolve();
+        return;
+      }
+
+      const script = existing || document.createElement('script');
+      if (!existing) {
+        script.src = src;
+        script.async = true;
+      }
+      script.onload = () => {
+        script.dataset.loaded = 'true';
+        resolve();
+      };
+      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+      if (!existing) document.head.appendChild(script);
+    });
+  }
+
+  async function ensureWordExportDeps() {
+    if (!_wordDepsPromise) {
+      _wordDepsPromise = (async () => {
+        if (typeof window.JSZip === 'undefined') {
+          await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+        }
+        if (typeof window.html2canvas === 'undefined') {
+          await loadExternalScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+        }
+      })();
+    }
+    return _wordDepsPromise;
+  }
+
+  function dataUrlToUint8Array(dataUrl) {
+    const b64 = String(dataUrl).split(',')[1] || '';
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }
+
+  function buildDocxDocumentXml(pageCount) {
+    const pages = [];
+    for (let i = 1; i <= pageCount; i++) {
+      pages.push(`
+    <w:p>
+      <w:r>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="${WORD_A4_EMU_W}" cy="${WORD_A4_EMU_H}"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="${i}" name="Page ${i}"/>
+            <wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>
+            <a:graphic>
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic>
+                  <pic:nvPicPr><pic:cNvPr id="0" name="page-${i}.png"/><pic:cNvPicPr/></pic:nvPicPr>
+                  <pic:blipFill><a:blip r:embed="rId${i}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="${WORD_A4_EMU_W}" cy="${WORD_A4_EMU_H}"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>
+    </w:p>`);
+      if (i < pageCount) pages.push('<w:p><w:r><w:br w:type="page"/></w:r></w:p>');
+    }
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+  xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+  <w:body>
+    ${pages.join('\n')}
+    <w:sectPr>
+      <w:pgSz w:w="${WORD_A4_TWIP_W}" w:h="${WORD_A4_TWIP_H}"/>
+      <w:pgMar w:top="0" w:right="0" w:bottom="0" w:left="0" w:header="0" w:footer="0" w:gutter="0"/>
+    </w:sectPr>
+  </w:body>
+</w:document>`;
+  }
+
+  function buildDocxRelsXml(pageCount) {
+    const rels = [];
+    for (let i = 1; i <= pageCount; i++) {
+      rels.push(`<Relationship Id="rId${i}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/page-${i}.png"/>`);
+    }
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${rels.join('\n  ')}
+</Relationships>`;
+  }
+
+  async function renderPrintHtmlToPngPages(printHtml) {
+    await ensureWordExportDeps();
+
+    const iframe = document.createElement('iframe');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    iframe.style.width = `${WORD_A4_SCREEN_W}px`;
+    iframe.style.height = `${WORD_A4_SCREEN_H}px`;
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.setAttribute('aria-hidden', 'true');
+
+    document.body.appendChild(iframe);
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Timed out while preparing Word render frame')), 20000);
+        iframe.onload = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        iframe.srcdoc = printHtml;
+      });
+
+      const doc = iframe.contentDocument;
+      const win = iframe.contentWindow;
+      if (!doc || !win) throw new Error('Could not access Word render frame');
+
+      await new Promise(r => setTimeout(r, 300));
+      if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+
+      const totalHeight = Math.max(
+        doc.documentElement ? doc.documentElement.scrollHeight : 0,
+        doc.body ? doc.body.scrollHeight : 0
+      );
+      const pageCount = Math.max(1, Math.ceil(totalHeight / WORD_A4_SCREEN_H));
+
+      const pages = [];
+      for (let i = 0; i < pageCount; i++) {
+        win.scrollTo(0, i * WORD_A4_SCREEN_H);
+        await new Promise(r => setTimeout(r, 90));
+
+        const canvas = await window.html2canvas(doc.documentElement, {
+          backgroundColor: '#ffffff',
+          width: WORD_A4_SCREEN_W,
+          height: WORD_A4_SCREEN_H,
+          windowWidth: WORD_A4_SCREEN_W,
+          windowHeight: WORD_A4_SCREEN_H,
+          x: 0,
+          y: i * WORD_A4_SCREEN_H,
+          scrollX: 0,
+          scrollY: -i * WORD_A4_SCREEN_H,
+          useCORS: true,
+          allowTaint: true,
+          scale: 2,
+        });
+
+        pages.push(canvas.toDataURL('image/png'));
+      }
+
+      return pages;
+    } finally {
+      document.body.removeChild(iframe);
+    }
+  }
+
+  async function buildDocxBlobFromRenderedPages(printHtml) {
+    const pngDataUrls = await renderPrintHtmlToPngPages(printHtml);
+    if (!pngDataUrls.length) throw new Error('No pages captured for Word export');
+
+    const zip = new window.JSZip();
+    zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Default Extension="png" ContentType="image/png"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+</Types>`);
+
+    zip.folder('_rels').file('.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>`);
+
+    const wordFolder = zip.folder('word');
+    wordFolder.file('document.xml', buildDocxDocumentXml(pngDataUrls.length));
+    wordFolder.folder('_rels').file('document.xml.rels', buildDocxRelsXml(pngDataUrls.length));
+
+    const mediaFolder = wordFolder.folder('media');
+    pngDataUrls.forEach((dataUrl, idx) => {
+      mediaFolder.file(`page-${idx + 1}.png`, dataUrlToUint8Array(dataUrl));
+    });
+
+    return zip.generateAsync({
+      type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      compression: 'DEFLATE',
+      compressionOptions: { level: 6 },
+    });
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1500);
+  }
+
   /* ── Word Document Export ────────────────────────────────────────────────── */
   async function exportToWord() {
     const btns = document.querySelectorAll('.word-btn');
@@ -3159,51 +3386,41 @@ ${contentHtml}
         v('gov-refNo') || v('aff-refNo') || v('mou-refNo') ||
         `ACNHS-${(currentDocType || 'DOC').toUpperCase()}-${new Date().getFullYear()}-001`
       );
-      const hospitalRaw  = v('aff-hospitalName') || v('mou-instName') || v('gov-agencyName') || '';
+      const hospitalRaw = v('aff-hospitalName') || v('mou-instName') || v('gov-agencyName') || '';
       const hospitalSlug = hospitalRaw
         .replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 36);
       const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
         .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.docx';
 
-      // Use the exact same print HTML as PDF export to ensure 1:1 visual fidelity.
+      // Use the same HTML source as PDF for perfect visual parity.
       const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
 
-      const response = await fetch('http://localhost:8001/generate-word', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ html: printHtml, filename, refNo }),
-      });
-
-      if (!response.ok) {
-        let msg = `Server error ${response.status}`;
-        try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
-        throw new Error(msg);
+      let blob = null;
+      try {
+        const response = await fetch('http://localhost:8001/generate-word', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ html: printHtml, filename, refNo }),
+        });
+        if (!response.ok) {
+          let msg = `Server error ${response.status}`;
+          try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
+          throw new Error(msg);
+        }
+        blob = await response.blob();
+      } catch (serverErr) {
+        console.warn('[exportToWord] Server route failed, using browser fallback:', serverErr.message);
+        blob = await buildDocxBlobFromRenderedPages(printHtml);
       }
 
-      const blob = await response.blob();
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 1500);
-
+      downloadBlob(blob, filename);
     } catch (err) {
       console.error('[exportToWord]', err);
-      const isDown = err.message.includes('Failed to fetch') ||
-                     err.message.includes('NetworkError') ||
-                     err.message.includes('Load failed');
-      if (isDown) {
-        alert(
-          '⚠️ Export server is not running.\n\n' +
-          'Start it in a new terminal:\n\n' +
-          '  node pdf-server.js\n\n' +
-          '(First-time setup: npm install && npx playwright install chromium)\n\n' +
-          'Then click "Export to Word" again.'
-        );
-      } else {
-        alert('⚠️ Word export failed.\n\nError: ' + err.message);
-      }
+      alert(
+        '⚠️ Word export failed.\n\n' +
+        'Error: ' + err.message + '\n\n' +
+        'Tip: For best quality, start local export server: node pdf-server.js'
+      );
     } finally {
       btns.forEach(b => {
         b.disabled = false;
