@@ -2979,6 +2979,42 @@ We're here to support you every step of the way. Welcome to ACNHS!`
           }
           // Allow native Cmd+C, Cmd+V, Cmd+X, Cmd+A, Cmd+Z, Cmd+Y
         });
+
+        // Clean pasted content: keep bold/italic/underline, strip block-level bloat
+        emailBody.addEventListener('paste', function(e) {
+          e.preventDefault();
+          const cd = e.clipboardData;
+          const html = cd.getData('text/html') || '';
+          const plain = cd.getData('text/plain') || '';
+
+          let clean = '';
+          if (html.trim()) {
+            const wrap = document.createElement('div');
+            wrap.innerHTML = html;
+            // Remove style/script/meta
+            wrap.querySelectorAll('style,script,meta,link').forEach(el => el.remove());
+            // Convert block elements to line breaks
+            wrap.querySelectorAll('div,p,h1,h2,h3,h4,h5,h6,li,tr').forEach(el => {
+              el.insertAdjacentText('afterend', '\n');
+            });
+            // Strip all tags except inline formatting
+            clean = wrap.innerHTML
+              .replace(/<\/?(?!b>|\/b>|strong>|\/strong>|em>|\/em>|i>|\/i>|u>|\/u>|br\s*\/?>)[^>]+>/gi, '')
+              .replace(/(\s*<br\s*\/?>\s*){3,}/gi, '<br><br>')
+              .replace(/\n{3,}/g, '\n\n')
+              .replace(/&nbsp;/gi, ' ')
+              .trim();
+          } else if (plain) {
+            clean = plain
+              .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+              .replace(/\n{3,}/g, '\n\n')
+              .replace(/\n/g, '<br>');
+          }
+
+          if (clean) document.execCommand('insertHTML', false, clean);
+          updatePreview();
+        });
+
         emailBody.addEventListener('input', function() {
           updatePreview();
         });
