@@ -755,6 +755,57 @@
       letter-spacing: 0.07em;
     }
 
+    .form-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      letter-spacing: 0.01em;
+    }
+
+    .status-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 10px;
+      min-height: 52px;
+      background: rgba(2, 6, 23, 0.35);
+      border: 1px solid rgba(201, 168, 76, 0.2);
+      border-radius: 10px;
+    }
+
+    .status-pill {
+      border: 1px solid rgba(201, 168, 76, 0.26);
+      background: rgba(15, 23, 42, 0.8);
+      color: #d6deea;
+      border-radius: 999px;
+      padding: 7px 12px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.18s ease;
+    }
+
+    .status-pill:hover {
+      border-color: rgba(201, 168, 76, 0.55);
+      color: #f5edd6;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
+    }
+
+    .status-pill.active {
+      border-color: rgba(201, 168, 76, 0.9);
+      background: linear-gradient(135deg, #c9a84c 0%, #d4b56a 100%);
+      color: #0f172a;
+      box-shadow: 0 5px 14px rgba(201, 168, 76, 0.35);
+    }
+
+    .status-pill-empty {
+      font-size: 12px;
+      color: #64748b;
+      padding: 4px 2px;
+    }
+
     .form-input,
     .form-select,
     .form-textarea {
@@ -787,6 +838,21 @@
 
     .form-select {
       cursor: pointer;
+    }
+
+    .form-select[multiple] {
+      min-height: 150px;
+      padding: 8px 10px;
+    }
+
+    .form-select[multiple] option {
+      padding: 8px;
+      border-radius: 6px;
+      margin-bottom: 2px;
+    }
+
+    #statusFilter {
+      display: none;
     }
 
     .form-select:hover {
@@ -1450,9 +1516,11 @@
 
           <div class="form-group" id="statusFilterGroup" style="display: none;">
             <label class="form-label">Application Status</label>
-            <select class="form-select" id="statusFilter">
+            <select class="form-select" id="statusFilter" multiple size="7" title="Select one or more statuses">
               <!-- Statuses will be loaded dynamically from database -->
             </select>
+            <div id="statusPills" class="status-pills" role="group" aria-label="Application statuses"></div>
+            <small class="form-hint">Tap status pills to select one or several target groups.</small>
           </div>
 
           <div class="form-group" id="programFilterGroup" style="display: none;">
@@ -2637,15 +2705,65 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         // Load recipients immediately when type is selected (not just 'all')
         if (type === 'all') {
           loadRecipientsList();
-        } else if (type === 'status' && document.getElementById('statusFilter').value) {
+        } else if (type === 'status' && getSelectedStatusFilters().length) {
+          renderStatusPills();
           loadRecipientsList();
+        } else if (type === 'status') {
+          renderStatusPills();
         } else if (type === 'program' && document.getElementById('programFilter').value) {
           loadRecipientsList();
         }
       });
       
       // Status/Program filter change - load recipients
-      document.getElementById('statusFilter').addEventListener('change', loadRecipientsList);
+      const statusFilter = document.getElementById('statusFilter');
+      const statusPills = document.getElementById('statusPills');
+      statusFilter.addEventListener('change', function() {
+        renderStatusPills();
+        loadRecipientsList();
+      });
+
+      statusPills.addEventListener('click', function(e) {
+        const pill = e.target.closest('.status-pill');
+        if (!pill) return;
+
+        const value = String(pill.dataset.value || '');
+        if (!value) return;
+
+        const option = Array.from(statusFilter.options || []).find(opt => String(opt.value) === value);
+        if (!option) return;
+
+        option.selected = !option.selected;
+        statusFilter.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      statusPills.addEventListener('keydown', function(e) {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const pill = e.target.closest('.status-pill');
+        if (!pill) return;
+        e.preventDefault();
+
+        const value = String(pill.dataset.value || '');
+        const option = Array.from(statusFilter.options || []).find(opt => String(opt.value) === value);
+        if (!option) return;
+
+        option.selected = !option.selected;
+        statusFilter.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+
+      // Touch support: allow tap toggle on mobile without waiting for click synthesis.
+      statusPills.addEventListener('touchstart', function(e) {
+        const pill = e.target.closest('.status-pill');
+        if (!pill) return;
+        const value = String(pill.dataset.value || '');
+        const option = Array.from(statusFilter.options || []).find(opt => String(opt.value) === value);
+        if (!option) return;
+
+        e.preventDefault();
+        option.selected = !option.selected;
+        statusFilter.dispatchEvent(new Event('change', { bubbles: true }));
+      }, { passive: false });
+
       document.getElementById('programFilter').addEventListener('change', loadRecipientsList);
 
       // Real-time preview - also listen to applicant name and email
@@ -2994,18 +3112,61 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       };
     }
 
+    function getSelectedStatusFilters() {
+      const statusSelect = document.getElementById('statusFilter');
+      if (!statusSelect) return [];
+      return Array.from(statusSelect.options || [])
+        .filter(option => option.selected)
+        .map(option => String(option.value || '').trim())
+        .filter(Boolean);
+    }
+
+    function renderStatusPills() {
+      const statusSelect = document.getElementById('statusFilter');
+      const pillsWrap = document.getElementById('statusPills');
+      if (!statusSelect || !pillsWrap) return;
+
+      const options = Array.from(statusSelect.options || []);
+      pillsWrap.innerHTML = '';
+
+      if (!options.length) {
+        const emptyState = document.createElement('div');
+        emptyState.className = 'status-pill-empty';
+        emptyState.textContent = 'No status options available.';
+        pillsWrap.appendChild(emptyState);
+        return;
+      }
+
+      options.forEach(option => {
+        const pill = document.createElement('button');
+        pill.type = 'button';
+        pill.className = `status-pill${option.selected ? ' active' : ''}`;
+        pill.dataset.value = String(option.value || '');
+        pill.setAttribute('aria-pressed', option.selected ? 'true' : 'false');
+        pill.textContent = String(option.textContent || option.value || '').trim();
+        pillsWrap.appendChild(pill);
+      });
+    }
+
     // Load recipients list when status or program is selected
     async function loadRecipientsList() {
       const recipientType = document.getElementById('recipientType').value;
       if (recipientType !== 'status' && recipientType !== 'program' && recipientType !== 'all') return;
       
       try {
+        const recipientsList = document.getElementById('recipientsList');
+        const recipientsListGroup = document.getElementById('recipientsListGroup');
         let query = db.from('applications').select('email, applicant_name, status');
         
         if (recipientType === 'status') {
-          const status = document.getElementById('statusFilter').value;
-          if (!status) return;
-          query = query.eq('status', status);
+          const selectedStatuses = getSelectedStatusFilters();
+          if (!selectedStatuses.length) {
+            recipientsList.innerHTML = '';
+            recipientsListGroup.style.display = 'none';
+            updateRecipientCount();
+            return;
+          }
+          query = query.in('status', selectedStatuses);
         } else if (recipientType === 'program') {
           const program = document.getElementById('programFilter').value;
           if (!program) return;
@@ -3015,9 +3176,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         
         const { data: applicants, error } = await query;
         if (error) throw error;
-        
-        const recipientsList = document.getElementById('recipientsList');
-        const recipientsListGroup = document.getElementById('recipientsListGroup');
         
         if (!applicants || applicants.length === 0) {
           recipientsList.innerHTML = '<div style="color: #64748b; font-style: italic; padding: 16px; text-align: center; font-size: 13px;">No recipients found for this selection</div>';
@@ -3118,6 +3276,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             <option value="rejected">Rejected</option>
           `;
         }
+
+        // Multi-select should start empty until the user chooses statuses.
+        Array.from(statusSelect.options).forEach(option => {
+          option.selected = false;
+        });
+
+        renderStatusPills();
       } catch (error) {
         console.error('Error loading programs/statuses:', error);
       }
@@ -4838,9 +5003,15 @@ ${email.body}`;
       }
 
       if (recipients.length === 0) {
-        const statusValue = document.getElementById('statusFilter').value;
-        console.error('❌ No recipients found for status:', statusValue);
-        showNotification(`No recipients found with status: ${statusValue}`, 'error');
+        if (recipientType === 'status') {
+          const statusValues = getSelectedStatusFilters();
+          const statusLabel = statusValues.length ? statusValues.join(', ') : 'No statuses selected';
+          console.error('❌ No recipients found for statuses:', statusLabel);
+          showNotification(`No recipients found for selected status(es): ${statusLabel}`, 'error');
+        } else {
+          console.error('❌ No recipients found for recipient type:', recipientType);
+          showNotification('No recipients found for the current selection', 'error');
+        }
         return;
       }
 
@@ -5028,6 +5199,15 @@ ${email.body}`;
       document.getElementById('emailBody').value = '';
       document.getElementById('recipientEmail').value = '';
       document.getElementById('applicantName').value = '';
+
+      const statusSelect = document.getElementById('statusFilter');
+      if (statusSelect) {
+        Array.from(statusSelect.options).forEach(option => {
+          option.selected = false;
+        });
+      }
+
+      renderStatusPills();
     }
 
     function validateEmail(email) {

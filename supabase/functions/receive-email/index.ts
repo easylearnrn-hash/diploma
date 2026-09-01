@@ -26,7 +26,22 @@ function normalizeEmailAddress(value?: string | null) {
 }
 
 function base64ToUint8Array(base64: string) {
-  const clean = base64.replace(/\s/g, '')
+  let clean = String(base64 || '').trim()
+  if (!clean) return new Uint8Array(0)
+  if (clean.includes('base64,')) {
+    clean = clean.split('base64,')[1] || ''
+  }
+
+  clean = clean
+    .replace(/\s/g, '')
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+
+  const remainder = clean.length % 4
+  if (remainder === 2) clean += '=='
+  else if (remainder === 3) clean += '='
+  else if (remainder === 1) clean = clean.slice(0, -1)
+
   const binary = atob(clean)
   const bytes = new Uint8Array(binary.length)
   for (let i = 0; i < binary.length; i++) {
@@ -35,9 +50,123 @@ function base64ToUint8Array(base64: string) {
   return bytes
 }
 
+function uint8ArrayToBase64(bytes: Uint8Array) {
+  let binary = ''
+  const chunkSize = 0x8000
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize)
+    binary += String.fromCharCode(...chunk)
+  }
+  return btoa(binary)
+}
+
 function sanitizeFileName(name: string, fallback: string) {
   if (!name) return fallback
   return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function pickAttachmentsFromPayload(payload: Record<string, unknown> | null | undefined) {
+  if (!payload) return [] as any[]
+
+  const candidates: any[] = []
+  const topLevel = Array.isArray((payload as any).attachments) ? (payload as any).attachments : []
+  const dataLevel = Array.isArray((payload as any)?.data?.attachments) ? (payload as any).data.attachments : []
+  const lastEventDataLevel = Array.isArray((payload as any)?.last_event?.data?.attachments)
+    ? (payload as any).last_event.data.attachments
+    : []
+  const messageLevel = Array.isArray((payload as any)?.message?.attachments) ? (payload as any).message.attachments : []
+  const emailLevel = Array.isArray((payload as any)?.email?.attachments) ? (payload as any).email.attachments : []
+
+  if (topLevel.length) candidates.push(...topLevel)
+  if (dataLevel.length) candidates.push(...dataLevel)
+  if (lastEventDataLevel.length) candidates.push(...lastEventDataLevel)
+  if (messageLevel.length) candidates.push(...messageLevel)
+  if (emailLevel.length) candidates.push(...emailLevel)
+
+  return candidates
+}
+
+function buildAttachmentSourceKey(attachment: any, index: number) {
+  const id = String(attachment?.id || '').trim().toLowerCase()
+  if (id) return `id:${id}`
+
+  const downloadUrl = String(attachment?.download_url || '').trim()
+  if (downloadUrl) return `url:${downloadUrl}`
+
+  const filename = String(attachment?.filename || attachment?.name || '').trim().toLowerCase()
+  const contentType = String(attachment?.content_type || attachment?.mime_type || attachment?.type || '').trim().toLowerCase()
+  const declaredSize = String(attachment?.size ?? attachment?.content_length ?? attachment?.bytes ?? '').trim()
+  const inline = String(attachment?.content || attachment?.base64 || '').replace(/\s/g, '')
+  const inlineHint = inline ? `${inline.length}:${inline.slice(0, 64)}` : ''
+
+  const meta = [filename, contentType, declaredSize, inlineHint].filter(Boolean).join('|')
+  if (meta) return `meta:${meta}`
+
+  return `idx:${index}`
+}
+
+function buildBinaryFingerprint(bytes: Uint8Array) {
+  const maxBytes = Math.min(bytes.length, 24)
+  let hex = ''
+  for (let i = 0; i < maxBytes; i++) {
+    hex += bytes[i].toString(16).padStart(2, '0')
+  }
+  return `${bytes.length}:${hex}`
+}
+
+function normalizeCidToken(value: unknown) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) return ''
+  return raw
+    .replace(/^cid:/, '')
+    .replace(/^<+/, '')
+    .replace(/>+$/, '')
+    .trim()
+}
+
+function extractCidReferencesFromHtml(html: string) {
+  const refs = new Set<string>()
+  const src = String(html || '')
+  const regex = /cid:([^"'\s>]+)/gi
+  let match: RegExpExecArray | null = null
+  while ((match = regex.exec(src)) !== null) {
+    const normalized = normalizeCidToken(match[1])
+    if (normalized) refs.add(normalized)
+  }
+  return refs
+}
+
+function isInlineAttachmentCandidate(attachment: any, cidRefs: Set<string>) {
+  const disposition = String(
+    attachment?.content_disposition ||
+    attachment?.contentDisposition ||
+    attachment?.disposition ||
+    ''
+  ).toLowerCase()
+
+  if (disposition.includes('attachment')) return false
+  if (disposition.includes('inline')) return true
+
+  if (attachment?.inline === true || attachment?.is_inline === true || attachment?.isInline === true) {
+    return true
+  }
+
+  const possibleCids: string[] = [
+    attachment?.content_id,
+    attachment?.contentId,
+    attachment?.cid
+  ].map(normalizeCidToken).filter(Boolean)
+
+  const headers = attachment?.headers
+  if (headers && typeof headers === 'object') {
+    for (const [key, value] of Object.entries(headers)) {
+      if (String(key).toLowerCase() === 'content-id') {
+        possibleCids.push(normalizeCidToken(value))
+      }
+    }
+  }
+
+  return possibleCids.some(cid => cid && cidRefs.has(cid))
 }
 
 function uniqueSuffix() {
@@ -220,16 +349,30 @@ async function uploadAttachmentBytes({
 
 async function fetchAttachmentBytesById(emailId: string, attachmentId: string) {
   try {
-    const response = await fetch(`https://api.resend.com/emails/receiving/${emailId}/attachments/${attachmentId}`, {
+    let response = await fetch(`https://api.resend.com/emails/receiving/${emailId}/attachments/${attachmentId}`, {
       headers: {
         'Authorization': 'Bearer ' + RESEND_API_KEY
       }
     })
 
+    if (!response.ok && (response.status === 404 || response.status === 422)) {
+      response = await fetch(`https://api.resend.com/emails/${emailId}/attachments/${attachmentId}`, {
+        headers: {
+          'Authorization': 'Bearer ' + RESEND_API_KEY
+        }
+      })
+    }
+
     if (!response.ok) {
       const errorText = await response.text()
       console.error('Attachment fetch error:', response.status, errorText)
       return null
+    }
+
+    const responseType = String(response.headers.get('content-type') || '').toLowerCase()
+    if (responseType && !responseType.includes('application/json')) {
+      const buffer = await response.arrayBuffer()
+      return new Uint8Array(buffer)
     }
 
     const resultJson = await response.json();
@@ -241,18 +384,16 @@ async function fetchAttachmentBytesById(emailId: string, attachmentId: string) {
        return await fetchAttachmentBytesFromUrl(resultJson.download_url);
     }
     
-    if (resultJson.content) {
-      let base64str = String(resultJson.content);
-      if (base64str.includes('base64,')) base64str = base64str.split('base64,')[1];
-      base64str = base64str.replace(/-/g, '+').replace(/_/g, '/');
-      base64str = base64str.replace(/[^A-Za-z0-9+/=]/g, '');
+    if (resultJson.content || resultJson.base64) {
+      return base64ToUint8Array(String(resultJson.content || resultJson.base64))
+    }
 
-      const binaryString = atob(base64str);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes;
+    if (resultJson.attachment?.content || resultJson.attachment?.base64) {
+      return base64ToUint8Array(String(resultJson.attachment.content || resultJson.attachment.base64))
+    }
+
+    if (resultJson.data?.content || resultJson.data?.base64) {
+      return base64ToUint8Array(String(resultJson.data.content || resultJson.data.base64))
     }
     return null;
   } catch (error) {
@@ -287,25 +428,46 @@ async function processInboundAttachments({
   emailId,
   emailContent,
   emailData,
-  supabase
+  supabase,
+  htmlForInlineDetection
 }: {
   emailId: string
   emailContent: Record<string, unknown> | null
   emailData: Record<string, unknown>
   supabase: ReturnType<typeof createClient>
+  htmlForInlineDetection: string
 }) {
-  const attachments: any[] = []
-  const contentAttachments = Array.isArray((emailContent as any)?.attachments) ? (emailContent as any).attachments : []
-  const dataAttachments = Array.isArray((emailData as any)?.attachments) ? (emailData as any).attachments : []
+  const sourceAttachments: any[] = []
+  const contentAttachments = pickAttachmentsFromPayload(emailContent)
+  const dataAttachments = pickAttachmentsFromPayload(emailData)
 
-  if (contentAttachments.length) attachments.push(...contentAttachments)
-  if (dataAttachments.length) attachments.push(...dataAttachments)
+  if (contentAttachments.length) sourceAttachments.push(...contentAttachments)
+  if (dataAttachments.length) sourceAttachments.push(...dataAttachments)
+
+  const attachments: any[] = []
+  const seenSourceKeys = new Set<string>()
+  for (let index = 0; index < sourceAttachments.length; index++) {
+    const attachment = sourceAttachments[index]
+    const sourceKey = buildAttachmentSourceKey(attachment, index)
+    if (seenSourceKeys.has(sourceKey)) {
+      console.log('Skipping duplicate inbound attachment metadata:', sourceKey)
+      continue
+    }
+    seenSourceKeys.add(sourceKey)
+    attachments.push(attachment)
+  }
 
   if (attachments.length === 0) {
-    return []
+    return {
+      storedAttachments: [] as Array<Record<string, unknown>>,
+      forwardAttachments: [] as Array<{ filename: string; content: string; type: string }>
+    }
   }
 
   const stored: Array<Record<string, unknown>> = []
+  const cidRefs = extractCidReferencesFromHtml(htmlForInlineDetection)
+  const forwardCandidates = new Map<string, { filename: string; content: string; type: string; isInline: boolean }>()
+  const seenBinaryKeys = new Set<string>()
   for (let index = 0; index < attachments.length; index++) {
     const attachment = attachments[index]
     try {
@@ -328,6 +490,25 @@ async function processInboundAttachments({
         continue
       }
 
+      const binaryKey = `${sanitizeFileName(filename, 'attachment').toLowerCase()}|${String(contentType).toLowerCase()}|${buildBinaryFingerprint(bytes)}`
+      const isInline = isInlineAttachmentCandidate(attachment, cidRefs)
+      const encoded = uint8ArrayToBase64(bytes)
+      const existingForward = forwardCandidates.get(binaryKey)
+      if (!existingForward || (existingForward.isInline && !isInline)) {
+        forwardCandidates.set(binaryKey, {
+          filename,
+          content: encoded,
+          type: contentType,
+          isInline
+        })
+      }
+
+      if (seenBinaryKeys.has(binaryKey)) {
+        console.log('Skipping duplicate inbound attachment bytes:', filename)
+        continue
+      }
+      seenBinaryKeys.add(binaryKey)
+
       const uploaded = await uploadAttachmentBytes({
         supabase,
         bytes,
@@ -343,7 +524,18 @@ async function processInboundAttachments({
     }
   }
 
-  return stored
+  const forwardAttachments = Array.from(forwardCandidates.values())
+    .filter(item => !item.isInline)
+    .map(item => ({ filename: item.filename, content: item.content, type: item.type }))
+  const skippedInlineCount = Array.from(forwardCandidates.values()).filter(item => item.isInline).length
+  if (skippedInlineCount > 0) {
+    console.log(`Skipping ${skippedInlineCount} inline attachment(s) to avoid duplicate inline images in forwarded mail`)
+  }
+
+  return {
+    storedAttachments: stored,
+    forwardAttachments
+  }
 }
 
 function stripHtml(html: string) {
@@ -404,7 +596,7 @@ function extractOriginalHtml(html: string): string {
   return ''
 }
 
-async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; text?: string; error?: string } | null> {
+async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; text?: string; attachments?: any[]; error?: string } | null> {
   try {
     console.log('Fetching email content for ID:', emailId)
 
@@ -441,6 +633,8 @@ async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; t
     console.log('Successfully fetched email from Resend')
     console.log('Has HTML:', !!emailData.html)
     console.log('Has text:', !!emailData.text)
+    const fetchedAttachments = pickAttachmentsFromPayload(emailData as Record<string, unknown>)
+    console.log('Has attachments:', fetchedAttachments.length)
     console.log('HTML length:', emailData.html?.length || 0)
     console.log('Text length:', emailData.text?.length || 0)
     console.log('Text preview:', emailData.text?.substring(0, 100) || 'No text')
@@ -448,7 +642,8 @@ async function fetchEmailFromResend(emailId: string): Promise<{ html?: string; t
     
     return {
       html: emailData.html,
-      text: emailData.text
+      text: emailData.text,
+      attachments: fetchedAttachments
     }
   } catch (error) {
     const errorMessage = `Error fetching email from Resend: ${(error as Error).message || String(error)}`
@@ -628,11 +823,12 @@ serve(async (req: Request) => {
 
     const normalizedSender = normalizeEmailAddress(actualSender) || actualSender
     const normalizedRecipient = normalizeEmailAddress(recipientEmail) || recipientEmail
-    const storedAttachments = await processInboundAttachments({
+    const { storedAttachments, forwardAttachments } = await processInboundAttachments({
       emailId,
       emailContent: emailContent as Record<string, unknown> | null,
       emailData,
-      supabase
+      supabase,
+      htmlForInlineDetection: fullHtml || String((emailContent as any)?.html || '')
     })
 
     console.log('Attachments processed:', storedAttachments.length)
@@ -799,6 +995,11 @@ serve(async (req: Request) => {
               'X-Forwarded-To': recipientEmail,
               'X-ACNHS-Forwarded': 'true'
             }
+          }
+
+          if (forwardAttachments.length > 0) {
+            console.log(`📎 Re-attaching ${forwardAttachments.length} inbound attachment(s) for forwarding`)
+            ;(forwardPayload as any).attachments = forwardAttachments
           }
 
           const forwardResponse = await fetch('https://api.resend.com/emails', {
