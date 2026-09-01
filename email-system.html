@@ -4026,6 +4026,19 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       return null; // signed URL generated on-click via openAttachment()
     }
 
+    function openPreviewTab(url) {
+      try {
+        const previewTab = window.open('about:blank', '_blank');
+        if (!previewTab) return false;
+        previewTab.opener = null;
+        previewTab.location.href = url;
+        return true;
+      } catch (error) {
+        console.warn('Preview tab open failed:', error);
+        return false;
+      }
+    }
+
     // Opens an attachment — uses public_url/url if present, otherwise generates
     // a signed URL from Supabase Storage on demand (handles private buckets).
     window.openAttachment = async function(storagePath, publicUrl, fileName, mode = 'download', contentType = '') {
@@ -4106,8 +4119,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
             const blobUrl = URL.createObjectURL(blob);
 
             if (shouldPreview) {
-              const previewTab = window.open(blobUrl, '_blank', 'noopener,noreferrer');
-              if (!previewTab) {
+              const opened = openPreviewTab(blobUrl);
+              if (!opened) {
                 showNotification('⚠️ Pop-up blocked. Please allow pop-ups to preview attachments.', 'error');
               }
               setTimeout(() => URL.revokeObjectURL(blobUrl), 15000);
@@ -4130,8 +4143,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }
         
         if (shouldPreview) {
-          const previewTab = window.open(finalUrl, '_blank', 'noopener,noreferrer');
-          if (!previewTab) {
+          const opened = openPreviewTab(finalUrl);
+          if (!opened) {
             showNotification('⚠️ Pop-up blocked. Please allow pop-ups to preview attachments.', 'error');
           }
           return;
