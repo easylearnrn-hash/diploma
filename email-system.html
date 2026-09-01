@@ -849,14 +849,12 @@
       font-family: inherit;
       line-height: 1.6;
       outline: none;
+      white-space: pre-wrap;
       word-wrap: break-word;
       overflow-y: auto;
       cursor: text;
       transition: all 0.2s;
     }
-
-    .rich-email-body p { margin: 0 0 0.4em 0; }
-    .rich-email-body div { margin: 0; }
 
     .rich-email-body:focus {
       border-color: var(--gold-dim);
@@ -873,6 +871,28 @@
     .rich-email-body b, .rich-email-body strong { font-weight: 700; }
     .rich-email-body i, .rich-email-body em { font-style: italic; }
     .rich-email-body u { text-decoration: underline; }
+    .rich-email-body p,
+    .rich-email-body div {
+      margin: 0 0 10px 0;
+      line-height: 1.55;
+    }
+    .rich-email-body p:last-child,
+    .rich-email-body div:last-child {
+      margin-bottom: 0;
+    }
+    .rich-email-body p[data-empty-line="true"],
+    .rich-email-body div[data-empty-line="true"] {
+      margin: 0 0 7px 0;
+      line-height: 1.15;
+    }
+    .rich-email-body ul,
+    .rich-email-body ol {
+      margin: 0 0 10px 22px;
+      padding: 0;
+    }
+    .rich-email-body li {
+      margin: 0 0 6px 0;
+    }
 
     .form-select {
       cursor: pointer;
@@ -1592,13 +1612,13 @@
           <div class="form-group">
             <label class="form-label">Message Body</label>
             <div class="formatting-toolbar">
-              <button type="button" class="format-btn" onclick="applyFormat('bold')" title="Bold (Ctrl+B)">
+              <button type="button" class="format-btn" onmousedown="event.preventDefault()" onclick="applyFormat('bold')" title="Bold (Ctrl+B)">
                 <strong>B</strong>
               </button>
-              <button type="button" class="format-btn" onclick="applyFormat('italic')" title="Italic (Ctrl+I)">
+              <button type="button" class="format-btn" onmousedown="event.preventDefault()" onclick="applyFormat('italic')" title="Italic (Ctrl+I)">
                 <em>I</em>
               </button>
-              <button type="button" class="format-btn" onclick="applyFormat('underline')" title="Underline (Ctrl+U)">
+              <button type="button" class="format-btn" onmousedown="event.preventDefault()" onclick="applyFormat('underline')" title="Underline (Ctrl+U)">
                 <u>U</u>
               </button>
             </div>
@@ -2958,6 +2978,286 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       textarea.style.height = Math.max(textarea.scrollHeight, 300) + 'px';
     }
 
+    function textToEmailPasteHtml(text) {
+      const lines = String(text || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/\r\n?/g, '\n')
+        .split('\n');
+
+      const blocks = [];
+      let paragraph = [];
+
+      const flushParagraph = () => {
+        const joined = paragraph.join(' ').trim();
+        if (joined) {
+          const escaped = escapeHtml(joined);
+          const preserveRuns = escaped.replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length - 1) + ' ');
+          blocks.push(`<p>${preserveRuns}</p>`);
+        }
+        paragraph = [];
+      };
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          flushParagraph();
+          return;
+        }
+        paragraph.push(trimmed);
+      });
+
+      flushParagraph();
+      return blocks.join('');
+    }
+
+    function sanitizeEmailPasteHtml(rawHtml, options = {}) {
+      const collapseEmptyBlocks = options.collapseEmptyBlocks === true;
+      const wrap = document.createElement('div');
+      wrap.innerHTML = String(rawHtml || '');
+
+      const body = wrap.querySelector('body');
+      if (body) wrap.innerHTML = body.innerHTML;
+
+      wrap.querySelectorAll('script,style,meta,link,iframe,object,embed').forEach(el => el.remove());
+
+      wrap.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+        const p = document.createElement('p');
+        while (h.firstChild) p.appendChild(h.firstChild);
+        h.replaceWith(p);
+      });
+
+      wrap.querySelectorAll('div').forEach(div => {
+        if (div.closest('li')) return;
+        const p = document.createElement('p');
+        while (div.firstChild) p.appendChild(div.firstChild);
+        div.replaceWith(p);
+      });
+
+      const allowedTags = new Set(['P', 'BR', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'A']);
+      Array.from(wrap.querySelectorAll('*')).forEach(el => {
+        const tag = String(el.tagName || '').toUpperCase();
+        if (!allowedTags.has(tag)) {
+          el.replaceWith(...Array.from(el.childNodes));
+          return;
+        }
+
+        const styleText = String(el.getAttribute('style') || '');
+        const href = tag === 'A' ? String(el.getAttribute('href') || '') : '';
+        Array.from(el.attributes).forEach(attr => el.removeAttribute(attr.name));
+
+        if (tag === 'A' && /^https?:\/\//i.test(href)) {
+          el.setAttribute('href', href);
+          el.setAttribute('target', '_blank');
+          el.setAttribute('rel', 'noopener noreferrer');
+        }
+
+        if (tag === 'SPAN') {
+          const keep = [];
+          if (/font-weight\s*:\s*(bold|[6-9]00)/i.test(styleText)) keep.push('font-weight:700');
+          if (/font-style\s*:\s*italic/i.test(styleText)) keep.push('font-style:italic');
+          if (/text-decoration(?:-line)?\s*:[^;]*underline/i.test(styleText)) keep.push('text-decoration:underline');
+          if (keep.length) el.setAttribute('style', keep.join('; '));
+        }
+      });
+
+      const normalizeEmptyCheckText = value => String(value || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/&#160;/gi, ' ')
+        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+        .trim();
+
+      const isMeaningfullyEmptyElement = el => {
+        const text = normalizeEmptyCheckText(el.textContent || '');
+        const htmlWithoutBreaks = normalizeEmptyCheckText(
+          String(el.innerHTML || '')
+            .replace(/<br\s*\/?>/gi, ' ')
+            .replace(/<[^>]+>/g, ' ')
+        );
+        return !text && !htmlWithoutBreaks;
+      };
+
+      wrap.querySelectorAll('p,div,li').forEach(el => {
+        const tag = String(el.tagName || '').toUpperCase();
+        if (!isMeaningfullyEmptyElement(el)) {
+          el.removeAttribute('data-empty-line');
+          return;
+        }
+
+        if (tag === 'LI') {
+          el.remove();
+          return;
+        }
+
+        el.setAttribute('data-empty-line', 'true');
+        el.innerHTML = '<br>';
+      });
+
+      wrap.innerHTML = wrap.innerHTML.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+
+      Array.from(wrap.childNodes).forEach(node => {
+        if (node.nodeType === 3) {
+          const txt = String(node.nodeValue || '')
+            .replace(/\r/g, '')
+            .replace(/\n+/g, ' ')
+            .trim();
+          if (!txt) {
+            node.remove();
+            return;
+          }
+          const p = document.createElement('p');
+          p.textContent = txt;
+          node.replaceWith(p);
+        }
+      });
+
+      if (collapseEmptyBlocks) {
+        // Collapse repeated empty paragraph/div blocks for pasted content only.
+        let previousEmptyBlock = false;
+        Array.from(wrap.children).forEach(el => {
+          const tag = String(el.tagName || '').toUpperCase();
+          const isBlock = tag === 'P' || tag === 'DIV';
+          if (!isBlock) {
+            previousEmptyBlock = false;
+            return;
+          }
+
+          if (!isMeaningfullyEmptyElement(el)) {
+            el.removeAttribute('data-empty-line');
+            previousEmptyBlock = false;
+            return;
+          }
+
+          if (previousEmptyBlock) {
+            el.remove();
+            return;
+          }
+
+          el.setAttribute('data-empty-line', 'true');
+          el.innerHTML = '<br>';
+          previousEmptyBlock = true;
+        });
+      }
+
+      return wrap.innerHTML.trim();
+    }
+
+    function moveCaretToEnd(element) {
+      if (!element) return;
+      const textWalker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let lastTextNode = null;
+      while (textWalker.nextNode()) {
+        const node = textWalker.currentNode;
+        if (String(node.nodeValue || '').length) lastTextNode = node;
+      }
+
+      const range = document.createRange();
+      if (lastTextNode) {
+        range.setStart(lastTextNode, lastTextNode.nodeValue.length);
+        range.collapse(true);
+      } else if (element.lastElementChild) {
+        range.selectNodeContents(element.lastElementChild);
+        range.collapse(false);
+      } else {
+        range.selectNodeContents(element);
+        range.collapse(false);
+      }
+
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function isEditorEmptyBlock(node) {
+      if (!node || node.nodeType !== 1) return false;
+      const tag = String(node.tagName || '').toUpperCase();
+      if (tag !== 'P' && tag !== 'DIV') return false;
+
+      const text = String(node.textContent || '')
+        .replace(/\u00a0/g, ' ')
+        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+        .trim();
+      const htmlWithoutBreaks = String(node.innerHTML || '')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/&nbsp;|&#160;/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
+        .trim();
+
+      return !text && !htmlWithoutBreaks;
+    }
+
+    function trimEditorBoundaryBlocks(editor) {
+      if (!editor) return;
+
+      while (isEditorEmptyBlock(editor.firstElementChild)) {
+        editor.firstElementChild.remove();
+      }
+
+      while (isEditorEmptyBlock(editor.lastElementChild)) {
+        editor.lastElementChild.remove();
+      }
+    }
+
+    function getNormalizedEmailBodyHtml() {
+      const el = document.getElementById('emailBody');
+      if (!el) return '';
+
+      const cleaned = sanitizeEmailPasteHtml(el.innerHTML || '');
+      if (!cleaned) return '';
+
+      const wrap = document.createElement('div');
+      wrap.innerHTML = cleaned;
+
+      const blockNodes = Array.from(wrap.querySelectorAll('p,div'));
+      blockNodes.forEach((block, idx) => {
+        const isLast = idx === blockNodes.length - 1;
+        const isEmpty = isEditorEmptyBlock(block);
+        const margin = isLast ? '0' : (isEmpty ? '0 0 7px 0' : '0 0 10px 0');
+        const lineHeight = isEmpty ? '1.15' : '1.55';
+        block.setAttribute('style', `margin:${margin};line-height:${lineHeight};`);
+      });
+
+      wrap.querySelectorAll('ul,ol').forEach(list => {
+        list.setAttribute('style', 'margin:0 0 10px 22px;padding:0;');
+      });
+
+      wrap.querySelectorAll('li').forEach(item => {
+        item.setAttribute('style', 'margin:0 0 6px 0;line-height:1.65;');
+      });
+
+      const walker = document.createTreeWalker(wrap, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode);
+      textNodes.forEach(node => {
+        const value = String(node.nodeValue || '');
+        if (!value) return;
+        node.nodeValue = value.replace(/ {2,}/g, m => '\u00a0'.repeat(m.length - 1) + ' ');
+      });
+
+      return wrap.innerHTML.trim();
+    }
+
+    function handleEmailBodyPaste(e) {
+      const editor = document.getElementById('emailBody');
+      if (!editor) return;
+
+      e.preventDefault();
+      const sourceHtml = e.clipboardData?.getData('text/html') || '';
+      const sourceText = e.clipboardData?.getData('text/plain') || '';
+
+      let safeHtml = '';
+      if (sourceHtml.trim()) safeHtml = sanitizeEmailPasteHtml(sourceHtml, { collapseEmptyBlocks: true });
+      if (!safeHtml && sourceText.trim()) safeHtml = textToEmailPasteHtml(sourceText);
+      if (!safeHtml) return;
+
+      editor.focus();
+      document.execCommand('insertHTML', false, safeHtml);
+      editor.innerHTML = sanitizeEmailPasteHtml(editor.innerHTML || '');
+      trimEditorBoundaryBlocks(editor);
+      moveCaretToEnd(editor);
+      updatePreview();
+    }
+
     // Apply text formatting via execCommand (visual rich text)
     function applyFormat(format) {
       const editor = document.getElementById('emailBody');
@@ -2984,55 +3284,20 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         emailBody.addEventListener('input', function() {
           updatePreview();
         });
-
-        emailBody.addEventListener('paste', function(e) {
-          e.preventDefault();
-          const html = e.clipboardData.getData('text/html');
-          const plain = e.clipboardData.getData('text/plain');
-
-          if (html) {
-            const wrap = document.createElement('div');
-            wrap.innerHTML = html;
-            wrap.querySelectorAll('script,style,meta,link,iframe,object,embed').forEach(el => el.remove());
-            const allowed = new Set(['B','STRONG','I','EM','U','BR','P','DIV','SPAN','UL','OL','LI']);
-            Array.from(wrap.querySelectorAll('*')).forEach(el => {
-              Array.from(el.attributes).forEach(a => el.removeAttribute(a.name));
-              if (!allowed.has(el.tagName)) el.replaceWith(...Array.from(el.childNodes));
-            });
-            wrap.querySelectorAll('span').forEach(s => {
-              if (!s.getAttributeNames().length) s.replaceWith(...Array.from(s.childNodes));
-            });
-            let clean = wrap.innerHTML
-              .replace(/<(p|div)[^>]*>\s*<\/(p|div)>/gi, '')
-              .replace(/(\s*<br\s*\/?>\s*){3,}/gi, '<br><br>')
-              .trim();
-            document.execCommand('insertHTML', false, clean);
-          } else if (plain) {
-            const safe = plain.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-            const lines = safe.replace(/\r\n?/g, '\n').split('\n');
-            const html2 = lines.map(l => l || '<br>').join('<br>');
-            document.execCommand('insertHTML', false, html2);
-          }
-          updatePreview();
-        });
+        emailBody.addEventListener('paste', handleEmailBodyPaste);
       }
     });
 
     function getEmailBodyContent() {
       const el = document.getElementById('emailBody');
       if (!el) return '';
-      return el.innerHTML
-        .replace(/<div>/gi, '\n').replace(/<\/div>/gi, '')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/&nbsp;/gi, ' ')
-        .replace(/<[^>]*>/g, '')
-        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+      return String(el.innerText || el.textContent || '')
+        .replace(/\u00a0/g, ' ')
         .trim();
     }
 
     function getEmailBodyHtml() {
-      const el = document.getElementById('emailBody');
-      return el ? el.innerHTML : '';
+      return getNormalizedEmailBodyHtml();
     }
 
     function setEmailBodyContent(text) {
@@ -3088,7 +3353,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
       const subject = document.getElementById('emailSubject').value || 'Email Subject';
       const bodyRaw = getEmailBodyHtml();
-      const body = bodyRaw || 'Your email content will appear here...';
+      const body = bodyRaw || '<p style="margin:0;line-height:1.65;">Your email content will appear here...</p>';
       const applicantName = document.getElementById('applicantName').value || 'Recipient';
       const recipientEmail = document.getElementById('recipientEmail').value;
       const senderEmail = document.getElementById('senderEmail').value || 'admissions@acnhs.am';
@@ -5145,7 +5410,7 @@ ${email.body}`;
                 .replace(/{{EMAIL_TITLE}}/g, subject)
                 .replace(/{{DATE}}/g, dateStr)
                 .replace(/{{APPLICANT_NAME}}/g, recipient.name)
-                .replace(/{{BODY_CONTENT}}/g, bodyHtmlRaw.replace(/\n/g, '<br>'))
+                .replace(/{{BODY_CONTENT}}/g, bodyHtmlRaw)
                 .replace(/{{YEAR}}/g, now.getFullYear())
                 .replace(/{{STUDENT_INFO}}/g, studentInfo)
                 .replace(/{{ACNHS_SEAL_BASE64}}/g, 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/acnhs-seal.png');
