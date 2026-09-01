@@ -1251,10 +1251,24 @@
       z-index: 9999;
       align-items: center;
       justify-content: center;
+      padding: 18px;
     }
 
     .loading.active {
       display: flex;
+    }
+
+    .loading-panel {
+      width: min(460px, 92vw);
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.96));
+      border: 1px solid rgba(201, 168, 76, 0.35);
+      border-radius: 14px;
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.5);
+      padding: 22px 20px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
     }
 
     .spinner {
@@ -1264,6 +1278,53 @@
       border-top-color: var(--gold-primary);
       border-radius: 50%;
       animation: spin 0.9s linear infinite;
+      margin-bottom: 4px;
+    }
+
+    .loading-title {
+      color: #f8fafc;
+      font-size: 17px;
+      font-weight: 700;
+      text-align: center;
+      line-height: 1.3;
+    }
+
+    .loading-detail {
+      color: #cbd5e1;
+      font-size: 13px;
+      text-align: center;
+      line-height: 1.45;
+      min-height: 18px;
+    }
+
+    .loading-progress {
+      width: 100%;
+      display: none;
+      margin-top: 2px;
+    }
+
+    .loading-progress-track {
+      width: 100%;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.22);
+      overflow: hidden;
+    }
+
+    .loading-progress-bar {
+      width: 0;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #c9a84c, #d8bf76);
+      transition: width 0.25s ease;
+    }
+
+    .loading-progress-text {
+      color: #e2e8f0;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: right;
+      margin-top: 7px;
     }
 
     @keyframes spin {
@@ -1803,7 +1864,17 @@
 
   <!-- Loading Overlay -->
   <div class="loading" id="loadingOverlay">
-    <div class="spinner"></div>
+    <div class="loading-panel">
+      <div class="spinner"></div>
+      <div class="loading-title" id="loadingTitle">Loading...</div>
+      <div class="loading-detail" id="loadingDetail"></div>
+      <div class="loading-progress" id="loadingProgressWrap">
+        <div class="loading-progress-track">
+          <div class="loading-progress-bar" id="loadingProgressBar"></div>
+        </div>
+        <div class="loading-progress-text" id="loadingProgressText"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Scripts -->
@@ -1821,6 +1892,11 @@
     const EDGE_FUNCTION_URL = 'https://eyhksbiceueoiamwnqpr.supabase.co/functions/v1/send-email';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV5aGtzYmljZXVlb2lhbXducXByIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg4NTIwOTAsImV4cCI6MjA4NDQyODA5MH0.1G3RZLKLJvIR8U9Cvmner3kUIxDtUfFYkHpzUUbnbq8';
     const TEST_MODE = false; // Fallback if Edge Function not deployed
+    const loadingOverlayState = {
+      title: 'Loading...',
+      detail: '',
+      progress: null
+    };
     
     // Email templates
     const emailTemplates = {
@@ -3606,8 +3682,13 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       }
     }
 
-    async function loadEmailHistory() {
-      showLoading(true);
+    async function loadEmailHistory(showOverlay = true) {
+      if (showOverlay) {
+        showLoading(true, {
+          title: 'Loading emails...',
+          detail: 'Fetching recent messages'
+        });
+      }
       try {
         // Get user's allowed email addresses
         const userAllowedEmails = getUserAllowedEmails();
@@ -3652,7 +3733,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         console.error('Error loading email history:', error);
         showNotification('Error loading emails', 'error');
       } finally {
-        showLoading(false);
+        if (showOverlay) showLoading(false);
       }
     }
     
@@ -5334,7 +5415,16 @@ ${email.body}`;
         return;
       }
 
-      showLoading(true);
+      const totalRecipients = recipients.length;
+      // Preserve selected files before closing the modal resets attachment state.
+      const filesToAttach = attachedFiles.slice();
+      showLoading(true, {
+        title: `Sending ${totalRecipients} email${totalRecipients === 1 ? '' : 's'}...`,
+        detail: filesToAttach.length > 0
+          ? `Preparing message payload and ${filesToAttach.length} attachment${filesToAttach.length === 1 ? '' : 's'}...`
+          : 'Preparing message payload...',
+        progress: { current: 0, total: totalRecipients }
+      });
       document.getElementById('sendBtnText').textContent = 'Sending...';
 
       // Close the compose window immediately — don't make the user wait
@@ -5344,20 +5434,33 @@ ${email.body}`;
       try {
         let successCount = 0;
         let failCount = 0;
+        let processedCount = 0;
+        let liveSuccessCount = 0;
+        let liveFailCount = 0;
         
         // Get selected sender email
         const senderEmail = document.getElementById('senderEmail').value;
+
+        showLoading(true, {
+          detail: 'Preparing attachments and signature...'
+        });
         
         // Get current user info + pre-convert attachments — both can run in parallel
         const [userInfo, attachments] = await Promise.all([
           getCurrentUserInfo(),
           (async () => {
-            if (!attachedFiles.length) return [];
+            if (!filesToAttach.length) return [];
             const converted = [];
-            for (const file of attachedFiles) {
+            for (const file of filesToAttach) {
               try {
                 const base64Content = await fileToBase64(file);
-                converted.push({ filename: file.name, content: base64Content.split(',')[1], type: file.type });
+                const encodedContent = String(base64Content || '').split(',')[1] || '';
+                if (!encodedContent) throw new Error('Attachment encoding failed');
+                converted.push({
+                  filename: file.name,
+                  content: encodedContent,
+                  type: file.type || 'application/octet-stream'
+                });
               } catch (err) {
                 console.error('Error converting file to base64:', err);
                 showNotification(`Failed to attach ${file.name}`, 'error');
@@ -5366,6 +5469,8 @@ ${email.body}`;
             return converted;
           })()
         ]);
+
+        console.log(`📎 Converted attachments: ${attachments.length}/${filesToAttach.length}`);
         
         // Generate department-specific signature based on sender email
         const userSignatureHtml = generateDepartmentSignature(senderEmail, userInfo);
@@ -5376,6 +5481,11 @@ ${email.body}`;
         const now = new Date();
         const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+        showLoading(true, {
+          detail: 'Fetching recipient records...',
+          progress: { current: processedCount, total: totalRecipients }
+        });
+
         // ── Fetch all student identifiers in parallel (one DB call per recipient, all at once) ──
         const studentDataMap = await Promise.all(
           recipients.map(r => fetchApplicationIdentifiersByEmail(r.email))
@@ -5385,12 +5495,26 @@ ${email.body}`;
         // Resend free/pro tier allows ~2-10 emails/sec; sending all at once causes mass failures.
         const BATCH_SIZE = 5;
         const BATCH_DELAY_MS = 1200;
+        const totalBatches = Math.ceil(totalRecipients / BATCH_SIZE);
         const sendResults = [];
 
         for (let batchStart = 0; batchStart < recipients.length; batchStart += BATCH_SIZE) {
-          if (batchStart > 0) await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+          const batchNumber = Math.floor(batchStart / BATCH_SIZE) + 1;
+
+          if (batchStart > 0) {
+            showLoading(true, {
+              detail: `Waiting briefly to avoid rate limits... (batch ${batchNumber}/${totalBatches})`,
+              progress: { current: processedCount, total: totalRecipients }
+            });
+            await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+          }
 
           const batch = recipients.slice(batchStart, batchStart + BATCH_SIZE);
+          showLoading(true, {
+            detail: `Sending batch ${batchNumber}/${totalBatches}...`,
+            progress: { current: processedCount, total: totalRecipients }
+          });
+
           const batchResults = await Promise.all(
             batch.map(async (recipient, batchIdx) => {
               const i = batchStart + batchIdx;
@@ -5421,6 +5545,16 @@ ${email.body}`;
               );
 
               const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
+
+              processedCount++;
+              if (result.success) liveSuccessCount++;
+              else liveFailCount++;
+
+              showLoading(true, {
+                detail: `Processed ${processedCount}/${totalRecipients} (${liveSuccessCount} sent, ${liveFailCount} failed)`,
+                progress: { current: processedCount, total: totalRecipients }
+              });
+
               return { recipient, result };
             })
           );
@@ -5428,6 +5562,11 @@ ${email.body}`;
           sendResults.push(...batchResults);
           console.log(`📧 Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: sent ${batchResults.filter(r => r.result.success).length}/${batch.length}`);
         }
+
+        showLoading(true, {
+          detail: 'Finalizing send report...',
+          progress: { current: totalRecipients, total: totalRecipients }
+        });
 
         // ── Tally results & save failures locally ──
         const historyWrites = [];
@@ -5454,7 +5593,7 @@ ${email.body}`;
         showNotification(`✅ Sent ${successCount} email(s)` + (failCount > 0 ? ` (${failCount} failed)` : ''), 'success');
 
         // Reload history in the background
-        loadEmailHistory().catch(console.error);
+        loadEmailHistory(false).catch(console.error);
       } catch (error) {
         console.error('Error sending email:', error);
         showNotification('Error: ' + error.message, 'error');
@@ -5562,8 +5701,71 @@ ${email.body}`;
       }, 4000);
     }
 
-    function showLoading(show) {
-      document.getElementById('loadingOverlay').classList.toggle('active', show);
+    function renderLoadingOverlay() {
+      const titleEl = document.getElementById('loadingTitle');
+      const detailEl = document.getElementById('loadingDetail');
+      const progressWrap = document.getElementById('loadingProgressWrap');
+      const progressBar = document.getElementById('loadingProgressBar');
+      const progressText = document.getElementById('loadingProgressText');
+
+      if (!titleEl || !detailEl || !progressWrap || !progressBar || !progressText) return;
+
+      titleEl.textContent = loadingOverlayState.title || 'Loading...';
+
+      if (loadingOverlayState.detail) {
+        detailEl.textContent = loadingOverlayState.detail;
+        detailEl.style.display = 'block';
+      } else {
+        detailEl.textContent = '';
+        detailEl.style.display = 'none';
+      }
+
+      const progress = loadingOverlayState.progress;
+      if (progress && Number.isFinite(progress.total) && Number(progress.total) > 0) {
+        const total = Math.max(1, Number(progress.total));
+        const current = Math.max(0, Math.min(Number(progress.current) || 0, total));
+        const percent = Math.round((current / total) * 100);
+
+        progressWrap.style.display = 'block';
+        progressBar.style.width = `${percent}%`;
+        progressText.textContent = `${current}/${total} (${percent}%)`;
+      } else {
+        progressWrap.style.display = 'none';
+        progressBar.style.width = '0%';
+        progressText.textContent = '';
+      }
+    }
+
+    function showLoading(show, options = {}) {
+      const overlay = document.getElementById('loadingOverlay');
+      if (!overlay) return;
+
+      if (show) {
+        if (!overlay.classList.contains('active')) {
+          loadingOverlayState.title = 'Loading...';
+          loadingOverlayState.detail = '';
+          loadingOverlayState.progress = null;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(options, 'title')) {
+          loadingOverlayState.title = options.title || 'Loading...';
+        }
+        if (Object.prototype.hasOwnProperty.call(options, 'detail')) {
+          loadingOverlayState.detail = options.detail || '';
+        }
+        if (Object.prototype.hasOwnProperty.call(options, 'progress')) {
+          loadingOverlayState.progress = options.progress || null;
+        }
+
+        overlay.classList.add('active');
+        renderLoadingOverlay();
+      } else {
+        overlay.classList.remove('active');
+        loadingOverlayState.title = 'Loading...';
+        loadingOverlayState.detail = '';
+        loadingOverlayState.progress = null;
+        renderLoadingOverlay();
+      }
     }
 
     // Selection management functions
