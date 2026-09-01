@@ -5062,40 +5062,53 @@ ${email.body}`;
           recipients.map(r => fetchApplicationIdentifiersByEmail(r.email))
         );
 
-        // ── Fire all emails in parallel ──
-        const sendResults = await Promise.all(
-          recipients.map(async (recipient, i) => {
-            const studentData = studentDataMap[i];
-            let studentInfo = '';
-            if (studentData) {
-              const infoItems = [];
-              if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
-              if (studentData.control_number)   infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
-              if (studentData.document_id)      infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
-              if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
-              if (infoItems.length > 0) studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
-            }
-            
-            let emailHtml = EMAIL_HTML_TEMPLATE
-              .replace(/{{SUBJECT}}/g, subject)
-              .replace(/{{EMAIL_TITLE}}/g, subject)
-              .replace(/{{DATE}}/g, dateStr)
-              .replace(/{{APPLICANT_NAME}}/g, recipient.name)
-              .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
-              .replace(/{{YEAR}}/g, now.getFullYear())
-              .replace(/{{STUDENT_INFO}}/g, studentInfo)
-              // Use hosted HTTPS URL for sent emails — Gmail/Outlook block data: URIs
-              .replace(/{{ACNHS_SEAL_BASE64}}/g, 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/acnhs-seal.png');
-            
-            emailHtml = emailHtml.replace(
-              /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
-              `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
-            );
+        // ── Send emails sequentially with rate-limit delay ──
+        // Resend free/pro tier allows ~2-10 emails/sec; sending all at once causes mass failures.
+        const BATCH_SIZE = 5;
+        const BATCH_DELAY_MS = 1200;
+        const sendResults = [];
 
-            const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
-            return { recipient, result };
-          })
-        );
+        for (let batchStart = 0; batchStart < recipients.length; batchStart += BATCH_SIZE) {
+          if (batchStart > 0) await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+
+          const batch = recipients.slice(batchStart, batchStart + BATCH_SIZE);
+          const batchResults = await Promise.all(
+            batch.map(async (recipient, batchIdx) => {
+              const i = batchStart + batchIdx;
+              const studentData = studentDataMap[i];
+              let studentInfo = '';
+              if (studentData) {
+                const infoItems = [];
+                if (studentData.reference_number) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">REF: ${studentData.reference_number}</div>`);
+                if (studentData.control_number)   infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">CTRL: ${studentData.control_number}</div>`);
+                if (studentData.document_id)      infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;margin-bottom:3px;line-height:1.2;">DOC ID: ${studentData.document_id}</div>`);
+                if (studentData.verification_hash) infoItems.push(`<div style="font-family:Inter,Arial,sans-serif;font-size:9.5px;color:#cbd5e1;font-weight:700;line-height:1.2;">HASH: ${studentData.verification_hash.substring(0, 13)}</div>`);
+                if (infoItems.length > 0) studentInfo = `<div style="text-align:right;">${infoItems.join('')}</div>`;
+              }
+
+              let emailHtml = EMAIL_HTML_TEMPLATE
+                .replace(/{{SUBJECT}}/g, subject)
+                .replace(/{{EMAIL_TITLE}}/g, subject)
+                .replace(/{{DATE}}/g, dateStr)
+                .replace(/{{APPLICANT_NAME}}/g, recipient.name)
+                .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+                .replace(/{{YEAR}}/g, now.getFullYear())
+                .replace(/{{STUDENT_INFO}}/g, studentInfo)
+                .replace(/{{ACNHS_SEAL_BASE64}}/g, 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/acnhs-seal.png');
+
+              emailHtml = emailHtml.replace(
+                /<div style="margin-top:12px;">[\s\S]*?<\/div>\s*<\/td>/,
+                `<div style="margin-top:12px;">${userSignatureHtml}</div></td>`
+              );
+
+              const result = await sendEmailViaResend(recipient.email, subject, emailHtml, senderEmail, fromName, attachments);
+              return { recipient, result };
+            })
+          );
+
+          sendResults.push(...batchResults);
+          console.log(`📧 Batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: sent ${batchResults.filter(r => r.result.success).length}/${batch.length}`);
+        }
 
         // ── Tally results & save failures locally ──
         const historyWrites = [];
