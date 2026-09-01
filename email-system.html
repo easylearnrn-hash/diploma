@@ -836,6 +836,42 @@
       overflow: hidden;
     }
 
+    .rich-email-body {
+      width: 100%;
+      min-height: 300px;
+      padding: 11px 14px;
+      background: rgba(2, 6, 23, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 0 0 8px 8px;
+      border-top: none;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      line-height: 1.6;
+      outline: none;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      overflow-y: auto;
+      cursor: text;
+      transition: all 0.2s;
+    }
+
+    .rich-email-body:focus {
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 0 3px var(--gold-glow);
+      background: rgba(2, 6, 23, 0.8);
+    }
+
+    .rich-email-body:empty::before {
+      content: attr(data-placeholder);
+      color: #64748b;
+      pointer-events: none;
+    }
+
+    .rich-email-body b, .rich-email-body strong { font-weight: 700; }
+    .rich-email-body i, .rich-email-body em { font-style: italic; }
+    .rich-email-body u { text-decoration: underline; }
+
     .form-select {
       cursor: pointer;
     }
@@ -1564,7 +1600,7 @@
                 <u>U</u>
               </button>
             </div>
-            <textarea class="form-textarea" id="emailBody" placeholder="Enter your message here..."></textarea>
+            <div class="rich-email-body" id="emailBody" contenteditable="true" data-placeholder="Enter your message here..." role="textbox" aria-multiline="true"></div>
           </div>
 
           <!-- Attachments -->
@@ -2790,7 +2826,6 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       
       const emailBodyTextarea = document.getElementById('emailBody');
       emailBodyTextarea.addEventListener('input', function() {
-        autoResizeTextarea(this);
         updatePreview();
       });
 
@@ -2921,78 +2956,62 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       textarea.style.height = Math.max(textarea.scrollHeight, 300) + 'px';
     }
 
-    // Apply text formatting (Bold, Italic, Underline)
+    // Apply text formatting via execCommand (visual rich text)
     function applyFormat(format) {
-      const textarea = document.getElementById('emailBody');
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const selectedText = textarea.value.substring(start, end);
-      
-      if (!selectedText) {
-        alert('Please select text to format');
-        return;
-      }
-
-      let formattedText = '';
-      switch(format) {
-        case 'bold':
-          formattedText = `<strong>${selectedText}</strong>`;
-          break;
-        case 'italic':
-          formattedText = `<em>${selectedText}</em>`;
-          break;
-        case 'underline':
-          formattedText = `<u>${selectedText}</u>`;
-          break;
-      }
-
-      // Replace selected text with formatted version
-      const newValue = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
-      textarea.value = newValue;
-      
-      // Update cursor position after the formatted text
-      const newCursorPos = start + formattedText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-      
-      // Trigger preview update
-      autoResizeTextarea(textarea);
+      const editor = document.getElementById('emailBody');
+      editor.focus();
+      document.execCommand(format, false, null);
       updatePreview();
-      
-      // Focus back on textarea
-      textarea.focus();
     }
 
-    // Add keyboard shortcuts for formatting
+    // Keyboard shortcuts for formatting inside rich editor
     document.addEventListener('DOMContentLoaded', function() {
       const emailBody = document.getElementById('emailBody');
       if (emailBody) {
         emailBody.addEventListener('keydown', function(e) {
-          if (e.ctrlKey || e.metaKey) {
-            switch(e.key.toLowerCase()) {
-              case 'b':
-                e.preventDefault();
-                applyFormat('bold');
-                break;
-              case 'i':
-                e.preventDefault();
-                applyFormat('italic');
-                break;
-              case 'u':
-                e.preventDefault();
-                applyFormat('underline');
-                break;
-            }
+          if (!(e.ctrlKey || e.metaKey)) return;
+          const key = e.key.toLowerCase();
+          if (key === 'b' || key === 'i' || key === 'u') {
+            e.preventDefault();
+            const cmd = { b: 'bold', i: 'italic', u: 'underline' }[key];
+            document.execCommand(cmd, false, null);
+            updatePreview();
           }
+          // Allow native Cmd+C, Cmd+V, Cmd+X, Cmd+A, Cmd+Z, Cmd+Y
+        });
+        emailBody.addEventListener('input', function() {
+          updatePreview();
         });
       }
     });
 
+    function getEmailBodyContent() {
+      const el = document.getElementById('emailBody');
+      if (!el) return '';
+      return el.innerHTML
+        .replace(/<div>/gi, '\n').replace(/<\/div>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        .trim();
+    }
+
+    function getEmailBodyHtml() {
+      const el = document.getElementById('emailBody');
+      return el ? el.innerHTML : '';
+    }
+
+    function setEmailBodyContent(text) {
+      const el = document.getElementById('emailBody');
+      if (!el) return;
+      el.innerText = text || '';
+    }
+
     function loadTemplate(template) {
       const templateData = emailTemplates[template];
       document.getElementById('emailSubject').value = templateData.subject;
-      const emailBodyTextarea = document.getElementById('emailBody');
-      emailBodyTextarea.value = templateData.body;
-      autoResizeTextarea(emailBodyTextarea);
+      setEmailBodyContent(templateData.body);
       updatePreview();
     }
 
@@ -3035,7 +3054,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         return;
       }
       const subject = document.getElementById('emailSubject').value || 'Email Subject';
-      const body = document.getElementById('emailBody').value || 'Your email content will appear here...';
+      const bodyRaw = getEmailBodyHtml();
+      const body = bodyRaw || 'Your email content will appear here...';
       const applicantName = document.getElementById('applicantName').value || 'Recipient';
       const recipientEmail = document.getElementById('recipientEmail').value;
       const senderEmail = document.getElementById('senderEmail').value || 'admissions@acnhs.am';
@@ -3071,7 +3091,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         .replace(/{{EMAIL_TITLE}}/g, subject)
         .replace(/{{DATE}}/g, dateStr)
         .replace(/{{APPLICANT_NAME}}/g, applicantName)
-        .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+        .replace(/{{BODY_CONTENT}}/g, body)
         .replace(/{{YEAR}}/g, now.getFullYear())
         .replace(/{{STUDENT_INFO}}/g, studentInfo)
         .replace(/{{ACNHS_SEAL_BASE64}}/g, ACNHS_LOGO_DATA_URL);
@@ -4809,7 +4829,7 @@ We're here to support you every step of the way. Welcome to ACNHS!`
       document.getElementById('emailSubject').value = subject;
       
       // Clear body for the reply
-      document.getElementById('emailBody').value = '';
+      setEmailBodyContent('');
       
       openComposeModal();
       updatePreview();
@@ -4845,7 +4865,7 @@ Subject: ${email.subject}
 
 ${email.body}`;
       
-      document.getElementById('emailBody').value = forwardedMessage;
+      setEmailBodyContent(forwardedMessage);
       
       openComposeModal();
       updatePreview();
@@ -4964,7 +4984,8 @@ ${email.body}`;
     async function sendEmail() {
       const recipientType = document.getElementById('recipientType').value;
       const subject = document.getElementById('emailSubject').value;
-      const body = document.getElementById('emailBody').value;
+      const body = getEmailBodyContent();
+      const bodyHtmlRaw = getEmailBodyHtml();
 
       if (!subject || !body) {
         showNotification('Please fill in subject and message', 'error');
@@ -5091,7 +5112,7 @@ ${email.body}`;
                 .replace(/{{EMAIL_TITLE}}/g, subject)
                 .replace(/{{DATE}}/g, dateStr)
                 .replace(/{{APPLICANT_NAME}}/g, recipient.name)
-                .replace(/{{BODY_CONTENT}}/g, body.replace(/\n/g, '<br>'))
+                .replace(/{{BODY_CONTENT}}/g, bodyHtmlRaw.replace(/\n/g, '<br>'))
                 .replace(/{{YEAR}}/g, now.getFullYear())
                 .replace(/{{STUDENT_INFO}}/g, studentInfo)
                 .replace(/{{ACNHS_SEAL_BASE64}}/g, 'https://raw.githubusercontent.com/easylearnrn-hash/diploma/main/assets/acnhs-seal.png');
@@ -5209,7 +5230,7 @@ ${email.body}`;
 
     function clearForm() {
       document.getElementById('emailSubject').value = '';
-      document.getElementById('emailBody').value = '';
+      setEmailBodyContent('');
       document.getElementById('recipientEmail').value = '';
       document.getElementById('applicantName').value = '';
 
