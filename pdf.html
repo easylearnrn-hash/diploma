@@ -1045,6 +1045,14 @@
             </div>
           </div>
 
+          <!-- Additional Institutions Attended (Conditional) -->
+          <div class="gov-section" id="additionalInstitutionsSection" style="display: none;">
+            <div class="gov-section__header">ADDITIONAL INSTITUTIONS ATTENDED</div>
+            <div class="gov-section__content">
+              <table class="gov-table" id="additionalInstitutionsTable"></table>
+            </div>
+          </div>
+
           <!-- Emergency Contact -->
           <div class="gov-section">
             <div class="gov-section__header">EMERGENCY CONTACT</div>
@@ -1419,6 +1427,13 @@
       }
     }
 
+    function escapeHtml(value) {
+      const text = (value === null || value === undefined || value === '') ? '—' : String(value);
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
   async function populatePreviewData(data) {
       // Helper function to safely set text content
       function setField(id, value) {
@@ -1525,6 +1540,40 @@
       setField('fieldOfStudy', data.fieldOfStudy);
       setField('graduationYear', data.gradYear);
       setField('gpa', data.gpa);
+
+      // Additional Institutions Attended (conditional)
+      const additionalInstitutionsSection = document.getElementById('additionalInstitutionsSection');
+      const additionalInstitutionsTable = document.getElementById('additionalInstitutionsTable');
+      if (additionalInstitutionsSection && additionalInstitutionsTable) {
+        const additionalInstitutions = Array.isArray(data.additionalInstitutions) ? data.additionalInstitutions : [];
+        if (additionalInstitutions.length > 0) {
+          additionalInstitutionsTable.innerHTML = additionalInstitutions.map((entry, index) => `
+            <tr>
+              <td class="gov-table__label">Institution ${index + 2}:</td>
+              <td class="gov-table__value">${escapeHtml(entry.institution)}</td>
+            </tr>
+            <tr>
+              <td class="gov-table__label">Education Level:</td>
+              <td class="gov-table__value">${escapeHtml(entry.education)}</td>
+            </tr>
+            <tr>
+              <td class="gov-table__label">Field of Study:</td>
+              <td class="gov-table__value">${escapeHtml(entry.fieldOfStudy)}</td>
+            </tr>
+            <tr>
+              <td class="gov-table__label">Graduation Year:</td>
+              <td class="gov-table__value">${escapeHtml(entry.gradYear)}</td>
+            </tr>
+            <tr>
+              <td class="gov-table__label">GPA / Final Grade:</td>
+              <td class="gov-table__value">${escapeHtml(entry.gpa)}</td>
+            </tr>
+          `).join('');
+          additionalInstitutionsSection.style.display = 'block';
+        } else {
+          additionalInstitutionsSection.style.display = 'none';
+        }
+      }
 
       // Emergency Contact
       setField('emergencyName', data.emergencyName);

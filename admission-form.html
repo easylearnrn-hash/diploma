@@ -766,6 +766,71 @@ input[type="checkbox"] {
   gap: 10px;
 }
 
+.inner-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inner-card__header h3 {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.remove-institution-btn {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.25);
+  color: #f87171;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.remove-institution-btn:hover {
+  background: rgba(239,68,68,0.18);
+}
+
+.add-institution-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  background: var(--gold-glow);
+  border: 1px dashed var(--border-gold);
+  color: var(--gold-400);
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Inter', sans-serif;
+  margin-top: 4px;
+}
+
+.add-institution-btn:hover {
+  background: rgba(201,168,76,0.16);
+  border-color: var(--gold-400);
+  color: var(--gold-300);
+}
+
 /* ── SUBMIT SECTION ────────────────────────────────────────── */
 .submit-section {
   margin-top: 32px;
@@ -1573,7 +1638,10 @@ select option {
       </div>
 
       <div class="form-group">
-        <label class="required">Your full name in Armenian alphabet (include your father’s name) — exactly as it appears in your passport and legal documents (REQUIRED BY THE MINISTRY OF EDUCATION, SCIENCE, CULTURE AND SPORT OF THE REPUBLIC OF ARMENIA FOR THE OFFICIAL ISSUANCE OF YOUR DIPLOMA)</label>
+        <label class="required">Full Name in Armenian Alphabet</label>
+        <div class="info-box" style="margin:8px 0 14px;">
+          <p>Include your father’s name — exactly as it appears in your passport and legal documents. <strong>Required by the Ministry of Education, Science, Culture and Sport of the Republic of Armenia</strong> for the official issuance of your diploma.</p>
+        </div>
         <input type="text" name="fullNameArmenian" placeholder="Վարդան Վարդանի Վարդանյան" required>
       </div>
 
@@ -1785,6 +1853,20 @@ select option {
       <div class="form-group">
         <label class="required">GPA / Final Grade</label>
         <input type="text" name="gpa" placeholder="e.g., 3.5/4.0 or 85/100" required>
+      </div>
+
+      <!-- Additional Institutions (Optional) -->
+      <div class="form-group" style="margin-top:32px;padding-top:32px;border-top:2px solid rgba(203, 213, 225, 0.3);">
+        <div class="info-box">
+          <p><strong>Graduated from more than one institution?</strong> If you have attended or graduated from additional schools, colleges, or universities, add each one below.</p>
+        </div>
+
+        <div id="additionalInstitutionsList"></div>
+
+        <button type="button" class="add-institution-btn" onclick="addInstitutionEntry()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          Add Another Institution
+        </button>
       </div>
 
       <!-- Transfer Student Question -->
@@ -2357,6 +2439,15 @@ select option {
           <p style="margin:4px 0 0 0;font-size:11px;color:#4a3c28">Relationship: <span data-field="emergency-relation">Parent</span></p>
           <p style="margin:2px 0 0 0;font-size:11px;color:#4a3c28">Phone: <span data-field="emergency-phone">1 555 000 0000</span></p>
         </div>
+      </div>
+
+      <!-- SECTION: ADDITIONAL INSTITUTIONS (populated dynamically, hidden if none) -->
+      <div id="additionalInstitutionsPreviewSection" style="margin-bottom:22px;display:none">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <p style="margin:0;font-size:8px;letter-spacing:3px;text-transform:uppercase;color:#c9a84c;font-weight:700">V.A Additional Institutions Attended</p>
+          <div style="flex:1;height:0.5px;background:linear-gradient(90deg,rgba(201,168,76,0.6),transparent)"></div>
+        </div>
+        <div id="additionalInstitutionsPreviewGrid" style="display:flex;flex-wrap:wrap;gap:16px"></div>
       </div>
 
       <!-- SECTION: DOCUMENT CHECKLIST -->
@@ -3908,6 +3999,89 @@ function resolveApplicantNameFromData(data = {}) {
   return 'Student';
 }
 
+// ==========================================
+// ADDITIONAL INSTITUTIONS (repeatable entries)
+// ==========================================
+function createInstitutionEntryElement() {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'inner-card additional-institution-entry';
+  wrapper.innerHTML = `
+    <div class="inner-card__header">
+      <h3>Additional Institution</h3>
+      <button type="button" class="remove-institution-btn" onclick="removeInstitutionEntry(this)" aria-label="Remove this institution">×</button>
+    </div>
+    <div class="form-group">
+      <label>Highest Level Achieved</label>
+      <select class="inst-education">
+        <option value="" disabled selected>Select education level</option>
+        <option value="highschool">High School Diploma</option>
+        <option value="associate">Associate Degree</option>
+        <option value="bachelor">Bachelor's Degree</option>
+        <option value="master">Master's Degree</option>
+        <option value="doctorate">Doctorate</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Name of Institution</label>
+      <input type="text" class="inst-institution" placeholder="School/University name">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Field of Study</label>
+        <input type="text" class="inst-field-of-study" placeholder="Major/Concentration">
+      </div>
+      <div class="form-group">
+        <label>Year of Graduation</label>
+        <input type="number" class="inst-grad-year" min="1950" max="2030" placeholder="YYYY">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>GPA / Final Grade</label>
+      <input type="text" class="inst-gpa" placeholder="e.g., 3.5/4.0 or 85/100">
+    </div>
+  `;
+  return wrapper;
+}
+
+function addInstitutionEntry() {
+  const list = document.getElementById('additionalInstitutionsList');
+  if (!list) return;
+  list.appendChild(createInstitutionEntryElement());
+}
+
+function removeInstitutionEntry(button) {
+  const entry = button.closest('.additional-institution-entry');
+  if (entry) entry.remove();
+}
+
+function gatherAdditionalInstitutions() {
+  const entries = document.querySelectorAll('#additionalInstitutionsList .additional-institution-entry');
+  const results = [];
+
+  entries.forEach(entry => {
+    const educationSelect = entry.querySelector('.inst-education');
+    const educationText = educationSelect && educationSelect.selectedIndex >= 0
+      ? (educationSelect.options[educationSelect.selectedIndex].textContent || '').trim()
+      : '';
+    const institution = (entry.querySelector('.inst-institution')?.value || '').trim();
+    const fieldOfStudy = (entry.querySelector('.inst-field-of-study')?.value || '').trim();
+    const gradYear = (entry.querySelector('.inst-grad-year')?.value || '').trim();
+    const gpa = (entry.querySelector('.inst-gpa')?.value || '').trim();
+
+    if (!institution && !fieldOfStudy && !gradYear && !gpa && !educationText) return;
+
+    results.push({
+      education: educationText || '—',
+      institution: institution || '—',
+      fieldOfStudy: fieldOfStudy || '—',
+      gradYear: gradYear || '—',
+      gpa: gpa || '—'
+    });
+  });
+
+  return results;
+}
+
 function gatherAdmissionData() {
   const formData = new FormData(form);
   const getValue = name => (formData.get(name) || '').toString().trim();
@@ -3982,6 +4156,7 @@ function gatherAdmissionData() {
     fieldOfStudy: getValue('fieldOfStudy') || '—',
     gradYear: getValue('gradYear') || '—',
     gpa: getValue('gpa') || '—',
+    additionalInstitutions: gatherAdditionalInstitutions(),
     programChoice: getSelectText('program') || '—',
     startTerm: getSelectText('startDate') || '—',
     previousApplication: previousApplicationValue === 'yes' && previousApplicationControlNumber
@@ -4286,6 +4461,39 @@ function populateAdmissionDocument(data) {
         el.textContent = value || '—';
       });
   });
+
+  // Additional Institutions (conditional, variable-length list)
+  const additionalInstitutionsSection = document.getElementById('additionalInstitutionsPreviewSection');
+  const additionalInstitutionsGrid = document.getElementById('additionalInstitutionsPreviewGrid');
+  if (additionalInstitutionsSection && additionalInstitutionsGrid) {
+    const additionalInstitutions = Array.isArray(data.additionalInstitutions) ? data.additionalInstitutions : [];
+    additionalInstitutionsGrid.innerHTML = '';
+
+    if (additionalInstitutions.length > 0) {
+      additionalInstitutions.forEach((entry, index) => {
+        const card = document.createElement('div');
+        card.style.cssText = 'flex:1 1 240px;border:1px solid rgba(201,168,76,0.3);padding:14px 16px';
+        card.innerHTML = `
+          <p style="margin:0 0 8px 0;font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#c9a84c;font-weight:700">Institution ${index + 2}</p>
+          <p style="margin:0;font-size:12px;font-weight:700;color:#04111f">${escapeHtml(entry.education)}</p>
+          <p style="margin:4px 0 0 0;font-size:11px;color:#4a3c28">${escapeHtml(entry.institution)}</p>
+          <p style="margin:2px 0 0 0;font-size:11px;color:#6b5a3e">${escapeHtml(entry.fieldOfStudy)}</p>
+          <p style="margin:6px 0 0 0;font-size:10.5px;color:#4a3c28">Graduated ${escapeHtml(entry.gradYear)} &nbsp;&middot;&nbsp; GPA <span style="font-weight:700;color:#04111f">${escapeHtml(entry.gpa)}</span></p>
+        `;
+        additionalInstitutionsGrid.appendChild(card);
+      });
+      additionalInstitutionsSection.style.display = 'block';
+    } else {
+      additionalInstitutionsSection.style.display = 'none';
+    }
+  }
+}
+
+function escapeHtml(value) {
+  const text = (value === null || value === undefined || value === '') ? '—' : String(value);
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
 }
 
 function generateReferenceNumber() {
