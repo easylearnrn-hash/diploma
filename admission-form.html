@@ -1580,6 +1580,20 @@ select option {
       </div>
 
       <div class="form-group">
+        <label class="required">Are you able to travel to Armenia for Clinicals and final/exit exam?</label>
+        <div style="display:flex;gap:20px;margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="travelToArmeniaForClinicals" value="Yes" required style="width:auto;margin:0;">
+            <span style="color:white;">Yes</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="radio" name="travelToArmeniaForClinicals" value="No" required style="width:auto;margin:0;">
+            <span style="color:white;">No</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="form-group">
         <label class="required">When was the last time you have been in Armenia?</label>
         <input type="date" name="lastTimeInArmenia" required>
       </div>
@@ -1921,9 +1935,6 @@ select option {
         <label class="required">Intended Start Date</label>
         <select name="startDate" required>
           <option value="" disabled selected>Select semester</option>
-          <option value="spring2026">Spring Semester 2026 (Early – Mid January)</option>
-          <option value="fall2026">Fall Semester 2026 (Late August – Early September)</option>
-          <option value="spring2027">Spring Semester 2027 (Early – Mid January)</option>
         </select>
       </div>
 
@@ -1934,6 +1945,17 @@ select option {
           <option value="no">No, this is my first application</option>
           <option value="yes">Yes, I have applied before</option>
         </select>
+      </div>
+
+      <div class="form-group" id="previousApplicationControlGroup" style="display:none;">
+        <label class="required" for="previousApplicationControlNumber">Previous Application Control Number</label>
+        <input
+          type="text"
+          id="previousApplicationControlNumber"
+          name="previousApplicationControlNumber"
+          placeholder="Enter your previous application control number"
+          autocomplete="off"
+        >
       </div>
     </div>
 
@@ -2172,9 +2194,13 @@ select option {
             <p style="margin:0;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#6b5a3e">Last Visit to Armenia</p>
             <p data-field="last-time-armenia" style="margin:5px 0 0 0;font-weight:600;font-size:11.5px;color:#04111f">—</p>
           </div>
-          <div style="flex:1 1 180px;padding:10px 14px">
+          <div style="flex:1 1 180px;padding:10px 14px;border-right:1px solid rgba(201,168,76,0.2)">
             <p style="margin:0;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#6b5a3e">Date Left Armenia</p>
             <p data-field="armenia-exit-date" style="margin:5px 0 0 0;font-weight:600;font-size:11.5px;color:#04111f">—</p>
+          </div>
+          <div style="flex:1 1 220px;padding:10px 14px">
+            <p style="margin:0;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#6b5a3e">Able to Travel to Armenia for Clinicals / Exit Exam</p>
+            <p data-field="travel-to-armenia-clinicals" style="margin:5px 0 0 0;font-weight:600;font-size:11.5px;color:#04111f">—</p>
           </div>
         </div>
       </div>
@@ -2224,6 +2250,10 @@ select option {
               <td data-field="program" style="padding:11px 14px;font-weight:700;color:#04111f">Associate Degree in Nursing (ADN)</td>
               <td data-field="start-term" style="padding:11px 14px;color:#04111f">Fall Semester 2026</td>
               <td data-field="previous-application" style="padding:11px 14px;color:#04111f">No, first-time applicant</td>
+            </tr>
+            <tr style="background:rgba(201,168,76,0.03)">
+              <td colspan="2" style="padding:9px 14px;font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#6b5a3e">Previous Application Control Number</td>
+              <td data-field="previous-application-control-number" style="padding:9px 14px;color:#04111f;font-weight:600">Not applicable</td>
             </tr>
           </tbody>
         </table>
@@ -2355,6 +2385,10 @@ select option {
 const form = document.getElementById('admissionForm');
 const progressBar = document.getElementById('progressBar');
 const submitBtn = document.getElementById('submitBtn');
+const startDateSelect = form ? form.querySelector('select[name="startDate"]') : null;
+const previousApplicationSelect = form ? form.querySelector('select[name="previousApplication"]') : null;
+const previousApplicationControlGroup = document.getElementById('previousApplicationControlGroup');
+const previousApplicationControlInput = document.getElementById('previousApplicationControlNumber');
 
 const APPLICATION_STORAGE_BUCKET = 'application-documents';
 const APPLICATION_STORAGE_FOLDER = 'applications';
@@ -2365,6 +2399,71 @@ const DOCUMENT_UPLOAD_FIELDS = [
   { id: 'englishUpload', name: 'English Test', optional: true },
   { id: 'recommendationUpload', name: 'Recommendation', optional: true }
 ];
+
+function buildSemesterConfig(term, year) {
+  if (term === 'spring') {
+    return {
+      value: `spring${year}`,
+      label: `Spring Semester ${year} (Late January – Early February)`,
+      cutoff: new Date(year, 1, 15, 23, 59, 59, 999)
+    };
+  }
+
+  return {
+    value: `fall${year}`,
+    label: `Fall Semester ${year} (Late August – Early September)`,
+    cutoff: new Date(year, 8, 15, 23, 59, 59, 999)
+  };
+}
+
+function getNextAvailableSemesters(now = new Date(), count = 3) {
+  const semesters = [];
+  let year = now.getFullYear();
+  const maxYearsToCheck = 20;
+
+  while (semesters.length < count && year <= now.getFullYear() + maxYearsToCheck) {
+    const spring = buildSemesterConfig('spring', year);
+    if (now <= spring.cutoff) semesters.push({ value: spring.value, label: spring.label });
+    if (semesters.length >= count) break;
+
+    const fall = buildSemesterConfig('fall', year);
+    if (now <= fall.cutoff) semesters.push({ value: fall.value, label: fall.label });
+
+    year += 1;
+  }
+
+  return semesters.slice(0, count);
+}
+
+function populateStartDateSemesters() {
+  if (!startDateSelect) return;
+
+  const placeholderText = 'Select semester';
+  const previousValue = startDateSelect.value;
+  const options = getNextAvailableSemesters(new Date(), 3);
+
+  startDateSelect.innerHTML = '';
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  placeholder.textContent = placeholderText;
+  startDateSelect.appendChild(placeholder);
+
+  options.forEach(optionData => {
+    const option = document.createElement('option');
+    option.value = optionData.value;
+    option.textContent = optionData.label;
+    startDateSelect.appendChild(option);
+  });
+
+  if (previousValue && options.some(option => option.value === previousValue)) {
+    startDateSelect.value = previousValue;
+  }
+}
+
+populateStartDateSemesters();
 
 function getSubmitStatusElement() {
   if (!submitBtn) return null;
@@ -2594,6 +2693,27 @@ function toggleTransferSection(value) {
       }
     });
   }
+}
+
+function togglePreviousApplicationControlNumber(value) {
+  if (!previousApplicationControlGroup || !previousApplicationControlInput) return;
+
+  if (value === 'yes') {
+    previousApplicationControlGroup.style.display = 'block';
+    previousApplicationControlInput.required = true;
+  } else {
+    previousApplicationControlGroup.style.display = 'none';
+    previousApplicationControlInput.required = false;
+    previousApplicationControlInput.value = '';
+  }
+}
+
+if (previousApplicationSelect) {
+  previousApplicationSelect.addEventListener('change', function() {
+    togglePreviousApplicationControlNumber(this.value);
+  });
+
+  togglePreviousApplicationControlNumber(previousApplicationSelect.value);
 }
 
 // Disciplinary action toggle
@@ -3745,6 +3865,10 @@ function gatherAdmissionData() {
     usImmigrationStatusValue = otherValue ? `Other: ${otherValue}` : 'Other (not specified)';
   }
 
+  const previousApplicationValue = getValue('previousApplication');
+  const previousApplicationControlNumber = getValue('previousApplicationControlNumber');
+  const previousApplicationText = getSelectText('previousApplication') || '—';
+
   return {
     applicantName,
     firstName,
@@ -3760,6 +3884,7 @@ function gatherAdmissionData() {
     // Armenian citizenship and immigration status
     armenianCitizen: getValue('armenianCitizen') || '—',
     usImmigrationStatus: usImmigrationStatusValue,
+    travelToArmeniaForClinicals: getValue('travelToArmeniaForClinicals') || '—',
     lastTimeInArmenia: formatDateValue(getValue('lastTimeInArmenia')) || '—',
     armeniaExitDate: formatDateValue(getValue('armeniaExitDate')) || '—',
     email: getValue('email') || '—',
@@ -3776,7 +3901,12 @@ function gatherAdmissionData() {
     gpa: getValue('gpa') || '—',
     programChoice: getSelectText('program') || '—',
     startTerm: getSelectText('startDate') || '—',
-    previousApplication: getSelectText('previousApplication') || '—',
+    previousApplication: previousApplicationValue === 'yes' && previousApplicationControlNumber
+      ? `${previousApplicationText} (Control #: ${previousApplicationControlNumber})`
+      : previousApplicationText,
+    previousApplicationControlNumber: previousApplicationValue === 'yes'
+      ? (previousApplicationControlNumber || '—')
+      : 'Not applicable',
     // Transfer student information
     isTransferStudent: getValue('isTransferStudent'),
     prevInstitution: getValue('prevInstitution') || '—',
@@ -4035,6 +4165,7 @@ function populateAdmissionDocument(data) {
     // Armenian citizenship and immigration
     'armenian-citizen': data.armenianCitizen,
     'us-immigration-status': data.usImmigrationStatus,
+    'travel-to-armenia-clinicals': data.travelToArmeniaForClinicals,
     'last-time-armenia': data.lastTimeInArmenia,
     'armenia-exit-date': data.armeniaExitDate,
     'email': data.email,
@@ -4045,6 +4176,7 @@ function populateAdmissionDocument(data) {
     'program': data.programChoice,
     'start-term': data.startTerm,
     'previous-application': data.previousApplication,
+    'previous-application-control-number': data.previousApplicationControlNumber,
     'education': data.educationLevel,
     'institution': data.institution,
     'field-of-study': data.fieldOfStudy,

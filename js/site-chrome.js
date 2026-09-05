@@ -21,7 +21,7 @@ const ACNHS_HEADER_HTML = `
         <div class="help-dropdown-content" role="menu">
           <a href="academic-catalog.html" role="menuitem" data-action="open-catalog-picker">Academic Catalog</a>
           <a href="index.html#programs" role="menuitem">Programs</a>
-          <a href="#" role="menuitem" data-action="open-curriculum">Curriculum</a>
+          <a href="academic-catalog.html#curriculum" role="menuitem" data-action="open-curriculum">Curriculum</a>
           <a href="index.html#simulation" role="menuitem">Simulation</a>
         </div>
       </div>
@@ -176,15 +176,11 @@ function wireHeaderInteractions(root) {
 
   ensureCatalogPickerOverlay();
 
-  // Curriculum modal is only on index.html; fall back to the catalog page elsewhere.
+  // Curriculum always routes to the Academic Catalog curriculum section.
   root.querySelectorAll('[data-action="open-curriculum"]').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      if (typeof window.openCurriculumModal === 'function') {
-        window.openCurriculumModal();
-      } else {
-        window.location.href = 'academic-catalog.html';
-      }
+      window.location.href = 'academic-catalog.html#curriculum';
     });
   });
 
