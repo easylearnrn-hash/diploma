@@ -2127,6 +2127,35 @@
     return size;
   }
 
+  // Word/Google Docs export bold/italic/underline as inline CSS on <span> rather
+  // than <b>/<i>/<u> tags — without these, pasted formatting silently disappears.
+  function hasBoldWeight(styleText) {
+    const m = String(styleText || '').match(/font-weight\s*:\s*([a-z0-9]+)/i);
+    if (!m) return false;
+    const w = m[1].toLowerCase();
+    if (w === 'bold' || w === 'bolder') return true;
+    const num = parseInt(w, 10);
+    return Number.isFinite(num) && num >= 600;
+  }
+
+  function hasItalicStyle(styleText) {
+    return /font-style\s*:\s*italic/i.test(String(styleText || ''));
+  }
+
+  function hasUnderlineDecoration(styleText) {
+    return /text-decoration(-line)?\s*:\s*[^;]*underline/i.test(String(styleText || ''));
+  }
+
+  function buildSafeInlineStyle(styleText) {
+    const parts = [];
+    const size = clampFontSizeStyle(styleText);
+    if (size) parts.push(size);
+    if (hasBoldWeight(styleText)) parts.push('font-weight:700');
+    if (hasItalicStyle(styleText)) parts.push('font-style:italic');
+    if (hasUnderlineDecoration(styleText)) parts.push('text-decoration:underline');
+    return parts.join(';');
+  }
+
   function sanitizeBasicRichHtml(rawHtml) {
     const wrap = document.createElement('div');
     wrap.innerHTML = String(rawHtml || '');
@@ -2135,6 +2164,57 @@
     if (body) wrap.innerHTML = body.innerHTML;
 
     wrap.querySelectorAll('script,style,meta,link,iframe,object,embed').forEach(el => el.remove());
+
+    // Normalize pasted tables so real grid structure survives: drop
+    // caption/colgroup/col (promote caption text to a heading paragraph) and
+    // remove empty rows. TABLE/TR/TD/TH are kept in the allowed-tags list
+    // below so cell boundaries stay intact instead of collapsing into one
+    // run-on string.
+    wrap.querySelectorAll('table').forEach(table => {
+      const caption = table.querySelector('caption');
+      if (caption) {
+        const text = String(caption.textContent || '').replace(/\s+/g, ' ').trim();
+        if (text) {
+          const p = document.createElement('p');
+          const strong = document.createElement('strong');
+          strong.textContent = text;
+          p.appendChild(strong);
+          table.parentNode.insertBefore(p, table);
+        }
+        caption.remove();
+      }
+      table.querySelectorAll('colgroup,col').forEach(el => el.remove());
+      table.querySelectorAll('tr').forEach(tr => {
+        const hasContent = Array.from(tr.querySelectorAll('td,th')).some(c => String(c.textContent || '').trim());
+        if (!hasContent) tr.remove();
+      });
+      if (!table.querySelector('tr')) table.remove();
+    });
+
+    // With table-layout:auto, each pasted table sizes its own columns based on
+    // that table's content, so ordinal/hour columns end up a different width
+    // in every table. Force a fixed layout and pin short/numeric columns to
+    // the same width everywhere so tables line up symmetrically.
+    const NARROW_COL_WIDTH_PX = 64;
+    wrap.querySelectorAll('table').forEach(table => {
+      const rows = Array.from(table.querySelectorAll('tr'));
+      const colCount = rows.reduce((max, tr) => Math.max(max, tr.querySelectorAll('td,th').length), 0);
+      if (!colCount) return;
+
+      const colgroup = document.createElement('colgroup');
+      for (let c = 0; c < colCount; c++) {
+        const texts = rows
+          .map(tr => tr.querySelectorAll('td,th')[c])
+          .filter(Boolean)
+          .map(cell => String(cell.textContent || '').replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+        const isNarrow = texts.length > 0 && texts.every(t => t.length <= 6 && !/\s/.test(t));
+        const col = document.createElement('col');
+        if (isNarrow) col.setAttribute('style', `width:${NARROW_COL_WIDTH_PX}px`);
+        colgroup.appendChild(col);
+      }
+      table.insertBefore(colgroup, table.firstChild);
+    });
 
     wrap.querySelectorAll('div').forEach(div => {
       const p = document.createElement('p');
@@ -2208,7 +2288,7 @@
       }
     }
 
-    const allowedTags = new Set(['P', 'BR', 'H2', 'H3', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'HR']);
+    const allowedTags = new Set(['P', 'BR', 'H2', 'H3', 'UL', 'OL', 'LI', 'B', 'STRONG', 'I', 'EM', 'U', 'SPAN', 'HR', 'TABLE', 'COLGROUP', 'COL', 'THEAD', 'TBODY', 'TR', 'TD', 'TH']);
     Array.from(wrap.querySelectorAll('*')).forEach(el => {
       const tag = el.tagName.toUpperCase();
       if (!allowedTags.has(tag)) {
@@ -2216,51 +2296,38 @@
         return;
       }
 
-      const safeFontSize = clampFontSizeStyle(el.getAttribute('style'));
+      const rawStyle = el.getAttribute('style') || '';
+      const safeFontSize = clampFontSizeStyle(rawStyle);
+      const safeInlineStyle = buildSafeInlineStyle(rawStyle);
       Array.from(el.attributes).forEach(attr => el.removeAttribute(attr.name));
-      if (safeFontSize && (tag === 'SPAN' || tag === 'P' || tag === 'LI' || tag === 'H2' || tag === 'H3')) {
-        el.setAttribute('style', safeFontSize);
+      if (safeInlineStyle && (tag === 'SPAN' || tag === 'P' || tag === 'LI' || tag === 'H2' || tag === 'H3')) {
+        el.setAttribute('style', safeInlineStyle);
+      }
+      if (tag === 'TABLE') {
+        el.setAttribute('style', 'table-layout:fixed;border-collapse:collapse;width:100%;margin:8px 0;' + (safeFontSize ? safeFontSize + ';' : ''));
+      } else if (tag === 'TD' || tag === 'TH') {
+        const bold = tag === 'TH' ? 'font-weight:700;' : '';
+        el.setAttribute('style', `border:1px solid rgba(130,130,145,0.6);padding:4px 8px;vertical-align:top;text-align:left;word-wrap:break-word;${bold}` + (safeFontSize ? safeFontSize + ';' : ''));
+      } else if (tag === 'COL') {
+        // Preserve only the width we generated above (px value), nothing from pasted markup.
+        const widthMatch = rawStyle.match(/width\s*:\s*(\d+(?:\.\d+)?px)/i);
+        if (widthMatch) el.setAttribute('style', `width:${widthMatch[1]}`);
       }
     });
 
-    // Google Docs and some editors emit invalid wrappers like <b><p>...</p></b>,
-    // which makes entire pasted sections appear bold. Unwrap formatting tags that
-    // contain block elements and keep only inline-level bold/italic/underline.
+    // Google Docs and some editors emit invalid wrappers like <b><p>...</p></b>
+    // (an inline tag physically containing a block element). That's always a
+    // paste artifact, never something a user can produce intentionally, so
+    // unwrap it and keep only the inline-level bold/italic/underline tag.
+    // NOTE: do not unwrap based on text length/ratio — a user who deliberately
+    // bolds or italicizes a full sentence/paragraph before copying it must see
+    // that formatting preserved on paste.
     wrap.querySelectorAll('b,strong,i,em,u').forEach(el => {
-      const txt = String(el.textContent || '').replace(/\s+/g, ' ').trim();
-      const parentText = String(el.parentElement?.textContent || '').replace(/\s+/g, ' ').trim();
-      const parentLen = parentText.length;
-      const ratio = parentLen ? (txt.length / parentLen) : 0;
-      const isRootLevel = el.parentElement === wrap;
-      const isOnlyMeaningfulInParagraph = !!(el.parentElement && el.parentElement.tagName === 'P' &&
-        Array.from(el.parentElement.childNodes).every(n =>
-          n === el || (n.nodeType === 3 && !String(n.nodeValue || '').trim())
-        ));
-      const broadInlineWrapper =
-        txt.length > 180 ||
-        (txt.length > 90 && /[.!?։]/.test(txt)) ||
-        (txt.length > 45 && ratio > 0.92) ||
-        ((isRootLevel || isOnlyMeaningfulInParagraph) && txt.length > 35);
-      if (broadInlineWrapper || el.querySelector('p,h1,h2,h3,h4,h5,h6,ul,ol,li,div,hr,table,blockquote')) {
+      if (el.querySelector('p,h1,h2,h3,h4,h5,h6,ul,ol,li,div,hr,table,blockquote')) {
         el.replaceWith(...Array.from(el.childNodes));
       }
     });
 
-    // If a long paragraph is mostly bold due paste wrappers, treat it as accidental
-    // and unwrap all bold tags in that paragraph while keeping short intentional bold text.
-    wrap.querySelectorAll('p').forEach(p => {
-      const plain = String(p.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!plain || plain.length < 70) return;
-
-      const boldNodes = Array.from(p.querySelectorAll('b,strong'));
-      if (!boldNodes.length) return;
-
-      const boldLen = boldNodes.reduce((sum, n) => sum + String(n.textContent || '').replace(/\s+/g, ' ').trim().length, 0);
-      const ratio = boldLen / plain.length;
-      if (ratio < 0.72) return;
-
-      boldNodes.forEach(n => n.replaceWith(...Array.from(n.childNodes)));
-    });
 
     // Malformed paste can also create headings that wrap full paragraphs/lists,
     // e.g. <h2><p>...</p></h2>, causing entire sections to look bold. Unwrap those.
@@ -2407,7 +2474,7 @@
       else el.removeAttribute('style');
     });
 
-    wrap.querySelectorAll('p, li').forEach(el => {
+    wrap.querySelectorAll('p, li, td, th').forEach(el => {
       const current = extractFontSizePx(el.getAttribute('style') || '');
       if (current === null || current < baseSizePx) el.style.fontSize = `${baseSizePx}px`;
     });
