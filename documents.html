@@ -2184,6 +2184,13 @@
         caption.remove();
       }
       table.querySelectorAll('colgroup,col').forEach(el => el.remove());
+      // The HTML parser auto-wraps bare <tr> in an implicit <tbody>; unwrap any
+      // existing thead/tbody/tfoot (implicit or pasted) so every <tr> becomes a
+      // direct child of <table>. We rebuild a clean thead/tbody pair below —
+      // leaving the old wrapper behind would produce an empty stray <tbody>.
+      Array.from(table.querySelectorAll('thead,tbody,tfoot')).forEach(wrapper => {
+        wrapper.replaceWith(...Array.from(wrapper.childNodes));
+      });
       table.querySelectorAll('tr').forEach(tr => {
         const hasContent = Array.from(tr.querySelectorAll('td,th')).some(c => String(c.textContent || '').trim());
         if (!hasContent) tr.remove();
@@ -2214,6 +2221,22 @@
         colgroup.appendChild(col);
       }
       table.insertBefore(colgroup, table.firstChild);
+
+      // Without an explicit <thead>, all rows land in one implicit <tbody> and
+      // the header row does not repeat when a table spans multiple PDF pages —
+      // it just gets cut off wherever the page break falls. Split the leading
+      // all-TH row into a real <thead> so Chromium's print pagination reprints
+      // it on every page the table continues onto.
+      const firstRow = rows[0];
+      const isHeaderRow = !!firstRow && Array.from(firstRow.children).every(c => c.tagName === 'TH');
+      const thead = document.createElement('thead');
+      const tbody = document.createElement('tbody');
+      rows.forEach((tr, idx) => {
+        if (idx === 0 && isHeaderRow) thead.appendChild(tr);
+        else tbody.appendChild(tr);
+      });
+      if (thead.childNodes.length) table.appendChild(thead);
+      if (tbody.childNodes.length) table.appendChild(tbody);
     });
 
     wrap.querySelectorAll('div').forEach(div => {
@@ -2304,10 +2327,21 @@
         el.setAttribute('style', safeInlineStyle);
       }
       if (tag === 'TABLE') {
-        el.setAttribute('style', 'table-layout:fixed;border-collapse:collapse;width:100%;margin:8px 0;' + (safeFontSize ? safeFontSize + ';' : ''));
+        el.setAttribute('style', 'table-layout:fixed;border-collapse:collapse;width:100%;max-width:100%;margin:8px 0;' + (safeFontSize ? safeFontSize + ';' : ''));
       } else if (tag === 'TD' || tag === 'TH') {
         const bold = tag === 'TH' ? 'font-weight:700;' : '';
-        el.setAttribute('style', `border:1px solid rgba(130,130,145,0.6);padding:4px 8px;vertical-align:top;text-align:left;word-wrap:break-word;${bold}` + (safeFontSize ? safeFontSize + ';' : ''));
+        // overflow-wrap/min-width guard against a Chromium table-layout:fixed quirk where
+        // an unbreakable token (e.g. a long unspaced number/string) ignores the assigned
+        // column width and spills the table's painted border past the page frame.
+        el.setAttribute('style', `border:1px solid rgba(130,130,145,0.6);padding:4px 8px;vertical-align:top;text-align:left;word-wrap:break-word;overflow-wrap:anywhere;overflow:hidden;min-width:0;${bold}` + (safeFontSize ? safeFontSize + ';' : ''));
+      } else if (tag === 'THEAD') {
+        // Forces Chromium's print pagination to repeat this row on every page the table spans.
+        el.setAttribute('style', 'display:table-header-group;');
+      } else if (tag === 'TBODY') {
+        el.setAttribute('style', 'display:table-row-group;');
+      } else if (tag === 'TR') {
+        // Keeps a single row from being sliced across a PDF page boundary.
+        el.setAttribute('style', 'page-break-inside:avoid;break-inside:avoid;');
       } else if (tag === 'COL') {
         // Preserve only the width we generated above (px value), nothing from pasted markup.
         const widthMatch = rawStyle.match(/width\s*:\s*(\d+(?:\.\d+)?px)/i);
@@ -3037,8 +3071,8 @@
         ? armDate(docDate)
         : '<span style="color:#aaa;">' + emptyDatePlaceholder + '</span>';
       sigHtml = `
-        <div class="doc-sig-wrapper" style="display:flex;justify-content:flex-end;">
-          <div style="text-align:left;min-width:280px;max-width:340px;">
+        <div class="doc-sig-wrapper" style="text-align:right;">
+          <div style="display:inline-block;text-align:left;min-width:280px;max-width:340px;">
             <div style="font-size:11.5px;font-weight:700;color:#1a2e4a;line-height:1.6;margin-bottom:30px;">
               ${escHtml(acnhsTitle)}<br>
               <span style="font-weight:400;font-size:10.5px;">${instName}</span>
@@ -3056,8 +3090,8 @@
     } else {
       const dateStr = docDate ? fmtDate(docDate) : '_______________';
       sigHtml = `
-        <div class="doc-sig-wrapper" style="display:flex;justify-content:flex-end;">
-          <div style="text-align:left;min-width:260px;max-width:320px;">
+        <div class="doc-sig-wrapper" style="text-align:right;">
+          <div style="display:inline-block;text-align:left;min-width:260px;max-width:320px;">
             <div style="border-bottom:1px solid #1a2e4a;width:220px;margin-bottom:6px;"></div>
             <div style="font-size:12px;color:#1a2e4a;font-weight:700;">${escHtml(acnhsName)}</div>
             <div style="font-size:11px;color:#555;margin-top:2px;">${escHtml(acnhsTitle)}</div>
@@ -3414,9 +3448,10 @@
   /**
    * Build a complete self-contained A4 HTML document for Playwright PDF export.
    *
-   * Layout (physical A4 = 297 mm tall):
-  *   0–275 mm  : Content viewport        (border frame + body)
-  *   275–297 mm: Playwright footer band  (page numbers in pdf-server.js)
+  * Layout (physical A4 = 297 mm tall):
+  *   Playwright reserves top and bottom bands (pdf-server.js margins)
+  *   for repeating header/footer templates on every page.
+  *   The HTML below is the body viewport content between those bands.
    *
   * position:fixed elements are relative to the content viewport.
   * A dedicated inner content wrapper creates safe padding from the border.
@@ -3439,7 +3474,14 @@
   <style>
     :root { --doc-ink: #0a0f1e; --doc-slate: #3a4a6b; --doc-gold: #9a7a2c; }
 
-    @page { size: A4; margin: 0; }
+    /* Must match pdf-server.js renderPdfBuffer() margin.top/margin.bottom exactly.
+       Chromium's automatic body pagination obeys THIS @page margin — it does NOT
+       shrink to fit Playwright's CDP margin/headerTemplate reservation on its own.
+       That mismatch (this used to be plain margin:0) is why body content previously
+       started at y=0 on every continuation page, overlapping the repeating
+       header/footer bands. Left/right stay 0 here; horizontal safe space is
+       handled by .pdf-content's own padding below. */
+    @page { size: A4; margin: 34mm 0 22mm 0; }
     *, *::before, *::after { box-sizing: border-box; }
 
     html, body {
@@ -3460,37 +3502,25 @@
       -webkit-font-feature-settings: "liga" 0;
     }
 
-     /* ─── PAGE BORDER FRAME ───────────────────────────────────────────────────
-       position:fixed → repeats on EVERY page in Playwright PDF.
-       Coordinates are relative to the content viewport.
-     ──────────────────────────────────────────────────────────────────────── */
-    .pdf-frame-outer {
-      position: fixed; top: 4mm; left: 4mm; right: 4mm; bottom: 4mm;
-      border: 1.5px solid rgba(10,15,30,0.22);
-      pointer-events: none; z-index: 100;
-    }
-    .pdf-frame-inner {
-      position: fixed; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
-      border: 0.5px solid rgba(154,122,44,0.45);
-      pointer-events: none; z-index: 100;
-    }
-
-    /* ─── WATERMARK ───────────────────────────────────────────────────────── */
+     /* ─── WATERMARK ───────────────────────────────────────────────────────── */
+    /* Full-page flex box (not a self-sized transform) so the image is always
+       true-centered regardless of its own rendered/decoded size. */
     .pdf-watermark {
-      position: fixed; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
+      position: fixed; inset: 0;
+      display: flex; align-items: center; justify-content: center;
       opacity: 0.032; pointer-events: none; z-index: 1;
     }
-    .pdf-watermark img { width: 420px; max-width: 80%; }
+    .pdf-watermark img { display: block; width: 420px; max-width: 80%; }
 
      /* ─── CONTENT WRAPPER ─────────────────────────────────────────────────────
-       Safe inner area inside the page frame for continuation-page readability.
-       Top 22 mm keeps first lines away from top border; bottom 18 mm reserves
-       breathing room before the footer band.
+       @page margin (top/bottom) now reserves the header/footer band on every
+       page, so this only needs to add the horizontal safe gap (@page left/right
+       is 0) plus a small breathing gap so the first/last line isn't flush
+       against the header/footer rule.
      ──────────────────────────────────────────────────────────────────────── */
      .page-content,
      .pdf-content {
-      padding: 22mm 12mm 18mm 12mm;
+      padding: 3mm 12mm 3mm 12mm;
       position: relative;
       z-index: 2;
      }
@@ -3555,7 +3585,10 @@
 
     /* ─── BODY ─────────────────────────────────────────────────────────────── */
     .doc-body { line-height: 1.75; }
-    .doc-body p { margin: 0 0 3.5mm 0; text-align: justify; hyphens: auto; font-weight: 400; }
+    .doc-body p {
+      margin: 0 0 3.5mm 0; text-align: justify; hyphens: auto; font-weight: 400;
+      orphans: 3; widows: 3;
+    }
     .doc-body h2 {
       margin: 4.2mm 0 2mm 0;
       font-family: 'Noto Sans Armenian', 'Inter', sans-serif;
@@ -3564,6 +3597,8 @@
       color: var(--doc-ink);
       line-height: 1.45;
       letter-spacing: 0.01em;
+      break-after: avoid; page-break-after: avoid;
+      break-inside: avoid; page-break-inside: avoid;
     }
     .doc-body h3 {
       margin: 3.2mm 0 1.6mm 0;
@@ -3572,6 +3607,8 @@
       font-weight: 700;
       color: #24344f;
       line-height: 1.45;
+      break-after: avoid; page-break-after: avoid;
+      break-inside: avoid; page-break-inside: avoid;
     }
     .doc-body ul,
     .doc-body ol { margin: 0 0 3mm 6mm; padding-left: 4mm; }
@@ -3677,9 +3714,6 @@
   </style>
 </head>
 <body>
-  <!-- Double border frame — position:fixed → repeats on every page -->
-  <div class="pdf-frame-outer"></div>
-  <div class="pdf-frame-inner"></div>
   <!-- Centred watermark — position:fixed → repeats on every page -->
   <div class="pdf-watermark"><img src="${logoDataUrl}" alt="ACNHS Seal"></div>
   <!-- Document content -->
@@ -3688,6 +3722,78 @@ ${contentHtml}
   </div>
 </body>
 </html>`;
+  }
+
+  function stripPdfBodyChrome(contentHtml) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = String(contentHtml || '');
+    wrap.querySelectorAll('.doc-header, .doc-microtext').forEach(el => el.remove());
+    return wrap.innerHTML;
+  }
+
+  function buildPdfHeaderTemplate(contentHtml, logoDataUrl, refNo) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = String(contentHtml || '');
+
+    // Clone the ACTUAL .doc-header / .doc-microtext markup (not a hand-picked
+    // reconstruction) so fonts, weights, sizes, spacing, the logo's exact
+    // 77x77px size, and the security microtext line are pixel-identical to
+    // the on-screen design — never re-typed/approximated here.
+    const headerEl = wrap.querySelector('.doc-header');
+    const microEl = wrap.querySelector('.doc-microtext');
+    const headerOuter = headerEl ? headerEl.outerHTML : '';
+    const microOuter = microEl ? microEl.outerHTML : '';
+    if (!headerOuter) return '<div></div>';
+
+    // Exact copy of the .doc-header / .doc-microtext rules from buildPrintHtml's
+    // <style> block. Playwright renders headerTemplate in an isolated frame
+    // that does not see the main document's stylesheet, so these rules must be
+    // duplicated here verbatim — do not hand-simplify or approximate values.
+    return `
+      <style>
+        :root { --doc-ink:#0a0f1e; --doc-slate:#3a4a6b; --doc-gold:#9a7a2c; }
+        * { box-sizing:border-box; font-feature-settings:"liga" 0,"clig" 0,"dlig" 0; }
+        .pdf-header-wrap { width:100%; padding:0 12mm; margin:0; }
+        .doc-header {
+          display:grid; grid-template-columns:1fr auto 1fr;
+          align-items:center; padding-bottom:5mm;
+          border-bottom:1.5px solid rgba(10,15,30,0.15); position:relative;
+        }
+        .doc-header::after {
+          content:''; position:absolute; bottom:-3px; left:0; right:0;
+          height:0.5px; background:rgba(154,122,44,0.45);
+        }
+        .doc-header-left  { text-align:left;  padding-right:15px; }
+        .doc-header-right { text-align:right; padding-left:15px; }
+        .doc-header-center { display:flex; justify-content:center; }
+        .doc-header-center img { width:77px; height:77px; object-fit:contain; }
+        .uni-name {
+          font-family:'Playfair Display', Georgia, serif;
+          font-size:10pt; font-weight:800; letter-spacing:0.05em;
+          text-transform:uppercase; color:var(--doc-ink); line-height:1.35; margin-bottom:3.5px;
+        }
+        .uni-dept {
+          font-family:'Inter', sans-serif; font-size:7.5pt; font-weight:500;
+          color:var(--doc-slate); text-transform:uppercase; letter-spacing:0.04em; line-height:1.4;
+        }
+        .doc-ref {
+          font-family:'Inter', sans-serif; font-size:8.5pt; font-weight:700;
+          color:var(--doc-ink); text-transform:uppercase;
+          letter-spacing:0.06em; margin-bottom:3.5px; line-height:1.35;
+        }
+        .doc-meta {
+          font-family:'Inter', sans-serif; font-size:7.5pt; font-weight:500;
+          color:var(--doc-slate); text-transform:uppercase; letter-spacing:0.04em; line-height:1.4;
+        }
+        .doc-url { color:var(--doc-gold); font-weight:600; }
+        .doc-microtext {
+          font-family:'Inter', sans-serif; font-size:5.5pt; text-align:center;
+          letter-spacing:0.08em; color:rgba(10,15,30,0.18);
+          text-transform:uppercase; overflow:hidden; white-space:nowrap;
+          margin:1.5mm 0; line-height:1.2;
+        }
+      </style>
+      <div class="pdf-header-wrap">${headerOuter}${microOuter}</div>`;
   }
 
   function extractEditableWordContent(contentHtml) {
@@ -3993,14 +4099,17 @@ ${contentHtml}
       const filename = ((hospitalSlug ? `${refNo}_${hospitalSlug}` : refNo)
         .replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.pdf';
 
-      // ── Build self-contained print HTML ───────────────────────────────────
-      const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
+      // Keep page-header chrome out of body flow; Playwright headerTemplate repeats it per page.
+      const pdfBodyHtml = stripPdfBodyChrome(contentEl.innerHTML);
+      const logoSrc = getLogoSrc() || '';
+      const printHtml = buildPrintHtml(pdfBodyHtml, logoSrc, refNo);
+      const headerHtml = buildPdfHeaderTemplate(contentEl.innerHTML, logoSrc, refNo);
 
       // ── POST to Playwright PDF server ─────────────────────────────────────
       const response = await fetch('http://localhost:8001/generate-pdf', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ html: printHtml, filename, refNo }),
+        body:    JSON.stringify({ html: printHtml, filename, refNo, headerHtml }),
       });
 
       if (!response.ok) {

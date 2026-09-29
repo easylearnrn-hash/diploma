@@ -55,7 +55,12 @@ function sanitizeFilename(name, fallback, ext) {
 }
 
 // Single source of truth for page layout: PDF and Word both come from this.
-async function renderPdfBuffer(html, safeRef) {
+// headerHtml is a self-contained (inline-styles only) letterhead snippet built
+// client-side by buildPdfHeaderTemplate() in documents.html. Playwright renders
+// it inside the reserved margin.top band on every generated page, which is the
+// only mechanism that both repeats AND reserves real per-page space — CSS
+// padding on the flowing body content only applies once, not per page.
+async function renderPdfBuffer(html, safeRef, headerHtml) {
   let browser;
   try {
     browser = await chromium.launch({ headless: true });
@@ -73,12 +78,12 @@ async function renderPdfBuffer(html, safeRef) {
       preferCSSPageSize: false,
       displayHeaderFooter: true,
       margin: {
-        top: '0',
+        top: '34mm',
         bottom: '22mm',
         left: '0',
         right: '0',
       },
-      headerTemplate: '<div></div>',
+      headerTemplate: headerHtml || '<div></div>',
       footerTemplate: `
         <div style="
           font-size: 8px;
@@ -146,10 +151,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── Parse body ──
-  let html, filename, refNo;
+  let html, filename, refNo, headerHtml;
   try {
     const raw = await readBody(req);
-    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '' } = JSON.parse(raw));
+    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '', headerHtml = '' } = JSON.parse(raw));
   } catch (e) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
@@ -186,7 +191,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const pdfBuffer = await renderPdfBuffer(html, safeRef);
+    const pdfBuffer = await renderPdfBuffer(html, safeRef, headerHtml);
 
     res.writeHead(200, {
       'Content-Type': 'application/pdf',
