@@ -694,3 +694,346 @@ ALTER TABLE public.test_grade_history
 
 COMMENT ON COLUMN public.test_grade_history.answered_snapshot IS
     'Answered questions snapshot: array of {index, id, stem, answers:[{id,text}]}. Only answered questions stored.';
+
+-- ============================================================
+-- ALERT CENTER: student-portal alerts + homepage pop-ups
+-- ============================================================
+-- Consolidated, idempotent version of:
+--   CREATE-PORTAL-ALERTS-SYSTEM.sql, ADD-ALERT-GROUP-TARGETING.sql,
+--   UPGRADE-ALERTS-TO-RULE-ENGINE.sql, ADD-ALERT-POSITION-AND-LINK.sql,
+--   ADD-PUBLIC-ALERT-AUDIENCE.sql and ADD-HOMEPAGE-POPUP-ALERTS.sql
+-- Documentation: HOMEPAGE-POPUP-ALERTS-SETUP.md
+
+CREATE TABLE IF NOT EXISTS public.portal_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    message_html TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'success', 'warn', 'critical')),
+    is_active BOOLEAN DEFAULT true,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    updated_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    target_type TEXT NOT NULL DEFAULT 'all',
+    target_student_ids JSONB DEFAULT '[]'::jsonb,
+    display_mode TEXT NOT NULL DEFAULT 'once_ever' CHECK (display_mode IN ('every_load', 'once_ever', 'times_limit', 'daily', 'daily_first_login')),
+    max_displays INTEGER,
+    date_rule_type TEXT NOT NULL DEFAULT 'always' CHECK (date_rule_type IN ('always', 'date_range', 'monthly_range', 'custom_dates')),
+    start_date DATE,
+    end_date DATE,
+    monthly_start_day INTEGER CHECK (monthly_start_day >= 1 AND monthly_start_day <= 31),
+    monthly_end_day INTEGER CHECK (monthly_end_day >= 1 AND monthly_end_day <= 31),
+    custom_dates JSONB DEFAULT '[]'::jsonb,
+    timezone TEXT DEFAULT 'Asia/Yerevan',
+    requires_response BOOLEAN DEFAULT false,
+    response_type TEXT DEFAULT 'none' CHECK (response_type IN ('none', 'yes_no')),
+    yes_label TEXT DEFAULT 'Yes',
+    no_label TEXT DEFAULT 'No'
+);
+
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS target_group TEXT;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS display_position TEXT NOT NULL DEFAULT 'modal';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS link_url TEXT;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS link_label TEXT DEFAULT 'Learn More';
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_display_position_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_display_position_check
+    CHECK (display_position IN ('modal', 'banner_top', 'banner_bottom', 'toast_tr', 'toast_tl', 'toast_br', 'toast_bl'));
+
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS targeting_rules JSONB DEFAULT '{"mode": "all", "include_students": [], "exclude_students": [], "groups": [], "statuses": [], "tags": [], "logic": "AND"}'::jsonb;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS frequency_rules JSONB DEFAULT '{"cap_type": "once_ever", "max_displays": null, "cooldown_hours": null, "per_period": null, "stop_after_response": false, "stop_after_days": null}'::jsonb;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS schedule_rules JSONB DEFAULT '{"recurrence_type": "always", "start_datetime": null, "end_datetime": null, "timezone": "Asia/Yerevan", "daily_pattern": null, "weekly_pattern": null, "monthly_pattern": null, "custom_dates": [], "exclude_dates": []}'::jsonb;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS trigger_rules JSONB DEFAULT '{"when": ["on_login"], "pages_whitelist": [], "pages_blacklist": [], "time_window": null}'::jsonb;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS interaction_rules JSONB DEFAULT '{"dismissible": true, "required_response": false, "remind_on_no": false, "auto_dismiss_seconds": null}'::jsonb;
+
+CREATE INDEX IF NOT EXISTS idx_portal_alerts_active ON public.portal_alerts(is_active);
+CREATE INDEX IF NOT EXISTS idx_portal_alerts_target_type ON public.portal_alerts(target_type);
+CREATE INDEX IF NOT EXISTS idx_portal_alerts_created_at ON public.portal_alerts(created_at DESC);
+
+-- Alert Center V2 columns
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS display_surface   TEXT        NOT NULL DEFAULT 'portal';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS lifecycle_status  TEXT        NOT NULL DEFAULT 'published';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS priority          TEXT        NOT NULL DEFAULT 'normal';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS publish_at        TIMESTAMPTZ;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS expires_at        TIMESTAMPTZ;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS popup_frequency   TEXT        NOT NULL DEFAULT 'once_per_session';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS dismiss_behavior  TEXT        NOT NULL DEFAULT 'dismissible';
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS acknowledge_label TEXT;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS link_new_tab      BOOLEAN     NOT NULL DEFAULT true;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS revision          INTEGER     NOT NULL DEFAULT 1;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS published_at      TIMESTAMPTZ;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS published_by      TEXT;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS updated_by        TEXT;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS archived_at       TIMESTAMPTZ;
+ALTER TABLE public.portal_alerts ADD COLUMN IF NOT EXISTS archived_by       TEXT;
+
+DO $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT conname
+    FROM pg_constraint
+    WHERE conrelid = 'public.portal_alerts'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) ILIKE '%target_type%'
+  LOOP
+    EXECUTE format('ALTER TABLE public.portal_alerts DROP CONSTRAINT %I', r.conname);
+  END LOOP;
+END $$;
+
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_target_type_check
+  CHECK (target_type IN ('all', 'group', 'individual', 'public', 'students'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_display_surface_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_display_surface_check
+  CHECK (display_surface IN ('portal', 'homepage', 'both'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_lifecycle_status_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_lifecycle_status_check
+  CHECK (lifecycle_status IN ('draft', 'published', 'archived'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_priority_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_priority_check
+  CHECK (priority IN ('normal', 'important', 'urgent', 'critical'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_popup_frequency_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_popup_frequency_check
+  CHECK (popup_frequency IN ('every_visit', 'once_per_session', 'once_per_visitor'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_dismiss_behavior_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_dismiss_behavior_check
+  CHECK (dismiss_behavior IN ('dismissible', 'acknowledge'));
+ALTER TABLE public.portal_alerts DROP CONSTRAINT IF EXISTS portal_alerts_revision_check;
+ALTER TABLE public.portal_alerts ADD CONSTRAINT portal_alerts_revision_check
+  CHECK (revision >= 1);
+
+UPDATE public.portal_alerts
+SET priority = CASE severity WHEN 'critical' THEN 'critical' WHEN 'warn' THEN 'important' ELSE priority END
+WHERE priority = 'normal'
+  AND severity IN ('critical', 'warn');
+
+CREATE INDEX IF NOT EXISTS idx_portal_alerts_surface_status
+  ON public.portal_alerts (display_surface, lifecycle_status, is_active);
+CREATE INDEX IF NOT EXISTS idx_portal_alerts_window
+  ON public.portal_alerts (publish_at, expires_at);
+
+CREATE TABLE IF NOT EXISTS public.portal_alert_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    template_name TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message_html TEXT NOT NULL,
+    severity TEXT NOT NULL DEFAULT 'info' CHECK (severity IN ('info', 'success', 'warn', 'critical')),
+    requires_response BOOLEAN DEFAULT false,
+    response_type TEXT DEFAULT 'none' CHECK (response_type IN ('none', 'yes_no')),
+    yes_label TEXT DEFAULT 'Yes',
+    no_label TEXT DEFAULT 'No',
+    created_at TIMESTAMPTZ DEFAULT timezone('utc', now())
+);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_templates_name ON public.portal_alert_templates(template_name);
+
+CREATE TABLE IF NOT EXISTS public.portal_alert_impressions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    alert_id UUID NOT NULL REFERENCES public.portal_alerts(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    shown_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    shown_date_local DATE NOT NULL,
+    page_path TEXT,
+    CONSTRAINT unique_impression UNIQUE (alert_id, student_id, shown_date_local)
+);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_impressions_alert ON public.portal_alert_impressions(alert_id);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_impressions_student ON public.portal_alert_impressions(student_id);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_impressions_date ON public.portal_alert_impressions(shown_date_local);
+
+CREATE TABLE IF NOT EXISTS public.portal_alert_responses (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    alert_id UUID NOT NULL REFERENCES public.portal_alerts(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    answer TEXT NOT NULL CHECK (answer IN ('yes', 'no')),
+    answered_at TIMESTAMPTZ DEFAULT timezone('utc', now()),
+    page_path TEXT,
+    CONSTRAINT unique_response UNIQUE (alert_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_responses_alert ON public.portal_alert_responses(alert_id);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_responses_student ON public.portal_alert_responses(student_id);
+CREATE INDEX IF NOT EXISTS idx_portal_alert_responses_answer ON public.portal_alert_responses(answer);
+
+ALTER TABLE public.portal_alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_alert_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_alert_impressions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.portal_alert_responses ENABLE ROW LEVEL SECURITY;
+
+-- NOTE: anonymous access is required because admin sign-in is client-side (see HOMEPAGE-POPUP-ALERTS-SETUP.md,
+-- "Security model"). Content safety is enforced by the portal_alerts_v2_guard trigger below.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alerts' AND policyname = 'Admin full access to alerts') THEN
+        CREATE POLICY "Admin full access to alerts" ON public.portal_alerts FOR ALL TO anon USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alert_templates' AND policyname = 'Admin full access to templates') THEN
+        CREATE POLICY "Admin full access to templates" ON public.portal_alert_templates FOR ALL TO anon USING (true) WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alert_impressions' AND policyname = 'Students can insert own impressions') THEN
+        CREATE POLICY "Students can insert own impressions" ON public.portal_alert_impressions FOR INSERT TO anon WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alert_impressions' AND policyname = 'Admin can read impressions') THEN
+        CREATE POLICY "Admin can read impressions" ON public.portal_alert_impressions FOR SELECT TO anon USING (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alert_responses' AND policyname = 'Students can insert own responses') THEN
+        CREATE POLICY "Students can insert own responses" ON public.portal_alert_responses FOR INSERT TO anon WITH CHECK (true);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'portal_alert_responses' AND policyname = 'Admin can read responses') THEN
+        CREATE POLICY "Admin can read responses" ON public.portal_alert_responses FOR SELECT TO anon USING (true);
+    END IF;
+END$$;
+
+CREATE OR REPLACE FUNCTION update_portal_alerts_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = timezone('utc', now());
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_update_portal_alerts_timestamp ON public.portal_alerts;
+CREATE TRIGGER trigger_update_portal_alerts_timestamp
+    BEFORE UPDATE ON public.portal_alerts
+    FOR EACH ROW
+    EXECUTE FUNCTION update_portal_alerts_updated_at();
+
+CREATE OR REPLACE FUNCTION validate_alert_rules()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT (NEW.targeting_rules ? 'mode') THEN
+    RAISE EXCEPTION 'targeting_rules must have "mode" key';
+  END IF;
+  IF NOT (NEW.frequency_rules ? 'cap_type') THEN
+    RAISE EXCEPTION 'frequency_rules must have "cap_type" key';
+  END IF;
+  IF NOT (NEW.schedule_rules ? 'recurrence_type') THEN
+    RAISE EXCEPTION 'schedule_rules must have "recurrence_type" key';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS validate_alert_rules_trigger ON public.portal_alerts;
+CREATE TRIGGER validate_alert_rules_trigger
+  BEFORE INSERT OR UPDATE ON public.portal_alerts
+  FOR EACH ROW
+  EXECUTE FUNCTION validate_alert_rules();
+
+-- Lifecycle rules, content safety (public homepage!) and the revision counter
+CREATE OR REPLACE FUNCTION public.portal_alerts_v2_guard()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_url TEXT;
+BEGIN
+  IF NEW.lifecycle_status IN ('draft', 'archived') THEN
+    NEW.is_active := FALSE;
+  ELSIF NEW.is_active IS NULL THEN
+    NEW.is_active := TRUE;
+  END IF;
+
+  IF NEW.lifecycle_status = 'published' THEN
+    IF TG_OP = 'INSERT' THEN
+      NEW.published_at := COALESCE(NEW.published_at, now());
+    ELSIF OLD.lifecycle_status IS DISTINCT FROM 'published'
+          AND NEW.published_at IS NOT DISTINCT FROM OLD.published_at THEN
+      NEW.published_at := now();
+    END IF;
+  END IF;
+
+  IF NEW.lifecycle_status = 'archived' THEN
+    IF TG_OP = 'INSERT' OR OLD.lifecycle_status IS DISTINCT FROM 'archived' THEN
+      NEW.archived_at := COALESCE(NEW.archived_at, now());
+    END IF;
+  ELSE
+    NEW.archived_at := NULL;
+    NEW.archived_by := NULL;
+  END IF;
+
+  IF char_length(COALESCE(NEW.title, '')) > 200 THEN
+    RAISE EXCEPTION 'Alert title is too long (maximum 200 characters).' USING ERRCODE = '22023';
+  END IF;
+  IF char_length(COALESCE(NEW.message_html, '')) > 20000 THEN
+    RAISE EXCEPTION 'Alert message is too long (maximum 20,000 characters).' USING ERRCODE = '22023';
+  END IF;
+  IF char_length(COALESCE(NEW.link_label, '')) > 80 THEN
+    RAISE EXCEPTION 'Button label is too long (maximum 80 characters).' USING ERRCODE = '22023';
+  END IF;
+
+  IF NEW.message_html ~* '<\s*/?\s*(script|iframe|object|embed|style|link|meta|base|form|svg|math)(\s|>|/|$)'
+     OR NEW.message_html ~* '<[^>]*\son[a-z]+\s*='
+     OR NEW.message_html ~* 'javascript\s*:'
+     OR NEW.message_html ~* 'data\s*:\s*text/html' THEN
+    RAISE EXCEPTION 'Alert message contains markup that is not allowed (scripts, frames, styles or event handlers).' USING ERRCODE = '22023';
+  END IF;
+
+  v_url := NULLIF(btrim(COALESCE(NEW.link_url, '')), '');
+  IF v_url IS NOT NULL THEN
+    IF NOT (v_url ~* '^(https?://|mailto:|tel:)[^[:space:]<>"'']+$' OR v_url ~ '^[^:[:space:]<>"'']+$') THEN
+      RAISE EXCEPTION 'Alert link must start with https://, http://, mailto:, tel: or be a relative page such as hub.html.' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  NEW.link_url := v_url;
+
+  IF NEW.publish_at IS NOT NULL AND NEW.expires_at IS NOT NULL AND NEW.expires_at <= NEW.publish_at THEN
+    RAISE EXCEPTION 'The expiration time must be later than the start time.' USING ERRCODE = '22023';
+  END IF;
+
+  IF TG_OP = 'UPDATE' AND NEW.revision IS NOT DISTINCT FROM OLD.revision THEN
+    IF NEW.title             IS DISTINCT FROM OLD.title
+       OR NEW.message_html      IS DISTINCT FROM OLD.message_html
+       OR NEW.link_url          IS DISTINCT FROM OLD.link_url
+       OR NEW.link_label        IS DISTINCT FROM OLD.link_label
+       OR NEW.link_new_tab      IS DISTINCT FROM OLD.link_new_tab
+       OR NEW.priority          IS DISTINCT FROM OLD.priority
+       OR NEW.dismiss_behavior  IS DISTINCT FROM OLD.dismiss_behavior
+       OR NEW.acknowledge_label IS DISTINCT FROM OLD.acknowledge_label THEN
+      NEW.revision := OLD.revision + 1;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS portal_alerts_v2_guard_trg ON public.portal_alerts;
+CREATE TRIGGER portal_alerts_v2_guard_trg
+  BEFORE INSERT OR UPDATE ON public.portal_alerts
+  FOR EACH ROW
+  EXECUTE FUNCTION public.portal_alerts_v2_guard();
+
+-- Delivery function for the public homepage (js/homepage-alerts.js)
+CREATE OR REPLACE FUNCTION public.get_site_alerts(p_surface TEXT DEFAULT 'homepage')
+RETURNS JSONB
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT jsonb_build_object(
+    'server_time', to_jsonb(now()),
+    'alerts', COALESCE(jsonb_agg(to_jsonb(a) ORDER BY a.prio_rank DESC, a.sort_ts DESC), '[]'::jsonb)
+  )
+  FROM (
+    SELECT
+      id, title, message_html, severity, priority, display_surface, display_position,
+      link_url, link_label, link_new_tab, dismiss_behavior, acknowledge_label,
+      popup_frequency, revision, target_type, target_student_ids, target_group,
+      targeting_rules, schedule_rules, date_rule_type, monthly_start_day,
+      monthly_end_day, custom_dates, publish_at, expires_at, published_at, created_at,
+      CASE priority WHEN 'critical' THEN 4 WHEN 'urgent' THEN 3 WHEN 'important' THEN 2 ELSE 1 END AS prio_rank,
+      COALESCE(publish_at, published_at, created_at) AS sort_ts
+    FROM public.portal_alerts
+    WHERE p_surface IN ('homepage', 'portal')
+      AND is_active IS TRUE
+      AND lifecycle_status = 'published'
+      AND display_surface IN (p_surface, 'both')
+      AND (publish_at IS NULL OR publish_at <= now())
+      AND (expires_at IS NULL OR expires_at > now())
+  ) a;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_site_alerts(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_site_alerts(TEXT) TO anon, authenticated, service_role;
+
+GRANT ALL ON public.portal_alerts, public.portal_alert_templates, public.portal_alert_impressions, public.portal_alert_responses TO service_role;
+GRANT INSERT, SELECT, UPDATE, DELETE ON public.portal_alerts, public.portal_alert_templates TO anon;
+GRANT INSERT, SELECT ON public.portal_alert_impressions, public.portal_alert_responses TO anon;

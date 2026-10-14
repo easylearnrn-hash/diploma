@@ -8722,6 +8722,21 @@
       default:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" width="18" height="18"><path d="M10 2a6 6 0 016 6c0 3.5 2 5 2 5H2s2-1.5 2-5a6 6 0 016-6z" stroke-linejoin="round"/><path d="M8.5 17a1.5 1.5 0 003 0" stroke-linecap="round"/></svg>`
     };
     function notifIconFor(type) { return _NI[type] || _NI.default; }
+
+    // Alert Center V2: is this portal_alerts row meant for this student's portal right now?
+    // Homepage-only pop-ups, drafts, archived, not-yet-started and expired alerts are skipped.
+    function portalAlertForStudent(r, studentIdCode, studentUuid) {
+      if (r.display_surface === 'homepage') return false;
+      if (r.lifecycle_status && r.lifecycle_status !== 'published') return false;
+      const now = Date.now();
+      if (r.publish_at && now < Date.parse(r.publish_at)) return false;
+      if (r.expires_at && now >= Date.parse(r.expires_at)) return false;
+      const type = r.target_type || 'all';
+      const ids  = r.target_student_ids;
+      return type === 'all' || type === 'students'
+        || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
+        || (ids && typeof ids === 'object' && !Array.isArray(ids));
+    }
     function annSeverityIcon(sev) {
       return {
         danger:  `<svg viewBox="0 0 20 20" fill="none" stroke="#ef4444" stroke-width="1.6" width="18" height="18"><path d="M10 3L2 17h16L10 3z" stroke-linejoin="round"/><path d="M10 9v4M10 14.5v.5" stroke-linecap="round"/></svg>`,
@@ -8754,7 +8769,7 @@
           .order('updated_at',{ascending:false}).limit(10);
       }
       q.alerts = db.from('portal_alerts')
-        .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
+        .select('*')
         .eq('is_active', true).order('created_at',{ascending:false}).limit(20);
       if (studentUuid) {
         q.notes = db.from('published_notes')
@@ -8825,12 +8840,7 @@
 
       // 4. Portal alerts
       (res.alerts || []).forEach(r => {
-        const isAll    = !r.target_type || r.target_type === 'all';
-        const ids      = r.target_student_ids;
-        const targeted = isAll
-          || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
-          || (ids && typeof ids === 'object' && !Array.isArray(ids));
-        if (!targeted) return;
+        if (!portalAlertForStudent(r, studentIdCode, studentUuid)) return;
         const plain = (r.message_html||'').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim().slice(0,120);
         all.push({ id:'alert_'+r.id, type:'alert', title:r.title||'Announcement', body:plain, ts:r.created_at, link:'Student-page.html?tab=announcements' });
       });
@@ -9491,17 +9501,11 @@
       const studentUuid   = studentData.id || '';
       try {
         const { data } = await db.from('portal_alerts')
-          .select('id,title,message_html,severity,created_at,target_type,target_student_ids')
+          .select('*')
           .eq('is_active', true)
           .order('created_at', {ascending: false})
           .limit(50);
-        return (data || []).filter(r => {
-          const isAll = !r.target_type || r.target_type === 'all';
-          const ids   = r.target_student_ids;
-          return isAll
-            || (Array.isArray(ids) && ids.some(id => id === studentIdCode || id === studentUuid))
-            || (ids && typeof ids === 'object' && !Array.isArray(ids));
-        });
+        return (data || []).filter(r => portalAlertForStudent(r, studentIdCode, studentUuid));
       } catch(_) { return []; }
     }
 

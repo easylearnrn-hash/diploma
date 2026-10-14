@@ -1,5 +1,9 @@
 # 📊 Portal Alerts System - Architecture & Flow
 
+> **Update:** the admin page is now the **Alert Center** and alerts can also be shown as **homepage pop-ups**
+> (lifecycle statuses, priorities, exact scheduling, permissions). See
+> [HOMEPAGE-POPUP-ALERTS-SETUP.md](HOMEPAGE-POPUP-ALERTS-SETUP.md). The student-portal flow below still applies.
+
 ## System Architecture
 
 ```

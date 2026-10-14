@@ -14,6 +14,13 @@
  *   trigger_rules JSONB -> { pages_whitelist: [] }
  *   frequency_rules JSONB -> { cap_type, max_displays }
  *   schedule_rules JSONB -> { recurrence_type, start_datetime, end_datetime }
+ *
+ * Alert Center V2 columns (see ADD-HOMEPAGE-POPUP-ALERTS.sql), all optional so the
+ * engine keeps working before the upgrade has been applied:
+ *   display_surface ('portal'|'homepage'|'both')  homepage-only alerts are never shown here
+ *   lifecycle_status ('draft'|'published'|'archived'), publish_at, expires_at (precise window)
+ *   priority ('normal'|'important'|'urgent'|'critical')  display order, most important first
+ *   dismiss_behavior ('dismissible'|'acknowledge'), acknowledge_label, link_new_tab
  */
 (function () {
   'use strict';
@@ -56,7 +63,7 @@
     var recordId = sessionStorage.getItem('studentRecordId') || localStorage.getItem('studentRecordId');
     if (recordId && db) {
       try {
-        var res = await db.from('students').select('id,student_id,full_name,email,program,group,group_name,enrollment_group').eq('id', recordId).maybeSingle();
+        var res = await db.from('students').select('id,student_id,full_name,email,program,group,group_name').eq('id', recordId).maybeSingle();
         if (res.data) {
           student = {
             id:               res.data.id,
@@ -126,7 +133,7 @@
     if (busy) return;
     var res = await db.from('portal_alerts').select('*').eq('is_active', true).order('created_at', { ascending: false });
     if (res.error) { console.error('Alerts fetch error:', res.error.message); return; }
-    var alerts = res.data || [];
+    var alerts = sortAlerts((res.data || []).filter(isLiveRow));
     console.log('Alerts: ' + alerts.length + ' active in DB');
     for (var i = 0; i < alerts.length; i++) {
       var a = alerts[i];
@@ -147,6 +154,38 @@
         return; // standard alerts only show one at a time to prevent modal stacking
       }
     }
+  }
+
+  /* ── Alert Center V2: lifecycle, precise window, priority ── */
+  var PRIO_RANK = { critical: 4, urgent: 3, important: 2, normal: 1 };
+
+  /* False for alerts this engine must never show: homepage-only pop-ups, drafts, archived,
+     and anything outside its exact start / expiry moment. All fields are optional. */
+  function isLiveRow(a) {
+    if (a.display_surface === 'homepage') return false;
+    if (a.lifecycle_status && a.lifecycle_status !== 'published') return false;
+    var now = Date.now();
+    if (a.publish_at && now < Date.parse(a.publish_at)) return false;
+    if (a.expires_at && now >= Date.parse(a.expires_at)) return false;
+    return true;
+  }
+
+  /* Most important first, then newest first */
+  function sortAlerts(list) {
+    return list.slice().sort(function (x, y) {
+      var d = (PRIO_RANK[y.priority] || 1) - (PRIO_RANK[x.priority] || 1);
+      if (d) return d;
+      return (Date.parse(y.created_at) || 0) - (Date.parse(x.created_at) || 0);
+    });
+  }
+
+  /* target="_blank" attributes for the optional action link (open in a new tab unless turned off) */
+  function linkTarget(a) { return a.link_new_tab === false ? '' : ' target="_blank" rel="noopener"'; }
+
+  /* Only http(s), mailto, tel or a relative page may be used as the action link (never javascript:) */
+  function hasSafeLink(a) {
+    var u = String(a.link_url || '').trim();
+    return !!u && (/^(https?:\/\/|mailto:|tel:)/i.test(u) || u.indexOf(':') === -1);
   }
 
   /* ── should we block this alert? ── */
@@ -251,6 +290,8 @@
     var today = localDate();
 
     if (rule === 'date_range' || rule === 'one_time') {
+      // An exact publish_at / expires_at window (checked in isLiveRow) replaces the day-level range
+      if (a.publish_at || a.expires_at) return true;
       var start = (sched.start_datetime || a.start_date || '').substring(0, 10);
       var end   = (sched.end_datetime   || a.end_date   || '').substring(0, 10);
       if (!start && !end) return true;
@@ -260,7 +301,8 @@
     }
     if (rule === 'monthly_range' || rule === 'monthly') {
       var day = new Date().getDate();
-      return day >= (a.monthly_start_day || 1) && day <= (a.monthly_end_day || 31);
+      var dr  = sched.monthly_pattern && sched.monthly_pattern.day_range;
+      return day >= (a.monthly_start_day || (dr && dr[0]) || 1) && day <= (a.monthly_end_day || (dr && dr[1]) || 31);
     }
     if (rule === 'custom_dates') {
       var dates = a.custom_dates || [];
@@ -446,7 +488,7 @@
       dismissNodes[i].addEventListener('touchend', onDismiss, { passive: false });
       dismissNodes[i].addEventListener('click', onDismiss);
     }
-    if (el.classList.contains('acnhs-overlay')) {
+    if (el.classList.contains('acnhs-overlay') && el.dataset.ack !== '1') {
       el.addEventListener('click', function(ev) { if (ev.target === el) dismiss(a, el); });
       el.addEventListener('touchend', function(ev) { if (ev.target === el) { ev.preventDefault(); dismiss(a, el); } }, { passive: false });
     }
@@ -477,19 +519,20 @@
     var severityLabel = { info:'Notice', success:'Update', warn:'Notice', critical:'Alert' };
     var eyebrow = (severityLabel[a.severity] || 'Notice').toUpperCase();
 
-    var linkH = a.link_url
-      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" class="acnhs-link-btn" style="border-color:'+c+';color:'+c+'">'+esc(a.link_label||'Learn More')+' ↗</a>'
+    var ack = a.dismiss_behavior === 'acknowledge';
+    var linkH = hasSafeLink(a)
+      ? '<a href="'+esc(a.link_url)+'"'+linkTarget(a)+' class="acnhs-link-btn" style="border-color:'+c+';color:'+c+'">'+esc(a.link_label||'Learn More')+' ↗</a>'
       : '';
     var yesno = (a.requires_response && a.response_type === 'yes_no')
       ? '<button class="acnhs-btn-yes" style="background:'+c+';box-shadow:0 4px 12px '+c+'40;color:#04111f">'+esc(a.yes_label||'Yes')+'</button><button class="acnhs-btn-no">'+esc(a.no_label||'No')+'</button>'
-      : '<button class="acnhs-btn-dismiss" data-dismiss style="border-color:'+c+';color:'+c+'">I Understand</button>';
+      : '<button class="acnhs-btn-dismiss" data-dismiss style="border-color:'+c+';color:'+c+'">'+esc(a.acknowledge_label||'I Understand')+'</button>';
 
     var el = document.createElement('div');
-    el.className = 'acnhs-overlay'; el.dataset.alertId = a.id;
+    el.className = 'acnhs-overlay'; el.dataset.alertId = a.id; el.dataset.ack = ack ? '1' : '0';
     el.innerHTML =
       '<div class="acnhs-box">'
       + '<div class="acnhs-top-bar" style="background:'+c+'"></div>'
-      + '<button class="acnhs-close" data-dismiss aria-label="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>'
+      + (ack ? '' : '<button class="acnhs-close" data-dismiss aria-label="Close"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>')
       + '<div class="acnhs-header">'
         + '<div class="acnhs-icon-ring" style="border-color:'+c+'22;background:'+c+'12;"><span class="acnhs-icon" style="color:'+c+'">'+ic+'</span></div>'
         + '<div>'
@@ -506,8 +549,8 @@
 
   function buildBanner(a, pos) {
     var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
-    var linkH = a.link_url
-      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="color:'+c+';font-weight:600;margin-left:12px;text-decoration:underline">'+esc(a.link_label||'Learn More')+' ↗</a>'
+    var linkH = hasSafeLink(a)
+      ? '<a href="'+esc(a.link_url)+'"'+linkTarget(a)+' style="color:'+c+';font-weight:600;margin-left:12px;text-decoration:underline">'+esc(a.link_label||'Learn More')+' ↗</a>'
       : '';
     var el = document.createElement('div');
     el.className = 'acnhs-banner acnhs-banner-'+(pos==='banner_top'?'top':'bottom');
@@ -522,8 +565,8 @@
   function buildToast(a, pos) {
     var c = COL[a.severity]||COL.info, ic = ICO[a.severity]||ICO.info;
     var corners = { toast_tr:'top:80px;right:20px', toast_tl:'top:80px;left:20px', toast_br:'bottom:20px;right:20px', toast_bl:'bottom:20px;left:20px' };
-    var linkH = a.link_url
-      ? '<a href="'+esc(a.link_url)+'" target="_blank" rel="noopener" style="color:'+c+';font-size:13px;font-weight:600;text-decoration:none;display:inline-block;margin-top:8px">'+esc(a.link_label||'Learn More')+' ↗</a>'
+    var linkH = hasSafeLink(a)
+      ? '<a href="'+esc(a.link_url)+'"'+linkTarget(a)+' style="color:'+c+';font-size:13px;font-weight:600;text-decoration:none;display:inline-block;margin-top:8px">'+esc(a.link_label||'Learn More')+' ↗</a>'
       : '';
     var el = document.createElement('div');
     el.className = 'acnhs-toast'; el.dataset.alertId = a.id;
