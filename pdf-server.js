@@ -24,6 +24,32 @@ const PORT = 8001;
 const ORIGIN = 'http://localhost:8000';
 const MAX_BYTES = 12 * 1024 * 1024; // 12 MB body limit
 
+// Fonts are read from disk and inlined so exports never depend on the :8000 dev server being up
+// (a missing font silently falls back to Times/Georgia/Helvetica).
+const FONTS_DIR = path.join(__dirname, 'assets', 'fonts');
+const FONTS_LINK_RE = /<link[^>]+href=["']assets\/fonts\/fonts\.css["'][^>]*>/i;
+let inlineFontsCss = null;
+
+function getInlineFontsCss() {
+  if (inlineFontsCss !== null) return inlineFontsCss;
+  try {
+    const css = fs.readFileSync(path.join(FONTS_DIR, 'fonts.css'), 'utf8');
+    inlineFontsCss = css.replace(/url\('([^']+)'\)/g, (_, file) => {
+      const data = fs.readFileSync(path.join(FONTS_DIR, file)).toString('base64');
+      return `url(data:font/woff;base64,${data})`;
+    });
+  } catch (e) {
+    console.warn('[pdf-server] Could not inline fonts:', e.message);
+    inlineFontsCss = '';
+  }
+  return inlineFontsCss;
+}
+
+function inlineLocalFonts(html) {
+  const css = getInlineFontsCss();
+  return css ? html.replace(FONTS_LINK_RE, () => `<style>${css}</style>`) : html;
+}
+
 function resolveAllowedOrigin(requestOrigin) {
   if (!requestOrigin) return ORIGIN;
   if (requestOrigin === 'null') return 'null'; // file:// pages
@@ -253,6 +279,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: 'html field is required' }));
   }
+  html = inlineLocalFonts(html);
 
   const safeFilename = isWordRoute
     ? sanitizeFilename(filename, 'document', 'docx')
