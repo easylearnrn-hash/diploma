@@ -2983,15 +2983,17 @@
    */
   function buildPrintHtml(contentHtml, logoDataUrl, refNo) {
     const safeRef = escHtml(refNo || '');
+    // Security hatch: every diagonal is a segment of ONE vector path (a few KB per page, no raster/pattern fills)
+    let hatchPath = '';
+    for (let x = -297; x <= 210; x += 3.5) hatchPath += `M${x} 0L${x + 297} 297`;
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <base href="http://localhost:8000/">
   <title>${safeRef}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Armenian:wght@400;500;600;700&amp;family=Noto+Sans+Armenian:wght@400;600;700;800&amp;family=Playfair+Display:wght@700;800&amp;family=Inter:wght@400;500;600;700;800&amp;family=EB+Garamond:ital,wght@0,400;0,600;1,400&amp;display=swap" rel="stylesheet">
+  <!-- Static per-weight fonts: Chromium embeds them as real subsetted text (variable Google fonts get outlined into huge vector paths) -->
+  <link rel="stylesheet" href="assets/fonts/fonts.css">
   <style>
     :root { --doc-ink: #0a0f1e; --doc-slate: #3a4a6b; --doc-gold: #9a7a2c; }
 
@@ -3003,11 +3005,6 @@
       color: var(--doc-ink);
       font-family: 'Noto Serif Armenian', 'EB Garamond', 'Times New Roman', Georgia, serif;
       font-size: 11pt; line-height: 1.65;
-      background-image: repeating-linear-gradient(
-        45deg,
-        rgba(10,15,30,0.018), rgba(10,15,30,0.018) 1px,
-        transparent 1px, transparent 7px
-      );
     }
 
     /* Disable ligatures to prevent glyph-composition artefacts */
@@ -3029,6 +3026,12 @@
       position: fixed; top: 6mm; left: 6mm; right: 6mm; bottom: 6mm;
       border: 0.5px solid rgba(154,122,44,0.45);
       pointer-events: none; z-index: 100;
+    }
+
+    /* ─── SECURITY HATCH ──────────────────────────────────────────────────── */
+    .pdf-security {
+      position: fixed; top: 0; left: 0; width: 210mm; height: 297mm;
+      pointer-events: none; z-index: 0;
     }
 
     /* ─── WATERMARK ───────────────────────────────────────────────────────── */
@@ -3222,6 +3225,7 @@
 </head>
 <body>
   <!-- Double border frame — position:fixed → repeats on every page -->
+  <svg class="pdf-security" viewBox="0 0 210 297" preserveAspectRatio="none" aria-hidden="true"><path d="${hatchPath}" fill="none" stroke="#0a0f1e" stroke-opacity="0.045" stroke-width="0.08"/></svg>
   <div class="pdf-frame-outer"></div>
   <div class="pdf-frame-inner"></div>
   <!-- Centred watermark — position:fixed → repeats on every page -->
