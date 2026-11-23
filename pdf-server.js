@@ -295,7 +295,9 @@ const server = http.createServer(async (req, res) => {
   let browser;
   try {
     if (isWordRoute) {
-      const pngPages = await renderA4PngPages(html);
+      const pngPages = await renderA4PngPages(
+        html.replace('</head>', '<style>.pdf-flow-bottom { height: 19mm !important; }</style></head>')
+      );
       const docxBuffer = createDocxFromPngPages(pngPages);
 
       res.writeHead(200, {
@@ -332,12 +334,12 @@ const server = http.createServer(async (req, res) => {
       headerTemplate: '<div></div>',
       footerTemplate: `
         <div style="
-          font-size: 8px;
+          font-size: 9pt;
           width: 100%;
           text-align: center;
           font-family: Arial, Helvetica, sans-serif;
           color: rgba(10,15,30,0.52);
-          padding: 5mm 0 0 0;
+          padding: 0;
           margin: 0;
           position: relative;
           top: -8mm;
@@ -345,13 +347,19 @@ const server = http.createServer(async (req, res) => {
           line-height: 1.2;
           white-space: nowrap;
         ">
-          <strong style="color:rgba(10,15,30,0.62);">www.acnhs.am</strong>
-          &nbsp;&bull;&nbsp;
-          info@acnhs.am
-          &nbsp;&bull;&nbsp;
-          Ref:&nbsp;${safeRef}
-          &nbsp;&bull;&nbsp;
-          Page&nbsp;<span class="pageNumber"></span>&nbsp;of&nbsp;<span class="totalPages"></span>
+          <div style="
+            margin: 1.5mm 12mm 0 12mm;
+            padding: 6.47mm 0 0 0;
+            border-top: 1px solid rgba(10,15,30,0.18);
+          ">
+            <strong style="color:rgba(10,15,30,0.62);">www.acnhs.am</strong>
+            &nbsp;&bull;&nbsp;
+            info@acnhs.am
+            &nbsp;&bull;&nbsp;
+            Ref:&nbsp;${safeRef}
+            &nbsp;&bull;&nbsp;
+            Page&nbsp;<span class="pageNumber"></span>&nbsp;of&nbsp;<span class="totalPages"></span>
+          </div>
         </div>`,
     });
 
