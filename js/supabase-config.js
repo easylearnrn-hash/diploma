@@ -92,6 +92,29 @@ async function acnhsRestFetch(input, init) {
 
 SUPABASE_CONFIG.options.global = Object.assign({}, SUPABASE_CONFIG.options.global, { fetch: acnhsRestFetch });
 
+// The send-email function only sends for signed-in people. Attach the session tokens (admin, or student/teacher) to those requests,
+// whichever way the page calls it (supabase.functions.invoke or a plain fetch).
+(function () {
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function' || window.__acnhsFetchPatched) return;
+  window.__acnhsFetchPatched = true;
+  const nativeFetch = window.fetch.bind(window);
+  const stored = (key) => { try { return sessionStorage.getItem(key) || localStorage.getItem(key) || ''; } catch (_) { return ''; } };
+  window.fetch = function (input, init) {
+    try {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (url.indexOf('/functions/v1/send-email') !== -1) {
+        const headers = new Headers((init && init.headers) || (typeof input !== 'string' && input && input.headers) || undefined);
+        const adminToken = stored('adminToken');
+        const portalToken = stored('portalToken');
+        if (adminToken && !headers.has('x-admin-token')) headers.set('x-admin-token', adminToken);
+        if (portalToken && !headers.has('x-portal-token')) headers.set('x-portal-token', portalToken);
+        init = Object.assign({}, init, { headers });
+      }
+    } catch (_) { /* never block a request because of this */ }
+    return nativeFetch(input, init);
+  };
+})();
+
 // Initialize Supabase client
 let supabaseClient = null;
 

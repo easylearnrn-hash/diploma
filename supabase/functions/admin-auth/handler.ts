@@ -11,6 +11,7 @@
 
 import { signAdminToken, verifyAdminToken } from '../_shared/admin-token.ts'
 import { pbkdf2Hash, sha256Hex } from '../_shared/password.ts'
+import { signPortalToken } from '../_shared/send-policy.ts'
 
 export type Env = (name: string) => string | undefined
 
@@ -148,7 +149,8 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
     const viewerHash = (env('STUDENT_VIEWER_PASSWORD_HASH') || '').trim().toLowerCase()
     const match = !!viewerEmail && HASH_RE.test(viewerHash) && email === viewerEmail && sameHash(viewerHash, passwordHash)
     if (!match) { noteFailure(`viewer:${ip}`, now); noteFailure(`ip:${ip}`, now); await sleep(400) }
-    return reply({ ok: true, match }, 200, cors)
+    const viewerToken = match ? await signPortalToken(secret, { id: '00000000-0000-4000-8000-000000000001', role: 'viewer', email: viewerEmail }) : undefined
+    return reply({ ok: true, match, ...(viewerToken ? { token: viewerToken } : {}) }, 200, cors)
   }
 
   /* ───────────── login (no token yet) ───────────── */

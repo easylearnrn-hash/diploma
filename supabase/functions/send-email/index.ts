@@ -4,6 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { corsHeaders } from "../_shared/cors.ts"
+import { authorizeSend } from "../_shared/send-policy.ts"
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY_DIPLOMA')
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
@@ -103,7 +104,22 @@ serve(async (req: Request) => {
 
   try {
     // Parse request body
-  const { to, subject, html, text, from, fromName, replyTo, attachments, headers: customHeaders }: EmailRequest = await req.json()
+  const { to, subject, html, text, from, fromName, replyTo, attachments, headers: requestedHeaders }: EmailRequest = await req.json()
+
+    // Only signed-in staff, teachers, students and the website's own forms may send (see _shared/send-policy.ts)
+    const policy = await authorizeSend(
+      {
+        adminToken: req.headers.get('x-admin-token'),
+        portalToken: req.headers.get('x-portal-token'),
+        ip: (req.headers.get('x-forwarded-for') || req.headers.get('cf-connecting-ip') || 'unknown').split(',')[0].trim(),
+        body: { to: String(to || ''), from, subject: subject as string, html: html as string, attachments, headers: requestedHeaders },
+      },
+      { env: (name) => Deno.env.get(name), fetchFn: fetch },
+    )
+    if (!policy.ok) {
+      return new Response(JSON.stringify({ success: false, error: policy.error }), { status: policy.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }
+    const customHeaders = policy.role === 'admin' ? requestedHeaders : policy.headers
 
     // Validate inputs
     if (!to || !subject || !html) {

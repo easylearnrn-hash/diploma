@@ -13,6 +13,7 @@
 // Provided by Supabase: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import { pbkdf2Hash, sameText, sha256Hex, verifyStoredPassword } from '../_shared/password.ts'
+import { signPortalToken } from '../_shared/send-policy.ts'
 
 export type Env = (name: string) => string | undefined
 
@@ -135,7 +136,12 @@ export async function handlePortalAuth(req: Request, deps: Deps): Promise<Respon
       const match = HASH_RE.test(hash) && sameText(hash, given)
       if (!match && hash) { noteFailure(keyId, now); noteFailure(keyIp, now); await sleep(300) }
 
-      if (body.action === 'student-verify') return reply({ ok: true, match, hasCredentials: !!hash }, 200, cors)
+      if (body.action === 'student-verify') {
+        // a signed session token proves who this student is to other functions (e.g. send-email)
+        const secret = env('ADMIN_TOKEN_SECRET')
+        const token = match && secret && secret.length >= 32 ? await signPortalToken(secret, { id: applicationId, role: 'student' }) : undefined
+        return reply({ ok: true, match, hasCredentials: !!hash, ...(token ? { token } : {}) }, 200, cors)
+      }
 
       if (!hash) return reply({ ok: false, code: 'no_credentials', error: 'This account has no password yet' }, 400, cors)
       if (!match) return reply({ ok: false, code: 'bad_password', error: 'Current password is incorrect' }, 401, cors)
@@ -175,7 +181,9 @@ export async function handlePortalAuth(req: Request, deps: Deps): Promise<Respon
       if (match && !stored.startsWith('pbkdf2:')) {
         await rest(deps, `teachers?id=eq.${teacherId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await pbkdf2Hash(password) }) })
       }
-      return reply({ ok: true, match }, 200, cors)
+      const tsecret = env('ADMIN_TOKEN_SECRET')
+      const ttoken = match && tsecret && tsecret.length >= 32 ? await signPortalToken(tsecret, { id: teacherId, role: 'teacher' }) : undefined
+      return reply({ ok: true, match, ...(ttoken ? { token: ttoken } : {}) }, 200, cors)
     }
 
     default:

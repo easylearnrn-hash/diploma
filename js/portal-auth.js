@@ -30,9 +30,20 @@
     return Object.assign({}, json, { ok: false, reason: json.code || 'error', message: json.error || 'Request failed' });
   }
 
+  // A successful check returns a signed session token; it is kept so the site can prove who the student/teacher is to the server
+  // (for instance when sending e-mail). js/supabase-config.js attaches it to those requests.
+  async function remember(promise) {
+    const res = await promise;
+    try {
+      if (res && res.ok && res.match && res.token) { sessionStorage.setItem('portalToken', res.token); localStorage.setItem('portalToken', res.token); }
+    } catch (_) { /* storage blocked */ }
+    return res;
+  }
+
   window.PortalAuth = {
-    verifyStudent: (applicationId, passwordHash) => call({ action: 'student-verify', applicationId, passwordHash }),
+    verifyStudent: (applicationId, passwordHash) => remember(call({ action: 'student-verify', applicationId, passwordHash })),
     changeStudentPassword: (applicationId, currentPasswordHash, newPassword) => call({ action: 'student-change-password', applicationId, currentPasswordHash, newPassword }),
-    verifyTeacher: (teacherId, password) => call({ action: 'teacher-verify', teacherId, password }),
+    verifyTeacher: (teacherId, password) => remember(call({ action: 'teacher-verify', teacherId, password })),
+    clear: () => { try { sessionStorage.removeItem('portalToken'); localStorage.removeItem('portalToken'); } catch (_) { /* ignore */ } },
   };
 })();

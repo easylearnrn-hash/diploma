@@ -88,6 +88,7 @@
       try {
         const passwordHash = await sha256(password);
         const { json } = await post({ action: 'viewer-login', email: String(email || '').trim(), passwordHash }, false);
+        if (json && json.ok && json.match && json.token) { try { sessionStorage.setItem('portalToken', json.token); localStorage.setItem('portalToken', json.token); } catch (_) { /* storage blocked */ } }
         return !!(json && json.ok && json.match);
       } catch (_) { return false; }
     },
