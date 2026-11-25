@@ -1889,6 +1889,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/pdf-render.js"></script>
   <script src="js/admin-sidebar.js"></script>
   <script>
   // ═══════════════════════════════════════════════════════════
@@ -4381,10 +4382,10 @@
   }
 
   /* ── Page preview: the real exported PDF, page by page ──
-     The page is exactly what the PDF button produces: the same print HTML is sent to the export server and the
-     returned PDF is drawn with pdf.js (vendored in js/vendor/pdfjs). Pages are rendered lazily, only near the
-     viewport, so long documents stay light. If the export server is not running, the instant Live preview is used. */
-  const EXPORT_SERVER = 'http://localhost:8001';
+     The page is exactly what the PDF button produces: the same print HTML is rendered to a PDF in the cloud
+     (js/pdf-render.js -> Supabase Edge Function -> Browserless Chromium) and drawn with pdf.js (vendored in
+     js/vendor/pdfjs). Pages are rendered lazily, only near the viewport, so long documents stay light. Editing and
+     the live page cuts never wait for it. If cloud rendering is unavailable, the instant Live preview is used. */
   let _pvMode = (() => { try { return localStorage.getItem('acnhs-preview-mode') === 'live' ? 'live' : 'pages'; } catch (_) { return 'pages'; } })();
   let _pvTimer = null, _pvSeq = 0, _pvAbort = null, _pvDoc = null, _pvLastHtml = '', _pvObserver = null, _pvPromise = null;
 
@@ -4434,7 +4435,7 @@
     clearTimeout(_pvTimer);
     const wrap = document.getElementById('previewWrapper');
     if (wrap.classList.contains('paged')) { wrap.classList.add('updating'); setPvStatus('Updating', 'busy'); }
-    _pvTimer = setTimeout(renderPagedPreview, 900);
+    _pvTimer = setTimeout(renderPagedPreview, ACNHSRender.state.lastBackend === 'local' ? 900 : 2500);
   }
 
   const pageCssWidth = () => (210 * 96 / 25.4) * currentScale;
@@ -4455,12 +4456,7 @@
     _pvAbort = new AbortController();
     try {
       const lib = await loadPdfJs();
-      const res = await fetch(EXPORT_SERVER + '/generate-pdf', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: _pvAbort.signal,
-        body: JSON.stringify({ html, filename, refNo, pageNumbers, lang }),
-      });
-      if (!res.ok) throw new Error('Export server error ' + res.status);
-      const data = new Uint8Array(await res.arrayBuffer());
+      const data = await ACNHSRender.renderPdf({ html, filename, refNo, pageNumbers, lang }, { signal: _pvAbort.signal });
       if (seq !== _pvSeq) return;
       const doc = await lib.getDocument({ data }).promise;
       if (seq !== _pvSeq) { doc.destroy(); return; }
@@ -4472,7 +4468,7 @@
       if (e.name === 'AbortError' || seq !== _pvSeq) return;
       console.warn('Page preview unavailable:', e);
       wrap.classList.remove('paged', 'updating');
-      setPvStatus('Export server offline · instant preview', 'warn');
+      setPvStatus((e && e.code === 'busy') || (e && e.code === 'rate_limited') ? 'Renderer busy · instant preview' : 'Cloud preview unavailable · instant preview', 'warn');
       schedulePageBreaks();
     }
   }
@@ -5550,41 +5546,21 @@ ${contentHtml}
         throw new Error('Document not rendered. Please fill in the form fields first.');
       }
 
-      const { refNo, filename } = getExportMeta('docx');
+      const { refNo, filename, pageNumbers, lang } = getExportMeta('docx');
 
-      // Exact Word export: use the same print HTML pipeline as PDF.
+      // Exact Word export: the same cloud-rendered PDF as the PDF button, one full-page image per page
       const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
-
-      const response = await fetch('http://localhost:8001/generate-word', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ html: printHtml, filename, refNo }),
-      });
-
-      if (!response.ok) {
-        let msg = `Server error ${response.status}`;
-        try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
-        throw new Error(msg);
+      const pdfBytes = await ACNHSRender.renderPdf({ html: printHtml, filename, refNo, pageNumbers, lang });
+      const lib = await loadPdfJs();
+      const pdfDoc = await lib.getDocument({ data: pdfBytes }).promise;
+      try {
+        downloadBlob(await ACNHSRender.pdfDocToDocx(pdfDoc), filename);
+      } finally {
+        pdfDoc.destroy();
       }
-
-      const blob = await response.blob();
-      downloadBlob(blob, filename);
     } catch (err) {
       console.error('[exportToWord]', err);
-      const isDown = err.message.includes('Failed to fetch') ||
-                     err.message.includes('NetworkError') ||
-                     err.message.includes('Load failed');
-      if (isDown) {
-        alert(
-          '⚠️ Export server is not running.\n\n' +
-          'Start it in a new terminal:\n\n' +
-          '  node pdf-server.js\n\n' +
-          '(First-time setup: npm install && npx playwright install chromium)\n\n' +
-          'Then click "Word" again.'
-        );
-      } else {
-        alert('⚠️ Word export failed.\n\nError: ' + err.message);
-      }
+      alert('⚠️ Word export failed.\n\n' + (err.message || err));
     } finally {
       btns.forEach(b => {
         b.disabled = false;
@@ -5593,10 +5569,7 @@ ${contentHtml}
     }
   }
 
-  /* ── PDF Export via Playwright PDF Server (http://localhost:8001) ───────────
-     Requires: node pdf-server.js   (in a separate terminal)
-     First-time setup: npm install && npx playwright install chromium
-  ── */
+  /* ── PDF export: cloud rendering (see js/pdf-render.js and supabase/functions/render-pdf) ── */
   async function printDocument() {
     const btns = document.querySelectorAll('.generate-btn, .preview-btn.primary');
     btns.forEach(b => {
@@ -5617,21 +5590,11 @@ ${contentHtml}
       // ── Build self-contained print HTML ───────────────────────────────────
       const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
 
-      // ── POST to Playwright PDF server ─────────────────────────────────────
-      const response = await fetch('http://localhost:8001/generate-pdf', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ html: printHtml, filename, refNo, pageNumbers, lang }),
-      });
+      // ── Render in the cloud (Supabase Edge Function -> Browserless Chromium) ──
+      const pdfBytes = await ACNHSRender.renderPdf({ html: printHtml, filename, refNo, pageNumbers, lang });
 
-      if (!response.ok) {
-        let msg = `Server error ${response.status}`;
-        try { const j = await response.json(); msg = j.error || msg; } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-
-      // ── Download the returned PDF blob ────────────────────────────────────
-      const blob = await response.blob();
+      // ── Download the returned PDF ─────────────────────────────────────────
+      const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement('a');
       a.href = url; a.download = filename;
@@ -5641,20 +5604,7 @@ ${contentHtml}
 
     } catch (err) {
       console.error('[printDocument]', err);
-      const isDown = err.message.includes('Failed to fetch') ||
-                     err.message.includes('NetworkError') ||
-                     err.message.includes('Load failed');
-      if (isDown) {
-        alert(
-          '⚠️ PDF server is not running.\n\n' +
-          'Start it in a new terminal:\n\n' +
-          '  node pdf-server.js\n\n' +
-          '(First-time setup: npm install && npx playwright install chromium)\n\n' +
-          'Then click "PDF" again.'
-        );
-      } else {
-        alert('⚠️ PDF generation failed.\n\nError: ' + err.message);
-      }
+      alert('⚠️ PDF generation failed.\n\n' + (err.message || err));
     } finally {
       btns.forEach(b => {
         b.disabled = false;

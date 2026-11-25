@@ -11,6 +11,9 @@
  *   npx playwright install chromium
  *
  * Then open http://localhost:8000/documents.html and use PDF / Word export.
+ *
+ * NOTE: production rendering now runs in the cloud (supabase/functions/render-pdf + Browserless, see
+ * RENDER-PDF-SETUP.md). This server is only an optional local fallback for developer machines.
  */
 
 const fs = require('fs');
