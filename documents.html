@@ -372,6 +372,7 @@
       box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
     }
     .rich-field ul, .rich-field ol { padding-left: 20px; margin: 4px 0; }
+    .rich-field hr { border: 0; border-top: 1px solid rgba(255,255,255,0.35); margin: 10px 0; height: 0; }
     .align-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .align-toolbar { flex-wrap: wrap; }
     .fmt-color { position: relative; width: 32px; height: 28px; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
@@ -386,6 +387,28 @@
       background: rgba(201,168,76,0.22); border-color: var(--gold-primary); color: var(--gold-primary);
       box-shadow: inset 0 0 0 1px rgba(201,168,76,0.35);
     }
+    .add-body-row { display: flex; align-items: center; gap: 12px; margin: 10px 0 4px; flex-wrap: wrap; }
+    .add-body-btn {
+      padding: 9px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; cursor: pointer;
+      background: rgba(201,168,76,0.08); border: 1px dashed var(--gold-dim); color: var(--gold-primary); transition: all 0.15s;
+    }
+    .add-body-btn:hover { background: rgba(201,168,76,0.18); border-style: solid; }
+    .add-body-hint { font-size: 12px; color: var(--text-muted, #8b96ab); }
+    [hidden] { display: none !important; }
+    .body-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    .body-block-actions { display: inline-flex; align-items: center; gap: 6px; }
+    .body-move-btn {
+      width: 28px; padding: 3px 0; border-radius: 8px; font-size: 13px; line-height: 1.1; cursor: pointer;
+      background: transparent; border: 1px solid rgba(255,255,255,0.12); color: var(--text-muted, #8b96ab); transition: all 0.15s;
+    }
+    .body-move-btn:hover:not(:disabled) { border-color: var(--gold-dim); color: var(--gold-primary); background: var(--gold-glow); }
+    .body-move-btn:disabled { opacity: 0.3; cursor: default; }
+    .body-remove-btn {
+      padding: 3px 10px; border-radius: 8px; font-size: 11px; cursor: pointer;
+      background: transparent; border: 1px solid rgba(255,255,255,0.12); color: var(--text-muted, #8b96ab); transition: all 0.15s;
+    }
+    .body-remove-btn:hover { border-color: #b91c1c; color: #fca5a5; background: rgba(185,28,28,0.12); }
+    .align-toolbar button:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
     .align-toolbar-sep { width: 1px; height: 20px; background: rgba(255,255,255,0.12); margin: 0 4px; }
     .align-toolbar .fmt-btn { font-family: 'Playfair Display', Georgia, serif; font-size: 14px; }
     .align-toolbar select.fmt-size {
@@ -657,6 +680,12 @@
     }
     .load-doc-item:hover { background: rgba(201,168,76,0.06); border-color: rgba(201,168,76,0.2); }
     .load-doc-item-left { flex: 1; min-width: 0; }
+    .load-doc-item.current { background: rgba(201,168,76,0.10); border-color: var(--gold-primary); box-shadow: 0 0 0 1px var(--gold-dim) inset; }
+    .load-current-badge {
+      display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; vertical-align: middle;
+      font-size: 10.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase;
+      background: var(--gold-glow); border: 1px solid var(--gold-dim); color: var(--gold-primary);
+    }
     .preview-nick {
       height: 36px; flex: 0 1 220px; width: 220px; min-width: 150px; padding: 0 12px; border-radius: 10px;
       background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
@@ -757,9 +786,16 @@
 
     /* Free-text letter body (Document type) */
     .doc-letter { font-size: 11pt; line-height: 1.75; color: #000; }
+    /* Live preview only: show where a body paragraph starts a new page in the PDF */
+    .body-page[data-page-break] { position: relative; margin-top: 12mm; padding-top: 7mm; border-top: 1px dashed rgba(154,122,44,0.6); }
+    .body-page[data-page-break]::before {
+      content: 'PAGE BREAK — NEW PAGE IN PDF'; position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+      background: #fff; padding: 0 8px; font: 700 6.5pt 'Inter', sans-serif; letter-spacing: 0.1em; color: #9a7a2c;
+    }
     .doc-letter p, .doc-letter div { margin: 0 0 4mm 0; text-align: justify; hyphens: none; -webkit-hyphens: none; }
     .doc-letter ul, .doc-letter ol { margin: 0 0 4mm 0; padding-left: 9mm; }
     .doc-letter ul { list-style: disc; }
+    .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
@@ -1599,11 +1635,18 @@
             </div>
 
             <p class="form-section-title">📝 Body</p>
-            <div class="form-grid full">
+            <div class="form-grid full" id="gen-bodies">
               <div class="form-group">
-                <label>Body Paragraph</label>
-                <div id="gen-body" data-fmt-editor data-render="renderDocument" contenteditable="true" class="rich-field" style="min-height:160px;" oninput="renderDocument()" onpaste="cleanLetterPaste(event)"></div>
+                <div class="body-block-head">
+                  <label class="body-block-label">Body Paragraph</label>
+                  <span class="body-block-actions" hidden><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onclick="moveBodyBlock(this, -1)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onclick="moveBodyBlock(this, 1)">↓</button></span>
+                </div>
+                <div id="gen-body" data-fmt-editor data-body-editor data-render="renderDocument" contenteditable="true" class="rich-field" style="min-height:160px;" oninput="renderDocument()" onpaste="cleanLetterPaste(event)"></div>
               </div>
+            </div>
+            <div class="add-body-row">
+              <button type="button" class="add-body-btn" onclick="addBodyBlock()">＋ Add Body Paragraph</button>
+              <span class="add-body-hint" id="gen-bodies-hint" hidden>Each body paragraph starts on a new page in the PDF.</span>
             </div>
 
             <p class="form-section-title">✍️ Signature (right side)</p>
@@ -1716,6 +1759,7 @@
   let currentDocType = 'affiliation';
   let currentScale   = 0.72;
   let _loadedDocId   = null;   // ID of the currently-loaded Supabase document (null = new doc)
+  let _loadedDocType = null;   // form type of that document ('affiliation' | 'mou' | 'government' | 'document')
 
   /* ═══════════════════════════════════════════
      SUPABASE REF NUMBER REGISTRY
@@ -1761,7 +1805,7 @@
       const existingRef = document.getElementById(meta.refInputId)?.value?.trim();
 
       // ── UPDATE existing record ──────────────────────────────────────
-      if (_loadedDocId && !forceNew) {
+      if (_loadedDocId && _loadedDocType === docType && !forceNew) {
         const refNo = existingRef;
 
         const allFields = docType === 'affiliation'
@@ -1784,6 +1828,7 @@
         });
         const nick = (document.getElementById('docNickname')?.value || '').trim();
         if (nick) formData._nickname = nick;
+        if (docType === 'document') documentExtraBodies().forEach((html, i) => { formData['gen-body-' + (i + 2)] = html; });
 
         const partnerName = docType === 'affiliation' ? (v('aff-hospitalName') || null)
                           : docType === 'government'  ? (v('gov-agencyName')   || null)
@@ -1812,7 +1857,7 @@
       // ── INSERT new record ───────────────────────────────────────────
       // When forceNew, clear the loaded state so a fresh ref is assigned
       if (forceNew) {
-        _loadedDocId = null;
+        _loadedDocId = null; _loadedDocType = null;
         const refInput = document.getElementById(meta.refInputId);
         if (refInput) { refInput.value = ''; refInput.readOnly = false; }
       }
@@ -1863,6 +1908,7 @@
       });
       const newNick = (document.getElementById('docNickname')?.value || '').trim();
       if (newNick) formData._nickname = newNick;
+      if (docType === 'document') documentExtraBodies().forEach((html, i) => { formData['gen-body-' + (i + 2)] = html; });
 
       const { error: insertErr } = await sb.from('documents').insert({
         doc_type:        meta.code,
@@ -1888,7 +1934,7 @@
 
       // Fetch the new record's ID so subsequent saves can UPDATE it
       const { data: savedRow } = await sb.from('documents').select('id').eq('ref_number', refNo).maybeSingle();
-      if (savedRow) _loadedDocId = savedRow.id;
+      if (savedRow) { _loadedDocId = savedRow.id; _loadedDocType = docType; }
 
       btns.forEach(b => {
         b.innerHTML = '✅ Saved — ' + refNo;
@@ -1907,7 +1953,7 @@
   /** Show/hide the "Save as New" button depending on whether a doc is loaded */
   // Shared by every Clear Form: forget the loaded record so the next Save creates a new one
   function _resetSaveState(docType) {
-    _loadedDocId = null;
+    _loadedDocId = null; _loadedDocType = null;
     const nick = document.getElementById('docNickname'); if (nick) nick.value = '';
     _updateSaveAsNewVisibility(docType, false);
     ['saveBtn-' + docType, 'saveBtn-preview'].forEach(id => {
@@ -1962,6 +2008,11 @@
     renderLoadList(type);
   }
 
+  // ID of the saved document being edited right now (only when its form is the active type)
+  function _openDocId() {
+    return (_loadedDocId && _loadedDocType === currentDocType) ? _loadedDocId : null;
+  }
+
   function renderLoadList(typeFilter) {
     const listEl = document.getElementById('loadDocList');
     const docs = typeFilter === 'all'
@@ -1973,15 +2024,17 @@
       return;
     }
 
+    const openId = _openDocId();
     listEl.innerHTML = docs.map(d => {
+      const isCurrent = openId !== null && d.id === openId;
       const typeLabel = d.doc_type === 'CAA' ? 'Affiliation' : d.doc_type === 'MOU' ? 'MOU' : d.doc_type === 'GOV' ? 'Government' : d.doc_type === 'DOC' ? 'Document' : d.doc_type;
       const date = d.issued_date
         ? new Date(d.issued_date + 'T12:00:00').toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })
         : '';
       return `
-        <div class="load-doc-item" onclick="loadDocument(${d.id})">
+        <div class="load-doc-item${isCurrent ? ' current' : ''}" onclick="loadDocument(${d.id})">
           <div class="load-doc-item-left">
-            <div class="load-doc-ref">${d.ref_number}</div>
+            <div class="load-doc-ref">${d.ref_number}${isCurrent ? '<span class="load-current-badge">● Currently open</span>' : ''}</div>
             <div class="load-doc-nick" id="loadNick-${d.id}">${nickRowHtml(d)}</div>
             <div class="load-doc-partner">${d.partner_name || '—'}</div>
             <div class="load-doc-meta">${typeLabel} &nbsp;·&nbsp; Issued ${date} &nbsp;·&nbsp; ${d.created_by || ''}</div>
@@ -2064,6 +2117,7 @@
 
     // Hydrate all form fields
     const fd = doc.form_data;
+    if (docType === 'document') resetBodyBlocks(Object.keys(fd).filter(k => /^gen-body-\d+$/.test(k)).length);
     Object.keys(fd).forEach(fieldId => {
       const el = document.getElementById(fieldId);
       if (!el) return;
@@ -2109,7 +2163,7 @@
     if (nickInput) nickInput.value = fd._nickname || '';
 
     // Update save buttons to show already-loaded state (editable)
-    _loadedDocId = doc.id;
+    _loadedDocId = doc.id; _loadedDocType = docType;
     ['saveBtn-' + docType, 'saveBtn-preview'].forEach(btnId => {
       const btn = document.getElementById(btnId);
       if (btn) {
@@ -2126,7 +2180,13 @@
     const previewPanel = document.getElementById('previewPanel');
     if (previewPanel) previewPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
+    // Warn once per record: it stays "legacy" until it is saved again, so repeating the alert on every load is noise
+    const legacyKey = 'acnhs-legacy-sig-notice-' + doc.id;
+    let legacySeen = false;
     if (legacySignature) {
+      try { legacySeen = !!localStorage.getItem(legacyKey); localStorage.setItem(legacyKey, '1'); } catch (e) {}
+    }
+    if (legacySignature && !legacySeen) {
       alert('This document was saved with the previous signature layout. It now uses the standard signature (CEO).\nPlease check "Signed By" and the signature language before printing.');
     }
   }
@@ -2894,6 +2954,111 @@
   }
 
   /* ═══════════════════════════════════════════
+     Document: several body paragraphs — each one starts on a new page in the PDF
+  ═══════════════════════════════════════════ */
+  let _bodySeq = 1;   // unique editor ids: gen-body (the first), gen-body-2, gen-body-3 …
+
+  function getBodyEditors() { return [...document.querySelectorAll('#gen-bodies [data-body-editor]')]; }
+
+  function htmlHasContent(html) {
+    const t = document.createElement('div');
+    t.innerHTML = html || '';
+    return !!(t.textContent.trim() || t.querySelector('img'));
+  }
+
+  // Extra (2nd, 3rd …) body paragraphs that actually contain something, in order
+  function documentExtraBodies() {
+    return getBodyEditors().slice(1).map(ed => ed.innerHTML.trim()).filter(htmlHasContent);
+  }
+
+  function refreshBodyBlocks() {
+    const editors = getBodyEditors(), multi = editors.length > 1;
+    editors.forEach((ed, i) => {
+      const group = ed.closest('.form-group');
+      const label = group && group.querySelector('.body-block-label');
+      if (label) label.textContent = multi ? 'Body Paragraph ' + (i + 1) : 'Body Paragraph';
+      const actions = group && group.querySelector('.body-block-actions');
+      if (actions) {
+        actions.hidden = !multi;
+        const [up, down] = actions.querySelectorAll('.body-move-btn');
+        if (up) up.disabled = i === 0;
+        if (down) down.disabled = i === editors.length - 1;
+      }
+    });
+    const hint = document.getElementById('gen-bodies-hint');
+    if (hint) hint.hidden = !multi;
+  }
+
+  function createBodyBlock(html) {
+    const id = 'gen-body-' + (++_bodySeq);
+    const group = document.createElement('div');
+    group.className = 'form-group body-block-group';
+    group.innerHTML = `<div class="body-block-head">
+        <label class="body-block-label"></label>
+        <span class="body-block-actions"><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onclick="moveBodyBlock(this, -1)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onclick="moveBodyBlock(this, 1)">↓</button><button type="button" class="body-remove-btn" title="Remove this body paragraph" aria-label="Remove body paragraph" onclick="removeBodyBlock('${id}')">✕ Remove</button></span>
+      </div>
+      <div id="${id}" data-fmt-editor data-body-editor data-render="renderDocument" contenteditable="true" class="rich-field" style="min-height:160px;" oninput="renderDocument()" onpaste="cleanLetterPaste(event)"></div>`;
+    document.getElementById('gen-bodies').append(group);
+    const ed = group.querySelector('.rich-field');
+    ed.innerHTML = html || '';
+    initFmtToolbars();   // toolbar + undo history for the new editor
+    return ed;
+  }
+
+  function addBodyBlock() {
+    const ed = createBodyBlock('');
+    refreshBodyBlocks();
+    renderDocument();
+    ed.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    ed.focus();
+  }
+
+  // Reorder by swapping the text of two neighbouring editors, so editor ids (and what is saved) stay positional
+  function moveBodyBlock(btn, dir) {
+    const editors = getBodyEditors();
+    const from = editors.indexOf(btn.closest('.form-group').querySelector('[data-body-editor]'));
+    const to = from + dir;
+    if (from < 0 || to < 0 || to >= editors.length) return;
+    const a = editors[from], b = editors[to];
+    histCommit(a); histCommit(b);   // keep any pending typing as its own undo step
+    if (a.innerHTML === b.innerHTML) return;
+    const html = a.innerHTML;
+    a.innerHTML = b.innerHTML;
+    b.innerHTML = html;
+    histCommit(a); histCommit(b);
+    // Link the two history steps so one Undo/Redo reverts or repeats the whole move
+    const ha = _hist.get(a.id), hb = _hist.get(b.id);
+    if (ha && hb) { ha.stack[ha.i].pair = b.id; hb.stack[hb.i].pair = a.id; }
+    renderDocument();
+    b.closest('.form-group').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    const mate = b.closest('.form-group').querySelectorAll('.body-move-btn')[dir < 0 ? 0 : 1];
+    if (mate && !mate.disabled) mate.focus();
+  }
+
+  function removeBodyBlock(id) {
+    const ed = document.getElementById(id);
+    if (!ed) return;
+    if (htmlHasContent(ed.innerHTML) && !confirm('Remove this body paragraph and its text?')) return;
+    const h = _hist.get(id);
+    if (h) { h.obs.disconnect(); clearTimeout(h.timer); _hist.delete(id); }
+    ed.closest('.form-group').remove();
+    refreshBodyBlocks();
+    renderDocument();
+  }
+
+  // Drop every extra paragraph and create `extraCount` fresh ones (ids restart at gen-body-2)
+  function resetBodyBlocks(extraCount) {
+    getBodyEditors().slice(1).forEach(ed => {
+      const h = _hist.get(ed.id);
+      if (h) { h.obs.disconnect(); clearTimeout(h.timer); _hist.delete(ed.id); }
+      ed.closest('.form-group').remove();
+    });
+    _bodySeq = 1;
+    for (let i = 0; i < extraCount; i++) createBodyBlock('');
+    refreshBodyBlocks();
+  }
+
+  /* ═══════════════════════════════════════════
      RENDER: Document (blank letterhead — header + footer, optional signature)
   ═══════════════════════════════════════════ */
   function renderDocument() {
@@ -2901,7 +3066,13 @@
     const docDate = v('gen-docDate') || new Date().toISOString().split('T')[0];
     const sigRole = document.getElementById('gen-sigRole')?.value || 'ceo';
     const sigName = v('gen-sigName');
-    const body    = spaceDashes(document.getElementById('gen-body')?.innerHTML.trim() || '');
+    // The first filled paragraph is the main body; every further filled paragraph starts on a new page.
+    // (With one paragraph, or none filled, this renders exactly as before.)
+    const bodyEditors = getBodyEditors();
+    const filledBodies = bodyEditors.filter(ed => htmlHasContent(ed.innerHTML));
+    const body    = spaceDashes((filledBodies[0] || bodyEditors[0])?.innerHTML.trim() || '');
+    const extraBodies = filledBodies.slice(1).map(ed => `
+      <div class="doc-body doc-letter body-page" data-page-break="1">${spaceDashes(ed.innerHTML.trim())}</div>`).join('');
     const logoSrc = getLogoSrc();
 
     const sigHtml = buildSignature({ lang: document.getElementById('gen-sigLang')?.value || 'en', role: sigRole, name: sigName });
@@ -2924,7 +3095,7 @@
       </div>
 
       <!-- BODY -->
-      <div class="doc-body doc-letter" style="margin-top:10mm;min-height:40mm;">${body}</div>
+      <div class="doc-body doc-letter" style="margin-top:10mm;min-height:40mm;">${body}</div>${extraBodies}
 
       <!-- SIGNATURE (right side) -->
       ${sigHtml}
@@ -2947,6 +3118,7 @@
     if (roleEl) roleEl.value = 'ceo';
     const langEl = document.getElementById('gen-sigLang');
     if (langEl) langEl.value = 'en';
+    resetBodyBlocks(0);
     const bodyEl = document.getElementById('gen-body');
     if (bodyEl) bodyEl.innerHTML = '';
     const btn = document.getElementById('saveBtn-document');
@@ -3007,7 +3179,7 @@
     const box = document.createElement('div');
     box.innerHTML = (html || '').trim();
     if (!box.textContent.trim() && !box.querySelector('img')) return '';
-    const BLOCK = /^(P|DIV|UL|OL|H[1-6]|BLOCKQUOTE|TABLE)$/;
+    const BLOCK = /^(P|DIV|UL|OL|H[1-6]|BLOCKQUOTE|TABLE|HR)$/;
     const out = document.createElement('div');
     let run = null;
     [...box.childNodes].forEach(n => {
@@ -3051,7 +3223,7 @@
       else { const p = doc.createElement('p'); p.append(...d.childNodes); d.replaceWith(p); }
     });
     // Keep only a small set of formatting tags; unwrap everything else (links, spans, fonts…)
-    const KEEP = new Set(['P','BR','STRONG','EM','U','UL','OL','LI']);
+    const KEEP = new Set(['P','BR','STRONG','EM','U','UL','OL','LI','HR']);
     [...root.querySelectorAll('*')].reverse().forEach(el => {
       if (el.tagName === 'B') { const s = doc.createElement('strong'); s.append(...el.childNodes); el.replaceWith(s); return; }
       if (el.tagName === 'I') { const s = doc.createElement('em'); s.append(...el.childNodes); el.replaceWith(s); return; }
@@ -3063,7 +3235,7 @@
     const out = doc.createElement('div');
     let run = null;
     [...root.childNodes].forEach(n => {
-      const isBlock = n.nodeType === 1 && ['P','UL','OL'].includes(n.tagName);
+      const isBlock = n.nodeType === 1 && ['P','UL','OL','HR'].includes(n.tagName);
       if (isBlock) { run = null; out.append(n); return; }
       if (n.nodeType === 3 && !n.textContent.trim() && !run) return;
       if (!run) { run = doc.createElement('p'); out.append(run); }
@@ -3076,6 +3248,132 @@
     return spaceDashes(out.innerHTML.replace(/\u00ad/g, '').replace(/\u00a0/g, ' ').replace(/\s*\n\s*/g, ' ').trim());
   }
 
+  /* ── Unlimited undo / redo for the rich editors ──
+     Native browser undo is unreliable here (the toolbar edits the DOM directly, which resets it, and clipboard/undo
+     shortcuts may not reach an embedded browser), so each editor keeps its own list of snapshots. There is no cap:
+     every step stays available until the page is closed. */
+  const _hist = new Map();   // editor id -> { stack: [{ html, sel }], i: current index, timer, busy, obs }
+  const HIST_TYPING = /^(insertText|insertCompositionText|deleteContentBackward|deleteContentForward|deleteWordBackward|deleteWordForward)$/;
+  const HIST_PAUSE_MS = 500;   // typing is grouped into one step until a pause this long
+
+  function histPath(node, root) {
+    const path = [];
+    while (node && node !== root) { const par = node.parentNode; if (!par) return null; path.unshift(Array.prototype.indexOf.call(par.childNodes, node)); node = par; }
+    return node === root ? path : null;
+  }
+  function histNode(root, path) {
+    let n = root;
+    for (const i of path) { n = n && n.childNodes[i]; if (!n) return null; }
+    return n;
+  }
+  function histSaveSel(ed) {
+    const s = window.getSelection();
+    if (!s.rangeCount) return null;
+    const r = s.getRangeAt(0);
+    if (!ed.contains(r.startContainer) || !ed.contains(r.endContainer)) return null;
+    const a = histPath(r.startContainer, ed), b = histPath(r.endContainer, ed);
+    return a && b ? { a, ao: r.startOffset, b, bo: r.endOffset } : null;
+  }
+  function histLoadSel(ed, sel) {
+    const s = window.getSelection();
+    const r = document.createRange();
+    const clamp = (n, o) => Math.max(0, Math.min(o, n.nodeType === 3 ? n.length : n.childNodes.length));
+    const a = sel && histNode(ed, sel.a), b = sel && histNode(ed, sel.b);
+    if (a && b) { r.setStart(a, clamp(a, sel.ao)); r.setEnd(b, clamp(b, sel.bo)); }
+    else { r.selectNodeContents(ed); r.collapse(false); }
+    s.removeAllRanges(); s.addRange(r);
+  }
+
+  function histButtons(ed) {
+    const h = _hist.get(ed.id);
+    const bar = ed.previousElementSibling;
+    if (!h || !bar || !bar.classList.contains('align-toolbar')) return;
+    const pending = ed.innerHTML !== h.stack[h.i].html;
+    const undo = bar.querySelector('[data-hist="undo"]'), redo = bar.querySelector('[data-hist="redo"]');
+    if (undo) undo.disabled = !(h.i > 0 || pending);
+    if (redo) redo.disabled = !(h.i < h.stack.length - 1 && !pending);
+  }
+
+  // Record the editor's current content as a new step (no-op when nothing changed)
+  function histCommit(ed) {
+    const h = ed && _hist.get(ed.id);
+    if (!h || h.busy) return;
+    clearTimeout(h.timer); h.timer = null;
+    const html = ed.innerHTML;
+    if (h.stack[h.i].html !== html) {
+      h.stack.length = h.i + 1;               // a new edit ends the redo branch
+      h.stack.push({ html, sel: histSaveSel(ed) });
+      h.i = h.stack.length - 1;
+    }
+    histButtons(ed);
+  }
+
+  function histApply(ed, h) {
+    h.busy = true; clearTimeout(h.timer); h.timer = null;
+    const snap = h.stack[h.i];
+    ed.innerHTML = snap.html;
+    h.obs.takeRecords();                      // our own change must not be recorded as a new step
+    ed.focus();
+    histLoadSel(ed, snap.sel);
+    ed.dispatchEvent(new Event('input', { bubbles: true }));   // re-render the preview
+    h.busy = false;
+    histButtons(ed);
+  }
+
+  function histUndo(ed) {
+    const h = ed && _hist.get(ed.id);
+    if (!h) return;
+    histCommit(ed);                           // pending typing becomes a step first
+    if (h.i === 0) return;
+    const pair = histPartner(h.stack[h.i], ed, -1);
+    h.i--; if (pair) { pair.h.i--; histApply(pair.ed, pair.h); }
+    histApply(ed, h);
+  }
+  function histRedo(ed) {
+    const h = ed && _hist.get(ed.id);
+    if (!h) return;
+    histCommit(ed);
+    if (h.i >= h.stack.length - 1) return;
+    const pair = histPartner(h.stack[h.i + 1], ed, 1);
+    h.i++; if (pair) { pair.h.i++; histApply(pair.ed, pair.h); }
+    histApply(ed, h);
+  }
+
+  // The other editor of a paragraph move, if its history is still at the matching step
+  function histPartner(step, ed, dir) {
+    if (!step.pair) return null;
+    const pEd = document.getElementById(step.pair), pH = pEd && _hist.get(pEd.id);
+    if (!pH) return null;
+    const pStep = pH.stack[pH.i + (dir > 0 ? 1 : 0)];
+    return pStep && pStep.pair === ed.id ? { ed: pEd, h: pH } : null;
+  }
+
+  function histInitEditor(ed) {
+    if (_hist.has(ed.id)) { histButtons(ed); return; }
+    const h = { stack: [{ html: ed.innerHTML, sel: null }], i: 0, timer: null, busy: false, obs: null };
+    _hist.set(ed.id, h);
+    h.obs = new MutationObserver(() => {
+      if (h.busy) return;
+      clearTimeout(h.timer);
+      h.timer = setTimeout(() => histCommit(ed), HIST_PAUSE_MS);
+      histButtons(ed);
+    });
+    h.obs.observe(ed, { childList: true, subtree: true, characterData: true, attributes: true });
+    ed.addEventListener('beforeinput', e => {
+      if (e.inputType === 'historyUndo') { e.preventDefault(); histUndo(ed); return; }    // Edit menu / context menu undo
+      if (e.inputType === 'historyRedo') { e.preventDefault(); histRedo(ed); return; }
+      if (!HIST_TYPING.test(e.inputType || '')) histCommit(ed);                            // keep the state before a paste/cut/etc. as its own step
+    });
+    ed.addEventListener('input', e => { if (!h.busy && !HIST_TYPING.test(e.inputType || '')) histCommit(ed); });
+    ed.addEventListener('keydown', e => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const k = (e.key || '').toLowerCase();
+      if (k === 'z') { e.preventDefault(); if (e.shiftKey) histRedo(ed); else histUndo(ed); }
+      else if (k === 'y' && !e.metaKey) { e.preventDefault(); histRedo(ed); }
+    });
+    histButtons(ed);
+  }
+
   /* ── Formatting toolbar: generated for every editor that declares data-fmt-editor + data-render ── */
   function buildFmtToolbar(id, render) {
     const bm = e => `onmousedown="event.preventDefault()" ${e}`;
@@ -3084,7 +3382,12 @@
     const al = (a, title, label, path) =>
       `<button type="button" data-align="${a}" aria-pressed="false" title="${title}" aria-label="${label}" ${bm(`onclick="setRowAlign('${id}','${a}',${render})"`)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}"/></svg></button>`;
     const sizes = [8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28].map(n => `<option value="${n}">${n} pt</option>`).join('');
+    const hist = (kind, title, label, path) =>
+      `<button type="button" data-hist="${kind}" disabled title="${title}" aria-label="${label}" ${bm(`onclick="hist${kind === 'undo' ? 'Undo' : 'Redo'}(document.getElementById('${id}'))"`)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="${path}"/></svg></button>`;
     return `<div class="align-toolbar" role="toolbar" aria-label="Text formatting">
+      ${hist('undo', 'Undo (Ctrl/Cmd+Z)', 'Undo', 'M5.5 3 2.5 6l3 3M2.5 6H9a4 4 0 0 1 0 8H5.5')}
+      ${hist('redo', 'Redo (Ctrl/Cmd+Shift+Z)', 'Redo', 'M10.5 3l3 3-3 3M13.5 6H7a4 4 0 0 0 0 8h3.5')}
+      <span class="align-toolbar-sep"></span>
       ${fmt('bold', 'Bold', 'Bold (Ctrl+B)', '<b>B</b>')}
       ${fmt('italic', 'Italic', 'Italic (Ctrl+I)', '<i>I</i>')}
       ${fmt('underline', 'Underline', 'Underline (Ctrl+U)', '<u>U</u>')}
@@ -3101,6 +3404,8 @@
       ${al('center', 'Center row', 'Align center', 'M2 3h12M4 6.5h8M2 10h12M4 13.5h8')}
       ${al('right', 'Align row right', 'Align right', 'M2 3h12M6 6.5h8M2 10h12M6 13.5h8')}
       ${al('justify', 'Justify row', 'Justify', 'M2 3h12M2 6.5h12M2 10h12M2 13.5h12')}
+      <span class="align-toolbar-sep"></span>
+      <button type="button" title="Insert a separator line at the cursor" aria-label="Insert separator line" ${bm(`onclick="insertSeparator('${id}',${render})"`)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h10M1.5 8h13M3 13.5h10"></path></svg></button>
     </div>`;
   }
 
@@ -3115,6 +3420,7 @@
       if (ed.previousElementSibling && ed.previousElementSibling.classList.contains('align-toolbar')) return;
       ed.insertAdjacentHTML('beforebegin', buildFmtToolbar(ed.id, ed.dataset.render));
     });
+    document.querySelectorAll('[data-fmt-editor]').forEach(histInitEditor);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initFmtToolbars);
   else initFmtToolbars();
@@ -3265,14 +3571,17 @@
 
   function collectRows(editor) {
     const BLOCK_TAGS = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE)$/;
+    const BLOCK_SEL = 'p,div,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote';
     const isRowBlock = n => n.nodeType === 1 && (BLOCK_TAGS.test(n.tagName) || n.classList.contains('ln'));
     const rows = [];
     const collect = container => {
       let seg = [];
       const flush = () => { if (seg.length) rows.push({ container, nodes: seg }); seg = []; };
       [...container.childNodes].forEach(n => {
-        if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) { flush(); [...n.children].forEach(li => collect(li)); }
+        if (n.nodeType === 1 && n.tagName === 'HR') flush();   // a separator line is not a text row
+        else if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) { flush(); [...n.children].forEach(li => collect(li)); }
         else if (isRowBlock(n)) { flush(); collect(n); }
+        else if (n.nodeType === 1 && n.querySelector(BLOCK_SEL)) { flush(); collect(n); }   // inline wrapper around paragraphs
         else if (n.nodeType === 1 && n.tagName === 'BR') { seg.push(n); flush(); }
         else seg.push(n);
       });
@@ -3299,6 +3608,7 @@
     const editor = document.getElementById(editorId);
     const sel = window.getSelection();
     if (!editor) return;
+    histCommit(editor);
     const range = getEditorRange(editor);
     if (!range) return;
 
@@ -3344,6 +3654,25 @@
     }
     editor.focus();
     updateToolbarState(editor);
+    histCommit(editor);
+    if (typeof onChange === 'function') onChange();
+  }
+
+  // Drops a thin horizontal line at the caret; text after the caret moves below it
+  function insertSeparator(editorId, onChange) {
+    const editor = document.getElementById(editorId);
+    if (!editor) return;
+    const range = getEditorRange(editor);
+    if (!range) return;
+    editor.focus();
+    histCommit(editor);
+    if (!range.collapsed) {
+      range.collapse(false);   // never replace the selected text
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+    }
+    document.execCommand('insertHorizontalRule');
+    histCommit(editor);
+    updateToolbarState(editor);
     if (typeof onChange === 'function') onChange();
   }
 
@@ -3351,15 +3680,45 @@
     const editor = document.getElementById(editorId);
     if (!editor || !getEditorRange(editor)) return;
     editor.focus();
+    histCommit(editor);
     document.execCommand(command, false, null);
+    histCommit(editor);
     updateToolbarState(editor);
     if (typeof onChange === 'function') onChange();
+  }
+
+  const BLOCK_SELECTOR = 'p,div,li,ul,ol,h1,h2,h3,h4,h5,h6,blockquote';
+
+  // Style a selection that crosses paragraphs: wrap each text piece on its own, so no <span> ever
+  // ends up around (or inside) a block — that nesting made later row alignment fail.
+  function styleTextInRange(range, prop, value) {
+    const root = range.commonAncestorContainer.nodeType === 3 ? range.commonAncestorContainer.parentNode : range.commonAncestorContainer;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const texts = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) if (range.intersectsNode(n)) texts.push(n);
+    const { startContainer: sc, startOffset: so, endContainer: ec, endOffset: eo } = range;
+    const spans = [];
+    texts.forEach(t => {
+      let node = t;
+      if (t === ec && eo < t.length) t.splitText(eo);
+      if (t === sc && so > 0) node = t.splitText(so);
+      if (!node.data.trim() && /^(UL|OL)$/.test(node.parentNode.tagName)) return;
+      if (!node.data) return;
+      const parent = node.parentNode;
+      let span;
+      if (parent.tagName === 'SPAN' && !parent.className && parent.childNodes.length === 1) span = parent;
+      else { span = document.createElement('span'); node.before(span); span.append(node); }
+      span.style[prop] = value;
+      spans.push(span);
+    });
+    return spans;
   }
 
   // pt === '' removes custom sizing. A caret (no selection) resizes the current row.
   function setFontSize(editorId, pt, onChange) {
     const editor = document.getElementById(editorId);
     if (!editor) return;
+    histCommit(editor);
     const range = getEditorRange(editor);
     if (!range) return;
     const sel = window.getSelection();
@@ -3385,6 +3744,13 @@
           nodes.forEach(n => span.append(n));
         }
       });
+    } else if (pt && range.cloneContents().querySelector(BLOCK_SELECTOR)) {
+      const spans = styleTextInRange(range, 'fontSize', pt + 'pt');
+      if (spans.length) {
+        sel.removeAllRanges();
+        const r = document.createRange();
+        r.setStartBefore(spans[0]); r.setEndAfter(spans[spans.length - 1]); sel.addRange(r);
+      }
     } else if (pt) {
       const frag = range.extractContents();
       clearInner(frag);
@@ -3407,6 +3773,7 @@
     editor.focus();
     updateFontSizeBox(editor);
     updateToolbarState(editor);
+    histCommit(editor);
     if (typeof onChange === 'function') onChange();
   }
 
@@ -3414,6 +3781,7 @@
   function setTextColor(editorId, color, onChange) {
     const editor = document.getElementById(editorId);
     if (!editor) return;
+    histCommit(editor);
     const range = getEditorRange(editor);
     if (!range) return;
     const sel = window.getSelection();
@@ -3438,6 +3806,13 @@
           nodes.forEach(n => span.append(n));
         }
       });
+    } else if (color && range.cloneContents().querySelector(BLOCK_SELECTOR)) {
+      const spans = styleTextInRange(range, 'color', color);
+      if (spans.length) {
+        sel.removeAllRanges();
+        const r = document.createRange();
+        r.setStartBefore(spans[0]); r.setEndAfter(spans[spans.length - 1]); sel.addRange(r);
+      }
     } else if (color) {
       const frag = range.extractContents();
       clearInner(frag);
@@ -3460,6 +3835,7 @@
     updateFontSizeBox(editor);
     updateColorBox(editor);
     updateToolbarState(editor);
+    histCommit(editor);
     if (typeof onChange === 'function') onChange();
   }
 
@@ -3753,6 +4129,7 @@
     .doc-letter p, .doc-letter div { margin: 0 0 4mm 0; text-align: justify; hyphens: none; }
     .doc-letter ul, .doc-letter ol { margin: 0 0 4mm 0; padding-left: 9mm; }
     .doc-letter ul { list-style: disc; }
+    .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
@@ -3770,6 +4147,7 @@
     .keep-with-next { break-after: avoid; page-break-after: avoid; break-inside: avoid; page-break-inside: avoid; }
     .sig-group { display: inline-block; width: 100%; vertical-align: top; break-inside: avoid; page-break-inside: avoid; }
     .sig-group > .doc-section:first-child { margin-top: 0; }
+    .body-page { break-before: page; page-break-before: always; margin-top: 0; }
     .keep-with-list { break-after: avoid; page-break-after: avoid; }
     /* Headings in body text are left-aligned (justified headings get stretched word gaps); inline alignment still wins */
     .doc-letter p.keep-with-next, .doc-letter div.keep-with-next,
@@ -3948,6 +4326,7 @@ ${contentHtml}
     .doc-letter p, .doc-letter div { margin: 0 0 4mm 0; text-align: justify; }
     .doc-letter ul, .doc-letter ol { margin: 0 0 4mm 0; padding-left: 9mm; }
     .doc-letter ul { list-style: disc; }
+    .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
