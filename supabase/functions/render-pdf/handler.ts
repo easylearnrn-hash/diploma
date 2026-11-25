@@ -194,6 +194,9 @@ export async function handleRender(req: Request, deps: Deps): Promise<Response> 
       headerTemplate: '<div></div>',
       footerTemplate,
       waitForFonts: true,
+      // Newer Chromium adds a tagged-PDF structure tree by default: invisible, but it makes every PDF much larger
+      tagged: false,
+      outline: false,
     },
     // Same as the local server: wait for the network to go quiet and every web font to be ready before printing
     gotoOptions: { waitUntil: ['networkidle0'], timeout: 30_000 },
