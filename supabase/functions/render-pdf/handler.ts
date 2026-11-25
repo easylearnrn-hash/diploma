@@ -22,8 +22,10 @@ const RENDER_TIMEOUT_MS = 110_000
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const DEFAULT_LOCAL_ORIGINS = ['http://localhost:8000', 'http://127.0.0.1:8000', 'null']
 
-// Armenian text in the footer needs its own font: the footer is a separate page that cannot see the document's fonts
-let footerFontsCache: string | null = null
+// The Armenian page label «Էջ» is drawn as vector outlines of Noto Sans Armenian Regular (the footer is a separate mini-page where
+// an embedded web font may not be loaded in time, so a font would silently fall back). 1000 units = 1 em; baseline at y = 0.
+const HY_PAGE_LABEL_PATH = 'M164 -492H550V-416H164ZM409 0H96V-714H186V-76H419Q490 -76 527.5 -40.5Q565 -5 565 64V143H475V72Q475 35 458.5 17.5Q442 0 409 0ZM840 166H1108V236H781Q743 236 722.5 221Q702 206 702 174Q702 165 705 153.5Q708 142 717 127Q726 112 744 93L903 -79Q945 -124 972 -160.5Q999 -197 1012 -229Q1025 -261 1025 -294Q1025 -362 991 -395.5Q957 -429 897 -429Q838 -429 803.5 -394Q769 -359 769 -294Q769 -248 784 -221.5Q799 -195 837 -171Q861 -156 878 -140.5Q895 -125 906.5 -108.5Q918 -92 924 -73L874 -25Q868 -41 857 -57Q846 -73 826 -90.5Q806 -108 772 -127Q725 -155 702.5 -194.5Q680 -234 680 -295Q680 -357 705.5 -403.5Q731 -450 780 -476Q829 -502 897 -502Q1003 -502 1059.5 -448Q1116 -394 1116 -296Q1116 -253 1097 -211Q1078 -169 1041 -121.5Q1004 -74 949 -16L840 99Q825 115 819 125.5Q813 136 813 146Q813 156 818.5 161Q824 166 840 166Z'
+const HY_PAGE_LABEL_WIDTH = 1146
 const rateLog = new Map<string, number[]>()
 
 function allowedOrigins(env: Env): string[] {
@@ -56,29 +58,12 @@ function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 }
 
-async function getFooterFontsCss(deps: Deps): Promise<string> {
-  if (footerFontsCache !== null) return footerFontsCache
-  const base = siteOrigin(deps.env)
-  try {
-    const faces: string[] = []
-    for (const weight of [400, 700]) {
-      const res = await deps.fetchFn(`${base}/assets/fonts/NotoSansArmenian-${weight}.woff`)
-      if (!res.ok) throw new Error(`font ${weight}: ${res.status}`)
-      const bytes = new Uint8Array(await res.arrayBuffer())
-      let bin = ''
-      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-      faces.push(`@font-face{font-family:'Noto Sans Armenian';font-weight:${weight};src:url(data:font/woff;base64,${btoa(bin)}) format('woff');}`)
-    }
-    footerFontsCache = faces.join('')
-  } catch (_e) {
-    return '' // the footer still renders (English text); only the Armenian label falls back to a system font
-  }
-  return footerFontsCache
-}
-
-export function buildFooterTemplate(opts: { refNo: string; pageNumbers: boolean; lang: string; fontsCss: string }): string {
+export function buildFooterTemplate(opts: { refNo: string; pageNumbers: boolean; lang: string }): string {
   const hy = opts.lang === 'hy'
-  const pageLabel = hy ? '\u0537\u057B' : 'Page'
+  // 9pt = 12 px: 1 unit = 0.012 px; the outline has a 292-unit descent below the baseline
+  const pageLabel = hy
+    ? `<svg role="img" aria-label="\u0537\u057B" xmlns="http://www.w3.org/2000/svg" viewBox="0 -1068 ${HY_PAGE_LABEL_WIDTH} 1360" width="${(HY_PAGE_LABEL_WIDTH * 0.012).toFixed(3)}" height="16.32" style="vertical-align:-3.504px;"><path fill="currentColor" d="${HY_PAGE_LABEL_PATH}"/></svg>`
+    : 'Page'
   const of = hy ? '/' : 'of'
   const pager = opts.pageNumbers
     ? `
@@ -86,7 +71,6 @@ export function buildFooterTemplate(opts: { refNo: string; pageNumbers: boolean;
             ${pageLabel}&nbsp;<span class="pageNumber"></span>&nbsp;${of}&nbsp;<span class="totalPages"></span>`
     : ''
   return `
-        <style>${opts.fontsCss}</style>
         <div style="
           font-size: 9pt;
           width: 100%;
@@ -195,7 +179,6 @@ export async function handleRender(req: Request, deps: Deps): Promise<Response> 
     refNo: typeof payload.refNo === 'string' ? payload.refNo.slice(0, 120) : '',
     pageNumbers: payload.pageNumbers !== false,
     lang: payload.lang === 'hy' ? 'hy' : 'en',
-    fontsCss: await getFooterFontsCss(deps),
   })
 
   const base = (env('BROWSERLESS_URL') || 'https://production-ams.browserless.io').replace(/\/+$/, '')

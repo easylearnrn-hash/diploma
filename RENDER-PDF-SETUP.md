@@ -63,6 +63,14 @@ Error messages are shown in the page: *not set up yet* (secret/function missing)
   barrier against random abuse, not strong authentication. Moving admin login to Supabase Auth would let the function verify a
   real signed-in user.
 
+## Verified against the real Browserless
+
+Tested on `production-sfo` with a 4-page Armenian/English document: same page count and identical text on every page as the old local
+export; Pages preview, PDF and Word all work. Known, harmless differences from a local Playwright export:
+the cloud Chromium is newer (page height differs by about 1 pt), and the footer's Latin text uses Liberation Sans, the metric-compatible
+stand-in for Arial on Linux. The Armenian page label «Էջ» in the footer is drawn as vector outlines of Noto Sans Armenian so it never
+depends on font loading.
+
 ## Cost and behaviour to know
 
 * Every Pages-preview refresh and every export is one Browserless render (the browser time counts against your plan). The
