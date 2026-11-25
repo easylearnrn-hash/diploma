@@ -50,3 +50,6 @@ signature as soon as the secret `RESEND_WEBHOOK_SECRET` is set (Resend dashboard
 supabase secrets set RESEND_WEBHOOK_SECRET='whsec_...' --project-ref eyhksbiceueoiamwnqpr
 ```
 Until it is set the function behaves as before and logs a warning. Verbose logging of headers/payload was removed.
+
+Emergency switch: `supabase secrets set SEND_EMAIL_ENFORCE=false` puts the send-email check in log-only mode (everything is allowed and
+refusals are only logged); `supabase secrets unset SEND_EMAIL_ENFORCE` turns it back on. Re-deploy is not needed for the switch.

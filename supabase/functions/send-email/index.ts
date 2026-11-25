@@ -116,10 +116,13 @@ serve(async (req: Request) => {
       },
       { env: (name) => Deno.env.get(name), fetchFn: fetch },
     )
-    if (!policy.ok) {
+    // SEND_EMAIL_ENFORCE=false puts the check in log-only mode (used while a new version of the pages reaches browsers)
+    const enforce = Deno.env.get('SEND_EMAIL_ENFORCE') !== 'false'
+    if (!policy.ok && enforce) {
       return new Response(JSON.stringify({ success: false, error: policy.error }), { status: policy.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
-    const customHeaders = policy.role === 'admin' ? requestedHeaders : policy.headers
+    if (!policy.ok) console.warn(`send-email policy (log only): would refuse - ${policy.error}`)
+    const customHeaders = !policy.ok || policy.role === 'admin' ? requestedHeaders : policy.headers
 
     // Validate inputs
     if (!to || !subject || !html) {
