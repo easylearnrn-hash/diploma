@@ -42,3 +42,11 @@ grades, video-call tables, ...). They need student/teacher session tokens first.
 `js/supabase-config.js` attaches the tokens to every request to `/functions/v1/send-email`; `PortalAuth` / `AdminAuth.viewerLogin`
 store the portal token on a successful sign-in. Sessions opened before the update have no token: the page asks to sign in again.
 Portal tokens are signed with a key derived from `ADMIN_TOKEN_SECRET` and cannot be used as admin tokens.
+
+## receive-email (inbound mail webhook)
+Anyone could post a forged "received e-mail" (which also triggers forwarding rules). `receive-email` now verifies the Resend (Svix)
+signature as soon as the secret `RESEND_WEBHOOK_SECRET` is set (Resend dashboard → Webhooks → the endpoint → Signing secret, `whsec_...`):
+```bash
+supabase secrets set RESEND_WEBHOOK_SECRET='whsec_...' --project-ref eyhksbiceueoiamwnqpr
+```
+Until it is set the function behaves as before and logs a warning. Verbose logging of headers/payload was removed.

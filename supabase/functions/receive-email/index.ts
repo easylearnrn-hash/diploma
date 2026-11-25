@@ -5,6 +5,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 // @ts-ignore
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { verifySvixSignature } from '../_shared/webhook-signature.ts'
 import { corsHeaders } from "./cors.ts"
 
 declare const Deno: {
@@ -658,7 +659,6 @@ serve(async (req: Request) => {
   }
 
   console.log('Webhook request received')
-  console.log('Headers:', Object.fromEntries(req.headers.entries()))
   console.log('Method:', req.method)
 
   try {
@@ -678,7 +678,24 @@ serve(async (req: Request) => {
     }
 
     console.log('Webhook type:', payload.type)
-    console.log('Payload:', JSON.stringify(payload, null, 2))
+
+    // Inbound mail webhooks must come from Resend: verify the Svix signature once RESEND_WEBHOOK_SECRET is set.
+    // ('fetch-body' is a call made by the admin/student mail pages, not a webhook.)
+    if (payload.type !== 'fetch-body') {
+      if (RESEND_WEBHOOK_SECRET) {
+        const valid = await verifySvixSignature(
+          RESEND_WEBHOOK_SECRET,
+          { id: req.headers.get('svix-id'), timestamp: req.headers.get('svix-timestamp'), signature: req.headers.get('svix-signature') },
+          rawBody,
+        )
+        if (!valid) {
+          console.warn('Rejected webhook with an invalid signature')
+          return new Response(JSON.stringify({ success: false, error: 'Invalid signature' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+      } else {
+        console.warn('RESEND_WEBHOOK_SECRET is not set: webhook signatures are NOT being checked')
+      }
+    }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
