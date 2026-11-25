@@ -81,8 +81,17 @@
   // Which backend produced the last PDF: the page preview waits longer between renders for the cloud (each render costs credits)
   const state = { lastBackend: 'cloud' };
 
-  async function renderPdf(payload, opts) {
-    const signal = opts && opts.signal;
+  // One render at a time: the cloud plan allows few concurrent browsers, so a second request (for example the PDF button while the
+  // page preview is still being built) would be refused as "busy". An export cancels a running preview and goes first;
+  // a preview simply waits for a running export; and a refused request is retried after a short pause.
+  let current = null;   // { kind, ctrl, done }
+  const abortError = () => { const e = new Error('Aborted'); e.name = 'AbortError'; return e; };
+  const sleep = (ms, signal) => new Promise((resolve, reject) => {
+    const t = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(t); reject(abortError()); }, { once: true });
+  });
+
+  async function renderOnce(payload, signal) {
     let preferred = 'auto';
     try { preferred = localStorage.getItem('acnhs-render-backend') || 'auto'; } catch (_) { /* default */ }
     const dev = isDevHost();
@@ -101,6 +110,38 @@
       }
       throw e;
     }
+  }
+
+  // opts: { signal, kind: 'preview' | 'export' (default) }
+  async function renderPdf(payload, opts) {
+    const outer = opts && opts.signal;
+    const kind = opts && opts.kind === 'preview' ? 'preview' : 'export';
+    if (outer && outer.aborted) throw abortError();
+
+    while (current) {
+      if (kind === 'export' && current.kind === 'preview') current.ctrl.abort();
+      await current.done.catch(() => {});
+      if (outer && outer.aborted) throw abortError();
+      if (kind === 'export') await sleep(300, outer);   // give the cloud browser of a cancelled preview a moment to close
+    }
+
+    const ctrl = new AbortController();
+    if (outer) outer.addEventListener('abort', () => ctrl.abort(), { once: true });
+    const rec = { kind, ctrl };
+    rec.done = (async () => {
+      const delays = kind === 'export' ? [2500, 5000, 8000] : [3000];
+      for (let attempt = 0; ; attempt++) {
+        try { return await renderOnce(payload, ctrl.signal); }
+        catch (e) {
+          const busy = e instanceof RenderError && (e.code === 'busy' || e.code === 'rate_limited');
+          if (!busy || attempt >= delays.length) throw e;
+          await sleep(delays[attempt], ctrl.signal);
+        }
+      }
+    })();
+    current = rec;
+    try { return await rec.done; }
+    finally { if (current === rec) current = null; }
   }
 
   /* ───────────────────────── Word (.docx) from PDF pages ───────────────────────── */
