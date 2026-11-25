@@ -24,7 +24,7 @@
   }
 
   const MESSAGES = {
-    not_configured: 'Cloud PDF rendering is not set up yet (the Browserless token has not been added to Supabase).',
+    not_configured: 'Cloud PDF rendering is not set up yet: the render-pdf function has not been deployed to Supabase (or its Browserless token is missing). See RENDER-PDF-SETUP.md.',
     unauthorized: 'Please sign in again as an admin to create PDFs.',
     forbidden_origin: 'This page is not allowed to use cloud rendering.',
     busy: 'The rendering service is busy. Please try again in a few seconds.',
@@ -60,9 +60,9 @@
     }
     if (!res.ok) {
       let code = 'error', msg = 'Rendering failed (' + res.status + ')';
-      try { const j = await res.json(); if (j && j.code) code = j.code; if (j && j.error) msg = j.error; } catch (_) { /* not JSON */ }
-      // The function is not deployed yet: the platform answers 404
-      if (res.status === 404 && code === 'error') code = 'not_configured';
+      try { const j = await res.json(); if (j && j.code) code = String(j.code); if (j && (j.error || j.message)) msg = j.error || j.message; } catch (_) { /* not JSON */ }
+      // The function is not deployed yet: the platform itself answers 404 (body like {"code":"NOT_FOUND",...})
+      if (res.status === 404) code = 'not_configured';
       throw new RenderError(MESSAGES[code] || msg, code, res.status);
     }
     const bytes = new Uint8Array(await res.arrayBuffer());
