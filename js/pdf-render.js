@@ -19,8 +19,8 @@
     constructor(message, code, status) { super(message); this.name = 'RenderError'; this.code = code || 'error'; this.status = status || 0; }
   }
 
-  function adminId() {
-    try { return localStorage.getItem('userId') || sessionStorage.getItem('userId') || ''; } catch (_) { return ''; }
+  function adminToken() {
+    try { return sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken') || ''; } catch (_) { return ''; }
   }
 
   const MESSAGES = {
@@ -38,7 +38,7 @@
   async function cloudPdf(payload, signal) {
     const cfg = (typeof SUPABASE_CONFIG !== 'undefined') ? SUPABASE_CONFIG : null;
     if (!cfg || !cfg.url) throw new RenderError('Supabase is not configured', 'not_configured');
-    const id = adminId();
+    const id = adminToken();
     if (!id) throw new RenderError(MESSAGES.unauthorized, 'unauthorized', 401);
 
     let res;
@@ -49,7 +49,7 @@
           'Content-Type': 'application/json',
           apikey: cfg.anonKey,
           Authorization: 'Bearer ' + cfg.anonKey,
-          'x-admin-id': id,
+          'x-admin-token': id,
         },
         body: JSON.stringify(payload),
         signal,

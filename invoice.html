@@ -1776,6 +1776,7 @@ Please include your Student ID in the payment reference or memo to ensure proper
 
   <script src="js/supabase.min.js"></script>
   <script src="./js/supabase-config.js"></script>
+<script src="./js/admin-auth.js"></script>
   <script src="./js/acnhs-logo-base64.js?v=20260215"></script>
   <script src="./js/email-template.js"></script>
   <script src="./js/payment-reminder.js"></script>
@@ -1864,44 +1865,23 @@ Please include your Student ID in the payment reference or memo to ensure proper
       authBtn.textContent = 'Verifying credentials…';
       
       try {
-        // Hash password for comparison
-        const passwordHash = await hashPassword(password);
-        
         // Normalize email to lowercase for case-insensitive matching
         const normalizedEmail = email.toLowerCase().trim();
         
-        // Query admin_users table
-        const { data: adminUsers, error } = await invoiceSupabase
-          .from('admin_users')
-          .select('id, name, email, username, password_hash, role, permissions, status')
-          .or(`email.eq.${normalizedEmail},username.eq.${normalizedEmail}`)
-          .eq('status', 'active')
-          .limit(1);
+        // The password is checked on the server (match by email OR username)
+        const auth = await AdminAuth.login(normalizedEmail, password);
         
-        if (error) {
-          console.error('Auth error:', error);
-          showAuthAlert('Authentication failed: ' + error.message, 'error');
+        if (!auth.ok) {
+          const msg = auth.reason === 'not_found' ? 'Admin account not found or inactive'
+                    : auth.reason === 'bad_password' ? 'Incorrect password'
+                    : 'Authentication failed: ' + auth.message;
+          showAuthAlert(msg, 'error');
           authBtn.disabled = false;
           authBtn.textContent = 'Authenticate & Access';
           return;
         }
         
-        if (!adminUsers || adminUsers.length === 0) {
-          showAuthAlert('Admin account not found or inactive', 'error');
-          authBtn.disabled = false;
-          authBtn.textContent = 'Authenticate & Access';
-          return;
-        }
-        
-        const adminUser = adminUsers[0];
-        
-        // Verify password hash
-        if (adminUser.password_hash !== passwordHash) {
-          showAuthAlert('Incorrect password', 'error');
-          authBtn.disabled = false;
-          authBtn.textContent = 'Authenticate & Access';
-          return;
-        }
+        const adminUser = auth.user;
         
         // Verify this is the authorized admin email
         if (adminUser.email !== ADMIN_EMAIL) {

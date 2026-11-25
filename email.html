@@ -1892,6 +1892,7 @@
   <!-- Scripts -->
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/admin-auth.js"></script>
   <!-- Super-admin guard: ONLY hrachfilm@gmail.com may access this page -->
   <script>
     (function() {
@@ -2368,11 +2369,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         if (!userEmail) return null;
         
         // Try to get from database first
-        const { data, error } = await db
-          .from('admin_users')
-          .select('id, name, email, role, title, phone_ext, signature')
-          .eq('email', userEmail)
-          .maybeSingle(); // Use maybeSingle() instead of single() to avoid error when no rows
+        // Loaded through the server (own profile); falls back to the session data below if unavailable
+        const data = await AdminAuth.me().catch(() => null);
         
         if (data) {
           _userInfoCache = data;
@@ -3733,12 +3731,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
 
         // Update user's email_permissions to include this new email
         const allEmails = [...forwardingRulesData.map(r => r.acnhs_email), newEmail];
-        const { error: permError } = await db
-          .from('admin_users')
-          .update({
-            email_permissions: allEmails
-          })
-          .eq('email', userEmail);
+        let permError = null;
+        try { await AdminAuth.setEmailPermissions(allEmails); } catch (e) { permError = e; }
 
         if (permError) {
           console.warn('Could not update email_permissions:', permError);
@@ -4370,12 +4364,8 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         const allStaffAcnhsEmails = forwardingRulesData.map(rule => rule.acnhs_email);
 
         // Update user's email_permissions to include all staff emails
-        const { error: permError } = await db
-          .from('admin_users')
-          .update({
-            email_permissions: allStaffAcnhsEmails
-          })
-          .eq('email', userEmail);
+        let permError = null;
+        try { await AdminAuth.setEmailPermissions(allStaffAcnhsEmails); } catch (e) { permError = e; }
 
         if (permError) {
           console.warn('Could not update email_permissions:', permError);

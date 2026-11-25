@@ -7,7 +7,10 @@
 //   SITE_ORIGIN                  optional   default https://www.acnhs.am  (where /assets/fonts is served from)
 //   ALLOWED_ORIGINS              optional   comma list; default = SITE_ORIGIN, https://acnhs.am and local dev origins
 //   RENDER_RATE_PER_MINUTE       optional   per-admin limit, default 20
+//   ADMIN_TOKEN_SECRET           required   signs/verifies the admin session tokens issued by the admin-auth function
 // Provided by Supabase automatically: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+import { verifyAdminToken } from '../_shared/admin-token.ts'
 
 export type Env = (name: string) => string | undefined
 
@@ -44,7 +47,7 @@ function corsHeaders(origin: string | null, env: Env): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': ok ? origin! : 'null',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-id',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token',
     'Access-Control-Expose-Headers': 'content-disposition, x-render-ms',
     'Vary': 'Origin',
   }
@@ -150,7 +153,10 @@ export async function handleRender(req: Request, deps: Deps): Promise<Response> 
   const token = env('BROWSERLESS_TOKEN')
   if (!token) return json({ error: 'Cloud rendering is not configured', code: 'not_configured' }, 503, cors)
 
-  const adminId = req.headers.get('x-admin-id') || ''
+  const secret = env('ADMIN_TOKEN_SECRET')
+  if (!secret) return json({ error: 'Admin authentication is not configured', code: 'not_configured' }, 503, cors)
+  const claims = await verifyAdminToken(secret, req.headers.get('x-admin-token'), now)
+  const adminId = claims ? claims.sub : ''
   if (!UUID_RE.test(adminId)) return json({ error: 'Admin session required', code: 'unauthorized' }, 401, cors)
   const admin = await isActiveAdmin(adminId, deps)
   if (admin === null) return json({ error: 'Could not verify the admin session', code: 'auth_unavailable' }, 503, cors)
