@@ -372,6 +372,9 @@
       box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
     }
     .rich-field ul, .rich-field ol { padding-left: 20px; margin: 4px 0; }
+    .rich-field table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; line-height: 1.45; white-space: normal; }
+    .rich-field th, .rich-field td { border: 1px solid rgba(255,255,255,0.28); padding: 5px 9px; text-align: left; vertical-align: middle; }
+    .rich-field th { background: rgba(255,255,255,0.08); font-weight: 700; }
     .rich-field hr { border: 0; border-top: 1px solid rgba(255,255,255,0.35); margin: 10px 0; height: 0; }
     .align-toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
     .align-toolbar { flex-wrap: wrap; }
@@ -396,6 +399,22 @@
     .add-body-hint { font-size: 12px; color: var(--text-muted, #8b96ab); }
     [hidden] { display: none !important; }
     .body-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+    /* Body paragraphs: collapsed to 9 lines until you click into one (or use its toolbar) */
+    #gen-bodies .rich-field {
+      max-height: calc(9 * 1.6em + 24px); overflow: hidden;
+      -webkit-mask-image: linear-gradient(#000 calc(100% - 22px), transparent); mask-image: linear-gradient(#000 calc(100% - 22px), transparent);
+    }
+    #gen-bodies .form-group:focus-within .rich-field { max-height: none; overflow: visible; -webkit-mask-image: none; mask-image: none; }
+    /* With several paragraphs each one is its own card: title + actions on a header bar, then toolbar and text */
+    #gen-bodies.multi { gap: 18px; }
+    #gen-bodies.multi > .form-group {
+      padding: 12px 16px 16px; border-radius: 14px; gap: 8px;
+      background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.12);
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    #gen-bodies.multi > .form-group:focus-within { border-color: var(--gold-dim); background: rgba(201,168,76,0.035); box-shadow: 0 0 0 3px rgba(201,168,76,0.08); }
+    #gen-bodies.multi .body-block-head { margin: 0; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+    #gen-bodies.multi .body-block-label { color: var(--gold-primary); font-weight: 700; margin: 0; }
     .body-block-actions { display: inline-flex; align-items: center; gap: 6px; }
     .body-move-btn {
       width: 28px; padding: 3px 0; border-radius: 8px; font-size: 13px; line-height: 1.1; cursor: pointer;
@@ -798,6 +817,11 @@
     .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
+    .doc-letter table { width: 100%; border-collapse: collapse; margin: 0 0 4mm 0; font-size: 10pt; line-height: 1.4; color: #000; }
+    .doc-letter th, .doc-letter td { border: 0.25mm solid #777; padding: 1.5mm 2.2mm; text-align: left; vertical-align: middle; overflow-wrap: break-word; }
+    .doc-letter th { background: #eceff4; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-letter thead { display: table-header-group; }
+    .doc-letter tr { break-inside: avoid; page-break-inside: avoid; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
     .doc-letter em, .doc-letter i { font-style: italic; }
     .doc-letter a { color: inherit; text-decoration: none; }
@@ -1166,7 +1190,16 @@
       <aside class="doc-sidebar">
         <p class="panel-label">Document Types</p>
 
-        <div class="doc-type-card active" id="typeCard-affiliation" data-type="affiliation" onclick="selectDocType('affiliation')">
+        <div class="doc-type-card active" id="typeCard-document" data-type="document" onclick="selectDocType('document')">
+          <div class="doc-icon">🗒️</div>
+          <div class="doc-type-info">
+            <div class="doc-type-name">Document</div>
+            <div class="doc-type-desc">Blank letterhead — header &amp; footer only, optional CEO/CFO signature</div>
+          </div>
+          <div class="doc-type-badge">Ready</div>
+        </div>
+
+        <div class="doc-type-card" id="typeCard-affiliation" data-type="affiliation" onclick="selectDocType('affiliation')">
           <div class="doc-icon">🤝</div>
           <div class="doc-type-info">
             <div class="doc-type-name">Clinical Affiliation Agreement</div>
@@ -1228,15 +1261,6 @@
           </div>
           <div class="doc-type-badge">Ready</div>
         </div>
-
-        <div class="doc-type-card" id="typeCard-document" data-type="document" onclick="selectDocType('document')">
-          <div class="doc-icon">🗒️</div>
-          <div class="doc-type-info">
-            <div class="doc-type-name">Document</div>
-            <div class="doc-type-desc">Blank letterhead — header &amp; footer only, optional CEO/CFO signature</div>
-          </div>
-          <div class="doc-type-badge">Ready</div>
-        </div>
       </aside>
 
       <!-- RIGHT: Form + Preview -->
@@ -1250,7 +1274,7 @@
         </div>
 
         <!-- ── CLINICAL AFFILIATION FORM ── -->
-        <div class="form-card" id="form-affiliation">
+        <div class="form-card" id="form-affiliation" style="display:none;">
           <div class="form-card-header">
             <div class="form-card-header-icon">🤝</div>
             <div class="form-card-header-text">
@@ -1612,7 +1636,7 @@
         </div>
 
         <!-- ── DOCUMENT (BLANK LETTERHEAD) FORM ── -->
-        <div class="form-card" id="form-document" style="display:none;">
+        <div class="form-card" id="form-document">
           <div class="form-card-header">
             <div class="form-card-header-icon">🗒️</div>
             <div class="form-card-header-text">
@@ -1632,6 +1656,13 @@
                 <label>Document Reference No.</label>
                 <input type="text" id="gen-refNo" placeholder="e.g. ACNHS-DOC-2026-001" oninput="renderDocument()">
               </div>
+              <div class="form-group">
+                <label>Page Numbers</label>
+                <select id="gen-pageNumbers" onchange="renderDocument()">
+                  <option value="on" selected>On — show “Page X of Y” in the footer</option>
+                  <option value="off">Off — no page numbers</option>
+                </select>
+              </div>
             </div>
 
             <p class="form-section-title">📝 Body</p>
@@ -1639,7 +1670,7 @@
               <div class="form-group">
                 <div class="body-block-head">
                   <label class="body-block-label">Body Paragraph</label>
-                  <span class="body-block-actions" hidden><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onclick="moveBodyBlock(this, -1)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onclick="moveBodyBlock(this, 1)">↓</button></span>
+                  <span class="body-block-actions" hidden><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onmousedown="event.preventDefault()" onclick="moveBodyBlock(this, -1, event)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onmousedown="event.preventDefault()" onclick="moveBodyBlock(this, 1, event)">↓</button></span>
                 </div>
                 <div id="gen-body" data-fmt-editor data-body-editor data-render="renderDocument" contenteditable="true" class="rich-field" style="min-height:160px;" oninput="renderDocument()" onpaste="cleanLetterPaste(event)"></div>
               </div>
@@ -1756,7 +1787,7 @@
   //  DOCUMENT GENERATOR — ACNHS
   // ═══════════════════════════════════════════════════════════
 
-  let currentDocType = 'affiliation';
+  let currentDocType = 'document';
   let currentScale   = 0.72;
   let _loadedDocId   = null;   // ID of the currently-loaded Supabase document (null = new doc)
   let _loadedDocType = null;   // form type of that document ('affiliation' | 'mou' | 'government' | 'document')
@@ -1781,10 +1812,10 @@
     const nameField = { affiliation: 'aff-hospitalName', mou: 'mou-instName', government: 'gov-agencyName' }[currentDocType];
     const slug = (nameField ? v(nameField) : '').replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-').slice(0, 36);
     const filename = ((slug ? `${refNo}_${slug}` : refNo).replace(/[^a-zA-Z0-9._-]/g, '_') || 'document') + '.' + ext;
-    return { refNo, filename };
+    return { refNo, filename, pageNumbers: currentDocType !== 'document' || pageNumbersOn() };
   }
 
-  const DOCUMENT_FIELDS = ['gen-docDate','gen-refNo','gen-body','gen-sigRole','gen-sigName','gen-sigLang'];
+  const DOCUMENT_FIELDS = ['gen-docDate','gen-refNo','gen-body','gen-sigRole','gen-sigName','gen-sigLang','gen-pageNumbers'];
 
   async function saveAndAssignRef(docType, forceNew = false) {
     const meta = DOC_META[docType];
@@ -2117,7 +2148,11 @@
 
     // Hydrate all form fields
     const fd = doc.form_data;
-    if (docType === 'document') resetBodyBlocks(Object.keys(fd).filter(k => /^gen-body-\d+$/.test(k)).length);
+    if (docType === 'document') {
+      resetBodyBlocks(Object.keys(fd).filter(k => /^gen-body-\d+$/.test(k)).length);
+      const pn = document.getElementById('gen-pageNumbers');
+      if (pn) pn.value = 'on';   // documents saved before this option existed
+    }
     Object.keys(fd).forEach(fieldId => {
       const el = document.getElementById(fieldId);
       if (!el) return;
@@ -2562,7 +2597,7 @@
       </div>
     `;
 
-    document.getElementById('docContent').innerHTML = html;
+    document.getElementById('docContent').innerHTML = protectText(html);
     document.getElementById('docFooter').innerHTML =
       `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; partnerships@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)} &nbsp;|&nbsp; Page 1`;
 
@@ -2740,7 +2775,7 @@
       </div>
     `;
 
-    document.getElementById('docContent').innerHTML = html;
+    document.getElementById('docContent').innerHTML = protectText(html);
     document.getElementById('docFooter').innerHTML =
       `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; international@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)} &nbsp;|&nbsp; Page 1`;
 
@@ -2876,7 +2911,7 @@
       ${sigHtml}
     `;
 
-    document.getElementById('docContent').innerHTML = html;
+    document.getElementById('docContent').innerHTML = protectText(html);
     document.getElementById('docFooter').innerHTML =
       `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; info@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)} &nbsp;|&nbsp; Page 1`;
 
@@ -2985,6 +3020,7 @@
         if (down) down.disabled = i === editors.length - 1;
       }
     });
+    document.getElementById('gen-bodies')?.classList.toggle('multi', multi);
     const hint = document.getElementById('gen-bodies-hint');
     if (hint) hint.hidden = !multi;
   }
@@ -2995,7 +3031,7 @@
     group.className = 'form-group body-block-group';
     group.innerHTML = `<div class="body-block-head">
         <label class="body-block-label"></label>
-        <span class="body-block-actions"><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onclick="moveBodyBlock(this, -1)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onclick="moveBodyBlock(this, 1)">↓</button><button type="button" class="body-remove-btn" title="Remove this body paragraph" aria-label="Remove body paragraph" onclick="removeBodyBlock('${id}')">✕ Remove</button></span>
+        <span class="body-block-actions"><button type="button" class="body-move-btn" title="Move this paragraph up" aria-label="Move body paragraph up" onmousedown="event.preventDefault()" onclick="moveBodyBlock(this, -1, event)">↑</button><button type="button" class="body-move-btn" title="Move this paragraph down" aria-label="Move body paragraph down" onmousedown="event.preventDefault()" onclick="moveBodyBlock(this, 1, event)">↓</button><button type="button" class="body-remove-btn" title="Remove this body paragraph" aria-label="Remove body paragraph" onclick="removeBodyBlock('${id}')">✕ Remove</button></span>
       </div>
       <div id="${id}" data-fmt-editor data-body-editor data-render="renderDocument" contenteditable="true" class="rich-field" style="min-height:160px;" oninput="renderDocument()" onpaste="cleanLetterPaste(event)"></div>`;
     document.getElementById('gen-bodies').append(group);
@@ -3014,7 +3050,7 @@
   }
 
   // Reorder by swapping the text of two neighbouring editors, so editor ids (and what is saved) stay positional
-  function moveBodyBlock(btn, dir) {
+  function moveBodyBlock(btn, dir, ev) {
     const editors = getBodyEditors();
     const from = editors.indexOf(btn.closest('.form-group').querySelector('[data-body-editor]'));
     const to = from + dir;
@@ -3022,9 +3058,14 @@
     const a = editors[from], b = editors[to];
     histCommit(a); histCommit(b);   // keep any pending typing as its own undo step
     if (a.innerHTML === b.innerHTML) return;
+    // The cursor travels with the text: if one of the two is being edited, the expanded box must follow it
+    const active = document.activeElement;
+    const selA = active === a ? histSaveSel(a) : null, selB = active === b ? histSaveSel(b) : null;
     const html = a.innerHTML;
     a.innerHTML = b.innerHTML;
     b.innerHTML = html;
+    if (active === a) { b.focus(); histLoadSel(b, selA); }
+    else if (active === b) { a.focus(); histLoadSel(a, selB); }
     histCommit(a); histCommit(b);
     // Link the two history steps so one Undo/Redo reverts or repeats the whole move
     const ha = _hist.get(a.id), hb = _hist.get(b.id);
@@ -3032,7 +3073,7 @@
     renderDocument();
     b.closest('.form-group').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     const mate = b.closest('.form-group').querySelectorAll('.body-move-btn')[dir < 0 ? 0 : 1];
-    if (mate && !mate.disabled) mate.focus();
+    if (ev && ev.detail === 0 && active !== a && active !== b && mate && !mate.disabled) mate.focus();   // keyboard users keep their place; a mouse click must not expand anything
   }
 
   function removeBodyBlock(id) {
@@ -3070,14 +3111,14 @@
     // (With one paragraph, or none filled, this renders exactly as before.)
     const bodyEditors = getBodyEditors();
     const filledBodies = bodyEditors.filter(ed => htmlHasContent(ed.innerHTML));
-    const body    = spaceDashes((filledBodies[0] || bodyEditors[0])?.innerHTML.trim() || '');
+    const body    = formatTables(spaceDashes((filledBodies[0] || bodyEditors[0])?.innerHTML.trim() || ''));
     const extraBodies = filledBodies.slice(1).map(ed => `
-      <div class="doc-body doc-letter body-page" data-page-break="1">${spaceDashes(ed.innerHTML.trim())}</div>`).join('');
+      <div class="doc-body doc-letter body-page" data-page-break="1">${formatTables(spaceDashes(ed.innerHTML.trim()))}</div>`).join('');
     const logoSrc = getLogoSrc();
 
     const sigHtml = buildSignature({ lang: document.getElementById('gen-sigLang')?.value || 'en', role: sigRole, name: sigName });
 
-    document.getElementById('docContent').innerHTML = `
+    document.getElementById('docContent').innerHTML = protectText(`
       <!-- HEADER -->
       <div class="doc-header">
         <div class="doc-header-left">
@@ -3099,13 +3140,18 @@
 
       <!-- SIGNATURE (right side) -->
       ${sigHtml}
-    `;
+    `);
 
     document.getElementById('docFooter').innerHTML =
-      `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; info@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)} &nbsp;|&nbsp; Page 1`;
+      `<strong>www.acnhs.am</strong> &nbsp;|&nbsp; info@acnhs.am &nbsp;|&nbsp; Ref: ${escHtml(refNo)}${pageNumbersOn() ? ' &nbsp;|&nbsp; Page 1' : ''}`;
 
     const wm = document.getElementById('docWatermarkImg');
     if (wm) wm.src = getLogoSrc();
+  }
+
+  // Page numbers are a Document-only option (default on); the other types always show them
+  function pageNumbersOn() {
+    return (document.getElementById('gen-pageNumbers')?.value || 'on') !== 'off';
   }
 
   function clearDocumentForm() {
@@ -3118,6 +3164,8 @@
     if (roleEl) roleEl.value = 'ceo';
     const langEl = document.getElementById('gen-sigLang');
     if (langEl) langEl.value = 'en';
+    const pnEl = document.getElementById('gen-pageNumbers');
+    if (pnEl) pnEl.value = 'on';
     resetBodyBlocks(0);
     const bodyEl = document.getElementById('gen-body');
     if (bodyEl) bodyEl.innerHTML = '';
@@ -3164,6 +3212,103 @@
   /* Dashes used as punctuation between words always get a space on each side
      ("word — word", "word – word"); hyphens in compounds and numeric ranges are untouched.
      A non-breaking space before the dash keeps it from starting a new line. */
+  // Output-only table layout (the editor keeps what was pasted): tidy cell text, make a leading all-<th> row the
+  // repeating header, and give columns a symmetric grid — short columns (chapter no., pages, hours…) share one
+  // fixed width and are centred, text columns share the rest and stay left-aligned, headers are centred.
+  function formatTables(html) {
+    if (!/<table[\s>]/i.test(html || '')) return html;
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    box.querySelectorAll('table').forEach(table => {
+      const trim = cell => {
+        const first = cell.firstChild, last = cell.lastChild;
+        if (first && first.nodeType === 3) first.textContent = first.textContent.replace(/^[\s\u00a0]+/, '');
+        if (last && last.nodeType === 3) last.textContent = last.textContent.replace(/[\s\u00a0]+$/, '');
+      };
+      table.querySelectorAll('th,td').forEach(trim);
+
+      if (!table.tHead) {
+        const first = table.rows[0];
+        if (first && [...first.cells].every(c => c.tagName === 'TH') && table.rows.length > 1) table.createTHead().append(first);
+      }
+      const rows = [...table.rows];
+      if (!rows.length || rows.some(r => [...r.cells].some(c => c.colSpan > 1 || c.rowSpan > 1))) return;
+      const cols = Math.max(...rows.map(r => r.cells.length));
+      const bodyRows = rows.filter(r => r.parentElement.tagName !== 'THEAD' && ![...r.cells].every(c => c.tagName === 'TH'));
+      if (!bodyRows.length) return;
+
+      const short = Array.from({ length: cols }, (_, i) =>
+        bodyRows.every(r => !r.cells[i] || r.cells[i].textContent.trim().length <= 12));
+      const shortCount = short.filter(Boolean).length, textCount = cols - shortCount;
+      // Short columns share one width, wide enough for their longest body value and the longest word of their header
+      const headRows = rows.filter(r => !bodyRows.includes(r));
+      const need = i => Math.max(
+        ...bodyRows.map(r => (r.cells[i] ? r.cells[i].textContent.trim().length : 0)),
+        ...headRows.flatMap(r => r.cells[i] ? r.cells[i].textContent.trim().split(/\s+/).map(w => w.length) : [0]));
+      const neededPct = Math.max(15, ...short.map((isShort, i) => isShort ? ((need(i) * 3 + 7) / 186) * 100 : 0));
+      const shortW = textCount ? Math.min(neededPct, 60 / shortCount) : 100 / cols;
+      const textW = textCount ? (100 - shortCount * shortW) / textCount : 0;
+
+      // Automatic layout: the percentages below are only preferred widths, a column never gets narrower than its longest word
+      table.style.width = '100%';
+      const group = document.createElement('colgroup');
+      short.forEach(isShort => {
+        const col = document.createElement('col');
+        col.style.width = (isShort ? shortW : textW).toFixed(2) + '%';
+        group.append(col);
+      });
+      table.prepend(group);
+      rows.forEach(r => [...r.cells].forEach((c, i) => {
+        if (c.style.textAlign) return;
+        const isHead = c.tagName === 'TH';
+        if (isHead || short[i]) c.style.textAlign = 'center';
+        if (short[i] && !isHead) c.style.whiteSpace = 'nowrap';
+      }));
+    });
+    return box.innerHTML;
+  }
+
+  // Output-only typography: numeric expressions and hyphenated words are never split across lines.
+  // Non-breaking spaces join thousands groups, numbers and their units/labels, and dates; ranges, numeric dates,
+  // phone numbers and hyphenated words are wrapped in a no-wrap span (a plain hyphen or en dash would allow a break).
+  const PROTECT = (() => {
+    const EN_MONTH = 'January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec';
+    const HY_MONTH = 'հունվար|փետրվար|մարտ|ապրիլ|մայիս|հունիս|հուլիս|օգոստոս|սեպտեմբեր|հոկտեմբեր|նոյեմբեր|դեկտեմբեր';
+    const MONTH = `(?:(?:${EN_MONTH})(?![\\p{L}])|(?:${HY_MONTH})\\p{L}{0,2}(?![\\p{L}]))`;
+    const HY_UNIT = '(?:ժամ|դասաժամ|կրեդիտ|միավոր|տոկոս|ամիս|շաբաթ|օր|տարի|րոպե|վայրկյան|կիսամյակ|դրամ|դոլար|եվրո|ռուբլի|հատ|մարդ|ուսանող|կգ|մգ|մլ|սմ|մմ|կմ)(?:ի|ը|ն|ով|ում|ից|ին|եր|երի|երը|ներ|ների|ները|ա)?';
+    const EN_UNIT = '(?:hours?|hrs?|minutes?|mins?|seconds?|days?|weeks?|months?|years?|credits?|points?|units?|ECTS|percent|students?|semesters?|kg|mg|ml|cm|mm|km|USD|EUR|AMD|RUB|dollars?|euros?|dram)';
+    const SYMBOL = '(?:%|‰|°C|°|թ\\.|թվ\\.|թվական\\p{L}*)';
+    const SP = '[ \\u202f]+';
+    const NBSP = '\u00a0';
+    return {
+      thousands: [/(?<![\d.,])(\d{1,3})((?:[ \u00a0\u202f]\d{3})+)(?!\d)/g, (m, a, b) => a + b.replace(/[ \u202f]/g, NBSP)],
+      unit:      [new RegExp(`(\\d)${SP}(?=(?:${SYMBOL}|${HY_UNIT}|${EN_UNIT})(?![\\p{L}\\d]))`, 'giu'), '$1' + NBSP],
+      label:     [new RegExp(`(?<![\\p{L}\\d])(էջեր|էջ|հոդված|կետ|Article|Art\\.|Section|Chapter|pages?|pp?\\.|№|No\\.?)${SP}(?=\\d)`, 'giu'), '$1' + NBSP],
+      currency:  [new RegExp(`(?<![\\p{L}])(USD|EUR|AMD|RUB|GBP|[$€£֏])${SP}(?=\\d)`, 'gu'), '$1' + NBSP],
+      dayMonth:  [new RegExp(`(?<![\\d])(\\d{1,2})${SP}(?=${MONTH})`, 'giu'), '$1' + NBSP],
+      monthYear: [new RegExp(`(?<![\\p{L}])(${MONTH}\\.?)${SP}(?=\\d{4}(?!\\d))`, 'giu'), '$1' + NBSP],
+      monthDay:  [new RegExp(`(?<![\\p{L}])(${MONTH}\\.?)${SP}(\\d{1,2}),${SP}(?=\\d{4})`, 'giu'), '$1' + NBSP + '$2,' + NBSP],
+      wrap: new RegExp('(?<![\\p{L}\\p{N}])(?:'
+        + '\\+\\d{1,3}[ \u00a0]\\(?\\d{3}\\)?[ \u00a0\\-]\\d{3}[ \u00a0\\-]\\d{4}'
+        + '|[\\p{L}\\p{N}]+(?:[-\u2010\u2011][\\p{L}\\p{N}]+)+'
+        + '|\\d(?:[\\d.,]*\\d)?[ \u00a0]?[\u2013\u2212][ \u00a0]?\\d(?:[\\d.,]*\\d)?(?:\u00a0[\\p{L}%.]+)?'
+        + '|\\d{1,2}[./]\\d{1,2}[./]\\d{2,4}'
+        + '|\\d+(?:/\\d+)+'
+        + ')', 'gu'),
+    };
+  })();
+
+  function protectText(html) {
+    if (!html) return html;
+    const fix = text => {
+      ['thousands', 'unit', 'label', 'currency', 'dayMonth', 'monthYear', 'monthDay'].forEach(k => { text = text.replace(PROTECT[k][0], PROTECT[k][1]); });
+      return text.replace(PROTECT.wrap, m => '<span style="white-space:nowrap">' + m.replace(/ /g, '\u00a0') + '</span>');
+    };
+    // Tags and entities (&#8212; …) are left untouched; only the text between them is processed
+    return String(html).split(/(<[^>]*>)/).map(part =>
+      part.startsWith('<') ? part : part.split(/(&#?\w+;)/).map((seg, i) => (i % 2 ? seg : fix(seg))).join('')).join('');
+  }
+
   function spaceDashes(html) {
     return String(html || '').split(/(<[^>]*>)/).map(part => {
       if (part.startsWith('<')) return part;
@@ -3189,16 +3334,26 @@
       run.append(n);
     });
     out.querySelectorAll(':scope > p').forEach(p => { if (!p.textContent.trim() && !p.querySelector('img')) p.remove(); });
-    return out.innerHTML;
+    return formatTables(out.innerHTML);
   }
 
   function normalizeLetterHtml(html) {
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    doc.querySelectorAll('script,style,meta,link,title,head,img,table,svg').forEach(el => el.remove());
+    doc.querySelectorAll('script,style,meta,link,title,head,img,svg,colgroup,col,caption').forEach(el => el.remove());
     const root = doc.body;
 
-    const BLOCK = new Set(['P','DIV','UL','OL','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','SECTION','ARTICLE','PRE']);
+    const BLOCK = new Set(['P','DIV','UL','OL','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','SECTION','ARTICLE','PRE','TABLE']);
     const hasBlock = el => [...el.children].some(c => BLOCK.has(c.tagName));
+
+    // Table cells hold inline text only: paragraphs/lists inside a cell become lines separated by <br>
+    root.querySelectorAll('td,th').forEach(cell => {
+      cell.querySelectorAll('table').forEach(t => t.replaceWith(doc.createTextNode(t.textContent)));
+      cell.querySelectorAll('ul,ol').forEach(l => l.replaceWith(...l.childNodes));
+      [...cell.querySelectorAll('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,section,article')].reverse()
+        .forEach(b => b.replaceWith(...b.childNodes, doc.createElement('br')));
+      while (cell.lastChild && cell.lastChild.nodeName === 'BR') cell.lastChild.remove();
+      while (cell.firstChild && cell.firstChild.nodeName === 'BR') cell.firstChild.remove();
+    });
 
     root.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
       const p = doc.createElement('p');
@@ -3223,19 +3378,22 @@
       else { const p = doc.createElement('p'); p.append(...d.childNodes); d.replaceWith(p); }
     });
     // Keep only a small set of formatting tags; unwrap everything else (links, spans, fonts…)
-    const KEEP = new Set(['P','BR','STRONG','EM','U','UL','OL','LI','HR']);
+    const KEEP = new Set(['P','BR','STRONG','EM','U','UL','OL','LI','HR','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD']);
     [...root.querySelectorAll('*')].reverse().forEach(el => {
       if (el.tagName === 'B') { const s = doc.createElement('strong'); s.append(...el.childNodes); el.replaceWith(s); return; }
       if (el.tagName === 'I') { const s = doc.createElement('em'); s.append(...el.childNodes); el.replaceWith(s); return; }
       if (!KEEP.has(el.tagName)) { el.replaceWith(...el.childNodes); return; }
-      [...el.attributes].forEach(a => el.removeAttribute(a.name));
+      [...el.attributes].forEach(a => {
+        if (/^(TD|TH)$/.test(el.tagName) && /^(colspan|rowspan)$/.test(a.name)) return;
+        el.removeAttribute(a.name);
+      });
     });
 
     // Wrap stray inline runs at the top level into paragraphs
     const out = doc.createElement('div');
     let run = null;
     [...root.childNodes].forEach(n => {
-      const isBlock = n.nodeType === 1 && ['P','UL','OL','HR'].includes(n.tagName);
+      const isBlock = n.nodeType === 1 && ['P','UL','OL','HR','TABLE'].includes(n.tagName);
       if (isBlock) { run = null; out.append(n); return; }
       if (n.nodeType === 3 && !n.textContent.trim() && !run) return;
       if (!run) { run = doc.createElement('p'); out.append(run); }
@@ -3578,7 +3736,7 @@
       let seg = [];
       const flush = () => { if (seg.length) rows.push({ container, nodes: seg }); seg = []; };
       [...container.childNodes].forEach(n => {
-        if (n.nodeType === 1 && n.tagName === 'HR') flush();   // a separator line is not a text row
+        if (n.nodeType === 1 && (n.tagName === 'HR' || n.tagName === 'TABLE')) flush();   // lines and tables are not text rows
         else if (n.nodeType === 1 && /^(UL|OL)$/.test(n.tagName)) { flush(); [...n.children].forEach(li => collect(li)); }
         else if (isRowBlock(n)) { flush(); collect(n); }
         else if (n.nodeType === 1 && n.querySelector(BLOCK_SEL)) { flush(); collect(n); }   // inline wrapper around paragraphs
@@ -3839,18 +3997,51 @@
     if (typeof onChange === 'function') onChange();
   }
 
+  // Plain text with Markdown pipe tables ("| a | b |" + "|---|---|") becomes real tables; other text keeps the paragraph logic
+  const MD_SEP = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+  const hasMarkdownTable = text => {
+    const lines = String(text || '').split('\n');
+    return lines.some((l, i) => i > 0 && l.includes('-') && l.includes('|') && MD_SEP.test(l) && lines[i - 1].includes('|'));
+  };
+
+  function plainTextToLetterHtml(text) {
+    const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    const splitRow = l => l.trim().replace(/^\|/, '').replace(/(?<!\\)\|\s*$/, '').split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, '|'));
+    const cell = c => esc(c).replace(/&lt;br\s*\/?&gt;/gi, '<br>').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+    let buf = [], out = [];
+    const flush = () => {
+      buf.join('\n').split(/\n\s*\n/).map(b => b.trim()).filter(Boolean)
+        .forEach(b => out.push('<p>' + esc(b).replace(/\n/g, '<br>') + '</p>'));
+      buf = [];
+    };
+    for (let i = 0; i < lines.length; ) {
+      if (lines[i].includes('|') && i + 1 < lines.length && lines[i + 1].includes('-') && lines[i + 1].includes('|') && MD_SEP.test(lines[i + 1])) {
+        const head = splitRow(lines[i]);
+        let j = i + 2; const rows = [];
+        while (j < lines.length && lines[j].trim() && lines[j].includes('|')) rows.push(splitRow(lines[j++]));
+        flush();
+        const pad = r => head.map((_, k) => `<td>${cell(r[k] || '')}</td>`).join('');
+        out.push('<table><thead><tr>' + head.map(h => `<th>${cell(h)}</th>`).join('') + '</tr></thead><tbody>'
+          + rows.map(r => `<tr>${pad(r)}</tr>`).join('') + '</tbody></table>');
+        i = j;
+      } else { buf.push(lines[i]); i++; }
+    }
+    flush();
+    return out.join('');
+  }
+
   function cleanLetterPaste(e) {
     e.preventDefault();
     const cd = e.clipboardData;
     const html = cd.getData('text/html');
+    const plain = cd.getData('text/plain');
     let clean;
-    if (html) {
+    // Copied Markdown source arrives as styled text, not a <table>: build the table from the plain text instead
+    if (html && !(/<table[\s>]/i.test(html) === false && hasMarkdownTable(plain))) {
       clean = normalizeLetterHtml(html);
     } else {
-      const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      clean = cd.getData('text/plain').split(/\n\s*\n/)
-        .map(b => b.trim()).filter(Boolean)
-        .map(b => '<p>' + esc(b).replace(/\n/g, '<br>') + '</p>').join('');
+      clean = plainTextToLetterHtml(plain);
     }
     document.execCommand('insertHTML', false, clean);
     e.target.dispatchEvent(new Event('input', { bubbles: true }));
@@ -3935,7 +4126,7 @@
     });
 
     // A line introducing a list ("…as follows:") stays with the first items of that list
-    root.querySelectorAll('ul, ol').forEach(list => {
+    root.querySelectorAll('ul, ol, table').forEach(list => {
       const intro = list.previousElementSibling;
       if (intro && /^(P|DIV)$/.test(intro.tagName) && /[:：]\s*$/.test(intro.textContent)) intro.classList.add('keep-with-list');
     });
@@ -4132,6 +4323,11 @@
     .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
+    .doc-letter table { width: 100%; border-collapse: collapse; margin: 0 0 4mm 0; font-size: 10pt; line-height: 1.4; color: #000; }
+    .doc-letter th, .doc-letter td { border: 0.25mm solid #777; padding: 1.5mm 2.2mm; text-align: left; vertical-align: middle; overflow-wrap: break-word; }
+    .doc-letter th { background: #eceff4; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-letter thead { display: table-header-group; }
+    .doc-letter tr { break-inside: avoid; page-break-inside: avoid; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
     .doc-letter em, .doc-letter i { font-style: italic; }
     .doc-letter a { color: inherit; text-decoration: none; }
@@ -4329,6 +4525,11 @@ ${contentHtml}
     .doc-letter hr { border: 0; border-top: 0.3mm solid #999; margin: 4mm 0; height: 0; break-after: avoid; page-break-after: avoid; }
     .doc-letter ol { list-style: decimal; }
     .doc-letter li { margin-bottom: 1.5mm; text-align: justify; }
+    .doc-letter table { width: 100%; border-collapse: collapse; margin: 0 0 4mm 0; font-size: 10pt; line-height: 1.4; color: #000; }
+    .doc-letter th, .doc-letter td { border: 0.25mm solid #777; padding: 1.5mm 2.2mm; text-align: left; vertical-align: middle; overflow-wrap: break-word; }
+    .doc-letter th { background: #eceff4; font-weight: 700; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-letter thead { display: table-header-group; }
+    .doc-letter tr { break-inside: avoid; page-break-inside: avoid; }
     .doc-letter strong, .doc-letter b { font-weight: 700; }
     .doc-letter em, .doc-letter i { font-style: italic; }
     .doc-letter a { color: inherit; text-decoration: none; }
@@ -4527,7 +4728,7 @@ ${contentHtml}
       }
 
       // ── Gather metadata (from the form of the document being exported) ─────
-      const { refNo, filename } = getExportMeta('pdf');
+      const { refNo, filename, pageNumbers } = getExportMeta('pdf');
 
       // ── Build self-contained print HTML ───────────────────────────────────
       const printHtml = buildPrintHtml(contentEl.innerHTML, getLogoSrc() || '', refNo);
@@ -4536,7 +4737,7 @@ ${contentHtml}
       const response = await fetch('http://localhost:8001/generate-pdf', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ html: printHtml, filename, refNo }),
+        body:    JSON.stringify({ html: printHtml, filename, refNo, pageNumbers }),
       });
 
       if (!response.ok) {
@@ -4595,8 +4796,8 @@ ${contentHtml}
     else                 currentScale = 0.75;
     applyScale();
 
-    // Render initial document
-    renderAffiliation();
+    // Open on the first type in the list (Document)
+    selectDocType('document');
 
     // Set today as default date for ACNHS signing date
     const today = new Date().toISOString().split('T')[0];

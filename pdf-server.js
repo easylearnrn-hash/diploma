@@ -68,7 +68,7 @@ const SCREEN_A4_H = 1123;
 // ── Read request body as string ──────────────────────────────────────────────
 function readBody(req) {
   return new Promise((resolve, reject) => {
-    let data = '';
+    const chunks = [];
     let size = 0;
     req.on('data', chunk => {
       size += chunk.length;
@@ -76,9 +76,10 @@ function readBody(req) {
         req.destroy();
         return reject(new Error('Request body too large'));
       }
-      data += chunk;
+      chunks.push(chunk);
     });
-    req.on('end',   () => resolve(data));
+    // Decode once: a multi-byte character (Armenian letters) can straddle two chunks, and decoding each chunk separately corrupts it
+    req.on('end',   () => resolve(Buffer.concat(chunks).toString('utf8')));
     req.on('error', reject);
   });
 }
@@ -266,10 +267,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── Parse body ──
-  let html, filename, refNo;
+  let html, filename, refNo, pageNumbers;
   try {
     const raw = await readBody(req);
-    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '' } = JSON.parse(raw));
+    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '', pageNumbers = true } = JSON.parse(raw));
   } catch (e) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
@@ -356,9 +357,9 @@ const server = http.createServer(async (req, res) => {
             &nbsp;&bull;&nbsp;
             info@acnhs.am
             &nbsp;&bull;&nbsp;
-            Ref:&nbsp;${safeRef}
+            Ref:&nbsp;${safeRef}${pageNumbers === false ? '' : `
             &nbsp;&bull;&nbsp;
-            Page&nbsp;<span class="pageNumber"></span>&nbsp;of&nbsp;<span class="totalPages"></span>
+            Page&nbsp;<span class="pageNumber"></span>&nbsp;of&nbsp;<span class="totalPages"></span>`}
           </div>
         </div>`,
     });
