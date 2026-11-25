@@ -63,7 +63,7 @@ function corsHeaders(origin: string | null, env: Env): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': ok ? origin! : 'null',
     'Access-Control-Allow-Methods': 'GET, HEAD, POST, PATCH, PUT, DELETE, OPTIONS',
-    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token, prefer, range, range-unit, accept, accept-profile, content-profile, x-owner-id, x-owner-role',
+    'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-admin-token, x-portal-token, prefer, range, range-unit, accept, accept-profile, content-profile, x-owner-id, x-owner-role',
     'Access-Control-Expose-Headers': 'content-range, content-location, preference-applied, range-unit',
     'Vary': 'Origin',
   }
