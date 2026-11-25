@@ -93,7 +93,7 @@ CREATE POLICY "Allow anonymous update transcripts" ON public.transcripts FOR UPD
 
 1. ✅ Run `FIX-TRANSCRIPT-RLS-POLICY.sql` in Supabase SQL Editor
 2. 🔲 Clear browser cache and session storage
-3. 🔲 Login as test@acnhs.am / Demirchyan36!
+3. 🔲 Login as test@acnhs.am (password held by the site owner)
 4. 🔲 Navigate to student-viewer.html
 5. 🔲 Select a student (e.g., Alvard with email alvard85@yahoo.com)
 6. 🔲 Verify Student-page.html loads without 400 errors

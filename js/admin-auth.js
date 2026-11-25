@@ -83,6 +83,14 @@
     hasToken: () => !!store.get(),
     clear: store.clear,
     sessionExpired,
+    // Student-viewer test account: true only when the server confirms it (credentials live in Supabase secrets, not in the page)
+    viewerLogin: async (email, password) => {
+      try {
+        const passwordHash = await sha256(password);
+        const { json } = await post({ action: 'viewer-login', email: String(email || '').trim(), passwordHash }, false);
+        return !!(json && json.ok && json.match);
+      } catch (_) { return false; }
+    },
     me: async () => (await call('me')).user,
     directory: async () => (await call('directory')).users,
     setEmailPermissions: async (emails) => { await call('set-email-permissions', { emails }); },

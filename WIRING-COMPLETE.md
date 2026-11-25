@@ -34,7 +34,7 @@
 1. **Login as Admin**:
    - Go to http://localhost:8000/login.html
    - Email: `Hrachfilm@gmail.com`
-   - Password: `Demirchyan36!`
+   - Password: (held by the site owner)
    - You'll be redirected to admin dashboard
 
 2. **View Applications**:

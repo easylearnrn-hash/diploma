@@ -134,6 +134,22 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
   try { body = await req.json() } catch (_e) { return reply({ ok: false, code: 'bad_request', error: 'Invalid JSON body' }, 400, cors) }
   if (!body || typeof body !== 'object' || typeof body.action !== 'string') return reply({ ok: false, code: 'bad_request', error: 'action is required' }, 400, cors)
 
+  /* ───────────── student-viewer test account (no token): the credentials only exist as Supabase secrets ───────────── */
+  if (body.action === 'viewer-login') {
+    const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+    const passwordHash = typeof body.passwordHash === 'string' ? body.passwordHash.trim().toLowerCase() : ''
+    if (!email || email.length > 254 || !HASH_RE.test(passwordHash)) return reply({ ok: false, code: 'bad_request', error: 'email and passwordHash are required' }, 400, cors)
+    const ip = clientIp(req)
+    if (throttled(`viewer:${ip}`, 8, now) || throttled(`ip:${ip}`, 40, now)) {
+      return reply({ ok: false, code: 'too_many_attempts', error: 'Too many sign-in attempts. Please wait a few minutes.' }, 429, cors, { 'Retry-After': '300' })
+    }
+    const viewerEmail = (env('STUDENT_VIEWER_EMAIL') || '').trim().toLowerCase()
+    const viewerHash = (env('STUDENT_VIEWER_PASSWORD_HASH') || '').trim().toLowerCase()
+    const match = !!viewerEmail && HASH_RE.test(viewerHash) && email === viewerEmail && sameHash(viewerHash, passwordHash)
+    if (!match) { noteFailure(`viewer:${ip}`, now); noteFailure(`ip:${ip}`, now); await sleep(400) }
+    return reply({ ok: true, match }, 200, cors)
+  }
+
   /* ───────────── login (no token yet) ───────────── */
   if (body.action === 'login') {
     const identifier = typeof body.identifier === 'string' ? body.identifier.trim() : ''
