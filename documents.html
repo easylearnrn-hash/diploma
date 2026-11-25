@@ -920,17 +920,18 @@
     .doc-letter > :last-child { margin-bottom: 0; }
 
     /* Watermark */
+    /* The watermark sits over the security lines (a white disc the size of the seal blanks them out, the seal is faintly tinted on top) and under the text */
     .doc-watermark {
       position: absolute;
       inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0.032;
+      display: grid;
+      place-items: center;
       pointer-events: none;
       z-index: 1;
     }
-    .doc-watermark img { width: 420px; }
+    .doc-watermark img { grid-area: 1 / 1; width: 420px; }
+    .doc-watermark .wm-disc { grid-area: 1 / 1; width: 420px; height: 420px; border-radius: 50%; background: #fff; }
+    .doc-watermark img.wm-tint { opacity: 0.032; }
 
     /* Document header */
     .doc-header {
@@ -977,9 +978,11 @@
       justify-content: center;
     }
     .doc-header-center img {
-      width: 77px;
-      height: 77px;
+      width: 92px;
+      height: 92px;
+      margin: -7.5px 0;   /* grows the seal without growing the header */
       object-fit: contain;
+      position: relative; z-index: 10;   /* the seal is the top-most thing of the letterhead */
     }
     .doc-header-right {
       text-align: right;
@@ -1291,6 +1294,15 @@
           <div class="doc-type-badge">Ready</div>
         </div>
 
+        <div class="doc-type-card" id="typeCard-government" data-type="government" onclick="selectDocType('government')">
+          <div class="doc-icon">🏛️</div>
+          <div class="doc-type-info">
+            <div class="doc-type-name">Government Correspondence</div>
+            <div class="doc-type-desc">Official letters to ministries &amp; government agencies</div>
+          </div>
+          <div class="doc-type-badge">Ready</div>
+        </div>
+
         <div class="doc-type-card" id="typeCard-affiliation" data-type="affiliation" onclick="selectDocType('affiliation')">
           <div class="doc-icon">🤝</div>
           <div class="doc-type-info">
@@ -1345,14 +1357,6 @@
           <div class="doc-type-badge soon">Soon</div>
         </div>
 
-        <div class="doc-type-card" id="typeCard-government" data-type="government" onclick="selectDocType('government')">
-          <div class="doc-icon">🏛️</div>
-          <div class="doc-type-info">
-            <div class="doc-type-name">Government Correspondence</div>
-            <div class="doc-type-desc">Official letters to ministries &amp; government agencies</div>
-          </div>
-          <div class="doc-type-badge">Ready</div>
-        </div>
       </aside>
 
       <!-- RIGHT: Form + Preview -->
@@ -1843,7 +1847,8 @@
             <!-- Document sheet rendered here -->
             <div class="doc-sheet" id="docSheet">
               <div class="doc-watermark">
-                <img id="docWatermarkImg" alt="ACNHS Watermark">
+                <div class="wm-disc"></div>
+                <img id="docWatermarkImg" class="wm-tint" alt="ACNHS Watermark">
               </div>
               <div class="doc-content" id="docContent">
                 <!-- Populated by JS -->
@@ -2118,27 +2123,74 @@
      LOAD DOCUMENT MODAL
   ═══════════════════════════════════════════ */
 
+  /* The list only needs a few small columns: the saved form (form_data) can be hundreds of KB per document, so it is
+     fetched for the one document that is opened, never for the whole list. The nickname is read out of it on the server. */
+  const LOAD_LIST_COLUMNS = 'id, doc_type, ref_number, partner_name, issued_date, created_by, nickname:form_data->>_nickname';
+  const LOAD_CACHE_KEY = 'acnhs-load-list-v1';
   let _allLoadedDocs = [];
+  let _loadFilter = 'all';
+  let _loadListPromise = null;
 
-  async function openLoadModal() {
-    document.getElementById('loadModalOverlay').classList.add('open');
-    const listEl = document.getElementById('loadDocList');
-    listEl.innerHTML = '<div class="load-empty">Loading…</div>';
+  try { _allLoadedDocs = JSON.parse(sessionStorage.getItem(LOAD_CACHE_KEY) || '[]'); } catch (e) { _allLoadedDocs = []; }
 
-    try {
+  // Only the light list is cached (never a loaded form)
+  function saveLoadCache() {
+    try { sessionStorage.setItem(LOAD_CACHE_KEY, JSON.stringify(_allLoadedDocs, (k, v) => k === 'form_data' ? undefined : v)); } catch (e) { /* cache is optional */ }
+  }
+
+  function fetchLoadList() {
+    if (_loadListPromise) return _loadListPromise;
+    _loadListPromise = (async () => {
       const sb = initSupabase();
       if (!sb) throw new Error('Supabase not available');
-      const { data, error } = await sb
-        .from('documents')
-        .select('id, doc_type, ref_number, partner_name, issued_date, created_by, form_data')
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const { data, error } = await sb.from('documents').select(LOAD_LIST_COLUMNS).order('created_at', { ascending: false }).limit(100);
       if (error) throw error;
       _allLoadedDocs = data || [];
-      renderLoadList('all');
+      saveLoadCache();
+      return _allLoadedDocs;
+    })().finally(() => { _loadListPromise = null; });
+    return _loadListPromise;
+  }
+
+  // Start fetching while the page is idle, so the list is usually ready before "Load" is pressed
+  (window.requestIdleCallback || (cb => setTimeout(cb, 1500)))(() => { fetchLoadList().catch(() => {}); });
+
+  // A saved form can be large, so its download starts as soon as the pointer is over a list entry (usually before the click)
+  const _formFetches = new Map();
+  function fetchSavedForm(id) {
+    if (!_formFetches.has(id)) {
+      const p = (async () => {
+        const sb = initSupabase();
+        if (!sb) throw new Error('Supabase not available');
+        const { data, error } = await sb.from('documents').select('form_data').eq('id', id).single();
+        if (error) throw error;
+        return data && data.form_data;
+      })();
+      p.catch(() => _formFetches.delete(id));
+      _formFetches.set(id, p);
+    }
+    return _formFetches.get(id);
+  }
+  ['pointerenter', 'touchstart'].forEach(ev => document.getElementById('loadDocList').addEventListener(ev, e => {
+    const item = e.target.closest && e.target.closest('.load-doc-item');
+    const m = item && /loadDocument\((\d+)\)/.exec(item.getAttribute('onclick') || '');
+    if (m) fetchSavedForm(Number(m[1])).catch(() => {});
+  }, { capture: true, passive: true }));
+
+  async function openLoadModal() {
+    _formFetches.clear();   // a saved form may have changed since it was last fetched
+    document.getElementById('loadModalOverlay').classList.add('open');
+    const listEl = document.getElementById('loadDocList');
+    const cached = _allLoadedDocs.length > 0;
+    // Show what is already known straight away; the fresh list replaces it as soon as it arrives
+    if (cached) renderLoadList(_loadFilter); else listEl.innerHTML = '<div class="load-empty">Loading…</div>';
+
+    try {
+      await fetchLoadList();
+      // Do not redraw under the user's hands while a nickname is being typed
+      if (!listEl.querySelector('.load-doc-nick-input')) renderLoadList(_loadFilter);
     } catch (e) {
-      document.getElementById('loadDocList').innerHTML =
-        `<div class="load-empty">⚠️ Could not load documents.<br><small>${e.message}</small></div>`;
+      if (!cached) listEl.innerHTML = `<div class="load-empty">⚠️ Could not load documents.<br><small>${escHtml(e.message || String(e))}</small></div>`;
     }
   }
 
@@ -2150,6 +2202,7 @@
   function filterLoadDocs(type, btn) {
     document.querySelectorAll('#loadFilter button').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
+    _loadFilter = type;
     renderLoadList(type);
   }
 
@@ -2190,7 +2243,7 @@
   }
 
   function nickRowHtml(d) {
-    const nick = (d.form_data && d.form_data._nickname) || '';
+    const nick = d.nickname || '';
     return `<span class="load-doc-nick-text${nick ? '' : ' empty'}">${nick ? escHtml(nick) : 'No nickname'}</span>
       <button type="button" class="load-doc-nick-edit" title="${nick ? 'Rename' : 'Add a nickname'}" onclick="startNickEdit(event, ${d.id})">✏️</button>`;
   }
@@ -2202,7 +2255,7 @@
     if (!doc || !row) return;
     const input = document.createElement('input');
     input.type = 'text'; input.className = 'load-doc-nick-input'; input.maxLength = 80;
-    input.placeholder = 'Nickname'; input.value = (doc.form_data && doc.form_data._nickname) || '';
+    input.placeholder = 'Nickname'; input.value = doc.nickname || '';
     input.addEventListener('click', e => e.stopPropagation());
     let done = false;
     const finish = save => {
@@ -2224,17 +2277,21 @@
     const row = document.getElementById('loadNick-' + id);
     if (!doc) return;
     const nick = String(value || '').trim().slice(0, 80);
-    const prev = doc.form_data || {};
-    if ((prev._nickname || '') === nick) { if (row) row.innerHTML = nickRowHtml(doc); return; }
+    if ((doc.nickname || '') === nick) { if (row) row.innerHTML = nickRowHtml(doc); return; }
 
-    const next = { ...prev };
-    if (nick) next._nickname = nick; else delete next._nickname;
     try {
       const sb = initSupabase();
       if (!sb) throw new Error('Supabase not available');
+      // The list does not carry the saved form, so read the current one for just this record and change only the nickname
+      const { data: cur, error: readErr } = await sb.from('documents').select('form_data').eq('id', id).single();
+      if (readErr) throw readErr;
+      const next = { ...(cur && cur.form_data || {}) };
+      if (nick) next._nickname = nick; else delete next._nickname;
       const { error } = await sb.from('documents').update({ form_data: next }).eq('id', id);
       if (error) throw error;
-      doc.form_data = next;
+      doc.nickname = nick;
+      _formFetches.delete(id);
+      saveLoadCache();
       if (_loadedDocId === id) {
         const nickInput = document.getElementById('docNickname');
         if (nickInput) nickInput.value = nick;
@@ -2247,7 +2304,22 @@
 
   async function loadDocument(id) {
     const doc = _allLoadedDocs.find(d => d.id === id);
-    if (!doc || !doc.form_data || !Object.keys(doc.form_data).some(k => k !== '_nickname')) {
+    if (!doc) return;
+    const item = document.querySelector(`#loadDocList .load-doc-item[onclick="loadDocument(${id})"]`);
+    const btn = item && item.querySelector('.load-doc-btn');
+    if (item && item.dataset.busy) return;
+    if (item) item.dataset.busy = '1';
+    if (btn) { btn.dataset.label = btn.textContent; btn.textContent = 'Opening…'; }
+    try {
+      doc.form_data = await fetchSavedForm(id);
+    } catch (e) {
+      alert('Could not open the document: ' + (e.message || e));
+      return;
+    } finally {
+      if (item) delete item.dataset.busy;
+      if (btn) btn.textContent = btn.dataset.label || 'Load';
+    }
+    if (!doc.form_data || !Object.keys(doc.form_data).some(k => k !== '_nickname')) {
       alert('No form data saved for this document.');
       return;
     }
@@ -5036,12 +5108,15 @@
     }
 
     /* ─── WATERMARK ───────────────────────────────────────────────────────── */
+    /* Over the security lines (a white disc the size of the seal blanks them, the seal is faintly tinted on top), under the text */
     .pdf-watermark {
       position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      opacity: 0.032; pointer-events: none; z-index: 1;
+      display: grid; place-items: center;
+      pointer-events: none; z-index: 101;
     }
-    .pdf-watermark img { display: block; width: 420px; height: 420px; flex: none; }
+    .pdf-watermark img { grid-area: 1 / 1; display: block; width: 420px; height: 420px; }
+    .pdf-watermark .wm-disc { grid-area: 1 / 1; width: 420px; height: 420px; border-radius: 50%; background: #fff; }
+    .pdf-watermark img.wm-tint { opacity: 0.032; }
 
      /* ─── CONTENT WRAPPER ─────────────────────────────────────────────────────
        Safe inner area inside the page frame for continuation-page readability.
@@ -5052,7 +5127,7 @@
      .pdf-content {
       padding: 0 12mm;
       position: relative;
-      z-index: 2;
+      z-index: 102;   /* above the page frame (100), hatch (0) and watermark (101): the seal is never crossed by a line */
      }
 
     /* Repeating top/bottom spacers (thead/tfoot repeat on every printed page),
@@ -5077,7 +5152,7 @@
     .doc-header-left  { text-align: left;  padding-right: 15px; }
     .doc-header-right { text-align: right; padding-left:  15px; }
     .doc-header-center { display: flex; justify-content: center; }
-    .doc-header-center img { width: 77px; height: 77px; object-fit: contain; }
+    .doc-header-center img { width: 92px; height: 92px; margin: -7.5px 0; object-fit: contain; position: relative; z-index: 10; }
     .uni-name {
       font-family: 'Playfair Display', Georgia, serif;
       font-size: 10pt; font-weight: 800; letter-spacing: 0.05em;
@@ -5251,7 +5326,7 @@
   <div class="pdf-frame-outer"></div>
   <div class="pdf-frame-inner"></div>
   <!-- Centred watermark — position:fixed → repeats on every page -->
-  <div class="pdf-watermark"><img src="${logoDataUrl}" alt="ACNHS Seal"></div>
+  <div class="pdf-watermark"><div class="wm-disc"></div><img class="wm-tint" src="${logoDataUrl}" alt="ACNHS Seal"></div>
   <!-- Document content (wrapped in a table so top/bottom spacers repeat on every page) -->
   <table class="pdf-flow">
     <thead><tr><td><div class="pdf-flow-top"></div></td></tr></thead>
