@@ -2591,11 +2591,18 @@ We're here to support you every step of the way. Welcome to ACNHS!`
         }, 100);
       }
 
-      // Auto-refresh emails via Realtime on new inserts
-      db.channel('email-system-inbox')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'email_history' },
-          async () => { await loadEmailHistory(); })
-        .subscribe();
+      // Auto-refresh when a new message arrives. (email_history is no longer open to the public realtime channel, so the page
+      // checks for the newest message every 20 seconds and reloads only when it changed.)
+      let _newestMailId = null;
+      setInterval(async () => {
+        if (document.hidden) return;
+        try {
+          const { data } = await db.from('email_history').select('id').order('sent_at', { ascending: false }).limit(1);
+          const id = data && data[0] && data[0].id;
+          if (id && _newestMailId !== null && id !== _newestMailId) await loadEmailHistory();
+          if (id) _newestMailId = id;
+        } catch (_) { /* try again next time */ }
+      }, 20000);
     });
 
     function setupEventListeners() {

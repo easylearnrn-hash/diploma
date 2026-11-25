@@ -53,3 +53,13 @@ Until it is set the function behaves as before and logs a warning. Verbose loggi
 
 Emergency switch: `supabase secrets set SEND_EMAIL_ENFORCE=false` puts the send-email check in log-only mode (everything is allowed and
 refusals are only logged); `supabase secrets unset SEND_EMAIL_ENFORCE` turns it back on. Re-deploy is not needed for the switch.
+
+## Phase 2A (e-mail history, activity log, export sessions, private notes)
+- `email_history`: the gateway now also accepts signed-in **students** and the **test viewer** (`x-portal-token`). A student may only read
+  or delete rows whose sender/recipient is one of their own addresses (the request must pin it: `recipient=eq.<own>` or
+  `or=(sender.eq.<own>,recipient.eq.<own>)`, or ids that belong to them); the viewer may only read a student's campus address.
+  Admins are unrestricted. Realtime is no longer available for this table, so the mail pages poll for new messages.
+- `user_activity_log`: the site can still insert lines, reads go through the gateway for admins only.
+- `export_sessions`, `export_session_notes`: admin gateway. `admin_private_notes`: owner only (real Supabase login).
+- `institutions`, `course_grade_items`, `sms_logs`, `sms_verifications`, `teacher_password_resets`: no page uses them; closed.
+Apply with `supabase/data-lockdown-phase2a.sql`, roll back with `...-rollback.sql`.

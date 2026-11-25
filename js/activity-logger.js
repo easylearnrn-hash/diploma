@@ -104,18 +104,18 @@ async function logActivity(actionType, actionCategory, description, options = {}
     });
 
     // Save to database
-    const { data, error } = await db
+    // No .select(): the public key can add log lines but can no longer read them back
+    const { error } = await db
       .from('user_activity_log')
-      .insert([logEntry])
-      .select();
+      .insert([logEntry]);
 
     if (error) {
       console.error('❌ Activity Logger: Failed to save log', error);
       return { success: false, error: error.message };
     }
 
-    console.log('✅ Activity logged successfully:', data[0].id);
-    return { success: true, data: data[0] };
+    console.log('✅ Activity logged successfully');
+    return { success: true, data: logEntry };
 
   } catch (error) {
     console.error('❌ Activity Logger: Exception', error);

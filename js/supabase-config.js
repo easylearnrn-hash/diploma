@@ -40,6 +40,9 @@ const SUPABASE_CONFIG = {
 // supabase/functions/admin-data/handler.ts. The page code does not change: it still calls supabase.from('<table>')...
 const PROXIED_TABLES = new Set([
   'documents',
+  'email_history',
+  'export_session_notes',
+  'export_sessions',
   'email_configuration',
   'email_folder_rules',
   'email_folders',
@@ -51,6 +54,24 @@ const PROXIED_TABLES = new Set([
   'portal_alert_templates',
   'user_tasks'
 ]);
+
+// Tables whose reads go through the gateway (admin session) while inserts still go straight to the database (activity logs)
+const PROXIED_READ_ONLY = new Set(['user_activity_log']);
+
+function acnhsPortalToken() {
+  try { return sessionStorage.getItem('portalToken') || localStorage.getItem('portalToken') || ''; } catch (_) { return ''; }
+}
+
+// Used when the page has no AdminAuth library (student pages): drop the stale session and go to the login page
+function acnhsSessionExpired(message) {
+  try {
+    ['isLoggedIn', 'isAdmin', 'primaryAdmin', 'userEmail', 'userName', 'userId', 'userRole', 'isStudentViewer', 'viewerAccountEmail',
+      'studentRecordId', 'studentApplicationId', 'studentInstitutionalEmail', 'studentPersonalEmail', 'isApplicationLogin',
+      'adminToken', 'portalToken'].forEach(function (k) { sessionStorage.removeItem(k); localStorage.removeItem(k); });
+  } catch (_) { /* ignore */ }
+  if (message) { try { alert(message); } catch (_) { /* ignore */ } }
+  location.href = 'login.html';
+}
 
 function acnhsAdminToken() {
   try { return sessionStorage.getItem('adminToken') || localStorage.getItem('adminToken') || ''; } catch (_) { return ''; }
@@ -64,21 +85,24 @@ async function acnhsRestFetch(input, init) {
 
   const rest = url.slice(prefix.length);
   const table = rest.split('?')[0].split('/')[0];
-  if (!PROXIED_TABLES.has(table)) return fetch(input, init);
+  const method = String((init && init.method) || (typeof input !== 'string' && input && input.method) || 'GET').toUpperCase();
+  const viaGateway = PROXIED_TABLES.has(table) || (PROXIED_READ_ONLY.has(table) && (method === 'GET' || method === 'HEAD'));
+  if (!viaGateway) return fetch(input, init);
 
   const token = acnhsAdminToken();
-  if (!token) {
+  const portalToken = acnhsPortalToken();
+  if (!token && !portalToken) {
     // A session opened before the security update has no token: sign in again
-    if (typeof window !== 'undefined' && window.AdminAuth && typeof window.AdminAuth.sessionExpired === 'function') {
-      window.AdminAuth.sessionExpired('Please sign in again to continue (security update).');
-    }
-    return new Response(JSON.stringify({ code: 'unauthorized', message: 'Admin session required', details: null, hint: null }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    const expiredMessage = 'Please sign in again to continue (security update).';
+    if (typeof window !== 'undefined' && window.AdminAuth && typeof window.AdminAuth.sessionExpired === 'function') window.AdminAuth.sessionExpired(expiredMessage);
+    else acnhsSessionExpired(expiredMessage);
+    return new Response(JSON.stringify({ code: 'unauthorized', message: 'Session required', details: null, hint: null }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
   const target = SUPABASE_CONFIG.url + '/functions/v1/admin-data/' + rest;
   const headers = new Headers((init && init.headers) || (typeof input !== 'string' && input && input.headers) || undefined);
-  headers.set('x-admin-token', token);
-  const method = (init && init.method) || (typeof input !== 'string' && input && input.method) || 'GET';
+  if (token) headers.set('x-admin-token', token);
+  if (portalToken) headers.set('x-portal-token', portalToken);
   const body = init && 'body' in init ? init.body : undefined;
   const res = await fetch(target, { method, headers, body, signal: init && init.signal });
   if (res.status === 401 && window.AdminAuth && typeof window.AdminAuth.sessionExpired === 'function') {

@@ -72,7 +72,7 @@ async function rest(deps: PolicyDeps, path: string): Promise<unknown[] | null> {
 const lower = (v: unknown): string => (typeof v === 'string' ? v.trim().toLowerCase() : '')
 
 // The addresses a student may send from: every campus/personal address recorded for their application and student record
-async function studentAddresses(deps: PolicyDeps, applicationId: string): Promise<Set<string> | null> {
+export async function studentAddresses(deps: PolicyDeps, applicationId: string): Promise<Set<string> | null> {
   const [apps, studs] = await Promise.all([
     rest(deps, `applications?select=email,institutional_email,username,payload&id=eq.${applicationId}&limit=1`),
     rest(deps, `students?select=email,metadata&application_id=eq.${applicationId}&limit=5`),
