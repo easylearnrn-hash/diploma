@@ -18,6 +18,7 @@
   <script src="js/med-abbr-tooltip.js" defer></script>
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+<script src="js/admin-auth.js"></script>
 
   <style>
     :root {
@@ -1092,20 +1093,10 @@
       try {
         btn.disabled = true;
         btn.textContent = 'Verifying...';
-        const supabase = initSupabase();
-        if (!supabase) throw new Error('Supabase not configured');
-
-        const passwordHash = await hashPassword(password);
-        const { data: adminUsers, error } = await supabase
-          .from('admin_users')
-          .select('id, name, email, password_hash, role, status')
-          .eq('email', email)
-          .eq('status', 'active')
-          .limit(1);
-
-        if (error || !adminUsers || !adminUsers.length) throw new Error('Invalid credentials');
-        const adminUser = adminUsers[0];
-        if (adminUser.password_hash !== passwordHash) throw new Error('Invalid credentials');
+        // The password is checked on the server
+        const auth = await AdminAuth.login(email, password);
+        if (!auth.ok) throw new Error('Invalid credentials');
+        const adminUser = auth.user;
 
         sessionStorage.setItem('isLoggedIn', 'true');
         localStorage.setItem('isLoggedIn', 'true');

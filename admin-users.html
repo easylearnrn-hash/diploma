@@ -873,6 +873,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/admin-auth.js"></script>
   <script src="js/activity-logger.js"></script>
   <script src="js/permission-check.js"></script>
   <script src="js/admin-sidebar.js"></script>
@@ -907,6 +908,12 @@
       db = initSupabase();
       if (!db) {
         alert('Failed to initialize Supabase');
+        return;
+      }
+
+      // Admin accounts are managed through the server now: a session opened before this security update has no token
+      if (!AdminAuth.hasToken()) {
+        AdminAuth.sessionExpired('Please sign in again to continue (security update).');
         return;
       }
 
@@ -1414,10 +1421,12 @@
 
     async function loadUsers() {
       try {
-        const { data, error } = await db
-          .from('admin_users')
-          .select('*')
-          .order('created_at', { ascending: false });
+        let data = null, error = null;
+        try { data = await AdminAuth.users.list(); } catch (e) { error = e; }
+        if (error && error.code === 'unauthorized') {
+          AdminAuth.sessionExpired('Your session has expired. Please sign in again.');
+          return;
+        }
 
         if (error) {
           console.error('Error loading users:', error);
@@ -1628,12 +1637,7 @@
 
         if (editingUserId) {
           // Update existing user (password only updated if provided)
-          const { error } = await db
-            .from('admin_users')
-            .update(userData)
-            .eq('id', editingUserId);
-
-          if (error) throw error;
+          await AdminAuth.users.update(editingUserId, userData);
           
           // Show updated message - simplified
           let updateBodyHTML = `
@@ -1695,11 +1699,7 @@
           }
         } else {
           // Create new user
-          const { error } = await db
-            .from('admin_users')
-            .insert([userData]);
-
-          if (error) throw error;
+          await AdminAuth.users.create(userData);
           
           // Show success message with email access details
           let bodyHTML = `
@@ -1795,11 +1795,12 @@
         passwordField.placeholder = 'Leave blank to keep current password';
         
         // Fetch user data
-        const { data, error } = await db
-          .from('admin_users')
-          .select('*')
-          .eq('id', userId)
-          .single();
+        let data = null, error = null;
+        try { data = await AdminAuth.users.get(userId); } catch (e) { error = e; }
+        if (error && error.code === 'unauthorized') {
+          AdminAuth.sessionExpired('Your session has expired. Please sign in again.');
+          return;
+        }
 
         if (error) {
           console.error('Error loading user:', error);
@@ -1866,12 +1867,7 @@
       }
 
       try {
-        const { error } = await db
-          .from('admin_users')
-          .delete()
-          .eq('id', userId);
-
-        if (error) throw error;
+        await AdminAuth.users.remove(userId);
 
         showSuccessModal(
           'User Deleted',
@@ -2075,7 +2071,7 @@
       currentActivityUserEmail = userEmail;
       
       // Find user name
-      const { data: userData } = await db.from('admin_users').select('name').eq('id', userId).single();
+      const userData = await AdminAuth.users.get(userId).catch(() => null);
       const userName = userData?.name || userEmail;
       
       document.getElementById('activityModalTitle').textContent = `📊 Activity History: ${userName}`;

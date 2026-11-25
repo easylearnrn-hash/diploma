@@ -597,6 +597,7 @@ body{
 
 <script src="js/supabase.min.js"></script>
 <script src="js/supabase-config.js"></script>
+<script src="js/admin-auth.js"></script>
 <script src="js/main.js"></script>
 <script>
 const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
@@ -693,6 +694,7 @@ window.addEventListener('DOMContentLoaded', function() {
     localStorage.removeItem('isStudentViewer');
     localStorage.removeItem('userEmail');
     localStorage.removeItem('viewerAccountEmail');
+    localStorage.removeItem('adminToken');
   }
 });
 
@@ -728,20 +730,14 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
         throw new Error('Supabase not configured');
       }
 
-      const passwordHash = await hashPassword(password);
-      
-      const { data: adminUsers, error: adminError } = await supabase
-        .from('admin_users')
-        .select('id, name, email, username, password_hash, role, permissions, email_permissions, signature, title, phone_ext, status')
-        .eq('email', normalizedEmail)
-        .eq('status', 'active')
-        .limit(1);
+      // The password is checked on the server; the browser never receives the stored hash
+      const authResult = await AdminAuth.login(normalizedEmail, password);
 
-      if (!adminError && adminUsers && adminUsers.length > 0) {
-        const adminUser = adminUsers[0];
+      if (authResult.ok || authResult.reason === 'bad_password') {
+        const adminUser = authResult.user;
         
-        // Verify password hash
-        if (adminUser.password_hash === passwordHash) {
+        // Verify password
+        if (authResult.ok) {
           // Primary admin authenticated
           sessionStorage.setItem('isLoggedIn', 'true');
           localStorage.setItem('isLoggedIn', 'true');
@@ -798,7 +794,7 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
           return;
         }
       } else {
-        showLoginAlert('Admin account not found', 'error');
+        showLoginAlert(authResult.reason === 'not_found' ? 'Admin account not found' : authResult.message, 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = 'Sign In';
         return;
@@ -830,20 +826,20 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
     }
 
     // First, try checking admin_users table (for custom admin login)
-    const passwordHash = await hashPassword(password);
-    
-    const { data: adminUsers, error: adminError } = await supabase
-      .from('admin_users')
-      .select('id, name, email, username, password_hash, role, permissions, email_permissions, signature, title, phone_ext, status')
-  .or(`email.eq.${email},username.eq.${email}`)
-      .eq('status', 'active')
-      .limit(1);
+    const authResult = await AdminAuth.login(email, password);
 
-    if (!adminError && adminUsers && adminUsers.length > 0) {
-      const adminUser = adminUsers[0];
+    if (authResult.reason === 'too_many_attempts') {
+      showLoginAlert(authResult.message, 'error');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign In';
+      return;
+    }
+
+    if (authResult.ok || authResult.reason === 'bad_password') {
+      const adminUser = authResult.user;
       
-      // Verify password hash
-      if (adminUser.password_hash === passwordHash) {
+      // Verify password (checked on the server)
+      if (authResult.ok) {
         // Admin user authenticated successfully
         console.log('✅ Admin user authenticated:', adminUser.name);
         

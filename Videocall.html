@@ -1795,6 +1795,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+<script src="js/admin-auth.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script>
     const state = {
@@ -2317,15 +2318,12 @@
 
         // ── 1. Admin ──────────────────────────────────────────────
         if (selectedRole === 'Admin') {
-          const { data } = await db
-            .from('admin_users')
-            .select('id, name, email, role, status')
-            .or(`email.ilike.${identifier},username.ilike.${identifier}`)
-            .eq('status', 'active')
-            .eq('password_hash', passwordHash)
-            .limit(1)
-            .maybeSingle();
-          if (data) { matched = data; matchedRole = data.role || 'Admin'; }
+          // The password is checked on the server (match by email OR username)
+          const auth = await AdminAuth.login(identifier, password);
+          if (auth.ok) {
+            const data = { id: auth.user.id, name: auth.user.name, email: auth.user.email, role: auth.user.role, status: auth.user.status };
+            matched = data; matchedRole = data.role || 'Admin';
+          }
         }
 
         // ── 2. Teacher ────────────────────────────────────────────

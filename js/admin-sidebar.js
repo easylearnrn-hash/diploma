@@ -516,6 +516,7 @@
         sessionStorage.clear();
         localStorage.removeItem('isLoggedIn');
         localStorage.removeItem('isAdmin');
+        localStorage.removeItem('adminToken');
         localStorage.removeItem('userEmail');
         localStorage.removeItem('userId');
         window.location.href = 'login.html';
