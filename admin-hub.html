@@ -13,6 +13,7 @@
   <!-- Supabase Client -->
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/admin-auth.js"></script>
   <script src="js/acnhs-logo-base64.js"></script>
 
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
@@ -12062,7 +12063,7 @@ Your instructor has posted a link for you to join the live class. Please use the
 
         // Fetch all teachers + courses in parallel
         const [teachersRes, coursesRes] = await Promise.all([
-          db.from('teachers').select('*').order('created_at', { ascending: false }),
+          db.from('teachers').select('id, full_name, email, username, active, created_at, updated_at, created_by, last_login, subjects').order('created_at', { ascending: false }),
           db.from('courses').select('code, name, teacher_id, semester')
         ]);
 
@@ -12285,28 +12286,11 @@ Your instructor has posted a link for you to join the live class. Please use the
         const selectedSubjects = Array.from(document.querySelectorAll('.teacherSubjectCheckbox:checked'))
           .map(cb => cb.value);
 
-        // Hash password via Edge Function; fall back to storing as-is if unavailable
-        let passwordHash = password;
-        try {
-          const { data: hashData, error: hashError } = await db.functions.invoke('hash-password', {
-            body: { action: 'hash', password: password }
-          });
-          if (!hashError && hashData?.hash) {
-            passwordHash = hashData.hash;
-            console.log('✅ Password hashed successfully');
-          } else {
-            console.warn('⚠️ hash-password function unavailable, storing password directly');
-          }
-        } catch (funcError) {
-          console.warn('⚠️ hash-password function error:', funcError.message);
-        }
-
         // Create teacher account
         const insertData = {
           full_name: fullName,
           email: email.toLowerCase(),
           username: username.toLowerCase(),
-          password_hash: passwordHash,
           subjects: selectedSubjects,
           active: true,
           created_by: sessionStorage.getItem('userEmail')
@@ -12315,7 +12299,7 @@ Your instructor has posted a link for you to join the live class. Please use the
         const { data: teacher, error: teacherError } = await db
           .from('teachers')
           .insert(insertData)
-          .select()
+          .select('id, full_name, email, username, active, created_at, updated_at, created_by, last_login, subjects')
           .single();
 
         if (teacherError) {
@@ -12323,6 +12307,14 @@ Your instructor has posted a link for you to join the live class. Please use the
             throw new Error('Username or email already exists');
           }
           throw teacherError;
+        }
+
+        // The password is hashed and saved on the server (admin session required); without it the account must not exist
+        try {
+          await AdminAuth.teachers.setPassword(teacher.id, password);
+        } catch (pwError) {
+          await db.from('teachers').delete().eq('id', teacher.id);
+          throw new Error(pwError.code === 'unauthorized' ? 'Your admin session has expired. Please sign in again.' : 'Could not save the password: ' + pwError.message);
         }
 
         // Create group assignments
@@ -12360,7 +12352,7 @@ Your instructor has posted a link for you to join the live class. Please use the
         // Fetch teacher data
         const { data: teacher, error: teacherError } = await db
           .from('teachers')
-          .select('*')
+          .select('id, full_name, email, username, active, created_at, updated_at, created_by, last_login, subjects')
           .eq('id', teacherId)
           .single();
 
@@ -12433,31 +12425,21 @@ Your instructor has posted a link for you to join the live class. Please use the
           active: active
         };
 
-        // If password is being changed, hash it via Edge Function (fall back gracefully)
-        if (newPassword) {
-          let passwordHash = newPassword;
-          try {
-            const { data: hashData, error: hashError } = await db.functions.invoke('hash-password', {
-              body: { action: 'hash', password: newPassword }
-            });
-            if (!hashError && hashData?.hash) {
-              passwordHash = hashData.hash;
-              console.log('✅ Password hashed successfully');
-            } else {
-              console.warn('⚠️ hash-password function unavailable, storing password directly');
-            }
-          } catch (funcError) {
-            console.warn('⚠️ hash-password function error:', funcError.message);
-          }
-          updateData.password_hash = passwordHash;
-        }
-
         const { error: updateError } = await db
           .from('teachers')
           .update(updateData)
           .eq('id', teacherId);
 
         if (updateError) throw updateError;
+
+        // A new password is hashed and saved on the server (admin session required)
+        if (newPassword) {
+          try {
+            await AdminAuth.teachers.setPassword(teacherId, newPassword);
+          } catch (pwError) {
+            throw new Error(pwError.code === 'unauthorized' ? 'Your admin session has expired. Please sign in again.' : 'Could not save the new password: ' + pwError.message);
+          }
+        }
 
         // Update group assignments
         const selectedGroups = Array.from(document.querySelectorAll('.editTeacherGroupCheckbox:checked'))

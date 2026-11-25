@@ -3412,6 +3412,7 @@ document.addEventListener('click', (e) => {
 <script src="js/supabase.min.js"></script>
 <!-- Supabase Configuration -->
 <script src="js/supabase-config.js"></script>
+<script src="js/portal-auth.js"></script>
 <!-- Activity Logger -->
 <script src="js/activity-logger.js"></script>
 <!-- Transcript Verification Service -->
@@ -6500,7 +6501,6 @@ async function changePassword() {
   try {
     // Hash both passwords
     const currentPasswordHash = await hashPassword(currentPassword);
-    const newPasswordHash = await hashPassword(newPassword);
     
     // Get application ID from student profile
     const applicationId = sessionStorage.getItem('studentApplicationId') || 
@@ -6518,46 +6518,17 @@ async function changePassword() {
       return;
     }
     
-    // Verify current password
-    const { data: app, error: fetchError } = await supabase
-      .from('applications')
-      .select('password_hash, applicant_name')
-      .eq('id', applicationId)
-      .single();
-    
-    if (fetchError || !app) {
-      console.error('Failed to fetch application:', fetchError);
-      showPasswordMessage('Could not verify your account. Please try again.', 'error');
-      return;
-    }
-    
-    if (app.password_hash !== currentPasswordHash) {
-      showPasswordMessage('Current password is incorrect', 'error');
-      return;
-    }
-    
-    // Update password in applications table
-    const { error: updateError } = await supabase
-      .from('applications')
-      .update({
-        password_hash: newPasswordHash,
-        plain_password: newPassword,
-        payload: {
-          ...app.payload,
-          credentials: {
-            password: newPassword,
-            password_hash: newPasswordHash,
-            default_password: false,
-            must_change_password: false,
-            password_last_changed: new Date().toISOString()
-          }
-        }
-      })
-      .eq('id', applicationId);
-    
-    if (updateError) {
-      console.error('Failed to update password:', updateError);
-      showPasswordMessage('Failed to update password. Please try again.', 'error');
+    // The server checks the current password and saves the new one; no password or hash is read or written from this page
+    const result = await PortalAuth.changeStudentPassword(applicationId, currentPasswordHash, newPassword);
+    if (!result.ok) {
+      if (result.reason === 'bad_password') {
+        showPasswordMessage('Current password is incorrect', 'error');
+      } else if (result.reason === 'too_many_attempts') {
+        showPasswordMessage(result.message, 'error');
+      } else {
+        console.error('Failed to update password:', result);
+        showPasswordMessage('Failed to update password. Please try again.', 'error');
+      }
       return;
     }
     
@@ -6587,7 +6558,7 @@ async function changePassword() {
     document.getElementById('confirmPassword').value = '';
     
     // Log activity
-    console.log('✅ Password changed successfully for:', app.applicant_name);
+    console.log('✅ Password changed successfully');
     
   } catch (error) {
     console.error('Password change error:', error);

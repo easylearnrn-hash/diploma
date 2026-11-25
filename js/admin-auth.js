@@ -94,6 +94,14 @@
     me: async () => (await call('me')).user,
     directory: async () => (await call('directory')).users,
     setEmailPermissions: async (emails) => { await call('set-email-permissions', { emails }); },
+    // Student portal credentials live in a private table; these calls need the admin session
+    studentCredentials: {
+      get: async (applicationId) => { const r = await call('student-credentials-get', { applicationId }); return { password: r.password, latestPassword: r.latestPassword, hasPassword: r.hasPassword }; },
+      set: async (applicationId, password, opts) => { await call('student-credentials-set', { applicationId, password, latest: !!(opts && opts.latest) }); },
+    },
+    teachers: {
+      setPassword: async (teacherId, password) => { await call('teacher-set-password', { teacherId, password }); },
+    },
     users: {
       list: async () => (await call('users-list')).users,
       get: async (id) => (await call('users-get', { id })).user,

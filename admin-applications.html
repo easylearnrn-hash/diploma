@@ -2813,6 +2813,7 @@
   <script src="js/supabase.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/admin-auth.js"></script>
   <script src="js/activity-logger.js"></script>
   <script src="js/permission-check.js"></script>
   <script src="js/admin-sidebar.js"></script>
@@ -3591,8 +3592,6 @@
       // Update application username to institutional email when enrolled
       const baseUpdate = {
         username: institutionalEmail, // Change username to institutional email
-        password_hash: 'a5ebdb42521ba5a49a0021b4d3173f061c19a9efc484f4e81eb15db85c970213', // Default password: Welcome2026!
-        plain_password: 'Welcome2026!', // Store plain password for reference
         institutional_email: institutionalEmail,
         payload: updatedPayload
       };
@@ -3614,6 +3613,13 @@
       if (appUpdateError) {
         console.error('Error updating application credentials:', appUpdateError);
         // Don't throw - student record is already updated
+      } else {
+        // Default password (Welcome2026!) is saved on the server: the hash and plain password are never written from the browser
+        try {
+          await AdminAuth.studentCredentials.set(app.id, 'Welcome2026!');
+        } catch (credError) {
+          console.error('Could not set the default password:', credError);
+        }
       }
 
       return {
@@ -7178,10 +7184,6 @@
         const newPassword = generateSecurePassword();
         console.log('🔑 Generated new password for', app.payload?.name);
 
-        // Hash the password
-        const passwordHash = await hashPassword(newPassword);
-        console.log('🔒 Password hashed successfully');
-
         const resolvedUsername = app.username || app.payload?.username || app.payload?.latestCredentials?.username || 'Pending';
         const credentialScreenshot = await generateCredentialsCardImage({
           applicantName: app.payload?.applicantName || app.applicant_name || 'Applicant',
@@ -7199,11 +7201,16 @@
           updated_at: new Date().toISOString(),
           source: 'admin_reset'
         };
+        // The payload keeps only the non-secret part; the password itself is saved on the server below
+        const storedCredentialRecord = { username: resolvedUsername, updated_at: latestCredentialRecord.updated_at, source: latestCredentialRecord.source };
         app.payload = app.payload || {};
-        app.payload.latestCredentials = latestCredentialRecord;
+        app.payload.latestCredentials = storedCredentialRecord;
         if (currentApplicationPayload) {
-          currentApplicationPayload.latestCredentials = latestCredentialRecord;
+          currentApplicationPayload.latestCredentials = storedCredentialRecord;
         }
+
+        if (!AdminAuth.hasToken()) throw new Error('Your admin session has expired. Please sign in again.');
+        await AdminAuth.studentCredentials.set(currentApplicationId, newPassword, { latest: true });
 
         // Update database
         const supabase = getSupabaseClient();
@@ -7221,7 +7228,6 @@
         });
 
         const updatePayload = {
-          password_hash: passwordHash,
           status_history: statusHistory,
           payload: app.payload
         };
@@ -7587,7 +7593,14 @@
       });
   const cachedScreenshot = app.credentials_screenshot || screenshotCache.get(app.id) || null;
   updateCredentialScreenshotUI(cachedScreenshot);
-      updateLatestCredentialsUI(extractLatestCredentials(app));
+      const _latestCreds = extractLatestCredentials(app);
+      updateLatestCredentialsUI(_latestCreds);
+      // The password itself is private on the server (admin session required)
+      AdminAuth.studentCredentials.get(app.id).then(c => {
+        if (!c || !c.latestPassword || currentApplicationId !== app.id) return;
+        const base = _latestCreds || { username: app.username || payload.username || null, updatedAt: null, source: 'unknown' };
+        updateLatestCredentialsUI({ ...base, password: c.latestPassword });
+      }).catch(() => {});
       if (app.credentials_screenshot) {
         console.log('✅ Credentials screenshot displayed');
       } else {

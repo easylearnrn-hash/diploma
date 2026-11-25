@@ -249,6 +249,7 @@
     <!-- Supabase Client -->
     <script src="js/supabase.min.js"></script>
     <script src="js/supabase-config.js"></script>
+    <script src="js/portal-auth.js"></script>
 
     <script>
         // Initialize Supabase from global config
@@ -302,7 +303,7 @@
                 // 1) Exact username match (case-insensitive via ilike)
                 const { data: byUsername } = await db
                     .from('teachers')
-                    .select('*')
+                    .select('id, full_name, email, username, active, created_at, updated_at, created_by, last_login, subjects')
                     .ilike('username', username)
                     .eq('active', true)
                     .limit(1);
@@ -314,7 +315,7 @@
                 if (!teacher) {
                     const { data: byEmail } = await db
                         .from('teachers')
-                        .select('*')
+                        .select('id, full_name, email, username, active, created_at, updated_at, created_by, last_login, subjects')
                         .ilike('email', username)
                         .eq('active', true)
                         .limit(1);
@@ -329,28 +330,14 @@
                     return;
                 }
 
-                // Verify password:
-                // 1) Via Edge Function (handles PBKDF2 hashes and plain-text legacy)
-                // 2) Direct plain-text compare against password_hash (plain-text fallback)
-                let passwordValid = false;
-                try {
-                    const { data: verifyData, error: verifyError } = await db.functions.invoke('hash-password', {
-                        body: {
-                            action: 'verify',
-                            password: password,
-                            hash: teacher.password_hash
-                        }
-                    });
-                    if (!verifyError && typeof verifyData?.match === 'boolean') {
-                        passwordValid = verifyData.match;
-                    } else {
-                        // Edge Function returned unexpected result — direct compare
-                        passwordValid = password === teacher.password_hash;
-                    }
-                } catch (funcError) {
-                    // Edge Function unreachable — direct compare
-                    passwordValid = password === teacher.password_hash;
+                // Verify password on the server (PBKDF2 or legacy plain text); the stored value never reaches the browser
+                const check = await PortalAuth.verifyTeacher(teacher.id, password);
+                if (!check.ok && check.reason === 'too_many_attempts') {
+                    showError(check.message);
+                    setLoading(false);
+                    return;
                 }
+                const passwordValid = check.ok && check.match === true;
 
                 if (!passwordValid) {
                     showError('Invalid username or password');

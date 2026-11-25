@@ -598,6 +598,7 @@ body{
 <script src="js/supabase.min.js"></script>
 <script src="js/supabase-config.js"></script>
 <script src="js/admin-auth.js"></script>
+<script src="js/portal-auth.js"></script>
 <script src="js/main.js"></script>
 <script>
 const ADMIN_EMAILS = ['Hrachfilm@gmail.com', 'hrachfilm@gmail.com'];
@@ -969,37 +970,21 @@ document.getElementById('applicationLoginForm').addEventListener('submit', async
     // Hash the provided password using SHA-256
     const passwordHash = await hashPassword(password);
     
-    console.log('🔍 DEBUG: Login attempt:', {
-      username: username,
-      normalizedUsername,
-      passwordLength: password.length,
-      hashLength: passwordHash.length,
-      hashPreview: passwordHash.substring(0, 16) + '...'
-    });
-
     const application = await fetchApplicationForStatusLogin(supabase, username);
-    const storedPasswordHash = extractApplicationPasswordHash(application);
-
-    console.log('🔍 DEBUG: User lookup result:', {
-      found: Boolean(application),
-      dbHashLength: storedPasswordHash?.length || 0,
-      hashMatch: storedPasswordHash === passwordHash
-    });
 
     if (!application) {
       throw new Error('Invalid username or password');
     }
-    
-    if (!storedPasswordHash) {
+
+    // The password is checked on the server; the stored hash never reaches the browser
+    const check = await PortalAuth.verifyStudent(application.id, passwordHash);
+    if (!check.ok) {
+      throw new Error(check.reason === 'too_many_attempts' ? check.message : 'Login is temporarily unavailable. Please try again in a moment.');
+    }
+    if (!check.hasCredentials) {
       throw new Error('This application does not have login credentials yet. Please contact admissions so we can regenerate them.');
     }
-
-    // Verify password hash matches
-    if (storedPasswordHash !== passwordHash) {
-      console.error('❌ Password hash mismatch:', {
-        provided: passwordHash,
-        stored: storedPasswordHash
-      });
+    if (!check.match) {
       throw new Error('Invalid username or password');
     }
 
@@ -1148,12 +1133,16 @@ async function authenticateStudentPortalLogin(supabase, email, password, submitB
     );
   }
 
-  const storedPasswordHash = extractApplicationPasswordHash(application);
-  if (!storedPasswordHash) {
+  // The password is checked on the server; the stored hash never reaches the browser
+  const check = await PortalAuth.verifyStudent(application.id, passwordHash);
+  if (!check.ok) {
+    throw createStudentLoginError(check.reason === 'too_many_attempts' ? check.message : 'Login is temporarily unavailable. Please try again in a moment.', 'STUDENT_AUTH_UNAVAILABLE');
+  }
+  if (!check.hasCredentials) {
     throw createStudentLoginError('Your student portal password has not been provisioned yet. Please contact admissions to regenerate your credentials.', 'STUDENT_PASSWORD_MISSING');
   }
 
-  if (storedPasswordHash !== passwordHash) {
+  if (!check.match) {
     throw createStudentLoginError('Incorrect password. Please try again or request a reset from admissions.', 'STUDENT_INVALID_PASSWORD');
   }
 
@@ -1179,7 +1168,7 @@ async function authenticateStudentPortalLogin(supabase, email, password, submitB
 
 async function fetchApplicationByEmailOrPortalFields(supabase, email) {
   if (!supabase || !email) return null;
-  const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+  const selectFields = 'id, reference_number, applicant_name, status, username, email, payload';
   const normalizedEmail = email.toLowerCase().trim();
 
   let data, error;
@@ -1332,21 +1321,6 @@ async function fetchLinkedStudentRecord(supabase, application) {
   return data;
 }
 
-function extractApplicationPasswordHash(application = {}) {
-  if (!application) return null;
-  const payload = application.payload || {};
-  return application.password_hash ||
-    payload.passwordHash ||
-    payload.password_hash ||
-    payload?.studentPortal?.passwordHash ||
-    payload?.studentPortal?.credentials?.passwordHash ||
-    payload?.studentCredentials?.passwordHash ||
-    payload?.portalCredentials?.passwordHash ||
-    payload?.credentials?.passwordHash ||
-    payload?.applicationCredentials?.passwordHash ||
-    null;
-}
-
 function extractApplicationReference(application = {}) {
   const payload = application?.payload || {};
   return application.reference_number ||
@@ -1461,7 +1435,7 @@ function persistStudentPortalSession(application = {}, context = {}) {
   }
 }
 
-const APPLICATION_LOGIN_SELECT = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+const APPLICATION_LOGIN_SELECT = 'id, reference_number, applicant_name, status, username, email, payload';
 
 async function fetchApplicationForStatusLogin(supabase, username = '') {
   if (!supabase) return null;

@@ -419,6 +419,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/portal-auth.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script>
     // ── Restore session from URL params (hub passes identity on file://) ──
@@ -552,7 +553,7 @@
         if (!db) throw new Error('Database not available. Use localhost:8000.');
 
         // Student only — check applications table
-        const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+        const selectFields = 'id, reference_number, applicant_name, status, username, email, payload';
         let appRow = null;
 
         let res = await db.from('applications').select(selectFields).eq('email', identifier).limit(1);
@@ -563,7 +564,12 @@
           if (res.data?.length) appRow = res.data[0];
         }
 
-        if (!appRow || appRow.password_hash !== passwordHash) {
+        // The password is checked on the server; the stored hash never reaches the browser
+        const check = appRow ? await PortalAuth.verifyStudent(appRow.id, passwordHash) : null;
+        if (check && !check.ok) {
+          throw new Error(check.reason === 'too_many_attempts' ? check.message : 'Sign-in is temporarily unavailable. Please try again in a moment.');
+        }
+        if (!appRow || !check.match) {
           throw new Error('Invalid credentials. Please try again.');
         }
 

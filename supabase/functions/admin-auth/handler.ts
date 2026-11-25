@@ -10,6 +10,7 @@
 // Provided by Supabase: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import { signAdminToken, verifyAdminToken } from '../_shared/admin-token.ts'
+import { pbkdf2Hash, sha256Hex } from '../_shared/password.ts'
 
 export type Env = (name: string) => string | undefined
 
@@ -246,6 +247,38 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
       const r = await rest(deps, `admin_users?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' })
       if (!r.ok) return dbError(r.data, r.status, cors)
       return Array.isArray(r.data) && r.data.length ? reply({ ok: true }, 200, cors) : reply({ ok: false, code: 'not_found', error: 'User not found' }, 404, cors)
+    }
+
+    /* ───────────── student credentials (private table application_secrets; never readable with the public key) ───────────── */
+    case 'student-credentials-get': {
+      const id = String(body.applicationId || '')
+      if (!UUID_RE.test(id)) return reply({ ok: false, code: 'bad_request', error: 'Invalid applicationId' }, 400, cors)
+      const r = await rest(deps, `application_secrets?select=plain_password,latest_password,password_hash&application_id=eq.${encodeURIComponent(id)}&limit=1`)
+      if (!r.ok) return dbError(r.data, r.status, cors)
+      const row = (Array.isArray(r.data) && r.data.length ? r.data[0] : {}) as Row
+      return reply({ ok: true, password: row.plain_password || null, latestPassword: row.latest_password || null, hasPassword: !!row.password_hash }, 200, cors)
+    }
+
+    case 'student-credentials-set': {
+      const id = String(body.applicationId || '')
+      const password = typeof body.password === 'string' ? body.password : ''
+      if (!UUID_RE.test(id) || password.length < 1 || password.length > 200) return reply({ ok: false, code: 'bad_request', error: 'applicationId and password are required' }, 400, cors)
+      const exists = await rest(deps, `applications?select=id&id=eq.${encodeURIComponent(id)}&limit=1`)
+      if (!exists.ok) return dbError(exists.data, exists.status, cors)
+      if (!Array.isArray(exists.data) || !exists.data.length) return reply({ ok: false, code: 'not_found', error: 'Application not found' }, 404, cors)
+      const record: Row = { application_id: id, password_hash: await sha256Hex(password), plain_password: password, source: 'server', updated_at: new Date(now).toISOString() }
+      if (body.latest === true) record.latest_password = password
+      const r = await rest(deps, 'application_secrets?on_conflict=application_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([record]) })
+      return r.ok ? reply({ ok: true }, 200, cors) : dbError(r.data, r.status, cors)
+    }
+
+    case 'teacher-set-password': {
+      const id = String(body.teacherId || '')
+      const password = typeof body.password === 'string' ? body.password : ''
+      if (!UUID_RE.test(id) || password.length < 1 || password.length > 200) return reply({ ok: false, code: 'bad_request', error: 'teacherId and password are required' }, 400, cors)
+      const r = await rest(deps, `teachers?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ password_hash: await pbkdf2Hash(password) }) })
+      if (!r.ok) return dbError(r.data, r.status, cors)
+      return Array.isArray(r.data) && r.data.length ? reply({ ok: true }, 200, cors) : reply({ ok: false, code: 'not_found', error: 'Teacher not found' }, 404, cors)
     }
 
     default:

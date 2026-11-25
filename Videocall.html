@@ -1795,6 +1795,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/portal-auth.js"></script>
 <script src="js/admin-auth.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/livekit-client@2/dist/livekit-client.umd.min.js"></script>
   <script>
@@ -2333,15 +2334,18 @@
             .select('id, full_name, email, username')
             .or(`email.ilike.${identifier},username.ilike.${identifier}`)
             .eq('active', true)
-            .eq('password_hash', passwordHash)
             .limit(1)
             .maybeSingle();
-          if (data) { matched = { id: data.id, name: data.full_name, email: data.email }; matchedRole = 'Teacher'; }
+          // The password is checked on the server; the stored hash never reaches the browser
+          if (data) {
+            const check = await PortalAuth.verifyTeacher(data.id, password);
+            if (check.ok && check.match) { matched = { id: data.id, name: data.full_name, email: data.email }; matchedRole = 'Teacher'; }
+          }
         }
 
         // ── 3. Student (via applications table, matching login.html) ──
         if (!matched && selectedRole === 'Student') {
-          const selectFields = 'id, reference_number, applicant_name, status, username, password_hash, email, payload';
+          const selectFields = 'id, reference_number, applicant_name, status, username, email, payload';
 
           // Try email match
           let appRow = null;
@@ -2366,20 +2370,11 @@
             const eligible = ['enroll', 'student', 'active', 'confirmed', 'registered'].some(kw => appStatus.includes(kw));
 
             if (eligible) {
-              // Extract stored password hash from multiple possible locations
+              // The password is checked on the server; the stored hash never reaches the browser
               const appPayload = appRow.payload || {};
-              const storedHash = appRow.password_hash
-                || appPayload.passwordHash
-                || appPayload.password_hash
-                || appPayload?.studentPortal?.passwordHash
-                || appPayload?.studentPortal?.credentials?.passwordHash
-                || appPayload?.studentCredentials?.passwordHash
-                || appPayload?.portalCredentials?.passwordHash
-                || appPayload?.credentials?.passwordHash
-                || appPayload?.applicationCredentials?.passwordHash
-                || null;
+              const check = await PortalAuth.verifyStudent(appRow.id, passwordHash);
 
-              if (storedHash && storedHash === passwordHash) {
+              if (check.ok && check.match) {
                 // Fetch linked student record for full profile data
                 let studentName = appRow.applicant_name || appPayload.fullName || appPayload.applicantName || '';
                 let studentEmail = appRow.email || identifier;

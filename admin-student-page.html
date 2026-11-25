@@ -1611,6 +1611,7 @@
 
   <script src="js/supabase.min.js"></script>
   <script src="js/supabase-config.js"></script>
+  <script src="js/admin-auth.js"></script>
   <script>
   let currentStudent = null;
   let currentApplication = null;
@@ -5170,11 +5171,13 @@
       try {
         const { data: app, error } = await sbClient
           .from('applications')
-          .select('username, plain_password, payload, status, submission_date')
+          .select('username, payload, status, submission_date')
           .eq('id', currentStudent.application_id)
           .single();
 
         if (error) throw error;
+        // The password is kept private on the server; it is only available with an admin session
+        app.plain_password = (await AdminAuth.studentCredentials.get(currentStudent.application_id).catch(() => null))?.password || null;
 
   const payload = app.payload || {};
   const portalEmail = payload.institutionalEmail || payload.studentPortal?.institutionalEmail || app.institutional_email || null;
@@ -5422,23 +5425,9 @@
       }
 
       try {
-        // Hash the password (simple SHA-256)
-        const encoder = new TextEncoder();
-        const data = encoder.encode(newPassword);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const passwordHash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-
-        // Update both hashed and plain password
-        const { error } = await sbClient
-          .from('applications')
-          .update({
-            password_hash: passwordHash,
-            plain_password: newPassword
-          })
-          .eq('id', currentStudent.application_id);
-
-        if (error) throw error;
+        // Saved on the server (hash and plain password); needs an admin session
+        if (!AdminAuth.hasToken()) throw new Error('Your admin session has expired. Please sign in again.');
+        await AdminAuth.studentCredentials.set(currentStudent.application_id, newPassword);
 
         // Close modal
   document.getElementById('resetPasswordModal')?.remove();
@@ -5536,11 +5525,12 @@
         // Get current credentials
         const { data: app, error } = await sbClient
           .from('applications')
-          .select('username, plain_password, email, payload')
+          .select('username, email, payload')
           .eq('id', currentStudent.application_id)
           .single();
 
         if (error) throw error;
+        app.plain_password = (await AdminAuth.studentCredentials.get(currentStudent.application_id).catch(() => null))?.password || null;
 
         const username = app.username || app.payload?.username;
         const password = app.plain_password;
