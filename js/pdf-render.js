@@ -31,7 +31,7 @@
     rate_limited: 'Too many PDFs were requested in a short time. Please wait a few seconds.',
     timeout: 'Rendering took too long. Please try again.',
     too_large: 'The document is too large to render.',
-    upstream_auth: 'The rendering service rejected the Supabase credentials. Please contact the site owner.',
+    upstream_auth: 'The cloud renderer\'s Browserless API key is invalid, revoked or expired. The site owner must set a valid BROWSERLESS_TOKEN secret in Supabase (see RENDER-PDF-SETUP.md).',
     unreachable: 'Could not reach the cloud rendering service. Check your internet connection, or that the render-pdf function has been deployed.',
   };
 
