@@ -12,7 +12,7 @@ against PostgREST with the service role and returns the answer unchanged. Page c
 - A session opened before the update has no token: the page asks the admin to sign in again.
 
 ## Phase 1 (admin-only tables)
-`documents`, `email_configuration`, `email_folder_rules`, `email_folders`, `email_forwarding_rules`, `email_spam_blocked`,
+`documents`, (`email_configuration` is routed too but the table does not exist), `email_folder_rules`, `email_folders`, `email_forwarding_rules`, `email_spam_blocked`,
 `invoice_drafts`, `invoice_templates`, `monthly_expenses`, `portal_alert_templates`, `user_tasks`.
 
 ```bash

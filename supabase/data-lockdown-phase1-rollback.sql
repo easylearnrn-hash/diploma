@@ -2,7 +2,6 @@
 --   supabase db query --linked -f supabase/data-lockdown-phase1-rollback.sql
 
 grant all on public.documents to anon, authenticated;
-grant all on public.email_configuration to anon, authenticated;
 grant all on public.email_folder_rules to anon, authenticated;
 grant all on public.email_folders to anon, authenticated;
 grant all on public.email_forwarding_rules to anon, authenticated;

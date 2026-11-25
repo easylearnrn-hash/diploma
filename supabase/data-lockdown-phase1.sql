@@ -6,7 +6,6 @@
 -- Roll back: supabase db query --linked -f supabase/data-lockdown-phase1-rollback.sql
 
 revoke all on public.documents              from anon, authenticated;
-revoke all on public.email_configuration    from anon, authenticated;
 revoke all on public.email_folder_rules     from anon, authenticated;
 revoke all on public.email_folders          from anon, authenticated;
 revoke all on public.email_forwarding_rules from anon, authenticated;
