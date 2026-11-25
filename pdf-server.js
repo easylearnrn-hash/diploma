@@ -45,6 +45,22 @@ function getInlineFontsCss() {
   return inlineFontsCss;
 }
 
+// Header/footer templates are separate pages that cannot see the document's fonts: Armenian text needs its own face
+let footerFontsCss = null;
+function getFooterFontsCss() {
+  if (footerFontsCss !== null) return footerFontsCss;
+  try {
+    footerFontsCss = [400, 700].map(w => {
+      const data = fs.readFileSync(path.join(FONTS_DIR, `NotoSansArmenian-${w}.woff`)).toString('base64');
+      return `@font-face{font-family:'Noto Sans Armenian';font-weight:${w};src:url(data:font/woff;base64,${data}) format('woff');}`;
+    }).join('');
+  } catch (e) {
+    console.warn('[pdf-server] Could not load footer fonts:', e.message);
+    footerFontsCss = '';
+  }
+  return footerFontsCss;
+}
+
 function inlineLocalFonts(html) {
   const css = getInlineFontsCss();
   return css ? html.replace(FONTS_LINK_RE, () => `<style>${css}</style>`) : html;
@@ -267,10 +283,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   // ── Parse body ──
-  let html, filename, refNo, pageNumbers;
+  let html, filename, refNo, pageNumbers, lang;
   try {
     const raw = await readBody(req);
-    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '', pageNumbers = true } = JSON.parse(raw));
+    ({ html, filename = isWordRoute ? 'document.docx' : 'document.pdf', refNo = '', pageNumbers = true, lang = 'en' } = JSON.parse(raw));
   } catch (e) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ error: e.message || 'Invalid request' }));
@@ -334,11 +350,12 @@ const server = http.createServer(async (req, res) => {
       },
       headerTemplate: '<div></div>',
       footerTemplate: `
+        <style>${getFooterFontsCss()}</style>
         <div style="
           font-size: 9pt;
           width: 100%;
           text-align: center;
-          font-family: Arial, Helvetica, sans-serif;
+          font-family: Arial, Helvetica, 'Noto Sans Armenian', sans-serif;
           color: rgba(10,15,30,0.52);
           padding: 0;
           margin: 0;
@@ -359,7 +376,7 @@ const server = http.createServer(async (req, res) => {
             &nbsp;&bull;&nbsp;
             Ref:&nbsp;${safeRef}${pageNumbers === false ? '' : `
             &nbsp;&bull;&nbsp;
-            Page&nbsp;<span class="pageNumber"></span>&nbsp;of&nbsp;<span class="totalPages"></span>`}
+            ${lang === 'hy' ? '\u0537\u057B' : 'Page'}&nbsp;<span class="pageNumber"></span>&nbsp;${lang === 'hy' ? '/' : 'of'}&nbsp;<span class="totalPages"></span>`}
           </div>
         </div>`,
     });
