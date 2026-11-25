@@ -239,10 +239,12 @@ export async function handleRender(req: Request, deps: Deps): Promise<Response> 
     // The upstream message is logged for the project owner; the token is never part of it
     const detail = (await upstream.text().catch(() => '')).slice(0, 300)
     console.error(`[render-pdf] Browserless ${upstream.status}: ${detail}`)
-    if (upstream.status === 401 || upstream.status === 403) return json({ error: 'Rendering service rejected the credentials', code: 'upstream_auth' }, 502, cors)
+    // Browserless's own answer (never contains our token) so a wrong token / region is easy to tell apart
+    const upstreamInfo = { status: upstream.status, host: new URL(base).host, detail: detail.replace(token, '***') }
+    if (upstream.status === 401 || upstream.status === 403) return json({ error: 'Rendering service rejected the credentials', code: 'upstream_auth', upstream: upstreamInfo }, 502, cors)
     if (upstream.status === 429) return new Response(JSON.stringify({ error: 'Rendering service is busy', code: 'busy' }), { status: 503, headers: { ...cors, 'Content-Type': 'application/json', 'Retry-After': '5' } })
     if (upstream.status === 408 || upstream.status === 504) return json({ error: 'Rendering took too long', code: 'timeout' }, 504, cors)
-    return json({ error: `Rendering failed (${upstream.status})`, code: 'upstream_error' }, 502, cors)
+    return json({ error: `Rendering failed (${upstream.status})`, code: 'upstream_error', upstream: upstreamInfo }, 502, cors)
   }
 
   const pdf = await upstream.arrayBuffer()
