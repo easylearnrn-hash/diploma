@@ -3614,9 +3614,9 @@
         console.error('Error updating application credentials:', appUpdateError);
         // Don't throw - student record is already updated
       } else {
-        // Default password (Welcome2026!) is saved on the server: the hash and plain password are never written from the browser
+        // Default password (Welcome<year>!) is saved on the server: the hash and plain password are never written from the browser
         try {
-          await AdminAuth.studentCredentials.set(app.id, 'Welcome2026!');
+          await AdminAuth.studentCredentials.set(app.id, 'Welcome' + new Date().getFullYear() + '!', { mustChange: true });
         } catch (credError) {
           console.error('Could not set the default password:', credError);
         }
@@ -6809,7 +6809,8 @@
      * 12 characters: 2 uppercase + 2 lowercase + 8 numbers
      */
     // DEFAULT PASSWORD FOR ALL STUDENTS
-    const DEFAULT_STUDENT_PASSWORD = 'Welcome2026!';
+    // The default password follows the calendar year (Welcome2027! in 2027); a student must replace it at the first sign-in
+    const DEFAULT_STUDENT_PASSWORD = 'Welcome' + new Date().getFullYear() + '!';
     
     function generateSecurePassword() {
       // Always return the default password for all students
@@ -7210,7 +7211,7 @@
         }
 
         if (!AdminAuth.hasToken()) throw new Error('Your admin session has expired. Please sign in again.');
-        await AdminAuth.studentCredentials.set(currentApplicationId, newPassword, { latest: true });
+        await AdminAuth.studentCredentials.set(currentApplicationId, newPassword, { latest: true, mustChange: true });
 
         // Update database
         const supabase = getSupabaseClient();

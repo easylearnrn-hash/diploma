@@ -10,7 +10,7 @@
 // Provided by Supabase: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
 import { signAdminToken, verifyAdminToken } from '../_shared/admin-token.ts'
-import { pbkdf2Hash, sha256Hex } from '../_shared/password.ts'
+import { checkPrehashed, hashSecret, sha256Hex } from '../_shared/password.ts'
 import { signPortalToken } from '../_shared/send-policy.ts'
 
 export type Env = (name: string) => string | undefined
@@ -175,10 +175,15 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
       await sleep(400)
       return reply({ ok: false, code: 'not_found', error: 'Account not found or inactive' }, 401, cors)
     }
-    if (!sameHash(String(admin.password_hash || '').toLowerCase(), passwordHash)) {
+    const check = await checkPrehashed(passwordHash, String(admin.password_hash || ''))
+    if (!check.match) {
       noteFailure(keyId, now); noteFailure(keyIp, now)
       await sleep(400)
       return reply({ ok: false, code: 'bad_password', error: 'Incorrect password' }, 401, cors)
+    }
+    // An old bare SHA-256 is replaced by a salted, slow hash now that the password is known to be right (a failure here must not block the login)
+    if (check.legacy) {
+      try { await rest(deps, `admin_users?id=eq.${encodeURIComponent(String(admin.id))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await hashSecret(passwordHash) }) }) } catch (_e) { /* converted next time */ }
     }
     const token = await signAdminToken(secret, { id: String(admin.id), email: String(admin.email || ''), role: String(admin.role || '') }, undefined, now)
     return reply({ ok: true, user: publicProfile(admin), token }, 200, cors)
@@ -231,6 +236,8 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
       if ('password_hash' in data && !(typeof data.password_hash === 'string' && HASH_RE.test(data.password_hash))) {
         return reply({ ok: false, code: 'bad_request', error: 'password_hash must be a SHA-256 hex digest' }, 400, cors)
       }
+      // stored salted and slow, never as the bare SHA-256 the page sent
+      if (typeof data.password_hash === 'string') data.password_hash = await hashSecret(data.password_hash.toLowerCase())
       if (body.action === 'users-create') {
         const r = await rest(deps, 'admin_users', { method: 'POST', body: JSON.stringify([data]) })
         return r.ok ? reply({ ok: true, user: Array.isArray(r.data) ? publicProfile((r.data as Row[])[0] || {}) : null }, 200, cors) : dbError(r.data, r.status, cors)
@@ -268,17 +275,46 @@ export async function handleAdminAuth(req: Request, deps: Deps): Promise<Respons
       const exists = await rest(deps, `applications?select=id&id=eq.${encodeURIComponent(id)}&limit=1`)
       if (!exists.ok) return dbError(exists.data, exists.status, cors)
       if (!Array.isArray(exists.data) || !exists.data.length) return reply({ ok: false, code: 'not_found', error: 'Application not found' }, 404, cors)
-      const record: Row = { application_id: id, password_hash: await sha256Hex(password), plain_password: password, source: 'server', updated_at: new Date(now).toISOString() }
+      // mustChange: the student has to create their own password at the next sign-in (default or admin-set passwords)
+      const record: Row = { application_id: id, password_hash: await hashSecret(await sha256Hex(password)), plain_password: password, must_change: body.mustChange === true, source: 'server', updated_at: new Date(now).toISOString() }
       if (body.latest === true) record.latest_password = password
       const r = await rest(deps, 'application_secrets?on_conflict=application_id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify([record]) })
       return r.ok ? reply({ ok: true }, 200, cors) : dbError(r.data, r.status, cors)
+    }
+
+    // One-off/idempotent clean-up: passwords the server can verify against the plain text it keeps (students with a saved plain password,
+    // teachers still stored as plain text) are converted to salted, slow hashes. Does `limit` accounts per call (default 8), call again until remaining is 0.
+    case 'rehash-passwords': {
+      const limit = Math.min(Math.max(Number(body.limit) || 8, 1), 15)
+      let done = 0
+      let remaining = 0
+      const students = await rest(deps, 'application_secrets?select=application_id,password_hash,plain_password&plain_password=not.is.null&limit=500')
+      if (!students.ok) return dbError(students.data, students.status, cors)
+      for (const row of students.data as Row[]) {
+        const stored = String(row.password_hash || '')
+        const plain = String(row.plain_password || '')
+        if (!/^[0-9a-f]{64}$/i.test(stored) || stored.toLowerCase() !== (await sha256Hex(plain))) continue
+        if (done >= limit) { remaining++; continue }
+        const w = await rest(deps, `application_secrets?application_id=eq.${encodeURIComponent(String(row.application_id))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await hashSecret(stored.toLowerCase()) }) })
+        if (w.ok) done++
+      }
+      const teachers = await rest(deps, 'teachers?select=id,password_hash&limit=200')
+      if (!teachers.ok) return dbError(teachers.data, teachers.status, cors)
+      for (const t of teachers.data as Row[]) {
+        const stored = String(t.password_hash || '')
+        if (!stored || stored.startsWith('p2:') || stored.startsWith('pbkdf2:')) continue
+        if (done >= limit) { remaining++; continue }
+        const w = await rest(deps, `teachers?id=eq.${encodeURIComponent(String(t.id))}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await hashSecret(stored) }) })
+        if (w.ok) done++
+      }
+      return reply({ ok: true, converted: done, remaining }, 200, cors)
     }
 
     case 'teacher-set-password': {
       const id = String(body.teacherId || '')
       const password = typeof body.password === 'string' ? body.password : ''
       if (!UUID_RE.test(id) || password.length < 1 || password.length > 200) return reply({ ok: false, code: 'bad_request', error: 'teacherId and password are required' }, 400, cors)
-      const r = await rest(deps, `teachers?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ password_hash: await pbkdf2Hash(password) }) })
+      const r = await rest(deps, `teachers?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ password_hash: await hashSecret(password) }) })
       if (!r.ok) return dbError(r.data, r.status, cors)
       return Array.isArray(r.data) && r.data.length ? reply({ ok: true }, 200, cors) : reply({ ok: false, code: 'not_found', error: 'Teacher not found' }, 404, cors)
     }

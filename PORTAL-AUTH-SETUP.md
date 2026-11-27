@@ -42,3 +42,18 @@ Secret `PORTAL_AUTH_ORIGINS` (comma list, default: the site + local dev origins)
   with the public key. They need the same treatment (tokens per student/admin) as a separate project.
 - Passwords are still unsalted SHA-256 in `application_secrets` (same value the pages always sent) and the default password
   `Welcome2026!` is assigned to every enrolled student.
+
+## Salted, slow password storage and the forced first change
+- **Stored form:** `p2:<iterations>:<salt>:<PBKDF2-SHA256>` (210,000 rounds, random 16-byte salt) computed over the SHA-256 value the pages send, so
+  nothing the pages do had to change. Admins (`admin_users.password_hash`), students (`application_secrets.password_hash`) and teachers
+  (`teachers.password_hash`, computed over the plain password they send) all use it. Old bare SHA-256 values still work and are replaced the
+  first time the owner signs in; `rehash-passwords` (admin action, repeat until `remaining` is 0) converts the ones the server can verify
+  against the plain text it holds.
+- **Default password:** `Welcome<current year>!` (computed in `admin-applications.html`). Setting a default or an admin-set password sends
+  `mustChange: true`; the `application_secrets.must_change` flag makes `student-verify` answer `mustChange: true` and withhold the session token.
+  The login pages then show the "Create your new password" window (`PortalAuth.promptNewPassword`); `student-change-password` stores the new
+  password salted and slow, does **not** keep its plain text, clears the flag and returns the token. The new password may not look like the default
+  (`Welcome<year>!`) or equal the old one.
+- **Not covered:** an admin whose stored hash is bcrypt (`$2a$...`, e.g. `hrach@acnhs.am`) cannot sign in until another admin sets a new
+  password for them in User Management (it is then stored salted and slow). Students who chose their own password before this change still have
+  their old plain text saved; it is removed when they next change their password.

@@ -98,7 +98,8 @@
     // Student portal credentials live in a private table; these calls need the admin session
     studentCredentials: {
       get: async (applicationId) => { const r = await call('student-credentials-get', { applicationId }); return { password: r.password, latestPassword: r.latestPassword, hasPassword: r.hasPassword }; },
-      set: async (applicationId, password, opts) => { await call('student-credentials-set', { applicationId, password, latest: !!(opts && opts.latest) }); },
+      // opts.mustChange: the student has to create their own password at the next sign-in (use it for default / admin-set passwords)
+      set: async (applicationId, password, opts) => { await call('student-credentials-set', { applicationId, password, latest: !!(opts && opts.latest), mustChange: !!(opts && opts.mustChange) }); },
     },
     teachers: {
       setPassword: async (teacherId, password) => { await call('teacher-set-password', { teacherId, password }); },

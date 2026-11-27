@@ -988,6 +988,11 @@ document.getElementById('applicationLoginForm').addEventListener('submit', async
     if (!check.match) {
       throw new Error('Invalid username or password');
     }
+    if (check.mustChange) {
+      // temporary password: the student creates their own before continuing
+      const changed = await PortalAuth.promptNewPassword({ applicationId: application.id, currentPassword: password });
+      if (!changed.ok) throw new Error('Please create a new password to continue.');
+    }
 
     // Authentication successful
     const resolvedUsername = application.username || application.payload?.username || normalizedUsername;
@@ -1145,6 +1150,14 @@ async function authenticateStudentPortalLogin(supabase, email, password, submitB
 
   if (!check.match) {
     throw createStudentLoginError('Incorrect password. Please try again or request a reset from admissions.', 'STUDENT_INVALID_PASSWORD');
+  }
+
+  if (check.mustChange) {
+    // temporary password (the yearly default, or one an admin set): the student creates their own before entering the portal
+    const changed = await PortalAuth.promptNewPassword({ applicationId: application.id, currentPassword: password });
+    if (!changed.ok) {
+      throw createStudentLoginError('Please create a new password to continue.', 'STUDENT_PASSWORD_CHANGE_REQUIRED');
+    }
   }
 
   if (submitBtn) {

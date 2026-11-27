@@ -5,14 +5,14 @@
 // the service role and no secret is ever returned.
 //
 // Actions (no token; throttled per IP and per account):
-//   student-verify          { applicationId, passwordHash }                      -> { ok, match, hasCredentials }
-//   student-change-password { applicationId, currentPasswordHash, newPassword }  -> { ok } | { ok:false, code:'bad_password' }
+//   student-verify          { applicationId, passwordHash }                      -> { ok, match, hasCredentials, mustChange, token }
+//   student-change-password { applicationId, currentPasswordHash, newPassword }  -> { ok, token } | { ok:false, code:'bad_password' }
 //   teacher-verify          { teacherId, password }                              -> { ok, match }
 //
 // Secrets: PORTAL_AUTH_ORIGINS (optional, comma list; default = the site + local dev origins)
 // Provided by Supabase: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
 
-import { pbkdf2Hash, sameText, sha256Hex, verifyStoredPassword } from '../_shared/password.ts'
+import { checkPrehashed, hashSecret, sha256Hex, verifyStoredPassword } from '../_shared/password.ts'
 import { signPortalToken } from '../_shared/send-policy.ts'
 
 export type Env = (name: string) => string | undefined
@@ -82,15 +82,15 @@ async function rest(deps: Deps, path: string, init: RequestInit = {}): Promise<{
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 const obj = (v: unknown): Row => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Row) : {})
 
-// The hash a student password is compared against: private table first, then (only until the columns are emptied) the
-// same places login.html used to look in applications
-async function storedStudentHash(deps: Deps, applicationId: string): Promise<{ hash: string; lookupFailed: boolean }> {
-  const sec = await rest(deps, `application_secrets?select=password_hash&application_id=eq.${applicationId}&limit=1`)
+// The stored value a student password is compared against (salted slow hash, or an old bare SHA-256): the private table first, then
+// (only until the columns are emptied) the places login.html used to look in applications
+async function storedStudentHash(deps: Deps, applicationId: string): Promise<{ hash: string; mustChange: boolean; fromSecrets: boolean; lookupFailed: boolean }> {
+  const sec = await rest(deps, `application_secrets?select=password_hash,must_change&application_id=eq.${applicationId}&limit=1`)
   if (sec.ok && Array.isArray(sec.data) && sec.data.length && str(obj(sec.data[0]).password_hash)) {
-    return { hash: str(obj(sec.data[0]).password_hash).toLowerCase(), lookupFailed: false }
+    return { hash: str(obj(sec.data[0]).password_hash), mustChange: obj(sec.data[0]).must_change === true, fromSecrets: true, lookupFailed: false }
   }
   const app = await rest(deps, `applications?select=password_hash,payload&id=eq.${applicationId}&limit=1`)
-  if (!app.ok) return { hash: '', lookupFailed: true }
+  if (!app.ok) return { hash: '', mustChange: false, fromSecrets: false, lookupFailed: true }
   const row = obj(Array.isArray(app.data) && app.data.length ? app.data[0] : {})
   const p = obj(row.payload)
   const portal = obj(p.studentPortal)
@@ -99,8 +99,10 @@ async function storedStudentHash(deps: Deps, applicationId: string): Promise<{ h
     str(obj(portal.credentials).passwordHash) || str(obj(p.studentCredentials).passwordHash) ||
     str(obj(p.portalCredentials).passwordHash) || str(obj(p.credentials).passwordHash) || str(obj(p.applicationCredentials).passwordHash) ||
     str(obj(p.credentials).password_hash)
-  return { hash: found.toLowerCase(), lookupFailed: false }
+  return { hash: found, mustChange: false, fromSecrets: false, lookupFailed: false }
 }
+
+const DEFAULT_PASSWORD_RE = /^welcome\d{4}!$/i
 
 export async function handlePortalAuth(req: Request, deps: Deps): Promise<Response> {
   const { env } = deps
@@ -131,28 +133,46 @@ export async function handlePortalAuth(req: Request, deps: Deps): Promise<Respon
       const keyId = `app:${applicationId}|${ip}`
       if (throttled(keyId, 8, now) || throttled(keyIp, 60, now)) return tooMany()
 
-      const { hash, lookupFailed } = await storedStudentHash(deps, applicationId)
+      const { hash, mustChange, fromSecrets, lookupFailed } = await storedStudentHash(deps, applicationId)
       if (lookupFailed) return reply({ ok: false, code: 'auth_unavailable', error: 'Authentication service unavailable. Please try again.' }, 503, cors)
-      const match = HASH_RE.test(hash) && sameText(hash, given)
+      const check = hash ? await checkPrehashed(given, hash) : { match: false, legacy: false }
+      const match = check.match
       if (!match && hash) { noteFailure(keyId, now); noteFailure(keyIp, now); await sleep(300) }
 
+      // The password is right: an old bare SHA-256 is replaced by a salted, slow hash (a failure here must not block the sign-in)
+      if (match && check.legacy) {
+        try {
+          await rest(deps, 'application_secrets?on_conflict=application_id', {
+            method: 'POST',
+            headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
+            body: JSON.stringify([{ application_id: applicationId, password_hash: await hashSecret(given), ...(fromSecrets ? {} : { source: 'server' }) }]),
+          })
+        } catch (_e) { /* converted next time */ }
+      }
+
+      const secret = env('ADMIN_TOKEN_SECRET')
+      const canSign = !!secret && secret.length >= 32
+
       if (body.action === 'student-verify') {
-        // a signed session token proves who this student is to other functions (e.g. send-email)
-        const secret = env('ADMIN_TOKEN_SECRET')
-        const token = match && secret && secret.length >= 32 ? await signPortalToken(secret, { id: applicationId, role: 'student' }) : undefined
-        return reply({ ok: true, match, hasCredentials: !!hash, ...(token ? { token } : {}) }, 200, cors)
+        // A student who still has an admin-set/default password must create their own first: no session token until then
+        // (a signed token proves who this student is to other functions, e.g. send-email)
+        const token = match && !mustChange && canSign ? await signPortalToken(secret!, { id: applicationId, role: 'student' }) : undefined
+        return reply({ ok: true, match, hasCredentials: !!hash, mustChange: match && mustChange, ...(token ? { token } : {}) }, 200, cors)
       }
 
       if (!hash) return reply({ ok: false, code: 'no_credentials', error: 'This account has no password yet' }, 400, cors)
       if (!match) return reply({ ok: false, code: 'bad_password', error: 'Current password is incorrect' }, 401, cors)
       const newPassword = str(body.newPassword)
       if (newPassword.length < 8 || newPassword.length > 200) return reply({ ok: false, code: 'bad_request', error: 'New password must be 8-200 characters' }, 400, cors)
-      const newHash = await sha256Hex(newPassword)
+      if (DEFAULT_PASSWORD_RE.test(newPassword)) return reply({ ok: false, code: 'weak_password', error: 'Please choose a password of your own, not the default one' }, 400, cors)
+      const newSha = await sha256Hex(newPassword)
+      if (newSha === given) return reply({ ok: false, code: 'same_password', error: 'The new password must be different from the current one' }, 400, cors)
 
+      // Stored salted and slow. The plain text is not kept for passwords students choose themselves.
       const saved = await rest(deps, 'application_secrets?on_conflict=application_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-        body: JSON.stringify([{ application_id: applicationId, password_hash: newHash, plain_password: newPassword, source: 'server', updated_at: new Date(now).toISOString() }]),
+        body: JSON.stringify([{ application_id: applicationId, password_hash: await hashSecret(newSha), plain_password: null, must_change: false, source: 'server', updated_at: new Date(now).toISOString() }]),
       })
       if (!saved.ok) return reply({ ok: false, code: 'db_error', error: 'Could not save the new password' }, 502, cors)
 
@@ -163,7 +183,8 @@ export async function handlePortalAuth(req: Request, deps: Deps): Promise<Respon
         const credentials = { ...obj(payload.credentials), default_password: false, must_change_password: false, password_last_changed: new Date(now).toISOString() }
         await rest(deps, `applications?id=eq.${applicationId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ payload: { ...payload, credentials } }) })
       }
-      return reply({ ok: true }, 200, cors)
+      const token = canSign ? await signPortalToken(secret!, { id: applicationId, role: 'student' }) : undefined
+      return reply({ ok: true, ...(token ? { token } : {}) }, 200, cors)
     }
 
     case 'teacher-verify': {
@@ -177,9 +198,9 @@ export async function handlePortalAuth(req: Request, deps: Deps): Promise<Respon
       const stored = Array.isArray(r.data) && r.data.length ? str(obj(r.data[0]).password_hash) : ''
       const match = await verifyStoredPassword(password, stored)
       if (!match) { noteFailure(keyId, now); noteFailure(keyIp, now); await sleep(300) }
-      // A password that was still stored as plain text is re-saved as a PBKDF2 hash the first time it is used
-      if (match && !stored.startsWith('pbkdf2:')) {
-        await rest(deps, `teachers?id=eq.${teacherId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await pbkdf2Hash(password) }) })
+      // A password that was still stored as plain text (or an older hash) is re-saved as a salted, slow hash the first time it is used
+      if (match && !stored.startsWith('p2:')) {
+        await rest(deps, `teachers?id=eq.${teacherId}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ password_hash: await hashSecret(password) }) })
       }
       const tsecret = env('ADMIN_TOKEN_SECRET')
       const ttoken = match && tsecret && tsecret.length >= 32 ? await signPortalToken(tsecret, { id: teacherId, role: 'teacher' }) : undefined
